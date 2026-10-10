@@ -17,7 +17,7 @@ WP-A1。觉的实时部分在 WP-I 才接入，本包用一个**替身**：对�
 ## 交付物与已定设计
 
 ### 1. 抽取 `l1/extract.py`
-- `RuleExtractor`（`name="rule"`）：只用 `huayan.domain` 的三个匹配函数；客户说「不清楚 / 不知道 / 不确定」且上一句业务员问了某槽位 → 该槽位 `unknown`；含「原理」「为什么」「配方」「成分」→ `mechanism_request`；出现「是什么产品」「怎么用」→ `product_question`；出现明显化学术语（取 L2/L3 转化对照中的 `chem_term`）→ `chem_savvy=True`。
+- `RuleExtractor`（`name="rule"`）：只用 `huayan.domain` 的三个匹配函数；客户说「不清楚 / 不知道 / 不确定」且上一句业务员问了某槽位 → 该槽位 `unknown`；含「原理」「为什么」「配方」「成分」→ `mechanism_request`；出现「是什么产品」「怎么用」→ `product_question`；客户点名要某一类助剂（文本含种子产品的 `category`，如「匀染剂」「pH 缓冲剂」）→ `chem_savvy=True`（懂化学的客户说得出成因、直接要某类助剂；不懂化学的只说现象）。
 - `LLMExtractor`（`name="llm"`）：一次 `gateway.structured(..., ExtractionResult)`，caller `agent:extract`，tier fast，`temperature=0`。提示词放 `prompts/extract.md`：给出全部槽位与取值枚举、现象列表、已有 NeedState，要求每个槽位附原话片段、取值必须来自枚举。
 - `apply_extraction` 按契约实现；只覆盖新抽到的槽位，不删除已有槽位；`asked` 按 `asked_slots` 累加。
 

@@ -1,8 +1,8 @@
 # 格式同 JUE。地址与模型名待人填写；密钥只放环境变量，不入库。
 tiers:
-  fast:   {base_url: "<OpenAI 兼容地址>", model: "<待填写>", api_key_env: FAST_API_KEY,
+  fast:   {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: FAST_API_KEY,
            price_per_1k: {input: null, output: null}, fallbacks: [backup]}
-  strong: {base_url: "<OpenAI 兼容地址>", model: "<待填写>", api_key_env: STRONG_API_KEY,
+  strong: {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: STRONG_API_KEY,
            price_per_1k: {input: null, output: null}, fallbacks: [fast]}
-  backup: {base_url: "<OpenAI 兼容地址>", model: "<待填写>", api_key_env: BACKUP_API_KEY,
+  backup: {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: BACKUP_API_KEY,
            price_per_1k: {input: null, output: null}, fallbacks: []}

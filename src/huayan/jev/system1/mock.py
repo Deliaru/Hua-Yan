@@ -16,7 +16,7 @@ def _choice(state, options, caller):
         return {key: w / total for key, w in weights.items()}
     if caller == "jev:disclose":
         profile = state["need"]["profile"]
-        savvy = profile["chem_savvy"] and profile["asked_mechanism"] and "full_mechanism" in options
+        savvy = profile["chem_savvy"] and "full_mechanism" in options
         return _peak(options, "full_mechanism" if savvy else "product_usage")
     if caller == "jev:grounding":
         return _peak(options, "grounded" if state["hits"] else "none")

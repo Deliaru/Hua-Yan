@@ -431,7 +431,7 @@ class System1Client(Protocol):
 - `OneJevClient`、`LLMSystem1Fallback` 从 JUE 复制，只改 import；`build_system1(impl, config_path, gateway, meter)` 同 JUE，另支持 `impl="mock"`。
 - `MockSystem1Client`（确定性规则桩，`impl="mock"`），按 caller 区分：
   - `jev:match`：候选权重 `1 / (1 + len(unknown_slots))`，`none` 权重为 0.2，归一化；
-  - `jev:disclose`：`profile.chem_savvy and profile.asked_mechanism` 且选项含 `full_mechanism` 时 0.7 给它；否则 0.7 给 `product_usage`；其余平分；
+  - `jev:disclose`：`profile.chem_savvy` 且选项含 `full_mechanism`（即已有解密授权）时 0.7 给它；否则 0.7 给 `product_usage`；其余平分；
   - `jev:grounding`：state 中 `hits` 非空时 `grounded` 0.7，否则 `none` 0.7；其余平分；
   - 其他 caller：均匀分布；`S1Noul` 为 0.5。
 
