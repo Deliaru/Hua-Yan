@@ -1,9 +1,9 @@
-# 格式同 JUE。密钥通过 SORANORI_API_KEY 环境变量读取，不入库。
+# 格式同 JUE。密钥通过 BACKUP_API_KEY 环境变量读取，不入库。
 # 当前三个 tier 使用同一服务，不配置重复调用同一模型的备用链。
 tiers:
-  fast:   {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: SORANORI_API_KEY,
+  fast:   {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: BACKUP_API_KEY,
            price_per_1k: {input: null, output: null}, fallbacks: []}
-  strong: {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: SORANORI_API_KEY,
+  strong: {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: BACKUP_API_KEY,
            price_per_1k: {input: null, output: null}, fallbacks: []}
-  backup: {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: SORANORI_API_KEY,
+  backup: {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: BACKUP_API_KEY,
            price_per_1k: {input: null, output: null}, fallbacks: []}

@@ -1,4 +1,4 @@
-# 真实模型验证配置；使用最小模拟种子，运行前设置 SORANORI_API_KEY。
+# 真实模型验证配置；使用最小模拟种子，运行前设置 BACKUP_API_KEY。
 # 从仓库根目录运行：python scripts/chat_cli.py --config config/app.live.yaml
 seeds_dir: tests/fixtures/mini_seeds
 templates_dir: config/templates
