@@ -1,0 +1,13 @@
+placeholder: true
+source: "占位：人物与客户全部虚构"
+items:
+  - {id: "sales:S01", role: sales, name: 业务员小王（模拟）}
+  - {id: "sales:S02", role: sales, name: 业务员小李（模拟）}
+  - {id: "customer:C01", role: customer, name: 某印染厂 A（模拟）}
+  - {id: "customer:C02", role: customer, name: 某印染厂 B（模拟）}
+  - {id: "customer:C03", role: customer, name: 某印染厂 C（模拟）}
+  - {id: "customer:C04", role: customer, name: 某印染厂 D（模拟）}
+  - {id: "pm:P01", role: pm, name: 产品经理老周（模拟）}
+  - {id: "rd:R01", role: rd, name: 染色过程研发陈工（模拟）}
+  - {id: "rd:R02", role: rd, name: 弹力面料与整理研发刘工（模拟）}
+  - {id: "supervisor:M01", role: supervisor, name: 主管赵总（模拟）}
