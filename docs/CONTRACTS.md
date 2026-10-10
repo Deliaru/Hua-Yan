@@ -2,7 +2,9 @@
 
 > 跨模块的数据格式与接口契约。**冻结后只能由人修改**。代码实现在 `src/huayan/contracts/`，必须与本文件一致。
 > 下列代码是规格（Python / pydantic v2 风格），字段名、类型、枚举值必须一致；函数签名必须一致，内部实现自由。
-> 版本：v1｜2026-10-10
+> 版本：v2｜2026-10-11
+>
+> **v2 变更（围绕「分层转译」与「权责对等」）**：转化对照增加 `phenomenon_ids`；知识库增加 `list`；知识来源与积分原因增加 `contributed`；第 ⑦ 节改为两步转译（L2 产品需求 → L3 化学语言）＋反向包装，需求条目增加 `ku_refs`，新增 `RDDraft`、`SheetDraft`、`CitedKnowledge`、`RequirementView`、`ContributionStat`；事件增加 `requirement_translated`、`knowledge_contributed`；门面第 ⑫ 节 L2/L3 方法相应调整。其余章节不变。
 >
 > 本文件只规定**模块之间**传递什么。模块内部的数据怎么组织，由各工作包自己决定，不要为了「统一」把内部结构也写进契约。
 
@@ -106,12 +108,15 @@ class Case(BaseModel):                        # seeds/cases.yaml，历史案例�
     pm_translation: str                       # 产品经理的转述
     owner: str                                # "pm:P01"
 
-class Translation(BaseModel):                 # seeds/translations.yaml，转化对照
+class Translation(BaseModel):                 # seeds/translations.yaml，转化对照：转译的核心知识
     id: str
-    scene_phrase: str                         # 「深一块浅一块」
-    chem_term: str                            # 「上染速率不均 / 匀染性差」
-    level: Literal[2, 3]
-    owner: str
+    scene_phrase: str                         # 原文：L2 条目为客户场景说法，如「深一块浅一块」；
+                                              #       L3 条目为产品需求说法，如「匀染」「低浴比」
+    chem_term: str                            # 译文：L2 条目为产品需求语言，如「需要匀染类助剂」；
+                                              #       L3 条目为化学语言，如「对酸性染料有缓染作用的阴离子型组分」
+    level: Literal[2, 3]                      # 2 = 产品经理的「场景 → 产品需求」；3 = 研发的「产品需求 → 化学语言」
+    owner: str                                # 归属人：L2 条目为产品经理，L3 条目为具体某位研发
+    phenomenon_ids: list[str] = []
 
 # seeds/actors.yaml：list[Actor]，至少包含 2 个业务员、4 个客户、1 个产品经理、2 个研发、1 个主管
 ```
@@ -162,7 +167,7 @@ class KnowledgeUnit(BaseModel):
     phenomenon_ids: list[str] = []
     owner: str                                # 知识归属人
     decryptable: bool = False                 # 只有 mechanism 为 True
-    source: Literal["seed", "released", "trial"] = "seed"
+    source: Literal["seed", "released", "trial", "contributed"] = "seed"
     created_at: datetime
 
 class KnowledgeHit(BaseModel):
@@ -184,6 +189,9 @@ class KnowledgeBase:
     def add_product(self, product: Product, at: datetime) -> list[KnowledgeUnit]: ...   # 发布，生成四条知识
     def update_applicable(self, product_id: str, slot: str, values: list[str], by: str) -> None: ...
     def add(self, ku: KnowledgeUnit) -> None: ...
+    def list(self, actor: Actor, *, kinds: list[KUKind] | None = None,
+             phenomenon: str | None = None) -> list[KnowledgeUnit]: ...
+        # 按层级过滤后列出；phenomenon 不为 None 时只保留 phenomenon_ids 含它或为空的条目。转译引擎用它取候选知识
     def get(self, ku_id: str, actor: Actor) -> KnowledgeUnit: ...
         # 越权抛 PermissionDenied，写审计 deny 与 access_denied 事件
     def search(self, query: str, actor: Actor, *, phenomenon: str | None = None, k: int = 5,
@@ -263,7 +271,7 @@ class LedgerEntry(BaseModel):
     ts: datetime
     owner: str                                # 获得积分的人
     points: int
-    reason: Literal["cited", "trial_pass", "product_released", "bounty"]
+    reason: Literal["cited", "contributed", "trial_pass", "product_released", "bounty"]
     ku_id: str | None = None
     ref: str                                  # 会话 / 试样 / 产品 / 问题 id
 
@@ -271,7 +279,10 @@ class AuditLog:   # append(record) / list(actor=None) ；写 runs/<run>/audit.js
 class Ledger:     # add(entry) / totals() -> dict[owner, points] / list(owner=None)；写 ledger.jsonl
 ```
 
-积分规则在 `config/app.yaml` 的 `points`：知识单元出现在一次推荐中，给其归属人记 `cited`；试样通过记 `trial_pass`；新品发布记 `product_released`；处理带悬赏的问题记 `bounty`。
+积分规则在 `config/app.yaml` 的 `points`（**权责对等的落点**）：
+- `cited`：知识单元被一次推荐卡片引用，或被一张确认的需求单（`ReqItem.ku_refs`）引用，给其归属人记分；同一知识在同一会话或需求单中只记一次；
+- `contributed`：研发把自己修改后的转译沉淀为新的转化知识；
+- `trial_pass`：试样通过；`product_released`：新品发布（给产品归属研发）；`bounty`：处理带悬赏的问题。
 
 ---
 
@@ -633,18 +644,36 @@ class QuestionBus:
 
 ---
 
-## ⑦ 升级与回流（`huayan.escalation`，WP-A3）
+## ⑦ 升级、分层转译与回流（`huayan.escalation`）
+
+**转译是化言的主线。** 一个 L1 解决不了的需求，按层逐步转译，每一层只用自己能看的知识，每一句都能回查客户原话、标明依据了谁的知识：
+
+```
+L1 场景需求卡（NeedState：槽位＋原话）
+  → L2 产品需求语言（产品经理 Agent 起草，只用 L2 知识：案例、L2 转化对照；产品经理确认）
+  → L3 化学语言需求单（研发助手 Agent 起草，用 L3 转化对照与机理；研发确认，修改可沉淀为自己的转化知识）
+  → 试样 → 研发给出「对外要点」
+  → 反向包装：L1 说明书（产品经理 Agent 只用产品需求＋对外要点起草，不接触机理与配方）→ 发布回 L1
+```
 
 ```python
 class ReqItem(BaseModel):
     text: str
     slot: str | None = None
     quote_refs: list[str] = []                # turn id，可回查客户原话
+    ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
 
-class PMDraft(BaseModel):                     # 产品经理 Agent 结构化输出（caller "agent:pm_draft"）
-    direction: str                            # 产品方向，如「低浴比条件下的锦纶氨纶匀染保护剂」
-    product_lang: list[ReqItem]               # 产品语言（L2）
-    chem_lang: list[ReqItem]                  # 化学语言研发需求单（L2/L3 可见）
+class PMDraft(BaseModel):                     # L2 转译（caller "agent:pm_draft"）：场景语言 → 产品需求语言
+    direction: str                            # 产品方向，如「低浴比条件下的锦纶氨纶匀染助剂」
+    product_lang: list[ReqItem]
+
+class RDDraft(BaseModel):                     # L3 转译（caller "agent:rd_translate"）：产品需求 → 化学语言
+    chem_lang: list[ReqItem]
+    hypotheses: list[str] = []                # 研发方向假设
+
+class SheetDraft(BaseModel):                  # 反向包装（caller "agent:package"）：研发结果 → L1 说明书
+    sheet: str
+    usage: str
 
 class Requirement(BaseModel):
     id: str                                   # "req:<n>"
@@ -653,11 +682,13 @@ class Requirement(BaseModel):
     phenomenon: str
     known_slots: dict[str, str]
     direction: str
-    product_lang: list[ReqItem]
-    chem_lang: list[ReqItem]
-    status: Literal["draft", "confirmed", "released", "rejected"]
-    drafted_by: str                           # "agent:pm" 或 "pm:P01"
-    confirmed_by: str | None = None
+    product_lang: list[ReqItem]               # L2/L3 可见
+    chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
+    hypotheses: list[str] = []
+    status: Literal["draft", "pm_confirmed", "rd_confirmed", "released", "rejected"]
+    drafted_by: str                           # "agent:pm"
+    pm_confirmed_by: str | None = None
+    rd_confirmed_by: str | None = None
     product_id: str | None = None             # 发布后的新产品
     created_at: datetime
 
@@ -671,18 +702,62 @@ class Trial(BaseModel):
     cause: Literal["none", "product", "equipment", "operation"]
     note: str = ""
     at: datetime
+
+class CitedKnowledge(BaseModel):              # 需求单中被引用的知识，按查看者裁剪
+    ku_id: str
+    owner: str
+    level: Level
+    title: str
+    text: str | None                          # 查看者无权阅读时为 None，界面只显示「研发 R01 的转化知识（L3）」
+    n_cited: int                              # 全系统累计被引用次数
+
+class RequirementView(BaseModel):
+    viewer: str
+    viewer_level: Level
+    requirement: Requirement
+    quotes: dict[str, str]                    # turn id → 客户原话
+    cited: list[CitedKnowledge]
+
+class ContributionStat(BaseModel):            # 贡献看板的一行
+    owner: str
+    ku_id: str
+    level: Level
+    title: str
+    n_cited: int
+    points: int
+    used_by: list[str]                        # 需求单 / 会话 id
 ```
 
+### 7.1 转译引擎 `huayan.escalation.translate`（WP-T）
+
 ```python
-# huayan.escalation（WP-A3）
-def draft_requirement(q: Question, sessions: list[Session], gateway, at) -> Requirement: ...
-    # caller "agent:pm_draft"；输入只含 L2 可见内容（会话原话、槽位、案例、转化对照）
+def draft_product_need(q: Question, sessions: list[Session], kb: KnowledgeBase, pm: Actor,
+                       gateway: ModelGateway | None, at: datetime) -> PMDraft: ...
+    # 输入：会话轮次（带 turn id）、NeedState 槽位与原话、kb.list(pm, kinds=["case", "translation"], phenomenon=...)
+def draft_chem_need(req: Requirement, sessions: list[Session], kb: KnowledgeBase, rd: Actor,
+                    gateway: ModelGateway | None, at: datetime) -> RDDraft: ...
+    # 输入：产品需求条目、原话、kb.list(rd, kinds=["translation", "mechanism"], phenomenon=...)
+def package_sheet(req: Requirement, public_points: str, gateway: ModelGateway | None) -> SheetDraft: ...
+    # 输入只有产品需求条目与研发给的对外要点；不得传入机理、配方、L3 转化对照
+```
+
+- `gateway is None`：**规则模式**（零成本，离线演示、测试与评测用）——按转化对照的 `scene_phrase` 与原话 / 上一层条目文字的匹配逐条生成，`ku_refs` 指向命中的转化对照，`quote_refs` 指向命中的轮次；
+- 否则大模型模式：候选知识（附 ku id）放进提示词，要求每条输出引用至少一个 turn id，并列出依据的 ku id；输出中不在候选里的 ku id、不存在的 turn id 丢弃（真实输入边界）。
+- **不变量（有测试）**：`draft_product_need` 的提示词与输出不含任何 L3 知识；`package_sheet` 的输入不含 L3 知识。
+
+### 7.2 流程 `huayan.escalation.flow`（WP-A3）
+
+```python
+def contribute_translation(req: Requirement, item_index: int, scene_phrase: str, chem_term: str,
+                           by: Actor, kb, ledger, events, at) -> KnowledgeUnit: ...
+    # 研发把修改后的一条 chem_lang 沉淀为 L3 转化对照：kind="translation"，level=3，owner=by，source="contributed"；
+    # 记 contributed 积分与 knowledge_contributed 事件；该条 ReqItem.ku_refs 追加新知识
 def release_product(req: Requirement, product: Product, kb, ledger, events, by: str, at) -> Product: ...
-    # product.status 改为 released → kb.add_product → 转化对照（L2）入库 → 给 product.owner 记 product_released
+    # product.status 改为 released → kb.add_product → 给 product.owner 记 product_released
     # → 写 product_released 事件 → req.status = "released"
 ```
 
-演示中新产品取自种子里 `status="project"` 的产品（研发界面预填，可修改），模拟「研发在 ELN 中完成开发」。
+演示中新产品取自种子里 `status="project"` 的产品（研发界面预填机理与配方要点，可修改），模拟「研发在 ELN 中完成开发」；L1 说明书与用法由反向包装生成，产品经理确认后发布。
 
 ---
 
@@ -691,7 +766,8 @@ def release_product(req: Requirement, product: Product, kb, ledger, events, by: 
 ```python
 EventKind = Literal["turn", "extraction", "ask_hint", "recommend", "escalate", "retrieve", "access_denied",
                     "decrypt_request", "decrypt_approve", "question_published", "question_resolved",
-                    "requirement_confirmed", "trial", "product_released", "sheet_updated", "access_frozen"]
+                    "requirement_confirmed", "requirement_translated", "knowledge_contributed", "trial",
+                    "product_released", "sheet_updated", "access_frozen"]
 
 class Event(BaseModel):
     id: str                                   # 日志分配
@@ -722,7 +798,9 @@ class EventLog:
 | `access_denied` | `object_id, reason` |
 | `decrypt_request` / `decrypt_approve` | `question_id, customer_id, product_id` |
 | `question_published` / `question_resolved` | `question_id, family, object_id, action`（resolved 时） |
-| `requirement_confirmed` | `requirement_id, phenomenon, known` |
+| `requirement_confirmed` | `requirement_id, phenomenon, known`（产品经理确认 L2） |
+| `requirement_translated` | `requirement_id, ku_refs`（研发确认 L3） |
+| `knowledge_contributed` | `ku_id, owner, requirement_id` |
 | `trial` | `trial_id, product_id, conditions, result, cause` |
 | `product_released` | `product_id, requirement_id, phenomenon, applicable` |
 | `sheet_updated` | `product_id, slot, values` |
@@ -824,7 +902,7 @@ class ModelGateway(Protocol):
 ```
 
 - `OpenAICompatGateway`（重试、降级、录制/回放缓存）与 `MockGateway`（`canned[caller]`）从 JUE 复制，只改 import。**录制/回放缓存就是「记录回放」演示模式的实现**：现场跑一次写缓存，回放时同样的输入直接命中。
-- caller 一览：`agent:extract`、`agent:l1_answer`、`agent:pm_draft`、`jev:match`、`jev:disclose`、`jev:grounding`（Jev 走大模型降级时透传）、`sim:customer`、`baseline:llm_poll`、`baseline:one_shot`。**不得出现 `jue:` 开头的大模型调用。**
+- caller 一览：`agent:extract`、`agent:l1_answer`、`agent:pm_draft`、`agent:rd_translate`、`agent:package`、`jev:match`、`jev:disclose`、`jev:grounding`（Jev 走大模型降级时透传）、`sim:customer`、`baseline:llm_poll`、`baseline:one_shot`。**不得出现 `jue:` 开头的大模型调用。**
 
 ```python
 class MeterRecord(BaseModel):
@@ -856,7 +934,7 @@ seeds_dir: seeds
 templates_dir: config/templates
 run_root: runs
 system1_impl: mock            # mock | llm_fallback | onejev
-gateway_mock: true            # true 时用 MockGateway（离线）；现场演示设 false
+gateway_mock: true            # true 时用 MockGateway（离线），L2/L3 转译与包装走规则模式（gateway=None）；现场演示设 false
 extractor: rule               # rule | llm
 realtime_model: jue_proto     # jue_proto | jue_k
 jue_k_dir: models/jue_k
@@ -865,7 +943,7 @@ replay: false                 # true = 记录回放模式，界面标明
 thresholds: {ask: 0.5, max_asks: 2, match: 0.5, publish: 0.5}
 windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
 routing: {escalate_need: pm, opportunity: pm, knowledge_conflict: rd, leak_risk: supervisor, decrypt_request: rd}
-points: {cited: 1, trial_pass: 5, product_released: 10}
+points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
 ```
 
 `config/models.yaml`、`config/system1.yaml` 格式同 JUE。
@@ -915,12 +993,22 @@ class HuayanApp:
     def jue_trace(self, session_id: str) -> list[JueOutput]: ...         # 该会话每轮的实时觉输出，觉视图用
     def status(self) -> RunStatus: ...
 
-    # L2 / L3（WP-A3）
-    def draft_requirement(self, question_id: str, by: str) -> Requirement: ...
+    # L2 / L3：分层转译、权责与回流（WP-A3）
+    def draft_requirement(self, question_id: str, by: str) -> Requirement: ...        # 产品经理；L2 转译
     def confirm_requirement(self, req_id: str, by: str, edited: PMDraft | None = None) -> Requirement: ...
+        # → pm_confirmed
+    def translate_requirement(self, req_id: str, by: str) -> Requirement: ...         # 研发；L3 转译草稿
+    def confirm_translation(self, req_id: str, by: str, edited: RDDraft | None = None) -> Requirement: ...
+        # → rd_confirmed；给两层所引知识的归属人记 cited
+    def contribute_translation(self, req_id: str, item_index: int, scene_phrase: str, chem_term: str,
+                               by: str) -> KnowledgeUnit: ...
     def requirements(self, viewer_id: str) -> list[Requirement]: ...      # L1 调用抛 PermissionDenied
+    def requirement_view(self, req_id: str, viewer_id: str) -> RequirementView: ...   # L1 抛 PermissionDenied
     def record_trial(self, trial: Trial) -> Trial: ...
+    def package_sheet(self, req_id: str, public_points: str, by: str) -> SheetDraft: ...   # 产品经理
     def release_product(self, req_id: str, product: Product, by: str) -> Product: ...
+    def contributions(self, viewer_id: str) -> list[ContributionStat]: ...
+        # 贡献看板；L3 知识的标题对非 L3 查看者显示为「研发 X 的转化知识」
     def request_decrypt(self, session_id: str, by: str) -> Question: ...
     def decide_decrypt(self, question_id: str, by: str, approve: bool) -> Question: ...
 

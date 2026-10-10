@@ -6,8 +6,28 @@ items:
     chem_term: 上染速率不均 / 匀染性差
     level: 2
     owner: pm:P01
+    phenomenon_ids: [color_unlevel]
   - id: tr:2
     scene_phrase: 染液酸碱不稳
     chem_term: 染浴 pH 漂移导致上染速率波动
     level: 3
     owner: rd:R01
+    phenomenon_ids: [color_unlevel]
+  - id: tr:3
+    scene_phrase: 气流缸
+    chem_term: 需要在低浴比条件下仍能保持匀染效果的助剂
+    level: 2
+    owner: pm:P01
+    phenomenon_ids: [color_unlevel]
+  - id: tr:4
+    scene_phrase: 匀染
+    chem_term: （模拟）对酸性染料有缓染作用、与染料竞争纤维染座的阴离子型匀染组分
+    level: 3
+    owner: rd:R01
+    phenomenon_ids: [color_unlevel]
+  - id: tr:5
+    scene_phrase: 锦纶氨纶
+    chem_term: （模拟）氨纶段对酸性染料亲和力低，需同时控制锦纶上染速率与氨纶沾色
+    level: 3
+    owner: rd:R02
+    phenomenon_ids: [color_unlevel]

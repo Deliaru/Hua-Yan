@@ -2,7 +2,8 @@
 from ._base import SHANGHAI, BaseModel
 from .app import RunStatus, SessionView
 from .bus import Evidence, QFamily, Question, Resolution
-from .escalation import PMDraft, ReqItem, Requirement, Trial
+from .escalation import (CitedKnowledge, ContributionStat, PMDraft, RDDraft, ReqItem, Requirement,
+                         RequirementView, SheetDraft, Trial)
 from .events import Event, EventKind
 from .gateway import LLMRequest, LLMResponse, LLMToolCall, Message, ModelGateway, Tier, Usage
 from .jev import JevDecision, S1Answer, S1Choice, S1Noul, S1Question, S1Result, S1Score, System1Client
@@ -29,7 +30,8 @@ __all__ = [
     "ObjectType", "Family", "JueObject", "JueState", "JueTemplate", "ScoredDecision", "JueOutput", "QuestionModel",
     "Discoverer",
     "QFamily", "Evidence", "Resolution", "Question",
-    "ReqItem", "PMDraft", "Requirement", "Trial",
+    "ReqItem", "PMDraft", "RDDraft", "SheetDraft", "Requirement", "Trial", "CitedKnowledge", "RequirementView",
+    "ContributionStat",
     "EventKind", "Event",
     "NeedCard", "Injection", "WeekItem",
     "Tier", "Message", "LLMRequest", "LLMToolCall", "Usage", "LLMResponse", "ModelGateway",

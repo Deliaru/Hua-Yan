@@ -21,7 +21,7 @@ class KnowledgeUnit(BaseModel):
     phenomenon_ids: list[str] = []
     owner: str
     decryptable: bool = False                 # 只有 mechanism 为 True
-    source: Literal["seed", "released", "trial"] = "seed"
+    source: Literal["seed", "released", "trial", "contributed"] = "seed"
     created_at: datetime
 
 
@@ -73,6 +73,6 @@ class LedgerEntry(BaseModel):
     ts: datetime
     owner: str
     points: int
-    reason: Literal["cited", "trial_pass", "product_released", "bounty"]
+    reason: Literal["cited", "contributed", "trial_pass", "product_released", "bounty"]
     ku_id: str | None = None
     ref: str

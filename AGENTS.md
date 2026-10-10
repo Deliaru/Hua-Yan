@@ -7,7 +7,9 @@
 
 **化言（HuaYan）：面向传化功能化学「市场—产品—研发」需求协同的多层 Agent 系统。**
 
-客户和业务员只会描述宏观现象，转述过程中需求会变形，研发拿到的是走样的需求。化言把对话中的需求转成可回查原话的化学语言需求单，按身份分层披露知识，L1 解决不了的需求逐层升级到产品经理和研发，新产品再回流到 L1 知识库。
+客户和业务员只会描述宏观现象，转述过程中需求会变形，研发拿到的是走样的需求。**化言的主旨是分层转译**：L1 把对话整理成绑定原话的场景需求卡；L1 解决不了的，由产品经理 Agent 转成 L2 产品需求语言、研发助手再转成 L3 化学语言需求单——每一层只用本层能看的知识，每一句都标明依据了谁的转化知识；研发的结果经反向包装回流到 L1。
+
+**权责对等**贯穿这条线：知识被引用即给归属人记分，研发修改的转译可沉淀为自己的知识，上层知识对下层只显示归属不显示原文，解密由研发本人审批。
 
 两个内部引擎：
 - **觉（Jue-K）**：发现层，判断「此刻是否出现了需要处理的情况、是哪一类」（追问补全、机会汇聚、知识冲突、泄露风险）。代码中是 `QuestionModel` 接口，两个实现：`jue_proto`（模板 × 对象 + 规则或 Jev 打分）、`jue_k`（训练出的追问模型）；
@@ -19,7 +21,7 @@
 
 Python 3.11+、`uv`、`pydantic` v2、`openai` SDK（所有大模型走 OpenAI 兼容接口）、`httpx`、`numpy`、`pandas`、`scikit-learn`、`matplotlib`、`pyyaml`、`streamlit`、`pytest`。
 
-不引入 LangChain、LangGraph 等 Agent 框架，不引入向量数据库。角色 Agent 在第一版中是**单次结构化调用**（抽取、L1 回答、产品经理起草），不做多步工具循环。
+不引入 LangChain、LangGraph 等 Agent 框架，不引入向量数据库。角色 Agent 在第一版中是**单次结构化调用**（抽取、L1 回答、L2 转译、L3 转译、反向包装），不做多步工具循环；转译引擎另有零成本的规则模式。
 
 ## 3. 目录结构
 
@@ -38,10 +40,10 @@ src/huayan/
   jev/         Jev 三个问题；system1/ 为 OneJev 客户端、降级与桩（复用 JUE）
   knowledge/   知识库、权限、披露、审计与积分
   l1/          抽取、L1 回答、会话流程
-  escalation/  产品经理起草、需求单、试样、新品发布
+  escalation/  translate.py（转译引擎：L2、L3、反向包装）  flow.py（需求单流转、沉淀、试样、发布）
   jue/         觉：expr、state、proto、publish、scan、features、jue_k
   sim/         需求卡、模拟客户、模拟业务周、Jue-K 轨迹
-  eval/        业务周运行器、指标
+  eval/        失真对照、业务周运行器、指标
   ui/          Streamlit 界面
   app.py       应用门面 HuayanApp（界面只通过它访问系统）
 scripts/     命令行脚本
@@ -72,7 +74,8 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 | `test_wp0` ×2 | 候选匹配的四步关系；总线合并与抑制 |
 | `test_wp_a1` | L1 身份拿不到 L2/L3 内容 |
 | `test_wp_a2` | L1 链路端到端：追问 → 推荐 / 升级，L1 与 L3 视图不同 |
-| `test_wp_a3` | 升级 → 发布 → 同类需求在 L1 命中新品 |
+| `test_wp_t` | L2 转译不含 L3 知识、L3 条目引用两位研发的知识并带原话、包装不含 L3 内容 |
+| `test_wp_a3` | 升级 → L2 → L3 → 沉淀 → 发布 → 同类需求在 L1 命中新品；引用与贡献记分；L2 看不到 L3 知识原文 |
 | `test_wp_b1` | 定时发现命中注入、不碰困难负样本；觉零大模型调用 |
 | `test_wp_b2` | 同种子可复现；业务代码不引用需求卡与注入清单 |
 | `test_wp_b3` | 事后有用性标签在手算样例上正确 |
@@ -99,5 +102,7 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 uv run pytest
 uv run python scripts/demo_mainline.py          # 离线跑完演示主线（WP-I 之后）
 uv run streamlit run src/huayan/ui/app.py       # 演示界面（WP-U 之后）
+uv run python scripts/translate_cli.py          # 一段对话的 L1 → L2 → L3 转译（WP-T 之后）
+uv run python scripts/run_distortion.py         # 失真对照（WP-E 之后）
 uv run python scripts/run_week.py --week data/week/w1   # 模拟业务周对照（WP-E 之后）
 ```
