@@ -23,9 +23,9 @@ META = ["family", "object_type", "object_id", "at", "source_id", "label", "split
 SOURCES = {"ask_slot": "程序轨迹（需求卡 + 随机追问策略 + 抽取噪声）", "ask_back": "程序轨迹结束时构造的需求单（应升级的卡）",
            "opportunity": "多周模拟业务周的合成事件", "knowledge_conflict": "多周模拟业务周的合成事件",
            "leak_risk": "多周模拟业务周的合成事件"}
-LABELS = {"ask_slot": "补上 / 改正真实值后，候选产品集合是否变化", "ask_back": "补上 / 改正真实值后，本层转化对照命中集合是否变化",
+LABELS = {"ask_slot": "补上 / 改正真实值后，最终推荐是否由错变对", "ask_back": "补上 / 改正真实值后，本层转化对照命中集合是否变化",
           "opportunity": "落在非困难负样本注入的 [earliest, latest] 内、object_id 一致",
-          "knowledge_conflict": "同上", "leak_risk": "同上"}
+          "knowledge_conflict": "同 opportunity", "leak_risk": "同 opportunity"}
 
 
 def features(df: pd.DataFrame) -> list[dict[str, float]]:
@@ -68,7 +68,7 @@ def main():
     with (out / "model.pkl").open("wb") as stream:
         pickle.dump({"classifier": classifier, "calibrators": calibrators}, stream)
     (out / "features.json").write_text(json.dumps({
-        "columns": columns, "encoding": "数值属性原值；布尔 0/1；slot / phenomenon / role / family / object_type 独热；缺失与未见取值记 0",
+        "columns": columns, "encoding": "数值属性原值；布尔 0/1；slot / role / family / object_type 独热（phenomenon 不进特征）；缺失与未见取值记 0",
         "sklearn": sklearn.__version__}, ensure_ascii=False, indent=2), encoding="utf-8")
     (out / "metrics.json").write_text(json.dumps({"samples": args.samples, "rows": len(df), "by_family": summary},
                                                  ensure_ascii=False, indent=2), encoding="utf-8")
@@ -103,10 +103,12 @@ def model_card(summary: dict, n_features: int) -> str:
 - 回问样本另补了 3,000 张应升级的卡（只取回问样本）；种子 `tr:50`～`tr:57` 是为回问补的挂在槽位取值上的 L3 转化对照。
 
 ## 适用范围
-占位种子下的追问、回问与三类定时发现的打分；阈值与链路沿用 `config/app.yaml`。换真实种子后用 `scripts/make_jue_k_data.py` 与本脚本重训。
+占位种子下的追问、回问与三类定时发现的打分；链路沿用 `config/app.yaml`。换真实种子后用 `scripts/make_jue_k_data.py` 与本脚本重训。
+输出是校准概率，阈值按代价取 1 / (1 + 漏问代价 / 多问代价)：实时追问建议 0.15 左右（原型的 0.5 会几乎不问），定时三类 0.5。
 
 ## 已知局限
 - 标签由需求卡真值或注入清单算出，是受控的模拟数据，不代表真实业务分布；接入真实对话后需用真实处置结果（`jue_samples.jsonl`）重新校准。
+- 现象不进特征（独热会让模型记住现象），未见现象上的追问不优于规则；换种子必须覆盖全部现象。
 - 追问只在前置条件通过的组合上打分：已填的槽位不进追问，模型不负责「对低置信度的值复问」。
 - 抽取噪声中填错的置信度（0.4～0.6）与填对的（0.7～0.95）不重叠，比真实抽取更容易分辨。
 - 回问的正例主要取决于该现象下槽位取值的先验（模型看不到真实值），且只来自挂在槽位取值上的少数几条转化对照。

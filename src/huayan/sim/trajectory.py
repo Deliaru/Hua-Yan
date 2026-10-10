@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from huayan.contracts import (CustomerProfile, JueObject, JueState, NeedCard, NeedState, Phenomenon, Product,
                               QuestionModel, Requirement, Seeds, SlotFill)
-from huayan.domain import match_candidates
+from huayan.domain import correct_product
 from huayan.jue.state import realtime_state, requirement_state, trans_hits
 
 TURNS = 6
@@ -13,12 +13,12 @@ WRONG, MISS = 0.10, 0.05      # 抽取噪声：填错（同槽位另一个取值
 
 
 def ask_label(need: NeedState, card: NeedCard, slot: str, products: list[Product]) -> int:
-    """追问：补上真实值（或把填错的改成真实值）后，候选产品集合是否变化。客户说不清的槽位为 0。"""
+    """追问：补上真实值（或把填错的改成真实值）后，最终推荐是否由错变对（含正确判为应升级）。客户说不清的槽位为 0。"""
     if _no_gain(need, card, slot):
         return 0
     known = need.known()
-    ids = lambda k: {c.product_id for c in match_candidates(card.phenomenon, k, products)}
-    return int(ids(known) != ids({**known, slot: card.slots[slot]}))
+    right = lambda k: correct_product(card.phenomenon, k, products) == card.truth_product
+    return int(not right(known) and right({**known, slot: card.slots[slot]}))
 
 
 def back_label(req: Requirement, need: NeedState, card: NeedCard, slot: str, phen: Phenomenon, kb, layer: int) -> int:

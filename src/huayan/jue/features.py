@@ -1,7 +1,7 @@
 """契约 ⑨：Jue-K 的特征构建，训练与推理共用。数值属性直接用、布尔转 0/1、类别独热；缺失属性与未见取值都记 0。"""
 from huayan.contracts import Family, JueObject
 
-CATEGORICAL = ("slot", "phenomenon", "role")     # 其余字符串属性（product_id、value）不进特征
+CATEGORICAL = ("slot", "role")     # 其余字符串属性不进特征；phenomenon 不独热，否则模型记住现象、对未见现象不能泛化
 
 
 def build(obj: JueObject, family: Family) -> dict[str, float]:

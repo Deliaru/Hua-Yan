@@ -1,268 +1,360 @@
 {
   "test": {
-    "n_cards": 300,
+    "n_cards": 2000,
     "不追问": {
       "tau": 2.0,
       "mean_asks": 0.0,
-      "useless_rate": 0.0,
-      "accuracy": 0.5333333333333333
+      "accuracy": 0.5465
     },
     "Jue-K": [
       {
+        "tau": 0.05,
+        "mean_asks": 1.629,
+        "accuracy": 0.91
+      },
+      {
         "tau": 0.1,
-        "mean_asks": 1.6233333333333333,
-        "useless_rate": 0.5585215605749486,
-        "accuracy": 0.9066666666666666
+        "mean_asks": 1.437,
+        "accuracy": 0.9015
+      },
+      {
+        "tau": 0.15,
+        "mean_asks": 1.437,
+        "accuracy": 0.9015
       },
       {
         "tau": 0.2,
-        "mean_asks": 1.6233333333333333,
-        "useless_rate": 0.5585215605749486,
-        "accuracy": 0.9066666666666666
+        "mean_asks": 1.26,
+        "accuracy": 0.892
+      },
+      {
+        "tau": 0.25,
+        "mean_asks": 0.999,
+        "accuracy": 0.865
       },
       {
         "tau": 0.3,
-        "mean_asks": 1.0533333333333332,
-        "useless_rate": 0.38924050632911394,
-        "accuracy": 0.86
+        "mean_asks": 0.876,
+        "accuracy": 0.856
       },
       {
         "tau": 0.4,
-        "mean_asks": 0.9333333333333333,
-        "useless_rate": 0.3357142857142857,
-        "accuracy": 0.8466666666666667
+        "mean_asks": 0.5865,
+        "accuracy": 0.7955
       },
       {
         "tau": 0.5,
-        "mean_asks": 0.7366666666666667,
-        "useless_rate": 0.28054298642533937,
-        "accuracy": 0.7766666666666666
+        "mean_asks": 0.1975,
+        "accuracy": 0.6635
       },
       {
         "tau": 0.6,
-        "mean_asks": 0.7366666666666667,
-        "useless_rate": 0.28054298642533937,
-        "accuracy": 0.7766666666666666
+        "mean_asks": 0.1435,
+        "accuracy": 0.632
       },
       {
         "tau": 0.7,
-        "mean_asks": 0.36,
-        "useless_rate": 0.009259259259259259,
-        "accuracy": 0.7166666666666667
+        "mean_asks": 0.1435,
+        "accuracy": 0.632
       },
       {
         "tau": 0.8,
-        "mean_asks": 0.35333333333333333,
-        "useless_rate": 0.009433962264150943,
-        "accuracy": 0.7166666666666667
+        "mean_asks": 0.0,
+        "accuracy": 0.5465
       },
       {
         "tau": 0.9,
-        "mean_asks": 0.35,
-        "useless_rate": 0.0,
-        "accuracy": 0.7166666666666667
+        "mean_asks": 0.0,
+        "accuracy": 0.5465
       }
     ],
     "觉原型（规则分）": [
       {
+        "tau": 0.05,
+        "mean_asks": 1.6545,
+        "accuracy": 0.909
+      },
+      {
         "tau": 0.1,
-        "mean_asks": 1.63,
-        "useless_rate": 0.5644171779141104,
-        "accuracy": 0.9133333333333333
+        "mean_asks": 1.6545,
+        "accuracy": 0.909
+      },
+      {
+        "tau": 0.15,
+        "mean_asks": 1.6545,
+        "accuracy": 0.909
       },
       {
         "tau": 0.2,
-        "mean_asks": 1.63,
-        "useless_rate": 0.5644171779141104,
-        "accuracy": 0.9133333333333333
+        "mean_asks": 1.6545,
+        "accuracy": 0.909
+      },
+      {
+        "tau": 0.25,
+        "mean_asks": 1.6545,
+        "accuracy": 0.909
       },
       {
         "tau": 0.3,
-        "mean_asks": 1.63,
-        "useless_rate": 0.5644171779141104,
-        "accuracy": 0.9133333333333333
+        "mean_asks": 1.6545,
+        "accuracy": 0.909
       },
       {
         "tau": 0.4,
-        "mean_asks": 1.63,
-        "useless_rate": 0.5644171779141104,
-        "accuracy": 0.9133333333333333
+        "mean_asks": 1.6545,
+        "accuracy": 0.909
       },
       {
         "tau": 0.5,
-        "mean_asks": 1.6066666666666667,
-        "useless_rate": 0.558091286307054,
-        "accuracy": 0.9133333333333333
+        "mean_asks": 1.627,
+        "accuracy": 0.909
       },
       {
         "tau": 0.6,
-        "mean_asks": 0.4666666666666667,
-        "useless_rate": 0.20714285714285716,
-        "accuracy": 0.77
+        "mean_asks": 0.4545,
+        "accuracy": 0.759
       },
       {
         "tau": 0.7,
-        "mean_asks": 0.34,
-        "useless_rate": 0.0392156862745098,
-        "accuracy": 0.7366666666666667
+        "mean_asks": 0.3405,
+        "accuracy": 0.7275
       },
       {
         "tau": 0.8,
-        "mean_asks": 0.19666666666666666,
-        "useless_rate": 0.06779661016949153,
-        "accuracy": 0.65
+        "mean_asks": 0.21,
+        "accuracy": 0.6535
       },
       {
         "tau": 0.9,
-        "mean_asks": 0.08333333333333333,
-        "useless_rate": 0.16,
-        "accuracy": 0.5733333333333334
+        "mean_asks": 0.101,
+        "accuracy": 0.584
       }
     ],
     "B1 必问清单": {
       "tau": 0.5,
-      "mean_asks": 1.8933333333333333,
-      "useless_rate": 0.625,
-      "accuracy": 0.91
+      "mean_asks": 1.92,
+      "accuracy": 0.908
     },
     "B2 信息价值规则": {
       "tau": 0.5,
-      "mean_asks": 1.6166666666666667,
-      "useless_rate": 0.5608247422680412,
-      "accuracy": 0.91
+      "mean_asks": 1.6335,
+      "accuracy": 0.9085
+    },
+    "Jue-K − 觉原型（同追问次数，百分点）": {
+      "0.5": {
+        "diff_pp": 0.13269193876376262,
+        "ci95_pp": [
+          -0.8913714906017343,
+          1.2624498444195489
+        ]
+      },
+      "0.75": {
+        "diff_pp": 3.286455582929171,
+        "ci95_pp": [
+          2.4146620261751677,
+          4.23347435907471
+        ]
+      },
+      "1.0": {
+        "diff_pp": 3.6316667892066667,
+        "ci95_pp": [
+          2.642235434104376,
+          4.717177175918992
+        ]
+      },
+      "1.25": {
+        "diff_pp": 3.0195794426880362,
+        "ci95_pp": [
+          2.1820692974989835,
+          3.790413752315395
+        ]
+      },
+      "1.5": {
+        "diff_pp": 1.1536397254797381,
+        "ci95_pp": [
+          0.581186499150421,
+          1.7458872510406236
+        ]
+      }
     }
   },
   "heldout": {
-    "n_cards": 300,
+    "n_cards": 2000,
     "不追问": {
       "tau": 2.0,
       "mean_asks": 0.0,
-      "useless_rate": 0.0,
-      "accuracy": 0.8
+      "accuracy": 0.8105
     },
     "Jue-K": [
       {
+        "tau": 0.05,
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
+      },
+      {
         "tau": 0.1,
-        "mean_asks": 0.93,
-        "useless_rate": 0.7956989247311828,
-        "accuracy": 0.9433333333333334
+        "mean_asks": 0.91,
+        "accuracy": 0.93
+      },
+      {
+        "tau": 0.15,
+        "mean_asks": 0.91,
+        "accuracy": 0.93
       },
       {
         "tau": 0.2,
-        "mean_asks": 0.93,
-        "useless_rate": 0.7956989247311828,
-        "accuracy": 0.9433333333333334
+        "mean_asks": 0.464,
+        "accuracy": 0.856
+      },
+      {
+        "tau": 0.25,
+        "mean_asks": 0.015,
+        "accuracy": 0.812
       },
       {
         "tau": 0.3,
-        "mean_asks": 0.3466666666666667,
-        "useless_rate": 0.8942307692307693,
-        "accuracy": 0.8166666666666667
+        "mean_asks": 0.015,
+        "accuracy": 0.812
       },
       {
         "tau": 0.4,
-        "mean_asks": 0.34,
-        "useless_rate": 0.8921568627450981,
-        "accuracy": 0.8166666666666667
+        "mean_asks": 0.015,
+        "accuracy": 0.812
       },
       {
         "tau": 0.5,
-        "mean_asks": 0.016666666666666666,
-        "useless_rate": 1.0,
-        "accuracy": 0.8
+        "mean_asks": 0.0,
+        "accuracy": 0.8105
       },
       {
         "tau": 0.6,
-        "mean_asks": 0.016666666666666666,
-        "useless_rate": 1.0,
-        "accuracy": 0.8
+        "mean_asks": 0.0,
+        "accuracy": 0.8105
       },
       {
         "tau": 0.7,
         "mean_asks": 0.0,
-        "useless_rate": 0.0,
-        "accuracy": 0.8
+        "accuracy": 0.8105
       },
       {
         "tau": 0.8,
         "mean_asks": 0.0,
-        "useless_rate": 0.0,
-        "accuracy": 0.8
+        "accuracy": 0.8105
       },
       {
         "tau": 0.9,
         "mean_asks": 0.0,
-        "useless_rate": 0.0,
-        "accuracy": 0.8
+        "accuracy": 0.8105
       }
     ],
     "觉原型（规则分）": [
       {
+        "tau": 0.05,
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
+      },
+      {
         "tau": 0.1,
-        "mean_asks": 0.93,
-        "useless_rate": 0.7956989247311828,
-        "accuracy": 0.9433333333333334
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
+      },
+      {
+        "tau": 0.15,
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
       },
       {
         "tau": 0.2,
-        "mean_asks": 0.93,
-        "useless_rate": 0.7956989247311828,
-        "accuracy": 0.9433333333333334
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
+      },
+      {
+        "tau": 0.25,
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
       },
       {
         "tau": 0.3,
-        "mean_asks": 0.93,
-        "useless_rate": 0.7956989247311828,
-        "accuracy": 0.9433333333333334
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
       },
       {
         "tau": 0.4,
-        "mean_asks": 0.93,
-        "useless_rate": 0.7956989247311828,
-        "accuracy": 0.9433333333333334
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
       },
       {
         "tau": 0.5,
-        "mean_asks": 0.93,
-        "useless_rate": 0.7956989247311828,
-        "accuracy": 0.9433333333333334
+        "mean_asks": 0.912,
+        "accuracy": 0.9305
       },
       {
         "tau": 0.6,
         "mean_asks": 0.0,
-        "useless_rate": 0.0,
-        "accuracy": 0.8
+        "accuracy": 0.8105
       },
       {
         "tau": 0.7,
         "mean_asks": 0.0,
-        "useless_rate": 0.0,
-        "accuracy": 0.8
+        "accuracy": 0.8105
       },
       {
         "tau": 0.8,
         "mean_asks": 0.0,
-        "useless_rate": 0.0,
-        "accuracy": 0.8
+        "accuracy": 0.8105
       },
       {
         "tau": 0.9,
         "mean_asks": 0.0,
-        "useless_rate": 0.0,
-        "accuracy": 0.8
+        "accuracy": 0.8105
       }
     ],
     "B1 必问清单": {
       "tau": 0.5,
-      "mean_asks": 1.8833333333333333,
-      "useless_rate": 0.8991150442477877,
-      "accuracy": 0.94
+      "mean_asks": 1.828,
+      "accuracy": 0.935
     },
     "B2 信息价值规则": {
       "tau": 0.5,
-      "mean_asks": 0.93,
-      "useless_rate": 0.7956989247311828,
-      "accuracy": 0.9433333333333334
+      "mean_asks": 0.912,
+      "accuracy": 0.9305
+    },
+    "Jue-K − 觉原型（同追问次数，百分点）": {
+      "0.5": {
+        "diff_pp": -1.4316379513806932,
+        "ci95_pp": [
+          -2.3117828274828134,
+          -0.549483991072046
+        ]
+      },
+      "0.75": {
+        "diff_pp": -0.5731295728109487,
+        "ci95_pp": [
+          -0.9250026945806147,
+          -0.19253677123761037
+        ]
+      },
+      "1.0": {
+        "diff_pp": 0.0,
+        "ci95_pp": [
+          0.0,
+          0.0
+        ]
+      },
+      "1.25": {
+        "diff_pp": 0.0,
+        "ci95_pp": [
+          0.0,
+          0.0
+        ]
+      },
+      "1.5": {
+        "diff_pp": 0.0,
+        "ci95_pp": [
+          0.0,
+          0.0
+        ]
+      }
     }
   }
 }

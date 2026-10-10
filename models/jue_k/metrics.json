@@ -15,9 +15,9 @@
         "test": 61,
         "heldout": 52
       },
-      "val_auc": 0.624828237718997,
-      "val_brier_raw": 0.19686627138456259,
-      "val_brier_calibrated": 0.18182308003405084
+      "val_auc": 0.605333218825146,
+      "val_brier_raw": 0.19806616473266647,
+      "val_brier_calibrated": 0.18251455632077773
     },
     "ask_slot": {
       "n": {
@@ -27,14 +27,14 @@
         "heldout": 889
       },
       "positives": {
-        "train": 2046,
-        "val": 479,
-        "test": 498,
+        "train": 1089,
+        "val": 292,
+        "test": 265,
         "heldout": 188
       },
-      "val_auc": 0.8264765060058699,
-      "val_brier_raw": 0.17354159387413848,
-      "val_brier_calibrated": 0.15785542375174352
+      "val_auc": 0.742687267132556,
+      "val_brier_raw": 0.18287806781185234,
+      "val_brier_calibrated": 0.16769134946660552
     },
     "knowledge_conflict": {
       "n": {
@@ -50,7 +50,7 @@
         "heldout": 0
       },
       "val_auc": 1.0,
-      "val_brier_raw": 3.9532450102271445e-11,
+      "val_brier_raw": 3.142831508261132e-11,
       "val_brier_calibrated": 0.0
     },
     "leak_risk": {
@@ -67,7 +67,7 @@
         "heldout": 0
       },
       "val_auc": 0.9080729166666667,
-      "val_brier_raw": 0.08583746213383228,
+      "val_brier_raw": 0.08547408295251917,
       "val_brier_calibrated": 0.08111702127659574
     },
     "opportunity": {
@@ -84,7 +84,7 @@
         "heldout": 0
       },
       "val_auc": 0.9454814814814815,
-      "val_brier_raw": 0.1097449849175332,
+      "val_brier_raw": 0.10189668669379752,
       "val_brier_calibrated": 0.0755522706742219
     }
   }

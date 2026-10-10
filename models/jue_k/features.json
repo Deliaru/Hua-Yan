@@ -34,16 +34,6 @@
     "object_type=slot",
     "object_type=theme",
     "open_project",
-    "phenomenon=bleeding_staining",
-    "phenomenon=color_spots",
-    "phenomenon=color_unlevel",
-    "phenomenon=crease_marks",
-    "phenomenon=harsh_hand",
-    "phenomenon=low_whiteness",
-    "phenomenon=poor_fastness",
-    "phenomenon=shade_variation",
-    "phenomenon=strength_loss",
-    "phenomenon=yellowing",
     "prior_top",
     "required",
     "role=sales",
@@ -59,6 +49,6 @@
     "turn",
     "unknown"
   ],
-  "encoding": "数值属性原值；布尔 0/1；slot / phenomenon / role / family / object_type 独热；缺失与未见取值记 0",
+  "encoding": "数值属性原值；布尔 0/1；slot / role / family / object_type 独热（phenomenon 不进特征）；缺失与未见取值记 0",
   "sklearn": "1.9.1"
 }

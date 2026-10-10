@@ -13,22 +13,24 @@ def test_hindsight_labels_on_hand_examples(mini_seeds, sim_clock):
     at = sim_clock.now()
     products = mini_seeds.products
     phen = next(p for p in mini_seeds.phenomena if p.id == "color_unlevel")
-    card = lambda slots, unknown=(): NeedCard(id="card:1", phenomenon="color_unlevel", slots=slots,
-                                              unknown_slots=list(unknown), customer_id="customer:C01", chem_savvy=False,
-                                              wants_mechanism=False, truth_product=None)
+    card = lambda slots, unknown=(), product=None: NeedCard(id="card:1", phenomenon="color_unlevel", slots=slots,
+                                                            unknown_slots=list(unknown), customer_id="customer:C01",
+                                                            chem_savvy=False, wants_mechanism=False, truth_product=product)
     fill = lambda slot, value, status="filled": SlotFill(slot=slot, value=value, status=status, confidence=0.5,
                                                         quote="", turn_id="turn:s:1")
     need = lambda **slots: NeedState(session_id="s", customer_id="customer:C01", sales_id="sales:S01",
                                      phenomenon="color_unlevel", slots=slots)
     truth = {"fiber": "棉", "equipment": "溢流染色机", "constraint": "无"}
 
-    # 追问 1：面料未填，真值「棉」→ 候选从 {T-101, T-205} 变成空集（应升级）→ 1
+    # 追问 1：面料未填时推荐 T-205（候选 {T-101, T-205}，取适用条件多的），真值「棉」、应升级 → 补上后候选为空、判为升级，由错变对 → 1
     assert ask_label(need(), card(truth), "fiber", products) == 1
     # 追问 2：面料答过「不清楚」→ 0
     assert ask_label(need(fiber=fill("fiber", None, "unknown")), card(truth, ["fiber"]), "fiber", products) == 0
-    # 追问 3：面料被填错成「涤纶」（候选 {T-101}），真值「锦纶氨纶」→ 改正后 {T-205} → 1
-    wrong = need(fiber=fill("fiber", "涤纶"))
-    assert ask_label(wrong, card({**truth, "fiber": "锦纶氨纶"}), "fiber", products) == 1
+    # 追问 3：真值「锦纶氨纶」、正确产品 T-205 → 补上后候选缩成 {T-205}，但推荐本来就是 T-205 → 0
+    nylon = {**truth, "fiber": "锦纶氨纶"}
+    assert ask_label(need(), card(nylon, product="T-205"), "fiber", products) == 0
+    # 追问 4：面料被填错成「涤纶」（推荐 T-101），改正后推荐 T-205 → 1
+    assert ask_label(need(fiber=fill("fiber", "涤纶")), card(nylon, product="T-205"), "fiber", products) == 1
 
     # 回问：L3 起草中只知设备；文本「色花（匀染性差） 气流染色机」只命中 L3 的 tr:4（匀染），
     # 补上真值「锦纶氨纶」后多命中 R02 的 tr:5 → 1
