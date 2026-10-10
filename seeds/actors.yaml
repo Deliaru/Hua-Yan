@@ -8,6 +8,7 @@ items:
   - {id: "customer:C03", role: customer, name: 某印染厂 C（模拟）}
   - {id: "customer:C04", role: customer, name: 某印染厂 D（模拟）}
   - {id: "pm:P01", role: pm, name: 产品经理老周（模拟）}
+  - {id: "pm:agent", role: pm, name: 产品经理 Agent}
   - {id: "rd:R01", role: rd, name: 染色过程研发陈工（模拟）}
   - {id: "rd:R02", role: rd, name: 弹力面料与整理研发刘工（模拟）}
   - {id: "supervisor:M01", role: supervisor, name: 主管赵总（模拟）}

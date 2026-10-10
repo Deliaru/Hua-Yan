@@ -87,7 +87,7 @@ class Recommendation(BaseModel):              # 会话里存的「决定」，�
     match: JevDecision | None                 # 无候选时为 None
     disclose: JevDecision | None
     version: Version | None                   # 对 L1 披露的版本
-    escalated_question_id: str | None = None
+    escalated_question_id: str | None = None  # 业务员签字升级时关闭的 escalate_need 问题
     at: datetime
 
 
@@ -110,3 +110,5 @@ class Session(BaseModel):
     replies: list[AssistantReply] = []
     recommendation: Recommendation | None = None
     status: Literal["open", "recommended", "escalated", "closed"] = "open"
+    reply_draft: str = ""                     # 副驾起草的回复，预填进「发给客户」输入框；发出后清空
+    escalate_note: str = ""                   # 副驾起草的升级说明；业务员签字时写入需求单

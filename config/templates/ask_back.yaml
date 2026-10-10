@@ -1,5 +1,6 @@
 id: ask_back
 family: ask_back
+kind: advance
 object_type: slot
 decision_label: 是否回问客户
 # 需求单起草中（layer 2 产品经理 / layer 3 研发）；客户没说过、也没答过「不清楚」，且它的取值会改变本层转译

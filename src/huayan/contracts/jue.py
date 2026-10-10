@@ -1,9 +1,9 @@
 """契约 ⑤：觉的对象、状态、模板与输出。"""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from ._base import BaseModel, datetime
 from .bus import Question
@@ -12,8 +12,9 @@ from .seeds import Role
 if TYPE_CHECKING:
     from huayan.events import EventLog
 
-ObjectType = Literal["slot", "theme", "knowledge", "actor"]
-Family = Literal["ask_slot", "ask_back", "opportunity", "knowledge_conflict", "leak_risk"]
+ObjectType = Literal["slot", "theme", "knowledge", "actor", "session", "requirement"]
+# 决策 id。合法取值 = 已加载模板目录中的 family 集合（加载时校验唯一）；新增决策点 = 人批准后新增模板文件，不改契约
+Family = Annotated[str, StringConstraints(pattern=r"^[a-z_]+$")]
 
 
 class JueObject(BaseModel):
@@ -37,13 +38,15 @@ class JueState(BaseModel):
 class JueTemplate(BaseModel):
     id: str
     family: Family
+    kind: Literal["advance", "anomaly"]       # 推进类 / 异常类
     object_type: ObjectType
     decision_label: str
     precondition: str | None = None           # 布尔表达式，只能引用 attrs.x
     rule_score: str | None = None             # 数值表达式；为空时 1.0
     worth_prompt: str                         # 含 {object}
     title: str                                # 可含 {object} 与 {attrs.x}
-    owner_role: Role
+    owner_role: Role                          # 主人（谁准备）；没有准备环节的与签字人相同
+    signer_role: Role | None = None           # 签字人角色；None = 提示类（ask_slot、ask_back），不进待签
     bounty_points: int = 0
     urgency: str | None = None                # 数值表达式，截断到 [0,1]；为空时 1.0
 
@@ -55,6 +58,7 @@ class ScoredDecision(BaseModel):
     urgency: float | None = None
     precondition_passed: bool = True
     template_id: str | None = None
+    scored_by: Literal["onejev", "rule", "jue_k"] | None = None   # 逐条打分来源；None 时取 JueOutput.scored_by
 
 
 class JueOutput(BaseModel):

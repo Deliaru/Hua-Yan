@@ -47,6 +47,7 @@ class DecryptGrant(BaseModel):
     session_id: str
     approved_by: str
     at: datetime
+    text: str = ""                            # 研发审定的、给这一位客户的结论层面说明；不含转译过程与配方（第二档）
 
 
 class CardSection(BaseModel):

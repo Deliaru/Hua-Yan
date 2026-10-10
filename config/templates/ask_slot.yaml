@@ -1,5 +1,6 @@
 id: ask_slot
 family: ask_slot
+kind: advance
 object_type: slot
 decision_label: 是否追问该信息
 # 对话中（layer 1）；未填、没答过「不清楚」、问过不到 2 次、现象已知；问了会改变候选集，或是必问项且候选不止一个

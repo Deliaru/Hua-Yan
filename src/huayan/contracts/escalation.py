@@ -12,39 +12,64 @@ class ReqItem(BaseModel):
     slot: str | None = None
     quote_refs: list[str] = []                # turn id，可回查客户原话
     ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
+    edited_by: str | None = None              # 最后一次由人修改的 actor id；None = 骨架或副驾起草
 
 
-class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理助手编辑）
+class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理 Agent 编辑）
     direction: str
     product_lang: list[ReqItem]
 
 
-class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发助手编辑）
+class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发副驾编辑）
     chem_lang: list[ReqItem]
     hypotheses: list[str] = []                # 研发方向假设
 
 
-class SheetDraft(BaseModel):                  # 反向包装：产品需求＋对外要点 → L1 说明书（规则模板，产品经理助手编辑）
+class SheetDraft(BaseModel):                  # 反向包装：产品需求＋对外要点 → L1 说明书（规则模板，产品经理 Agent 编辑）
     sheet: str
     usage: str
 
 
+class LeakHit(BaseModel):                     # 泄密匹配结果，只给句序号与类别，不含命中内容
+    index: int                                # 按「。；！？\n」切句后的序号，从 0 开始
+    source: Literal["sealed", "l3_term", "hypothesis"]
+
+
+class PointsDraft(BaseModel):                 # 封存 / 放出两栏草稿（只对 L3 可见）
+    public: str                               # 拟放出的对外要点
+    sealed: list[str]                         # 拟封存的窗户纸
+    self_check: list[LeakHit] = []            # 对 public 的泄露自查结果
+
+
+class ContributionDraft(BaseModel):           # 副驾提炼的可沉淀转化知识（只对 L3 可见）
+    item_index: int
+    scene_phrase: str
+    chem_term: str
+    note: str = ""                            # 泛化说明、与已有知识相近或冲突之处
+
+
 class Requirement(BaseModel):
     id: str                                   # "req:<n>"
-    question_id: str
+    question_id: str                          # 产生它的 escalate_need 或 opportunity 问题
     session_ids: list[str]
     phenomenon: str
     known_slots: dict[str, str]
-    direction: str
-    product_lang: list[ReqItem]               # L2/L3 可见
+    assigned_rd: str                          # 接单与签字的研发：建单时取该现象 L3 转化对照条数最多的研发（并列取 id 最小）
+    escalate_note: str = ""                   # 业务员签字时的升级说明（L2/L3 可见）
+    direction: str = ""                       # 空单时为空
+    product_lang: list[ReqItem] = []          # L2/L3 可见；空单时为空
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
-    hypotheses: list[str] = []
-    status: Literal["draft", "pm_confirmed", "rd_confirmed", "released", "rejected"]
-    drafted_by: str                           # L2 草稿的委托人（产品经理 actor id）
+    hypotheses: list[str] = []                # 研发方向假设（只对 L3 可见）；泄密匹配的来源之一
+    status: Literal["draft", "rd_accepted", "rd_confirmed", "released", "rejected"]
+    drafted_by: str = "pm:agent"              # L2 草稿的起草者
     chem_drafted_by: str | None = None        # L3 草稿的委托人（研发 actor id）
-    pm_confirmed_by: str | None = None
+    rd_accepted_by: str | None = None         # 研发接单（= 立项）
     rd_confirmed_by: str | None = None
-    public_points: str = ""                   # 研发确认可以对外的要点：L3 内容流向 L2/L1 的唯一出口
+    return_notes: list[str] = []              # 研发退回理由（提交前经 L3 术语自查，L2 可见）
+    contribution_drafts: list[ContributionDraft] = []   # 只对 L3 可见
+    points_draft: PointsDraft | None = None   # 只对 L3 可见
+    public_points: str = ""                   # 研发签字放出的对外要点：L3 内容流向 L2/L1 的唯一出口
+    sealed: list[str] = []                    # 研发签字封存的窗户纸，只对 L3 可见
     sheet: SheetDraft | None = None           # 反向包装草稿
     product_id: str | None = None             # 目标产品：L3 确认时关联种子中 status=project 的产品；发布后即新产品
     created_at: datetime
@@ -60,6 +85,9 @@ class Trial(BaseModel):
     cause: Literal["none", "product", "equipment", "operation"]
     note: str = ""
     at: datetime
+    market_eval: Literal["pass", "fail"] | None = None   # 客户评价，业务员录入
+    market_eval_by: str | None = None
+    market_eval_note: str = ""
 
 
 class CitedKnowledge(BaseModel):              # 需求单中被引用的知识，按查看者裁剪

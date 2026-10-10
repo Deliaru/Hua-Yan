@@ -2,7 +2,9 @@
 
 > 跨模块的数据格式与接口契约。**冻结后只能由人修改**。代码实现在 `src/huayan/contracts/`，必须与本文件一致。
 > 下列代码是规格（Python / pydantic v2 风格），字段名、类型、枚举值必须一致；函数签名必须一致，内部实现自由。
-> 版本：v4｜2026-10-11
+> 版本：v5｜2026-10-11
+>
+> **v5 变更（觉是全过程的决策点发现器；产品经理由 Agent 担任；工作面 + 副驾，按钮即签字；依据 `workpackages/REPLAN-v5.md` 与 `workpackages/WP-0v5.md`）**：觉的对象增加 `session`、`requirement`，`Family` / `QFamily` 改为由模板目录校验的字符串，模板增加 `kind`、`signer_role`，`ScoredDecision` 逐条标 `scored_by`；问题增加签字人、准备完成时间、模板 id，处置动作改为 sign / accept / return 等，总线增加 `set_prepared`；需求单可以是空单，`pm_confirmed` 改为 `rd_accepted`（立项 ≡ 研发接单），增加指定研发、封存项、两栏与提炼草稿、退回理由，`ReqItem.edited_by`，试样增加客户评价，新增 `LeakHit` 与 `leak_hits`；会话增加回复与升级说明草稿；事件增加 `match` 等 8 种、删除 `requirement_confirmed`；Jev 不再升级；新增身份 `pm:agent`，积分只给人；`DecryptGrant.text`；删除路由配置；门面删除 `confirm_requirement` 与内部流程推进，新增升级、接单 / 退回、客户评价、草稿、`mark_prepared`、`questions`、`jue_timeline` 等原子方法与写后评估；`AgentMessage.target`，`pm:agent` 无生效工具，派单只派总线上的问题，删除「确认后派单」。
 >
 > **v4 变更（觉回到「发现需要决策的情况，并给出校准概率」）**：Jue-K 从「只做追问」扩为**一个模型覆盖全部决策类型**，实时与定时都可以替换原型；新增决策类型 `ask_back`（需求单在 L2/L3 起草时发现缺一个会改变转译的信息，派回原业务员向客户回问），slot 对象增加 `layer`、`trans_splits`，新增 `requirement_state`；模板增加 `urgency` 表达式，`ScoredDecision.urgency`、`Question.urgency` 照填；新增 `JueRecord` 与 `jue_samples.jsonl`（每次觉调用的完整状态与输出，数据引擎）；`Discoverer` 增加 `jue_k`；`QFamily` 增加 `ask_back`，处置增加 `answered`，路由 `ask_back → sales`；配置增加 `scheduled_model`，`RunStatus` 增加同名字段；Jue-K 训练数据改为 `data/jue_k/samples.csv`，`features.build(obj, family)`；门面 `tick` / `add_turn` 增加回问的发布与回填；助手 `notify` 增加 `session_id`，业务员助手增加 `list_my_questions`。
 >
@@ -24,7 +26,7 @@
 
 | 对象 | 格式 | 例子 |
 |---|---|---|
-| 人 | `<role>:<id>` | `sales:S01`、`customer:C01`、`pm:P01`、`rd:R01`、`supervisor:M01` |
+| 人 | `<role>:<id>` | `sales:S01`、`customer:C01`、`pm:P01`、`rd:R01`、`supervisor:M01`；产品经理 Agent 为 `pm:agent`（v5） |
 | 产品 | 虚构型号 | `HY-LV205` |
 | 现象、槽位 | 小写英文 | `color_unlevel`、`fiber` |
 | 知识单元 | `ku:<kind>:<ref>` | `ku:mechanism:HY-LV205` |
@@ -122,7 +124,8 @@ class Translation(BaseModel):                 # seeds/translations.yaml，转化
     owner: str                                # 归属人：L2 条目为产品经理，L3 条目为具体某位研发
     phenomenon_ids: list[str] = []
 
-# seeds/actors.yaml：list[Actor]，至少包含 2 个业务员、4 个客户、1 个产品经理、2 个研发、1 个主管
+# seeds/actors.yaml：list[Actor]，至少包含 2 个业务员、4 个客户、1 个产品经理（L2 历史知识归属人，v5 起无工作台）、
+# pm:agent（产品经理 Agent，role = pm）、2 个研发、1 个主管
 ```
 
 ### 1.5 领域函数 `huayan.domain`（WP-0 提供，所有包共用，不得各写一套）
@@ -242,6 +245,8 @@ class DecryptGrant(BaseModel):
     session_id: str
     approved_by: str                          # 产品的知识归属研发
     at: datetime
+    text: str = ""                            # v5（第二档）：研发审定的、给这一位客户的结论层面说明；不含转译过程与配方。
+                                              # 经业务员转交，业务员可见；研发的转译过程始终只在 L3
 
 class CardSection(BaseModel):
     title: str
@@ -295,9 +300,10 @@ class Ledger:     # add(entry) / totals() -> dict[owner, points] / list(owner=No
 ```
 
 积分规则在 `config/app.yaml` 的 `points`（**权责对等的落点**）：
-- `cited`：知识单元被一次推荐卡片引用，或被一张确认的需求单（`ReqItem.ku_refs`）引用，给其归属人记分；同一知识在同一会话或需求单中只记一次；
+- **积分只给人**（v5）：`pm:agent` 不进账本；
+- `cited`：知识单元被一次推荐卡片引用给其归属人记分；需求单所引知识在**研发接单时记 L2、确认转译时记 L3**（`ReqItem.ku_refs`）；同一知识在同一会话或需求单中只记一次；
 - `contributed`：研发把自己修改后的转译沉淀为新的转化知识；
-- `trial_pass`：试样通过；`product_released`：新品发布（给产品归属研发）；`bounty`：处理带悬赏的问题。
+- `trial_pass`：试样通过；`product_released`：新品发布（给产品归属研发）；`bounty`：处理带悬赏的问题，记给签字人。
 
 ---
 
@@ -383,7 +389,7 @@ class Recommendation(BaseModel):              # 会话里存的「决定」，�
     match: JevDecision | None                 # 无候选时为 None
     disclose: JevDecision | None
     version: Version | None                   # 对 L1 披露的版本
-    escalated_question_id: str | None = None
+    escalated_question_id: str | None = None  # v5：业务员签字升级时关闭的 escalate_need 问题
     at: datetime
 
 class AssistantReply(BaseModel):              # 问答类意图（product_question / mechanism_request）的回复
@@ -404,6 +410,8 @@ class Session(BaseModel):
     replies: list[AssistantReply] = []
     recommendation: Recommendation | None = None
     status: Literal["open", "recommended", "escalated", "closed"] = "open"
+    reply_draft: str = ""                     # v5：副驾起草的回复，预填进「发给客户」输入框；发出后清空
+    escalate_note: str = ""                   # v5：副驾起草的升级说明；业务员签字时写入需求单
 ```
 
 ---
@@ -468,12 +476,11 @@ class Jev:
  "hits": [{"title": "...", "text": "..."}]}
 ```
 
-### 4.3 推荐与升级规则（WP-A2 实现，写死，不做配置）
+### 4.3 推荐与升级规则（v5：Jev 只给匹配概率，不再升级）
 
-每轮发言后：抽取 → 觉追问（5.4）→ 若现象已知且**没有追问提示**，或业务员点了「直接推荐」，则匹配：
-- `choice == "none"`，或 `not confident` 且没有追问提示 → **升级**：发布 `escalate_need` 问题（第 ⑥ 节），`status="escalated"`；
-- `not confident` 但仍有追问提示 → 不推荐，继续追问；
-- 否则推荐 `choice`，`disclose` 选版本，对 L1 渲染，写 `recommend` 事件、披露审计、引用积分。
+每轮发言后：抽取 → 觉追问（5.4）→ 若现象已知且**没有追问提示**，或业务员点了「直接推荐」，则匹配并**写 `match` 事件**：
+- 有把握且 `choice != "none"` → 推荐 `choice`，`disclose` 选版本，对 L1 渲染，写 `recommend` 事件、披露审计、引用积分；
+- 否则不推荐、不升级。是否转产品经理 Agent 由觉的 `escalate_need`（session 对象，信号来自 `match`）在写后评估中提出，业务员签字后门面 `escalate()` 建单（第 ⑫ 节）。
 
 ---
 
@@ -482,7 +489,7 @@ class Jev:
 ### 5.1 觉的输入：对象与状态
 
 ```python
-ObjectType = Literal["slot", "theme", "knowledge", "actor"]
+ObjectType = Literal["slot", "theme", "knowledge", "actor", "session", "requirement"]
 
 class JueObject(BaseModel):
     object_id: str
@@ -503,13 +510,19 @@ class JueState(BaseModel):
 | `theme` | `theme:<phenomenon>|<slot>=<value>,...`（该现象 required_slots 中已知的部分，按槽位 id 排序） | 定时 | `scheduled_state(events, at, seeds, products)` |
 | `knowledge` | `knowledge:<product_id>|<slot>=<value>` | 定时 | 同上 |
 | `actor` | `actor:<actor_id>` | 定时 | 同上 |
+| `session`（v5） | `session:<session_id>` | 实时（写后） | `session_state(sess, events, at)` |
+| `requirement`（v5） | `requirement:<req_id>` | 实时（写后）；停滞为定时（第二档） | `requirement_state(...)`：在 slot 对象之外再产出一个 requirement 对象 |
 
-三个构建函数都在 `huayan.jue.state`（WP-B1 写前两个，WP-B3 增加 `requirement_state`），**只读 NeedState / 需求单 / 事件日志 / 种子 / 知识库**，不读需求卡、注入清单。
+构建函数都在 `huayan.jue.state`（WP-B1 写前两个，WP-B3 增加 `requirement_state`，WP-J 增加 `session_state`），**只读 NeedState / 需求单 / 事件日志 / 种子 / 知识库**，不读需求卡、注入清单。
 
 ```python
-def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase, at: datetime) -> JueState: ...
-    # 只对 status 为 draft（layer=2）或 pm_confirmed（layer=3）的需求单；为该现象每个槽位生成一个 slot 对象；
+def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase, at: datetime,
+                      events: EventLog) -> JueState: ...
+    # v5：status 为 released / rejected 之外的需求单都构建；总是产出一个 requirement 对象；
+    # 只在 status 为 draft（layer=2）或 rd_accepted（layer=3）时为该现象每个槽位再生成一个 slot 对象；
     # need = 需求单首个会话的 NeedState，已知槽位以 req.known_slots 为准；mode="realtime"
+def session_state(sess: Session, events: EventLog, at: datetime) -> JueState: ...
+    # v5：只读会话与该会话的事件；产出一个 session 对象；mode="realtime"
 ```
 
 ### 5.2 属性命名表
@@ -540,30 +553,80 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
 
 **actor（定时，泄露风险）**：`role` str、`n_queries` int、`n_mech_requests` int、`n_blocked` int（被拦截的高层级命中数）、`blocked_top_share` float（被拦截命中中最集中的产品占比）、`n_distinct_products` int、`frozen` bool。
 
-定时窗口：机会汇聚、知识冲突 7 天，泄露风险 48 小时（`config/app.yaml` 可改）。
+**session（v5，实时：推荐还是升级 `escalate_need`、解密时机）**
+
+| 属性 | 类型 | 含义 |
+|---|---|---|
+| `phenomenon` | str | 现象 id；未识别为 `"unknown"` |
+| `phenomenon_known` | bool | 现象已识别 |
+| `turn` | int | 对话轮次 |
+| `n_filled` | int | 已填槽位数 |
+| `n_open_asks` | int | 最近一次追问提示中仍在阈值以上的槽位数 |
+| `matched` | bool | 本会话有过 `match` 事件 |
+| `p_none` | float | 最近一次 `match` 的「都不合适」概率；未匹配为 0 |
+| `p_top` | float | 最近一次 `match` 中候选产品的最高概率；未匹配为 0 |
+| `n_candidates` | int | 最近一次 `match` 的候选数 |
+| `top_is_none` | bool | `matched` 且 `p_none ≥ p_top` |
+| `recommended` | bool | 已推荐 |
+| `escalated` | bool | 业务员已签字升级 |
+| `chem_savvy` | bool | 客户画像 |
+| `asked_mechanism` | bool | 客户明确要求了解原理 |
+| `decrypt_requested` | bool | 已申请解密 |
+
+**requirement（v5，实时：接单、失真、确认、沉淀、客户评价、封存、泄密、发布；停滞为定时）**
+
+| 属性 | 类型 | 含义 |
+|---|---|---|
+| `status` | str | 需求单状态 |
+| `layer` | int | draft = 2，rd_accepted = 3，其余 0 |
+| `n_product_items` | int | L2 条目数 |
+| `n_chem_items` | int | L3 条目数 |
+| `n_returns` | int | 被研发退回次数 |
+| `n_open_ask_back` | int | 本单未答复的回问数（由 `question_published / resolved` 事件算） |
+| `n_unmapped_constraints` | int | 上一层已有、本层条目未承接的已知槽位数（按 `ReqItem.slot` 计） |
+| `n_unquoted_items` | int | 本层没有 `quote_refs` 的条目数 |
+| `n_edited_uncovered` | int | L3 条目中 `edited_by` 为研发、且未被已有 L3 转化对照的 `chem_term` 覆盖的条数 |
+| `n_contributed` | int | 本单已沉淀的转化知识数 |
+| `n_trials` | int | 试样次数 |
+| `trial_passed` | bool | 最近一次试样通过 |
+| `market_eval` | str | `"none"` / `"pass"` / `"fail"`（最近一次通过的试样上的客户评价） |
+| `points_set` | bool | 研发已签字「封存 / 放出」 |
+| `n_sealed` | int | 封存项数 |
+| `sheet_ready` | bool | 已有说明书草稿 |
+| `n_leak_hits` | int | 说明书与用法上的 `leak_hits` 命中句数（第 7.1 节） |
+| `released` | bool | 已发布 |
+| `hours_in_status` | float | 停留在当前状态的业务小时（第二档：停滞） |
+
+对象属性只放计数与状态，不放文本；文本类信号在构建时用规则匹配算成计数（铁律 3）。
+
+定时窗口：机会汇聚、知识冲突 7 天，泄露风险 48 小时（`config/app.yaml` 可改）。v5：`theme.n_escalations` 统计的是 `escalate` 事件，即业务员签字后的升级。
 
 Jue-K 的特征来自以上全部对象类型的属性（`features.build(obj, family)`，缺失的属性记 0）。
 
 ### 5.3 模板 `config/templates/*.yaml`（一个模板一个文件）
 
 ```python
-Family = Literal["ask_slot", "ask_back", "opportunity", "knowledge_conflict", "leak_risk"]
+Family = Annotated[str, StringConstraints(pattern=r"^[a-z_]+$")]
+# v5：决策 id。合法取值 = 已加载模板目录中的 family 集合；huayan.jue 加载模板时校验每个 family 只有一个模板、object_type 合法。
+# 新增决策点 = 人批准后新增模板文件，不改契约（AGENTS.md 铁律 1）
 
 class JueTemplate(BaseModel):
     id: str
     family: Family
+    kind: Literal["advance", "anomaly"]       # v5：推进类 / 异常类
     object_type: ObjectType
     decision_label: str                       # 「是否追问该信息」「是否立项」…
     precondition: str | None = None           # 布尔表达式，只能引用 attrs.x
     rule_score: str | None = None             # 数值表达式，规则模式下的 p_need（结果截断到 [0,1]）；为空时 1.0
     worth_prompt: str                         # Jev 是非题，含 {object}
     title: str                                # 发布后的问题标题，可含 {object} 与 {attrs.x}
-    owner_role: Role                          # ask_slot 为 sales（不进总线）；ask_back 为 sales（进总线，owner_id = 会话的业务员）
+    owner_role: Role                          # v5 改义：主人（谁准备）。ask_slot、ask_back 为 sales；没有准备环节的（leak_risk）与签字人相同
+    signer_role: Role | None = None           # v5：签字人角色；None = 提示类（ask_slot、ask_back），不进待签
     bounty_points: int = 0
     urgency: str | None = None                # 数值表达式，截断到 [0,1]；为空时 1.0。紧急度是规则，不学习
 ```
 
-模板共 5 个：`ask_slot`（前置条件含 `attrs.layer == 1`）、`ask_back`（含 `attrs.layer >= 2`、未填、未答不清楚、`attrs.trans_splits >= 2`）、`opportunity`、`knowledge_conflict`、`leak_risk`。
+模板即**决策目录**，见 `config/templates/`，每个 family 一个文件。v4 已有：`ask_slot`（前置条件含 `attrs.layer == 1`）、`ask_back`（含 `attrs.layer >= 2`、未填、未答不清楚、`attrs.trans_splits >= 2`）、`opportunity`、`knowledge_conflict`、`leak_risk`；v5 新增 `escalate_need`、`accept_requirement`、`distortion`、`confirm_translation`、`contribution`、`market_eval`、`seal_points`、`seal_leak`、`release`（前置条件、主人、签字人见 `workpackages/REPLAN-v5.md` 第 4.3 节，均先用规则打分）。
 
 表达式求值器 `huayan.jue.expr` 复制自 JUE `discovery/expr.py`，只保留 `attrs.x`。基线（B1、B2、规则告警）也写成模板，放在 `config/baselines/<name>/`，由同一个原型在规则模式下运行。
 
@@ -577,6 +640,7 @@ class ScoredDecision(BaseModel):
     urgency: float | None = None              # 前置条件通过时 = 模板 urgency 表达式的值；未通过为 None
     precondition_passed: bool = True
     template_id: str | None = None
+    scored_by: Literal["onejev", "rule", "jue_k"] | None = None   # v5：逐条打分来源；None 时取 JueOutput.scored_by
 
 class JueOutput(BaseModel):
     at: datetime
@@ -591,7 +655,7 @@ class QuestionModel(Protocol):
 ```
 
 - **`JueProto(templates_dir, system1, mode)`**：模板 × 匹配 `object_type` 的对象枚举全部组合；前置条件不通过的 `p_need=None`。`system1` 为 `OneJevClient` 时，通过者的 worth 题**一次** `ask` 批量打分（caller `jue:proto`），`scored_by="onejev"`；否则**不调用任何模型**，用 `rule_score`，`scored_by="rule"`。
-- **`JueK(model_dir, templates_dir, mode)`**（WP-B3）：**一个模型覆盖全部五类决策**。与原型用同一套模板枚举「模板 × 对象」、同一套前置条件（不通过的 `p_need=None`）；通过者由同一个梯度提升模型一次批量推理，按 `family` 分别校准，输出校准概率；`scored_by="jue_k"`。实时（`ask_slot`、`ask_back`）与定时（三类）都可以把原型换成它，运行链路、发布层、界面不改。
+- **`JueK(model_dir, templates_dir, mode)`**（WP-B3）：**一个模型覆盖有训练样本的决策**（`ask_slot`、`ask_back`、`opportunity`、`knowledge_conflict`、`leak_risk`）；v5 起没有训练样本的决策在同一次 `propose` 中由模板 `rule_score` 打分，逐条标 `ScoredDecision.scored_by="rule"`。与原型用同一套模板枚举「模板 × 对象」、同一套前置条件（不通过的 `p_need=None`）；通过者由同一个梯度提升模型一次批量推理，按 `family` 分别校准，输出校准概率；`scored_by="jue_k"`。实时（`ask_slot`、`ask_back`）与定时（三类）都可以把原型换成它，运行链路、发布层、界面不改。
 - **紧急度**：两个实现都用模板的 `urgency` 表达式填 `ScoredDecision.urgency`（规则，不学习，如实标注）。
 - **铁律**：两个实现都不调用网关；觉每次 `propose` 写一条 `kind="jue"` 计量（耗时、对象数）；调用方（门面）把每次的状态与输出写成一条 `JueRecord`（数据引擎）。
 
@@ -609,9 +673,20 @@ def select_asks(out: JueOutput, state: JueState, seeds: Seeds, threshold: float,
     # ask_slot 中 p_need ≥ threshold 的，按 p_need 降序取前 max_asks
 def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], bus: QuestionBus,
             threshold: float) -> list[Question]: ...
-    # 定时：p_need ≥ threshold 的组合生成问题；证据取对象属性中的关键数字与相关事件 id
-    # ask_back 也走 publish：owner_role=sales，owner_id=会话的业务员，refs={session_id, requirement_id, slot}；
-    # 所有问题的 urgency 取自 ScoredDecision
+    # v5：所有非 ask_slot 的组合 p_need ≥ threshold 即生成问题（不再区分实时 / 定时）；证据取对象属性中的关键数字与相关事件 id；
+    # owner_role / signer_role 取自模板，owner_id / signer_id 按下表解析；template_id、urgency 取自 ScoredDecision；
+    # ask_back：refs={session_id, requirement_id, slot}；requirement / session 对象的问题 refs 带 requirement_id / session_id
+```
+
+| 角色 | 对象 | 解析为 |
+|---|---|---|
+| sales | session / requirement / slot | 会话的业务员（需求单取首个会话） |
+| pm | 任意 | `pm:agent` |
+| rd | requirement / slot（layer 2/3） | `req.assigned_rd` |
+| rd | knowledge | 产品归属研发 |
+| supervisor | 任意 | id 最小的主管 |
+
+```python
 
 # huayan.jue.scan（WP-B1）
 def scan(events: EventLog, at: datetime, model: QuestionModel, seeds: Seeds, products: list[Product],
@@ -634,7 +709,7 @@ class Discoverer(Protocol):
 ## ⑥ 问题总线（`huayan.bus`，WP-0 提供）
 
 ```python
-QFamily = Literal["escalate_need", "ask_back", "opportunity", "knowledge_conflict", "leak_risk", "decrypt_request"]
+QFamily = Annotated[str, StringConstraints(pattern=r"^[a-z_]+$")]   # v5：同 Family，由模板目录校验
 
 class Evidence(BaseModel):
     summary: str
@@ -642,8 +717,11 @@ class Evidence(BaseModel):
     quote: str = ""
 
 class Resolution(BaseModel):
-    action: Literal["draft_requirement", "approve_project", "update_sheet", "freeze_access",
-                    "approve_decrypt", "reject_decrypt", "dismiss", "answered"]   # answered：回问已由客户回答
+    action: Literal["sign", "accept", "return", "answered", "update_sheet", "freeze_access",
+                    "approve_decrypt", "reject_decrypt", "dismiss"]
+    # v5：sign = 签字人在工作面签字（升级、确认转译、沉淀、客户评价、封存 / 放出、发布）；
+    # accept / return = 研发接单 / 退回（accept 同时关闭关联的 opportunity）；
+    # answered = 回问已由客户回答，或异常类问题的前置条件不再成立；删除 draft_requirement、approve_project（立项 ≡ 接单）
     by: str
     note: str = ""
 
@@ -652,13 +730,17 @@ class Question(BaseModel):
     family: QFamily
     title: str
     object_id: str                            # sess:3 / theme:... / knowledge:... / actor:...
-    owner_role: Role
-    owner_id: str | None = None               # 指定到人（解密审批、知识冲突给知识归属人）
+    owner_role: Role                          # v5：主人（谁准备）
+    owner_id: str | None = None
+    signer_role: Role | None = None           # v5：None = 提示类
+    signer_id: str | None = None              # v5
+    prepared_at: datetime | None = None       # v5：None = 准备中；有值 = 待签
+    template_id: str | None = None            # v5：被忽略率按模板统计
     status: Literal["open", "resolved", "dismissed"] = "open"
     p_need: float | None = None
     urgency: float | None = None              # v4：觉发现的问题来自 ScoredDecision；其他来源为 None
     scored_by: str                            # onejev / llm_fallback / mock / rule / jue_k / human
-    discoverer: Literal["jev", "jue_proto", "jue_k", "rule_alert", "llm_poll", "human"]
+    discoverer: Literal["jue_proto", "jue_k", "rule_alert", "llm_poll", "human"]   # v5：删除 jev
     evidence: list[Evidence] = []
     refs: dict[str, str] = {}                 # session_id / requirement_id / product_id / customer_id …
     bounty_points: int = 0
@@ -678,9 +760,11 @@ class QuestionBus:
     def list(self, owner_role: Role | None = None, status: str | None = "open", family: QFamily | None = None) -> list[Question]: ...
     def resolve(self, qid: str, resolution: Resolution, at: datetime) -> Question: ...
         # dismiss → status=dismissed，其余 → resolved；写 question_resolved 事件
+    def set_prepared(self, qid: str, at: datetime | None) -> Question: ...
+        # v5：at 有值 → 进入待签，写 question_prepared 事件；None → 退回准备中（需求单已知条件变化时由门面调用）
 ```
 
-路由在 `config/app.yaml` 的 `routing`：`escalate_need → pm`、`ask_back → sales`（owner_id = 会话的业务员）、`opportunity → pm`、`knowledge_conflict → rd`（owner_id = 产品归属人）、`leak_risk → supervisor`、`decrypt_request → rd`（owner_id = 产品归属人）。发布方负责按路由填写 `owner_role` / `owner_id`。
+v5：删除路由配置。发布方按模板的 `owner_role` / `signer_role` 与第 5.4 节的解析表填写主人与签字人；`decrypt_request` 由门面发布，主人与签字人都是产品归属研发。界面据 `prepared_at` 区分「准备中 / 待签」。
 
 ---
 
@@ -690,10 +774,14 @@ class QuestionBus:
 
 ```
 L1 场景需求卡（NeedState：槽位＋原话）
-  → L2 产品需求语言（规则骨架 → 产品经理助手用 L2 知识检索、逐条修改 → 产品经理在确认卡上确认）
-  → L3 化学语言需求单（规则骨架 → 研发助手用 L3 转化对照与机理修改 → 研发确认；修改可沉淀为自己的转化知识）
-  → 试样 → 研发确认「对外要点」（L3 内容流向下层的唯一出口）
-  → 反向包装：L1 说明书（只用产品需求＋对外要点，不接触机理与配方；产品经理助手可修改）→ 产品经理确认发布 → 回到 L1
+  → 业务员签字升级：门面建空需求单（指定研发 assigned_rd）
+  → L2 产品需求语言（规则骨架 → 产品经理 Agent 用 L2 知识检索、逐条修改）→ 研发接单（= 立项）或写理由退回
+  → L3 化学语言需求单（规则骨架 → 研发副驾用 L3 转化对照与机理起草 → 研发修改、确认）
+  → 沉淀（研发副驾提炼 → 研发签字）
+  → 试样（模拟 ELN）→ 客户评价（业务员签字）
+  → 封存 / 放出（研发副驾起草两栏 → 研发签字）：对外要点是 L3 内容流向下层的唯一出口，封存项只对 L3 可见
+  → 反向包装：L1 说明书（产品经理 Agent，只用产品需求＋对外要点）→ 研发审定发布 → 回到 L1
+每一步都由觉提出（第 ⑤ 节），主人准备，签字人签字。
 ```
 
 ```python
@@ -702,35 +790,57 @@ class ReqItem(BaseModel):
     slot: str | None = None
     quote_refs: list[str] = []                # turn id，可回查客户原话
     ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
+    edited_by: str | None = None              # v5：最后一次由人修改的 actor id；None = 骨架或副驾起草（界面标「副驾起草」）
 
-class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理助手编辑）
+class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理 Agent 编辑）
     direction: str                            # 产品方向，如「低浴比条件下的锦纶氨纶匀染助剂」
     product_lang: list[ReqItem]
 
-class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发助手编辑）
+class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发副驾编辑）
     chem_lang: list[ReqItem]
     hypotheses: list[str] = []                # 研发方向假设
 
-class SheetDraft(BaseModel):                  # 反向包装：产品需求＋对外要点 → L1 说明书（规则模板，产品经理助手编辑）
+class SheetDraft(BaseModel):                  # 反向包装：产品需求＋对外要点 → L1 说明书（规则模板，产品经理 Agent 编辑）
     sheet: str
     usage: str
 
+class LeakHit(BaseModel):                     # v5：泄密匹配结果，只给句序号与类别，不含命中内容
+    index: int                                # 按「。；！？\n」切句后的序号，从 0 开始
+    source: Literal["sealed", "l3_term", "hypothesis"]
+
+class PointsDraft(BaseModel):                 # v5：封存 / 放出两栏草稿（只对 L3 可见）
+    public: str                               # 拟放出的对外要点
+    sealed: list[str]                         # 拟封存的窗户纸
+    self_check: list[LeakHit] = []            # 对 public 的泄露自查结果
+
+class ContributionDraft(BaseModel):           # v5：副驾提炼的可沉淀转化知识（只对 L3 可见）
+    item_index: int
+    scene_phrase: str
+    chem_term: str
+    note: str = ""                            # 泛化说明、与已有知识相近或冲突之处
+
 class Requirement(BaseModel):
     id: str                                   # "req:<n>"
-    question_id: str
+    question_id: str                          # 产生它的 escalate_need 或 opportunity 问题
     session_ids: list[str]
     phenomenon: str
     known_slots: dict[str, str]
-    direction: str
-    product_lang: list[ReqItem]               # L2/L3 可见
+    assigned_rd: str                          # v5：接单与签字的研发；建单时取该现象 L3 转化对照条数最多的研发（并列取 id 最小）
+    escalate_note: str = ""                   # v5：业务员签字时的升级说明（L2/L3 可见）
+    direction: str = ""                       # v5：空单时为空
+    product_lang: list[ReqItem] = []          # L2/L3 可见；v5：空单时为空
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
-    hypotheses: list[str] = []
-    status: Literal["draft", "pm_confirmed", "rd_confirmed", "released", "rejected"]
-    drafted_by: str                           # L2 草稿的委托人（产品经理 actor id）
+    hypotheses: list[str] = []                # 研发方向假设（v5：只对 L3 可见）；泄密匹配的来源之一
+    status: Literal["draft", "rd_accepted", "rd_confirmed", "released", "rejected"]   # v5：pm_confirmed → rd_accepted
+    drafted_by: str = "pm:agent"              # v5：L2 草稿的起草者
     chem_drafted_by: str | None = None        # L3 草稿的委托人（研发 actor id）
-    pm_confirmed_by: str | None = None
+    rd_accepted_by: str | None = None         # v5：研发接单（= 立项），原 pm_confirmed_by
     rd_confirmed_by: str | None = None
-    public_points: str = ""                   # 研发确认可以对外的要点：L3 内容流向 L2/L1 的唯一出口
+    return_notes: list[str] = []              # v5：研发退回理由（提交前经 L3 术语自查，L2 可见）
+    contribution_drafts: list[ContributionDraft] = []   # v5：只对 L3 可见
+    points_draft: PointsDraft | None = None   # v5：只对 L3 可见
+    public_points: str = ""                   # 研发签字放出的对外要点：L3 内容流向 L2/L1 的唯一出口
+    sealed: list[str] = []                    # v5：研发签字封存的窗户纸，只对 L3 可见
     sheet: SheetDraft | None = None           # 反向包装草稿
     product_id: str | None = None             # 目标产品：L3 确认时关联种子中 status=project 的产品；发布后即新产品
     created_at: datetime
@@ -745,6 +855,9 @@ class Trial(BaseModel):
     cause: Literal["none", "product", "equipment", "operation"]
     note: str = ""
     at: datetime
+    market_eval: Literal["pass", "fail"] | None = None   # v5：客户评价，业务员录入
+    market_eval_by: str | None = None
+    market_eval_note: str = ""
 
 class CitedKnowledge(BaseModel):              # 需求单中被引用的知识，按查看者裁剪
     ku_id: str
@@ -760,6 +873,7 @@ class RequirementView(BaseModel):
     requirement: Requirement
     quotes: dict[str, str]                    # turn id → 客户原话
     cited: list[CitedKnowledge]
+    # v5：对 L2 查看者，requirement 中的 sealed、points_draft、contribution_drafts、hypotheses 置空；L1 抛 PermissionDenied
 
 class ContributionStat(BaseModel):            # 贡献看板的一行
     owner: str
@@ -778,17 +892,22 @@ def match_translations(text: str, kb: KnowledgeBase, actor: Actor,
                        phenomenon: str | None = None) -> list[KnowledgeHit]: ...
     # 在 kb.list(actor, kinds=["translation"], phenomenon=...) 中按 scene_phrase 与 text 的子串 / 字符二元组匹配；
     # 规则骨架与助手工具 match_translations 共用
-def draft_product_need(q: Question, sessions: list[Session], kb: KnowledgeBase, pm: Actor, at: datetime) -> PMDraft: ...
+def draft_product_need(req: Requirement, sessions: list[Session], kb: KnowledgeBase, pm: Actor, at: datetime) -> PMDraft: ...
+    # v5：输入从问题改为（空）需求单
     # 输入：会话轮次（带 turn id）、NeedState 槽位与原话、kb.list(pm, kinds=["case", "translation"], phenomenon=...)
 def draft_chem_need(req: Requirement, sessions: list[Session], kb: KnowledgeBase, rd: Actor, at: datetime) -> RDDraft: ...
     # 输入：产品需求条目、原话、kb.list(rd, kinds=["translation", "mechanism"], phenomenon=...)
 def package_sheet(req: Requirement) -> SheetDraft: ...
-    # 输入只有 req.product_lang 与 req.public_points；不得读机理、配方、L3 转化对照
+    # 输入只有 req.product_lang 与 req.public_points；不得读 sealed、points_draft、chem_lang、hypotheses、机理、配方、L3 转化对照
+def leak_hits(text: str, sealed: list[str], hypotheses: list[str], kb: KnowledgeBase) -> list[LeakHit]: ...
+    # v5：规则匹配，逐句检查 sealed 各项、kb 中 level=3 转化对照的 chem_term、hypotheses 的关键词（子串或字符二元组重合）；
+    # 不查 L2 内容（说明书本来就由产品需求包装而来）。觉的状态构建、门面的发送拦截、退回理由自查与发布可签条件共用
 ```
 
 - 三个函数都是**规则实现**（零成本、确定；离线演示、测试与评测用）：按转化对照的 `scene_phrase` 与原话 / 上一层条目文字的匹配逐条生成，`ku_refs` 指向命中的转化对照，`quote_refs` 指向命中的轮次；没有命中知识的原话保留为「未转译」条目，不编造。
 - 大模型参与转译的方式是**角色助手**（第 ⑭ 节）：助手先调用规则骨架，再用工具检索、逐条修改。
-- **不变量（有测试）**：`draft_product_need` 的输出不含任何 L3 知识；`package_sheet` 的输出不含 L3 内容。
+- **不变量（有测试）**：`draft_product_need` 的输出不含任何 L3 知识；`package_sheet` 的输出不含 L3 内容；L2 视图里没有 `sealed`。
+- 对外泄密是规则匹配，挡不住换说法的泄露；最后一道闸是研发审定发布（D16）。
 
 ### 7.2 流程 `huayan.escalation.flow`（WP-A3）
 
@@ -799,21 +918,23 @@ def contribute_translation(req: Requirement, item_index: int, scene_phrase: str,
     # 记 contributed 积分与 knowledge_contributed 事件；该条 ReqItem.ku_refs 追加新知识
 def release_product(req: Requirement, product: Product, kb, ledger, events, by: str, at) -> Product: ...
     # product.status 改为 released → kb.add_product → 给 product.owner 记 product_released
-    # → 写 product_released 事件 → req.status = "released"
+    # → 写 product_released 事件 → req.status = "released"；v5：by 必须是 req.assigned_rd
 ```
 
-演示中新产品取自种子里 `status="project"` 的产品（`confirm_translation` 时由门面关联到 `req.product_id`，机理与配方要点来自它），模拟「研发在 ELN 中完成开发」；L1 说明书与用法来自 `req.sheet`（反向包装，产品经理助手可修改），产品经理确认后发布。
+演示中新产品取自种子里 `status="project"` 的产品（`confirm_translation` 时由门面关联到 `req.product_id`，机理与配方要点来自它），模拟「研发在 ELN 中完成开发」；L1 说明书与用法来自 `req.sheet`（反向包装，产品经理 Agent 起草，研发副驾可改写泄密句），**研发审定后发布**（v5）。窗户纸默认本单封存并沉淀为研发自己的 L3 知识，研发可在沉淀处拒签（D15）。
 
 ---
 
 ## ⑧ 事件日志（`huayan.events`，WP-0 提供）
 
 ```python
-EventKind = Literal["turn", "extraction", "ask_hint", "recommend", "escalate", "retrieve", "access_denied",
-                    "decrypt_request", "decrypt_approve", "question_published", "question_resolved",
-                    "requirement_confirmed", "requirement_translated", "knowledge_contributed", "trial",
-                    "product_released", "sheet_updated", "access_frozen", "agent_action_proposed",
-                    "agent_action_decided"]
+EventKind = Literal["turn", "extraction", "ask_hint", "match", "recommend", "escalate", "retrieve", "access_denied",
+                    "decrypt_request", "decrypt_approve", "question_published", "question_prepared",
+                    "question_resolved", "requirement_created", "requirement_accepted", "requirement_returned",
+                    "requirement_edited", "requirement_translated", "knowledge_contributed", "trial", "market_eval",
+                    "points_set", "product_released", "sheet_updated", "access_frozen", "human_decision",
+                    "agent_action_proposed", "agent_action_decided"]
+# v5：删除 requirement_confirmed
 
 class Event(BaseModel):
     id: str                                   # 日志分配
@@ -838,21 +959,31 @@ class EventLog:
 | `turn` | `turn_id, speaker, text` |
 | `extraction` | `intent, phenomenon, filled: {slot: value}, extracted_by` |
 | `ask_hint` | `slots: [slot], p: {slot: p}, model` |
+| `match`（v5） | `phenomenon, known, customer_id, candidate_ids, p_choice: {product_id: p}, p_none, scored_by` |
 | `recommend` | `product_id, version, p_choice, candidate_ids, phenomenon, known: {slot: value}, customer_id` |
-| `escalate` | `question_id, phenomenon, known, customer_id, p_none` |
+| `escalate` | `question_id, requirement_id, phenomenon, known, customer_id, p_none`（v5：只在业务员签字后写） |
 | `retrieve` | `query, intent, actor_level, hit_ku_ids, n_blocked, blocked_product_ids` |
 | `access_denied` | `object_id, reason` |
 | `decrypt_request` / `decrypt_approve` | `question_id, customer_id, product_id` |
-| `question_published` / `question_resolved` | `question_id, family, object_id, action`（resolved 时） |
-| `requirement_confirmed` | `requirement_id, phenomenon, known`（产品经理确认 L2） |
+| `question_published` / `question_resolved` | `question_id, family, object_id, template_id`；resolved 时另有 `action, by` |
+| `question_prepared`（v5） | `question_id, family, by` |
+| `requirement_created`（v5） | `requirement_id, question_id, phenomenon, session_ids, assigned_rd` |
+| `requirement_accepted`（v5） | `requirement_id, phenomenon, known, ku_refs`（研发接单；ku_refs 为 L2 所引） |
+| `requirement_returned`（v5） | `requirement_id, reason` |
+| `requirement_edited`（v5） | `requirement_id, layer, index, before, after`（index = -1 追加；after 为空 = 删除） |
 | `requirement_translated` | `requirement_id, ku_refs`（研发确认 L3） |
 | `knowledge_contributed` | `ku_id, owner, requirement_id` |
 | `trial` | `trial_id, product_id, conditions, result, cause` |
+| `market_eval`（v5） | `requirement_id, trial_id, result` |
+| `points_set`（v5） | `requirement_id, n_sealed`（不含内容） |
 | `product_released` | `product_id, requirement_id, phenomenon, applicable` |
 | `sheet_updated` | `product_id, slot, values` |
 | `access_frozen` | `actor_id` |
+| `human_decision`（v5） | `action, object_id, object_type, attrs`（人执行生效动作时同一对象上没有对应的 open 问题；attrs 为当时的属性快照） |
 | `agent_action_proposed` | `action_id, tool, principal, conversation_id` |
 | `agent_action_decided` | `action_id, tool, principal, status`（approved / rejected） |
+
+所有事件的 `actor` 即操作人；签字类事件的 `actor` 就是签字人。
 
 ---
 
@@ -909,6 +1040,8 @@ def make_week(seeds: Seeds, start: datetime, days: int, rng) -> tuple[list[WeekI
 `split ∈ {train, val, test, heldout}`：轨迹按卡划分，另留 2 个现象为 heldout；业务周按周划分。
 
 **Jue-K 产物** `models/jue_k/`：`model.pkl`（模型 + 按 family 的 isotonic 校准层）、`features.json`（特征名与编码）、`model_card.md`、`metrics.json`。特征构建 `huayan.jue.features.build(obj: JueObject, family: Family) -> dict[str, float]` 训练与推理共用。
+
+**v5 模拟业务周**：照常走真实链路；推进类决策由「模拟人」签字——问题提出即签（`sign` / `accept`），退回率为 0；模拟周中不产生 `human_decision`。需求卡、注入清单仍只有 `sim/`、`eval/` 可读。
 
 **评测产物** `docs/reports/<name>/`：`metrics.json`、图（png）、`README.md`（一页说明，结果如实写）。
 
@@ -995,7 +1128,7 @@ llm_cache_dir: runs/llm_cache # 录制/回放缓存；为空则不缓存
 replay: false                 # true = 记录回放模式，界面标明
 thresholds: {ask: 0.5, max_asks: 2, match: 0.5, publish: 0.5}
 windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
-routing: {escalate_need: pm, ask_back: sales, opportunity: pm, knowledge_conflict: rd, leak_risk: supervisor, decrypt_request: rd}
+# v5：删除 routing，主人与签字人随模板（第 ⑤ 节）
 points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
 ```
 
@@ -1020,6 +1153,8 @@ class SessionView(BaseModel):
     status: str
     escalation_question_id: str | None = None
     requirement: Requirement | None = None    # 只对 L2/L3 返回
+    reply_draft: str = ""                     # v5
+    escalate_note: str = ""                   # v5
 
 class RunStatus(BaseModel):
     run_id: str
@@ -1032,6 +1167,36 @@ class RunStatus(BaseModel):
     seeds_placeholder: bool
     scheduled_model: str = "jue_proto"       # 觉定时模型（v4）
 
+class TimelinePoint(BaseModel):               # v5：觉的一次判断中的一个「决策 × 对象」
+    at: datetime
+    family: Family
+    object_id: str
+    p_need: float | None
+    threshold: float
+    scored_by: str
+    raised: bool                              # 这一次是否提出了问题
+
+class TimelineNode(BaseModel):                # v5：一个被提出的问题的全过程
+    question_id: str
+    family: Family
+    owner_id: str | None
+    signer_id: str | None
+    created_at: datetime
+    prepared_at: datetime | None
+    resolved_at: datetime | None
+    action: str | None
+    by: str | None
+
+class JueTimeline(BaseModel):                 # v5：觉视图
+    target_id: str                            # sess:<n> 或 req:<n>；需求单线程含其全部会话
+    viewer: str
+    points: list[TimelinePoint]               # 按查看者裁剪：业务员只含 escalate_need、market_eval、ask_back 与本会话的 ask_slot
+    nodes: list[TimelineNode]
+    n_judgments: int                          # 觉的判断次数（JueRecord 条数）
+    n_llm_calls: int                          # 计量中 caller 以 "jue" 开头的大模型调用数（应为 0，取自计量，不写死）
+    n_questions: int
+    n_signatures: int
+
 class HuayanApp:
     @classmethod
     def build(cls, config_path: str = "config/app.yaml", run_id: str | None = None) -> "HuayanApp": ...
@@ -1041,8 +1206,9 @@ class HuayanApp:
     # L1（WP-A2）
     def start_session(self, customer_id: str, sales_id: str) -> Session: ...
     def add_turn(self, session_id: str, speaker: Literal["customer", "sales"], text: str) -> Session: ...
-        # v4：客户发言填上某个槽位、且该会话该槽位有 open 的 ask_back 问题时：resolve(answered)，取值写入需求单 known_slots，
-        # 并 agents.notify 需求单当前的起草人（draft → drafted_by；pm_confirmed → chem_drafted_by）
+        # v5：不再自动升级。业务员发言先过发送拦截：leak_hits(text, 全部需求单的 sealed, [], kb) 有命中则抛 ValueError
+        # （消息只含命中句序号与类别），不写入；客户发言答复了 open 回问时：resolve(answered)，取值写入需求单 known_slots，
+        # 并把该需求单上已待签的问题 bus.set_prepared(None) 退回准备中
     def recommend_now(self, session_id: str) -> Session: ...
     def view_session(self, session_id: str, viewer_id: str) -> SessionView: ...
     def sessions(self) -> list[Session]: ...
@@ -1050,48 +1216,76 @@ class HuayanApp:
     def status(self) -> RunStatus: ...
 
     # L2 / L3：分层转译、权责与回流（WP-A3）。每个方法一个动作，角色助手的工具一对一调用它们（第 ⑭ 节）
-    def draft_requirement(self, question_id: str, by: str) -> Requirement: ...
-        # 产品经理；escalate_need 或 opportunity 问题 → L2 规则骨架，status=draft，drafted_by=by
+    def escalate(self, session_id: str, by: str) -> Requirement: ...
+        # v5：业务员签字。建空需求单（assigned_rd；escalate_note ← session.escalate_note）、resolve escalate_need(sign)、
+        # session.status="escalated"、写 escalate 与 requirement_created
+    def draft_requirement(self, req_id: str, by: str) -> Requirement: ...
+        # v5：by 必须是 pm:agent；对空单（draft）写入 L2 规则骨架
+    def accept_requirement(self, req_id: str, by: str) -> Requirement: ...
+        # v5：by = assigned_rd；可签条件：无 open 回问、无 open 失真；→ rd_accepted；给所引 L2 知识记 cited；
+        # resolve accept_requirement(accept)，并关闭 refs 指向本单的 opportunity(accept)；写 requirement_accepted
+    def return_requirement(self, req_id: str, reason: str, by: str) -> Requirement: ...
+        # v5：by = assigned_rd；reason 过 leak_hits（只看 l3_term），命中抛 ValueError；追加 return_notes；resolve(return)；状态仍为 draft
     def edit_req_item(self, req_id: str, index: int, item: ReqItem, by: str) -> Requirement: ...
-        # 产品经理改 product_lang（draft 状态），研发改 chem_lang（pm_confirmed 状态）；index = -1 表示追加。
+        # pm:agent 改 product_lang（draft），研发改 chem_lang（rd_accepted）；index = -1 表示追加；
+        # v5：人改的条目写 edited_by，写 requirement_edited 事件。
         # 校验（大模型输出的真实边界）：quote_refs 必须是该需求单会话中的轮次，ku_refs 必须存在且 by 可读，否则 ValueError
     def remove_req_item(self, req_id: str, index: int, by: str) -> Requirement: ...  # 层的规则同上
-    def set_direction(self, req_id: str, text: str, by: str) -> Requirement: ...      # 产品经理，draft 状态
-    def confirm_requirement(self, req_id: str, by: str) -> Requirement: ...
-        # → pm_confirmed；关联问题 resolve
+    def set_direction(self, req_id: str, text: str, by: str) -> Requirement: ...      # pm:agent，draft 状态
+    # v5：删除 confirm_requirement（立项 ≡ 研发接单）
     def translate_requirement(self, req_id: str, by: str) -> Requirement: ...
-        # 研发；L3 规则骨架写入 chem_lang 与 hypotheses，chem_drafted_by=by
+        # 研发（assigned_rd）；L3 规则骨架写入 chem_lang 与 hypotheses，chem_drafted_by=by
     def confirm_translation(self, req_id: str, by: str) -> Requirement: ...
-        # → rd_confirmed；关联 product_id（种子中覆盖该现象与已知槽位的 status=project 产品）；给两层所引知识的归属人记 cited
+        # by = assigned_rd；→ rd_confirmed；关联 product_id（种子中覆盖该现象与已知槽位的 status=project 产品）；
+        # v5：只给所引 L3 知识的归属人记 cited（L2 已在接单时记）
     def contribute_translation(self, req_id: str, item_index: int, scene_phrase: str, chem_term: str,
                                by: str) -> KnowledgeUnit: ...
-    def set_public_points(self, req_id: str, text: str, by: str) -> Requirement: ...   # 研发，rd_confirmed 之后
+    def set_public_points(self, req_id: str, text: str, sealed: list[str], by: str) -> Requirement: ...
+        # v5：assigned_rd 签字「封存 / 放出」；需客户评价通过；写 public_points 与 sealed，写 points_set
+    def save_reply_draft(self, session_id: str, text: str, by: str) -> Session: ...          # v5：业务员（副驾）
+    def save_escalate_note(self, session_id: str, text: str, by: str) -> Session: ...        # v5：业务员（副驾）
+    def save_points_draft(self, req_id: str, public: str, sealed: list[str], by: str) -> Requirement: ...
+        # v5：assigned_rd（副驾）；自动填 self_check = leak_hits(public, sealed, hypotheses, kb)
+    def save_contribution_draft(self, req_id: str, draft: ContributionDraft, by: str) -> Requirement: ...   # v5：assigned_rd（副驾）
+    def record_market_eval(self, req_id: str, result: Literal["pass", "fail"], note: str, by: str) -> Trial: ...
+        # v5：需求单首个会话的业务员签字；写到最近一次通过的试样上；写 market_eval
+    def leak_check(self, req_id: str, viewer_id: str) -> list[LeakHit]: ...
+        # v5：说明书与用法的命中；L2 查看者也可调用（只得到序号与类别）
     def requirements(self, viewer_id: str) -> list[Requirement]: ...      # L1 调用抛 PermissionDenied
     def requirement_view(self, req_id: str, viewer_id: str) -> RequirementView: ...   # L1 抛 PermissionDenied
-    def record_trial(self, trial: Trial) -> Trial: ...
+    def record_trial(self, trial: Trial) -> Trial: ...        # v5：来自模拟 ELN，不写 human_decision
     def package_sheet(self, req_id: str, by: str) -> SheetDraft: ...
-        # 产品经理；translate.package_sheet(req)，结果写入 req.sheet
-    def save_sheet(self, req_id: str, sheet: SheetDraft, by: str) -> Requirement: ...  # 产品经理修改说明书草稿
+        # v5：by 为 pm:agent（草稿，不是生效动作）；translate.package_sheet(req)，结果写入 req.sheet
+    def save_sheet(self, req_id: str, sheet: SheetDraft, by: str) -> Requirement: ...
+        # v5：pm:agent 修改说明书草稿，或 assigned_rd（研发副驾改写泄密句）
     def release_product(self, req_id: str, by: str) -> Product: ...
+        # v5：by = assigned_rd；可签条件：说明书与用法 leak_hits 为空；
         # 以 req.product_id 的种子产品为底，sheet / usage 用 req.sheet，调用 flow.release_product
     def contributions(self, viewer_id: str) -> list[ContributionStat]: ...
         # 贡献看板；L3 知识的标题对非 L3 查看者显示为「研发 X 的转化知识」
     def request_decrypt(self, session_id: str, by: str) -> Question: ...
-    def decide_decrypt(self, question_id: str, by: str, approve: bool) -> Question: ...
+    def decide_decrypt(self, question_id: str, by: str, approve: bool, text: str = "") -> Question: ...   # v5：text 为第二档
 
     # 角色助手（第 ⑭ 节；WP-L 实现 AgentHub，WP-I 在 build 中挂上）
     agents: AgentHub
 
+    # 统一循环（v5）
+    def mark_prepared(self, question_id: str, by: str) -> Question: ...
+        # 只由 AgentHub 在主人的 Loop 结束后调用（离线时在规则骨架起草后调用）；不注册为工具
+    def questions(self, viewer_id: str) -> list[Question]: ...
+        # 查看者作为主人或签字人的 open 问题；界面据 prepared_at 分「准备中 / 待签」
+    def jue_timeline(self, target_id: str, viewer_id: str) -> JueTimeline: ...
+
     # 觉定时发现与处置（WP-I）
     def scan(self, at: datetime | None = None) -> list[Question]: ...
     def resolve(self, question_id: str, action: str, by: str, note: str = "") -> Question: ...
-        # approve_project → 起草需求单；update_sheet → kb.update_applicable；freeze_access → permission.freeze
+        # update_sheet → kb.update_applicable；freeze_access → permission.freeze；dismiss；v5：删除 approve_project
     def tick(self) -> list[Question]: ...
-        # 上次 tick 后出现过升级、或距上次扫描 ≥ 30 业务分钟则 scan；
-        # v4：每次对 draft / pm_confirmed 的需求单 requirement_state → 实时模型 propose → publish（ask_back）；
-        # 然后 agents.dispatch()；返回本次新发现的问题。门面每次调用觉都追加一条 JueRecord
-        # 界面在每次 chat / approve 之后、脚本在每一步之后调用
+        # 距上次扫描 ≥ 30 业务分钟则 scan（定时部分）；然后 agents.dispatch()；返回本次新发现的问题
+        # 界面在每次操作之后、脚本在每一步之后调用
 ```
+
+**写后评估（v5）**：每个改状态的方法结束时，门面对受影响的 session / requirement（及其 slot）构建状态 → 实时模型 `propose` → `publish`，每次追加一条 `JueRecord`；前置条件不再成立的异常类 open 问题 resolve(answered)；执行生效动作时若同一对象上没有对应的 open 问题，写 `human_decision`。门面方法内部不推进下一步（AGENTS.md 铁律 14）。
 
 ---
 
@@ -1101,14 +1295,15 @@ class HuayanApp:
 
 ---
 
-## ⑭ 角色助手（`huayan.agent`，WP-L）
+## ⑭ 副驾与产品经理 Agent（`huayan.agent`，WP-L；v5 改）
 
-每个 L1 / L2 / L3 的人配一个**角色助手**：业务员助手、产品经理助手、研发助手。助手 = **Agent Loop + 原子工具**：人用自然语言说要做什么，或者问题 / 需求单被派到他名下，助手理解意图、自己调用工具处理。
+v5：业务员、研发各有一个**副驾**，产品经理由**产品经理 Agent**（`pm:agent`）担任。三者都是 **Agent Loop + 原子工具**：觉的问题派给主人后，Agent 查会话、检索、起草，把草稿写进领域对象（需求单、会话的草稿字段）；人在工作面上看、改、按按钮签字。私聊用于开放式请求与查询。
 
 - 助手**没有自己的身份和权限**，借用委托人的权限：工具在代码里绑定委托人，模型看不到也改不了；
 - `read` / `draft` 工具自动执行，草稿未生效；
-- `effect` 工具**只能提议**：Loop 创建 `PendingAction`，对话里出现确认卡，**委托人点确认后才执行**。确认卡是委托人的签字，不是调度入口；助手没有、也不能有「确认」工具；
-- 觉不是助手，不调用大模型；它发现的问题经总线派给对应人的助手。
+- `effect` 工具**只能提议**，且只用于私聊：Loop 创建 `PendingAction`，对话里出现确认卡，**委托人点确认后才执行**；助手没有、也不能有「确认」工具。工作面上的签字按钮直接调门面原子方法，不经过 `PendingAction`；
+- **没有委托人的 Agent 没有生效工具**：`pm:agent` 只有 read / draft 工具；
+- 觉不是助手，不调用大模型；它提出的问题经总线派给主人准备。
 
 ```python
 ToolKind = Literal["read", "draft", "effect"]
@@ -1155,10 +1350,11 @@ class AgentMessage(BaseModel):
     text: str
     at: datetime
     pending_action_ids: list[str] = []
+    target: str | None = None                 # v5：批注挂的位置，如 "req:3/chem/2"、"sess:5/reply"；None = 普通消息
 
 class Conversation(BaseModel):
     id: str                                   # "conv:<actor_id>:<session_id 或 inbox>"
-    principal: str
+    principal: str                            # v5：产品经理 Agent 为 pm:agent
     role: Role                                # sales / pm / rd
     session_id: str | None = None             # 业务员助手绑定的客户会话
     messages: list[AgentMessage] = []
@@ -1173,10 +1369,11 @@ class AgentHub:                               # HuayanApp.agents
     def notify(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation: ...
         # 派单：写一条 system 消息到该人的 inbox 对话（带 session_id 时写到该会话的对话）并跑一轮 Loop（助手主动处理，如起草）
     def dispatch(self) -> list[Conversation]: ...
-        # 把总线上新出现、尚未派过的 open 问题（owner_role 为 pm / rd / sales）notify 给负责人（owner_id，空则该角色 id 最小的人）；
-        # sales 的 ask_back 按 refs["session_id"] 派到该会话的对话
+        # v5：只把总线上 open、prepared_at 为空、尚未派过的问题 notify 给主人（owner_id）；主人是 pm:agent 时跑产品经理 Agent 的 Loop，
+        # 是业务员 / 研发时跑其副驾的 Loop；有签字人的问题在 Loop 结束后调用 app.mark_prepared；
+        # 提示类（signer_role 为空）照旧派送，sales 的 ask_back 按 refs["session_id"] 派到该会话的对话
     def approve(self, action_id: str, by: str) -> PendingAction: ...
-        # by 必须是 principal，否则 PermissionDenied；执行该工具，结果写回对话，写 agent_action_decided；再按「确认后派单」notify 下一棒
+        # by 必须是 principal，否则 PermissionDenied；执行该工具，结果写回对话，写 agent_action_decided；v5：不再派下一棒
     def reject(self, action_id: str, by: str, note: str = "") -> PendingAction: ...
     def pending(self, actor_id: str) -> list[PendingAction]: ...
     def conversations(self, actor_id: str) -> list[Conversation]: ...
@@ -1187,7 +1384,7 @@ class AgentHub:                               # HuayanApp.agents
 - 每轮：系统提示词（`prompts/assistant_<role>.md` + 委托人身份 + 当前待确认动作）+ 对话历史 → `gateway.complete(tools=该角色的工具, caller="agent:<role>", tier=fast, temperature=0)` → 执行工具调用，结果追加为 tool 消息 → 直到没有工具调用或满 8 步 → 最后的文字作为助手回复；
 - 本轮的工具消息只在本轮保留，跨轮只保留文字消息（含确认结果的 system 消息）；
 - 每一步写一条 `AgentStep`；
-- `gateway_mock` 为 true 时不跑 Loop：`chat` / `notify` 只追加一条「助手需要大模型（当前离线）」的 system 消息。离线演示走 `scripts/demo_mainline.py`（直接调用门面）。
+- `gateway_mock` 为 true 时不跑 Loop：`chat` 只追加一条「助手需要大模型（当前离线）」的 system 消息；v5：`dispatch` 对主人调用对应的规则骨架（`draft_requirement` / `translate_requirement` / `package_sheet`）后 `mark_prepared`，没有骨架的（升级说明、封存两栏、提炼）用录制缓存或标注「离线，无草稿」。
 
 **原子工具**（`huayan/agent/tools.py`；规则写死，评审时逐条检查）：
 1. 一个工具 = 一个动作 = 调用**一个**门面 / 知识库 / 转译函数；组装参数时最多先读一次当前状态。业务规则、权限、校验都在门面和知识库里，工具里不写业务分支；
@@ -1204,39 +1401,33 @@ class AgentHub:                               # HuayanApp.agents
 |---|---|---|---|
 | `search_knowledge(query, kind?)` | read | sales pm rd | `kb.search` ＋ `kb.search_blocked`（越权只给归属人与层级） |
 | `get_knowledge(ku_id)` | read | sales pm rd | `kb.get` |
-| `record_customer_turn(text)` | draft | sales | `app.add_turn(session, "customer", text)`；返回槽位、觉的追问提示、推荐 / 升级状态 |
-| `record_sales_turn(text)` | draft | sales | `app.add_turn(session, "sales", text)` |
 | `get_need_card()` | read | sales | `app.view_session(session, principal)` |
-| `recommend_now()` | draft | sales | `app.recommend_now(session)` |
-| `request_decrypt()` | effect | sales | `app.request_decrypt(session, principal)` |
+| `save_reply_draft(text)` | draft | sales | `app.save_reply_draft`（v5） |
+| `save_escalate_note(text)` | draft | sales | `app.save_escalate_note`（v5） |
+| `request_decrypt()` | effect | sales | `app.request_decrypt(session, principal)`（私聊提议） |
 | `list_my_questions()` | read | sales pm rd | `app.bus.list(owner_role=角色)`，只留 owner_id 为空或为本人的 |
 | `get_session(session_id)` | read | pm rd | `app.view_session(session_id, principal)` |
 | `match_translations(text)` | read | pm rd | `translate.match_translations` |
 | `find_products(phenomenon, slots)` | read | pm rd | `domain.match_candidates(phenomenon, slots, kb.products())` |
-| `draft_product_need(question_id)` | draft | pm | `app.draft_requirement` |
+| `draft_product_need(req_id)` | draft | pm | `app.draft_requirement`（v5 改参数） |
 | `get_requirement(req_id)` | read | pm rd | `app.requirement_view` |
 | `edit_item(req_id, index, text, quote_refs, ku_refs)` | draft | pm rd | `app.edit_req_item` |
 | `remove_item(req_id, index)` | draft | pm rd | `app.remove_req_item` |
 | `set_direction(req_id, text)` | draft | pm | `app.set_direction` |
-| `confirm_requirement(req_id)` | effect | pm | `app.confirm_requirement` |
-| `dismiss_question(question_id, note)` | effect | pm | `app.resolve(question_id, "dismiss", ...)` |
 | `package_sheet(req_id)` | draft | pm | `app.package_sheet` |
-| `edit_sheet(req_id, sheet, usage)` | draft | pm | `app.save_sheet` |
-| `release_product(req_id)` | effect | pm | `app.release_product` |
+| `edit_sheet(req_id, sheet, usage)` | draft | pm rd | `app.save_sheet`（v5：研发副驾改写泄密句） |
+| `leak_check(req_id)` | read | pm rd | `app.leak_check`（v5；只得到句序号与类别） |
 | `draft_chem_need(req_id)` | draft | rd | `app.translate_requirement` |
-| `confirm_translation(req_id)` | effect | rd | `app.confirm_translation` |
-| `contribute_translation(req_id, index, scene_phrase, chem_term)` | effect | rd | `app.contribute_translation` |
-| `set_public_points(req_id, text)` | effect | rd | `app.set_public_points` |
-| `record_trial(req_id, result, cause, note)` | effect | rd | `app.record_trial`（`product_id`、`conditions` 取自需求单） |
-| `decide_decrypt(question_id, approve)` | effect | rd | `app.decide_decrypt` |
+| `save_points_draft(req_id, public, sealed)` | draft | rd | `app.save_points_draft`（v5） |
+| `save_contribution_draft(req_id, index, scene_phrase, chem_term, note)` | draft | rd | `app.save_contribution_draft`（v5） |
+| `confirm_translation(req_id)` | effect | rd | `app.confirm_translation`（私聊提议） |
+| `contribute_translation(req_id, index, scene_phrase, chem_term)` | effect | rd | `app.contribute_translation`（私聊提议） |
+| `set_public_points(req_id, text, sealed)` | effect | rd | `app.set_public_points`（私聊提议） |
+| `decide_decrypt(question_id, approve)` | effect | rd | `app.decide_decrypt`（私聊提议） |
+
+v5 删除：`record_customer_turn`、`record_sales_turn`、`recommend_now`（客户原话不经过副驾，发言与推荐在工作面上）；`confirm_requirement`、`dismiss_question`、`release_product`（`pm:agent` 没有生效工具）；`record_trial`（试样来自模拟 ELN）。
 | `my_contributions()` | read | pm rd | `app.contributions(principal)` |
 
-**确认后派单**（`approve` 执行成功后，写死在 `AgentHub` 里）：
+**v5 删除「确认后派单」**：下一步由觉的写后评估提出（AGENTS.md 铁律 14）。
 
-| 已确认的工具 | notify 谁 |
-|---|---|
-| `confirm_requirement` | 该现象 L3 转化对照条数最多的研发（并列取 id 最小） |
-| `set_public_points` | 需求单的 `pm_confirmed_by` |
-| `request_decrypt` | 解密问题的 `owner_id`（产品归属研发） |
-
-**不变量（有测试，`tests/test_wp_l.py`，不调用模型）**：产品经理助手的 `search_knowledge` / `get_knowledge` 拿不到 L3 原文（只有 `BlockedHint`）；`effect` 工具在 `approve` 之前不改变任何状态；非委托人 `approve` 抛 `PermissionDenied`。
+**不变量（有测试，`tests/test_wp_l.py`，不调用模型）**：`pm:agent` 的工具集合中没有 `effect` 工具；它的 `search_knowledge` / `get_knowledge` / `get_requirement` 拿不到 L3 原文（只有 `BlockedHint` 与归属）、`sealed` 与 `points_draft`；`effect` 工具在 `approve` 之前不改变任何状态；非委托人 `approve` 抛 `PermissionDenied`。

@@ -5,11 +5,12 @@ from typing import Any, Literal
 
 from ._base import BaseModel, datetime
 
-EventKind = Literal["turn", "extraction", "ask_hint", "recommend", "escalate", "retrieve", "access_denied",
-                    "decrypt_request", "decrypt_approve", "question_published", "question_resolved",
-                    "requirement_confirmed", "requirement_translated", "knowledge_contributed", "trial",
-                    "product_released", "sheet_updated", "access_frozen", "agent_action_proposed",
-                    "agent_action_decided"]
+EventKind = Literal["turn", "extraction", "ask_hint", "match", "recommend", "escalate", "retrieve", "access_denied",
+                    "decrypt_request", "decrypt_approve", "question_published", "question_prepared",
+                    "question_resolved", "requirement_created", "requirement_accepted", "requirement_returned",
+                    "requirement_edited", "requirement_translated", "knowledge_contributed", "trial", "market_eval",
+                    "points_set", "product_released", "sheet_updated", "access_frozen", "human_decision",
+                    "agent_action_proposed", "agent_action_decided"]
 
 
 class Event(BaseModel):

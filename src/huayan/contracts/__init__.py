@@ -1,10 +1,10 @@
 """契约代码，与 docs/CONTRACTS.md 一致；只能由人修改。"""
 from ._base import SHANGHAI, BaseModel
 from .agent import AgentMessage, AgentStep, Conversation, PendingAction, ToolKind, ToolResult, ToolSpec
-from .app import RunStatus, SessionView
+from .app import JueTimeline, RunStatus, SessionView, TimelineNode, TimelinePoint
 from .bus import Evidence, QFamily, Question, Resolution
-from .escalation import (CitedKnowledge, ContributionStat, PMDraft, RDDraft, ReqItem, Requirement,
-                         RequirementView, SheetDraft, Trial)
+from .escalation import (CitedKnowledge, ContributionDraft, ContributionStat, LeakHit, PMDraft, PointsDraft, RDDraft,
+                         ReqItem, Requirement, RequirementView, SheetDraft, Trial)
 from .events import Event, EventKind
 from .gateway import LLMRequest, LLMResponse, LLMToolCall, Message, ModelGateway, Tier, Usage
 from .jev import JevDecision, S1Answer, S1Choice, S1Noul, S1Question, S1Result, S1Score, System1Client
@@ -31,12 +31,12 @@ __all__ = [
     "ObjectType", "Family", "JueObject", "JueState", "JueTemplate", "ScoredDecision", "JueOutput", "JueRecord", "QuestionModel",
     "Discoverer",
     "QFamily", "Evidence", "Resolution", "Question",
-    "ReqItem", "PMDraft", "RDDraft", "SheetDraft", "Requirement", "Trial", "CitedKnowledge", "RequirementView",
-    "ContributionStat",
+    "ReqItem", "PMDraft", "RDDraft", "SheetDraft", "LeakHit", "PointsDraft", "ContributionDraft", "Requirement", "Trial",
+    "CitedKnowledge", "RequirementView", "ContributionStat",
     "EventKind", "Event",
     "NeedCard", "Injection", "WeekItem",
     "Tier", "Message", "LLMRequest", "LLMToolCall", "Usage", "LLMResponse", "ModelGateway",
     "MeterRecord", "Meter",
-    "SessionView", "RunStatus",
+    "SessionView", "RunStatus", "TimelinePoint", "TimelineNode", "JueTimeline",
     "ToolKind", "ToolSpec", "ToolResult", "PendingAction", "AgentStep", "AgentMessage", "Conversation",
 ]

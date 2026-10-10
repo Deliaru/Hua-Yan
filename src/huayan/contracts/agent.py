@@ -9,7 +9,8 @@ from .seeds import Role
 ToolKind = Literal["read", "draft", "effect"]
 # read：只读，按委托人权限过滤，自动执行
 # draft：写草稿（未生效），自动执行
-# effect：让结果生效（确认、沉淀、试样、对外要点、发布、解密申请与审批）；只挂起为 PendingAction，委托人在确认卡上确认后才执行
+# effect：让结果生效；只用于私聊里副驾的提议，挂起为 PendingAction，委托人确认后才执行。
+#         工作面上的签字按钮直接调门面，不经过 PendingAction；没有委托人的 Agent（pm:agent）没有 effect 工具
 
 
 class ToolSpec(BaseModel):
@@ -58,11 +59,12 @@ class AgentMessage(BaseModel):
     text: str
     at: datetime
     pending_action_ids: list[str] = []
+    target: str | None = None                 # 批注挂的位置，如 "req:3/chem/2"、"sess:5/reply"；None = 普通消息
 
 
 class Conversation(BaseModel):
     id: str                                   # "conv:<actor_id>:<session_id 或 inbox>"
     principal: str
-    role: Role                                # sales / pm / rd
+    role: Role                                # sales / pm / rd；产品经理 Agent 的 principal 为 pm:agent
     session_id: str | None = None             # 业务员助手绑定的客户会话
     messages: list[AgentMessage] = []
