@@ -84,7 +84,7 @@ def test_l1_recommend_and_escalate(tmp_path, monkeypatch):
     assert payload["recommended_product_id"] == "T-205"
     assert {h["ku_id"] for h in payload["hits"]} == {"ku:sheet:T-101", "ku:usage:T-101"}
 
-    app.add_turn(session.id, "customer", "这个是控制 pH 吧，原理能讲讲吗？")
+    app.add_turn(session.id, "customer", "我们懂一点，你们这个匀染剂的原理直接讲明白就行")
     q = app.request_decrypt(session.id, "sales:S01")
     app.decide_decrypt(q.id, "rd:R01", True)
     assert not any(e.ku_id == "ku:mechanism:T-205" for e in app.ledger.list())

@@ -1,6 +1,5 @@
 """逐轮需求抽取：规则实现与单次结构化模型调用。"""
 import json
-import re
 from pathlib import Path
 
 from huayan.contracts import (ExtractedSlot, ExtractionResult, LLMRequest, Message,
@@ -43,11 +42,9 @@ class RuleExtractor:
             result.intent = "product_question"
         elif not phenomenon and not result.slots and any(w in text for w in ("你好", "谢谢", "再见")):
             result.intent = "smalltalk"
-        # 术语仅用于本地画像判断，不把 L2/L3 对照正文传给 L1 模型。
-        terms = {tr.chem_term for tr in self.seeds.translations}
-        terms.update(token for tr in self.seeds.translations
-                     for token in re.findall(r"[A-Za-z][A-Za-z0-9+-]*", tr.chem_term))
-        if any(term.casefold() in text.casefold() for term in terms if term):
+        # 懂化学的客户直接点名要某一类助剂（种子产品品类）；不懂化学的只说现象。
+        compact = text.replace(" ", "").casefold()
+        if any(p.category.replace(" ", "").casefold() in compact for p in self.seeds.products):
             profile.chem_savvy, profile.evidence_quote = True, text
         return result
 
@@ -61,6 +58,7 @@ class LLMExtractor:
 
     def extract(self, turns, prev):
         data = {"slots": [{"id": s.id, "label": s.label, "values": s.values} for s in self.seeds.slots],
+                "categories": sorted({p.category for p in self.seeds.products}),
                 "phenomena": [{"id": p.id, "label": p.label, "phrases": p.customer_phrases}
                               for p in self.seeds.phenomena],
                 "previous": prev.model_dump(mode="json"),

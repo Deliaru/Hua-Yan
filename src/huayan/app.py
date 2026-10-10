@@ -422,8 +422,8 @@ class HuayanApp:
         if by != session.sales_id or self.kb.is_frozen(by):
             raise PermissionDenied("只能为自己的有效会话申请解密")
         rec, profile = session.recommendation, session.need.profile
-        if not rec or not rec.product_id or not (profile.chem_savvy and profile.asked_mechanism):
-            raise ValueError("解密需要已有推荐，且客户懂化学并明确要求机理")
+        if not rec or not rec.product_id or not profile.chem_savvy:
+            raise ValueError("解密需要已有推荐，且客户懂化学")
         product = self.kb.product(rec.product_id)
         q = self.bus.publish(Question(id="", family="decrypt_request", title="客户申请了解产品机理",
             object_id=f"{session_id}/{product.id}", owner_role="rd", owner_id=product.owner,
