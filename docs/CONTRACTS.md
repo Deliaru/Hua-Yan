@@ -262,8 +262,10 @@ def cap(viewer: Actor, customer_id: str, product_id: str, grants: list[DecryptGr
     # L1：product_usage；存在该客户×该产品的授权时 full_mechanism
     # L2：product_usage（另可看案例与需求单，不看机理）
     # L3：internal
-def render(product_id: str, version: Version, viewer: Actor, kb: KnowledgeBase) -> RecommendationCard: ...
-    # 只渲染 version 允许的知识单元；调用方保证 version 不超过 cap
+def render(product_id: str, version: Version, viewer: Actor, kb: KnowledgeBase, *,
+           session_id: str, customer_id: str, grants: list[DecryptGrant]) -> RecommendationCard: ...
+    # 2026-10-11 经用户授权补齐上下文：门面校验会话访问权并传入真实客户与授权。
+    # 渲染器再次验证 cap，授权审批人必须是产品归属研发；卡片绑定 session_id。
 ```
 
 **不变量（必须有测试）**：查看者为 L1 且无授权时，渲染结果和任何 L1 回复中不出现 level ≥ 2 的知识单元；任何情况下 L1 看不到 `formula` 与 `trial`。
