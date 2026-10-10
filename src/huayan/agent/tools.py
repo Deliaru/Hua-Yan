@@ -1,0 +1,343 @@
+"""契约 ⑭：角色助手的原子工具。一个工具 = 一个动作 = 调用一个门面 / 知识库 / 转译函数；
+业务规则、权限与校验都在门面和知识库里，工具只组装参数、精简返回。委托人由 ToolContext 绑定，模型看不到也改不了。
+注册表写法参照 JUE src/jue/tools/__init__.py（Registry.register / openai_schemas），按契约 ⑭ 重写。"""
+from dataclasses import dataclass
+from typing import Any, Callable, Literal
+
+from huayan.clock import get_clock
+from huayan.contracts import Actor, KUKind, ReqItem, Role, SheetDraft, ToolKind, ToolResult, ToolSpec, Trial
+from huayan.contracts._base import BaseModel
+from huayan.domain import match_candidates
+from huayan.escalation import translate
+
+
+@dataclass
+class ToolContext:
+    app: Any                                  # HuayanApp
+    principal: Actor
+    conversation_id: str
+    session_id: str | None = None
+
+
+TOOLS: dict[str, tuple[ToolSpec, Callable[[ToolContext, BaseModel], ToolResult]]] = {}
+
+
+def tool(name: str, kind: ToolKind, roles: list[Role], description: str, params: type[BaseModel], confirm_text: str = ""):
+    def register(fn):
+        TOOLS[name] = (ToolSpec(name=name, kind=kind, roles=roles, description=description, params=params,
+                                confirm_text=confirm_text), fn)
+        return fn
+    return register
+
+
+def openai_schemas(role: Role) -> list[dict]:
+    return [{"type": "function", "function": {"name": spec.name, "description": spec.description,
+                                              "parameters": spec.params.model_json_schema()}}
+            for spec, _ in TOOLS.values() if role in spec.roles]
+
+
+def _session(s) -> dict:
+    rec = s.recommendation
+    return {"session_id": s.id, "status": s.status, "phenomenon": s.need.phenomenon,
+            "slots": {k: f.value or "不清楚" for k, f in s.need.slots.items()},
+            "ask_hints": [{"slot": h.slot, "label": h.label, "ask_text": h.ask_text} for h in s.hints],
+            "product_id": rec.product_id if rec else None,
+            "escalation_question_id": rec.escalated_question_id if rec else None}
+
+
+def _items(items: list[ReqItem]) -> list[dict]:
+    return [{"index": i, "text": it.text, "quote_refs": it.quote_refs, "ku_refs": it.ku_refs} for i, it in enumerate(items)]
+
+
+def _req(req) -> dict:
+    return {"req_id": req.id, "status": req.status, "phenomenon": req.phenomenon, "known_slots": req.known_slots,
+            "direction": req.direction, "product_lang": _items(req.product_lang), "chem_lang": _items(req.chem_lang),
+            "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id}
+
+
+class NoArgs(BaseModel):
+    pass
+
+
+class Text(BaseModel):
+    text: str
+
+
+class ReqId(BaseModel):
+    req_id: str
+
+
+class QuestionId(BaseModel):
+    question_id: str
+
+
+# ---- 通用 ----
+
+class SearchArgs(BaseModel):
+    query: str
+    kind: KUKind | None = None
+
+
+@tool("search_knowledge", "read", ["sales", "pm", "rd"],
+      "在你委托人可读的知识里检索；越权命中只告诉你归属人与层级（谁知道），不给内容", SearchArgs)
+def search_knowledge(ctx: ToolContext, args: SearchArgs) -> ToolResult:
+    kb, me = ctx.app.kb, ctx.principal
+    hits = [h.ku for h in kb.search(args.query, me, k=5, session_id=ctx.session_id) if args.kind in (None, h.ku.kind)]
+    blocked = kb.search_blocked(args.query, me)
+    return ToolResult(data={"hits": [{"ku_id": u.id, "kind": u.kind, "level": u.level, "title": u.title,
+                                      "text": u.text[:160], "owner": u.owner} for u in hits],
+                            "blocked": [f"{b.owner} · L{b.level}" for b in blocked]})
+
+
+class KuId(BaseModel):
+    ku_id: str
+
+
+@tool("get_knowledge", "read", ["sales", "pm", "rd"], "读取一条知识的全文（越权会被拒绝）", KuId)
+def get_knowledge(ctx: ToolContext, args: KuId) -> ToolResult:
+    u = ctx.app.kb.get(args.ku_id, ctx.principal)
+    return ToolResult(data={"ku_id": u.id, "kind": u.kind, "level": u.level, "title": u.title, "text": u.text,
+                            "owner": u.owner})
+
+
+@tool("list_my_questions", "read", ["sales", "pm", "rd"], "列出派给你委托人（或其角色、尚未指派到人）的待处理问题", NoArgs)
+def list_my_questions(ctx: ToolContext, args: NoArgs) -> ToolResult:
+    me = ctx.principal
+    return ToolResult(data=[{"question_id": q.id, "family": q.family, "title": q.title, "object_id": q.object_id,
+                             "p_need": q.p_need, "refs": q.refs, "evidence": [e.summary for e in q.evidence]}
+                            for q in ctx.app.bus.list(owner_role=me.role) if q.owner_id in (None, me.id)])
+
+
+# ---- 业务员（绑定当前客户会话） ----
+
+@tool("record_customer_turn", "draft", ["sales"], "把客户的一句原话记入当前会话；返回槽位、追问提示、推荐或升级状态", Text)
+def record_customer_turn(ctx: ToolContext, args: Text) -> ToolResult:
+    return ToolResult(data=_session(ctx.app.add_turn(ctx.session_id, "customer", args.text)))
+
+
+@tool("record_sales_turn", "draft", ["sales"], "把业务员说的一句话（如追问）记入当前会话", Text)
+def record_sales_turn(ctx: ToolContext, args: Text) -> ToolResult:
+    return ToolResult(data=_session(ctx.app.add_turn(ctx.session_id, "sales", args.text)))
+
+
+@tool("get_need_card", "read", ["sales"], "查看当前会话的场景需求卡：槽位与客户原话、追问提示、推荐卡", NoArgs)
+def get_need_card(ctx: ToolContext, args: NoArgs) -> ToolResult:
+    v = ctx.app.view_session(ctx.session_id, ctx.principal.id)
+    return ToolResult(data={"status": v.status, "slots": [{"slot": f.slot, "value": f.value, "quote": f.quote} for f in v.slots],
+                            "ask_hints": [h.ask_text for h in v.hints], "escalation_question_id": v.escalation_question_id,
+                            "card": v.card and {"product_id": v.card.product_id, "version": v.card.version,
+                                                "sections": [f"{s.title}：{s.text}" for s in v.card.sections]}})
+
+
+@tool("recommend_now", "draft", ["sales"], "按当前已知条件立即推荐（信息不全时也给出结果或升级）", NoArgs)
+def recommend_now(ctx: ToolContext, args: NoArgs) -> ToolResult:
+    return ToolResult(data=_session(ctx.app.recommend_now(ctx.session_id)))
+
+
+@tool("request_decrypt", "effect", ["sales"], "客户懂化学且要求了解机理时，为当前会话的推荐产品申请解密（产品归属研发审批）",
+      NoArgs, "为当前会话的推荐产品申请解密，交产品归属研发审批")
+def request_decrypt(ctx: ToolContext, args: NoArgs) -> ToolResult:
+    q = ctx.app.request_decrypt(ctx.session_id, ctx.principal.id)
+    return ToolResult(data={"question_id": q.id, "owner_id": q.owner_id})
+
+
+# ---- 产品经理 / 研发：读 ----
+
+class SessionId(BaseModel):
+    session_id: str
+
+
+@tool("get_session", "read", ["pm", "rd"], "查看一段客户会话：逐轮原话（带 turn id）、槽位、状态", SessionId)
+def get_session(ctx: ToolContext, args: SessionId) -> ToolResult:
+    v = ctx.app.view_session(args.session_id, ctx.principal.id)
+    return ToolResult(data={"turns": [{"turn_id": t.id, "speaker": t.speaker, "text": t.text} for t in v.turns],
+                            "slots": {f.slot: f.value for f in v.slots}, "status": v.status,
+                            "requirement_id": v.requirement.id if v.requirement else None})
+
+
+class MatchArgs(BaseModel):
+    text: str
+    phenomenon: str | None = None
+
+
+@tool("match_translations", "read", ["pm", "rd"], "用一段场景描述匹配你可读的转化对照（场景说法 → 本层术语）", MatchArgs)
+def match_translations(ctx: ToolContext, args: MatchArgs) -> ToolResult:
+    hits = translate.match_translations(args.text, ctx.app.kb, ctx.principal, args.phenomenon)
+    return ToolResult(data=[{"ku_id": h.ku.id, "level": h.ku.level, "translation": h.ku.text, "owner": h.ku.owner,
+                             "score": round(h.score, 2)} for h in hits])
+
+
+class ProductArgs(BaseModel):
+    phenomenon: str
+    slots: dict[str, str] = {}
+
+
+@tool("find_products", "read", ["pm", "rd"], "按现象与已知条件查已发布产品中的候选（含还不知道的限定条件）", ProductArgs)
+def find_products(ctx: ToolContext, args: ProductArgs) -> ToolResult:
+    found = match_candidates(args.phenomenon, args.slots, ctx.app.kb.products())
+    return ToolResult(data=[c.model_dump() for c in found])
+
+
+@tool("get_requirement", "read", ["pm", "rd"], "查看需求单：各层条目、客户原话、所引知识（越权知识只显示归属）", ReqId)
+def get_requirement(ctx: ToolContext, args: ReqId) -> ToolResult:
+    v = ctx.app.requirement_view(args.req_id, ctx.principal.id)
+    return ToolResult(data={**_req(v.requirement), "quotes": v.quotes,
+                            "cited": [{"ku_id": c.ku_id, "owner": c.owner, "level": c.level, "title": c.title,
+                                       "text": c.text} for c in v.cited]})
+
+
+@tool("my_contributions", "read", ["pm", "rd"], "查看你委托人的知识被引用的次数与积分", NoArgs)
+def my_contributions(ctx: ToolContext, args: NoArgs) -> ToolResult:
+    rows = ctx.app.contributions(ctx.principal.id)
+    return ToolResult(data=[{"ku_id": r.ku_id, "title": r.title, "n_cited": r.n_cited, "points": r.points}
+                            for r in rows if r.owner == ctx.principal.id])
+
+
+# ---- 需求单草稿（产品经理改 L2，研发改 L3；层的规则在门面） ----
+
+@tool("draft_product_need", "draft", ["pm"], "为一个升级 / 机会问题起草 L2 产品需求单（规则骨架，之后可逐条修改）", QuestionId)
+def draft_product_need(ctx: ToolContext, args: QuestionId) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.draft_requirement(args.question_id, ctx.principal.id)))
+
+
+class EditArgs(BaseModel):
+    req_id: str
+    index: int                                # -1 = 追加
+    text: str
+    quote_refs: list[str] = []
+    ku_refs: list[str] = []
+
+
+@tool("edit_item", "draft", ["pm", "rd"],
+      "改写需求单的一条（产品经理改产品需求，研发改化学语言）；index=-1 追加；quote_refs 填客户原话的 turn id，ku_refs 填依据的知识",
+      EditArgs)
+def edit_item(ctx: ToolContext, args: EditArgs) -> ToolResult:
+    item = ReqItem(text=args.text, quote_refs=args.quote_refs, ku_refs=args.ku_refs)
+    return ToolResult(data=_req(ctx.app.edit_req_item(args.req_id, args.index, item, ctx.principal.id)))
+
+
+class IndexArgs(BaseModel):
+    req_id: str
+    index: int
+
+
+@tool("remove_item", "draft", ["pm", "rd"], "删除需求单的一条（产品经理删产品需求，研发删化学语言）", IndexArgs)
+def remove_item(ctx: ToolContext, args: IndexArgs) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.remove_req_item(args.req_id, args.index, ctx.principal.id)))
+
+
+class DirectionArgs(BaseModel):
+    req_id: str
+    text: str
+
+
+@tool("set_direction", "draft", ["pm"], "修改需求单的产品方向（一句话）", DirectionArgs)
+def set_direction(ctx: ToolContext, args: DirectionArgs) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.set_direction(args.req_id, args.text, ctx.principal.id)))
+
+
+@tool("draft_chem_need", "draft", ["rd"], "为产品经理已确认的需求单起草 L3 化学语言条目与研发方向假设（规则骨架）", ReqId)
+def draft_chem_need(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.translate_requirement(args.req_id, ctx.principal.id)))
+
+
+@tool("package_sheet", "draft", ["pm"], "用产品需求与研发的对外要点生成 L1 说明书草稿（反向包装）", ReqId)
+def package_sheet(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=ctx.app.package_sheet(args.req_id, ctx.principal.id).model_dump())
+
+
+class SheetArgs(BaseModel):
+    req_id: str
+    sheet: str
+    usage: str
+
+
+@tool("edit_sheet", "draft", ["pm"], "修改 L1 说明书草稿（说明与用法）", SheetArgs)
+def edit_sheet(ctx: ToolContext, args: SheetArgs) -> ToolResult:
+    req = ctx.app.save_sheet(args.req_id, SheetDraft(sheet=args.sheet, usage=args.usage), ctx.principal.id)
+    return ToolResult(data={"req_id": req.id, "sheet": req.sheet.model_dump()})
+
+
+# ---- 生效动作（只挂起为确认卡，委托人确认后才执行） ----
+
+@tool("confirm_requirement", "effect", ["pm"], "提议确认 L2 产品需求单并交研发", ReqId, "确认需求单 {req_id} 的产品需求，并交研发转译")
+def confirm_requirement(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.confirm_requirement(args.req_id, ctx.principal.id)))
+
+
+class DismissArgs(BaseModel):
+    question_id: str
+    note: str = ""
+
+
+@tool("dismiss_question", "effect", ["pm"], "提议忽略一个问题（写明理由）", DismissArgs, "忽略问题 {question_id}：{note}")
+def dismiss_question(ctx: ToolContext, args: DismissArgs) -> ToolResult:
+    q = ctx.app.resolve(args.question_id, "dismiss", ctx.principal.id, args.note)
+    return ToolResult(data={"question_id": q.id, "status": q.status})
+
+
+@tool("release_product", "effect", ["pm"], "提议按说明书草稿发布新产品，回到 L1", ReqId, "按需求单 {req_id} 的说明书发布新产品，L1 可直接推荐")
+def release_product(ctx: ToolContext, args: ReqId) -> ToolResult:
+    p = ctx.app.release_product(args.req_id, ctx.principal.id)
+    return ToolResult(data={"product_id": p.id, "name": p.name})
+
+
+@tool("confirm_translation", "effect", ["rd"], "提议确认 L3 化学语言需求单（关联研发中产品，给所引知识的归属人记分）", ReqId,
+      "确认需求单 {req_id} 的化学语言转译，并给所引知识的归属人记分")
+def confirm_translation(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.confirm_translation(args.req_id, ctx.principal.id)))
+
+
+class ContributeArgs(BaseModel):
+    req_id: str
+    index: int
+    scene_phrase: str
+    chem_term: str
+
+
+@tool("contribute_translation", "effect", ["rd"], "提议把化学语言的一条沉淀为委托人自己的转化知识（场景说法 → 化学术语）",
+      ContributeArgs, "把「{scene_phrase} → {chem_term}」沉淀为你的转化知识（需求单 {req_id} 第 {index} 条）")
+def contribute_translation(ctx: ToolContext, args: ContributeArgs) -> ToolResult:
+    u = ctx.app.contribute_translation(args.req_id, args.index, args.scene_phrase, args.chem_term, ctx.principal.id)
+    return ToolResult(data={"ku_id": u.id, "title": u.title})
+
+
+class PointsArgs(BaseModel):
+    req_id: str
+    text: str
+
+
+@tool("set_public_points", "effect", ["rd"], "提议确认可以对外的要点（L3 内容流向下层的唯一出口，不写机理与配方）", PointsArgs,
+      "确认需求单 {req_id} 的对外要点：{text}")
+def set_public_points(ctx: ToolContext, args: PointsArgs) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.set_public_points(args.req_id, args.text, ctx.principal.id)))
+
+
+class TrialArgs(BaseModel):
+    req_id: str
+    result: Literal["pass", "fail"]
+    cause: Literal["none", "product", "equipment", "operation"] = "none"
+    note: str = ""
+
+
+@tool("record_trial", "effect", ["rd"], "提议录入需求单关联产品的试样结果（条件取自需求单）", TrialArgs,
+      "录入需求单 {req_id} 的试样结果：{result}（原因 {cause}）{note}")
+def record_trial(ctx: ToolContext, args: TrialArgs) -> ToolResult:
+    app = ctx.app
+    req = app.requirement_view(args.req_id, ctx.principal.id).requirement
+    trial = app.record_trial(Trial(id=f"trial:{len(app.events.query(kinds=['trial'])) + 1}", product_id=req.product_id,
+                                   requirement_id=req.id, rd=ctx.principal.id, conditions=req.known_slots,
+                                   result=args.result, cause=args.cause, note=args.note, at=get_clock().now()))
+    return ToolResult(data={"trial_id": trial.id, "product_id": trial.product_id, "result": trial.result})
+
+
+class DecryptArgs(BaseModel):
+    question_id: str
+    approve: bool
+
+
+@tool("decide_decrypt", "effect", ["rd"], "提议批准或拒绝客户的解密申请（只有产品归属研发本人可审批）", DecryptArgs,
+      "解密申请 {question_id}：{approve}（True = 批准，客户可看机理、看不到配方）")
+def decide_decrypt(ctx: ToolContext, args: DecryptArgs) -> ToolResult:
+    q = ctx.app.decide_decrypt(args.question_id, ctx.principal.id, args.approve)
+    return ToolResult(data={"question_id": q.id, "status": q.status, "action": q.resolution.action})
