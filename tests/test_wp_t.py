@@ -1,36 +1,15 @@
 from datetime import timedelta
 
-from huayan.contracts import (ROLE_LEVEL, CustomerProfile, KnowledgeUnit, NeedState, Question, Requirement, Session,
-                              SlotFill, Turn)
+from huayan.contracts import CustomerProfile, NeedState, Question, Requirement, Session, SlotFill, Turn
 from huayan.escalation.translate import draft_chem_need, draft_product_need, package_sheet
-
-
-class ListOnlyKB:
-    """WP-A1 合并前的最简替身：只实现 list 与 products（按 WP-A1 的知识单元格式从小种子构造）。A1 合并后换成 KnowledgeBase.from_seeds。"""
-
-    def __init__(self, seeds, at):
-        self._products = [p for p in seeds.products if p.status == "released"]
-        self.units = [KnowledgeUnit(id=f"ku:translation:{t.id}", level=t.level, kind="translation", title=t.scene_phrase,
-                                    text=f"{t.scene_phrase} → {t.chem_term}", phenomenon_ids=t.phenomenon_ids,
-                                    owner=t.owner, created_at=at) for t in seeds.translations]
-        self.units += [KnowledgeUnit(id=f"ku:case:{c.id}", level=2, kind="case", title=c.scene_text, text=c.pm_translation,
-                                     phenomenon_ids=[c.phenomenon], owner=c.owner, created_at=at) for c in seeds.cases]
-        self.units += [KnowledgeUnit(id=f"ku:mechanism:{p.id}", level=3, kind="mechanism", title=p.name, text=p.mechanism,
-                                     product_id=p.id, phenomenon_ids=p.solves, owner=p.owner, decryptable=True,
-                                     created_at=at) for p in seeds.products if p.status == "released"]
-
-    def products(self):
-        return self._products
-
-    def list(self, actor, *, kinds=None, phenomenon=None):
-        return [u for u in self.units if u.level <= ROLE_LEVEL[actor.role] and (kinds is None or u.kind in kinds)
-                and (phenomenon is None or not u.phenomenon_ids or phenomenon in u.phenomenon_ids)]
+from huayan.events import EventLog
+from huayan.knowledge import AuditLog, KnowledgeBase
 
 
 def test_layers_cite_own_knowledge_and_keep_quotes(mini_seeds, sim_clock):
     at = sim_clock.now()
     actors = {a.id: a for a in mini_seeds.actors}
-    kb = ListOnlyKB(mini_seeds, at)
+    kb = KnowledgeBase.from_seeds(mini_seeds, EventLog(), AuditLog())
     lines = [("customer", "染完以后布面深一块浅一块"), ("sales", "请问是什么面料？"), ("customer", "锦氨的"),
              ("sales", "用的什么染色机？"), ("customer", "气流缸")]
     turns = [Turn(id=f"turn:sess:1:{n}", session_id="sess:1", n=n, speaker=sp, text=tx, ts=at + timedelta(minutes=n))
@@ -46,7 +25,7 @@ def test_layers_cite_own_knowledge_and_keep_quotes(mini_seeds, sim_clock):
     q = Question(id="q:1", family="escalate_need", title="升级", object_id="sess:1", owner_role="pm", scored_by="mock",
                  discoverer="jev", dedup_key="escalate_need:sess:1", created_at=at)
     l3_terms = [t.chem_term for t in mini_seeds.translations if t.level == 3]
-    units = {u.id: u for u in kb.units}
+    units = {u.id: u for u in kb.list(actors["rd:R01"])}
 
     # L2：引用 tr:1、tr:3，不含任何 L3 知识（引用与文字都不含）
     pm = draft_product_need(q, [session], kb, actors["pm:P01"], at)
