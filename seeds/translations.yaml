@@ -55,3 +55,11 @@ items:
   - {id: tr:49, scene_phrase: 氨纶沾色, chem_term: （模拟）分散染料易沾污氨纶，需优先吸附在氨纶上的阻沾组分占据吸附位点, level: 3, owner: rd:R02, phenomenon_ids: [bleeding_staining]}
   # 主线回问（WP-I 第 3 步）：演示主题升级时客户没说染浴 pH，研发起草 L3 时觉据此回问；「弱酸性浴」不与「强酸性」「酸性染料」二元组混淆
   - {id: tr:50, scene_phrase: 弱酸性浴, chem_term: （模拟）弱酸性浴中酸性染料对锦纶初染快，需配合随升温缓释酸的 pH 调节组分, level: 3, owner: rd:R01, phenomenon_ids: [color_unlevel]}
+  # 回问样本（Jue-K）：各现象一条挂在槽位取值上的 L3 转化对照，取值不同则研发引用的知识不同；说法只与一个取值的二元组重合
+  - {id: tr:51, scene_phrase: 卷染机, chem_term: （模拟）卷染机浴比小、换水次数少，脱落染料在浴中浓度高、易回沾，需加强分散与阻沾, level: 3, owner: rd:R02, phenomenon_ids: [bleeding_staining]}
+  - {id: tr:52, scene_phrase: 连续轧染, chem_term: （模拟）连续轧染汽蒸段碱与双氧水浓度高、作用时间短，需稳定剂控制双氧水分解速率以减少纤维损伤, level: 3, owner: rd:R01, phenomenon_ids: [strength_loss]}
+  - {id: tr:53, scene_phrase: 无APEO, chem_term: （模拟）无 APEO 要求下乳化剂改用异构醇醚类，柔软剂乳液的稳定性与手感需重新评估, level: 3, owner: rd:R02, phenomenon_ids: [harsh_hand]}
+  - {id: tr:54, scene_phrase: 碱性, chem_term: （模拟）碱性浴中部分荧光增白剂上染率下降，需按浴 pH 选择耐碱型增白组分, level: 3, owner: rd:R01, phenomenon_ids: [low_whiteness]}
+  - {id: tr:55, scene_phrase: 冷轧堆, chem_term: （模拟）冷轧堆在室温长时间固色，水解染料比例偏高，需强化皂洗去除水解染料后再固色, level: 3, owner: rd:R02, phenomenon_ids: [poor_fastness]}
+  - {id: tr:56, scene_phrase: 分散染料, chem_term: （模拟）分散染料在高温定形时向纤维表面热迁移，与柔软剂叠加加重泛黄，需控制定形温度并选用低迁移组分, level: 3, owner: rd:R02, phenomenon_ids: [yellowing]}
+  - {id: tr:57, scene_phrase: 低泡, chem_term: （模拟）低泡要求下消泡组分易破乳析出成斑，需选用自乳化型低泡组分, level: 3, owner: rd:R01, phenomenon_ids: [color_spots]}

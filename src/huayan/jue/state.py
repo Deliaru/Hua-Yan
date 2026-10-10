@@ -57,11 +57,14 @@ def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: See
 
 
 def _trans_splits(phen: Phenomenon, known: dict[str, str], slot: SlotDef, kb: KnowledgeBase, layer: int) -> int:
-    """该槽位取各个值时，本层转化对照的命中集合有几种。以内部 L3 身份匹配，只产出计数，不外泄内容。"""
-    def hits(k: dict[str, str]) -> frozenset[str]:
-        text = " ".join([phen.label, *k.values()])
-        return frozenset(h.ku.id for h in match_translations(text, kb, _INTERNAL, phen.id) if h.ku.level == layer)
-    return len({hits({**known, slot.id: v}) for v in slot.values})
+    """该槽位取各个值时，本层转化对照的命中集合有几种。"""
+    return len({trans_hits(phen, {**known, slot.id: v}, kb, layer) for v in slot.values})
+
+
+def trans_hits(phen: Phenomenon, known: dict[str, str], kb: KnowledgeBase, layer: int) -> frozenset[str]:
+    """text = 现象名 + 已知槽位取值，以内部 L3 身份匹配后只留本层；只在觉内部计数，不外泄内容。回问标签也用它。"""
+    text = " ".join([phen.label, *known.values()])
+    return frozenset(h.ku.id for h in match_translations(text, kb, _INTERNAL, phen.id) if h.ku.level == layer)
 
 
 def theme_id(phenomenon: str, known: dict[str, str], seeds: Seeds) -> str:
