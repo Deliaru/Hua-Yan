@@ -25,8 +25,10 @@ class AgentHub:
         actor = self.app.actors.get(actor_id)
         if actor is None or actor.role not in ("sales", "pm", "rd"):
             raise PermissionDenied("只有业务员、产品经理、研发配有角色助手")
-        if actor.role == "sales" and session_id is None:
-            raise ValueError("业务员助手必须绑定客户会话")
+        if actor.role == "sales":
+            if session_id is None:
+                raise ValueError("业务员助手必须绑定客户会话")
+            self.app.view_session(session_id, actor_id)      # 由门面校验会话归属：只能绑定自己参与的会话
         return ToolContext(self.app, actor, f"conv:{actor_id}:{session_id or 'inbox'}", session_id)
 
     def chat(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation:
@@ -135,11 +137,11 @@ class AgentHub:
         for q in self.app.bus.list(status="open"):
             if q.id in self._dispatched or q.owner_role not in ("sales", "pm", "rd"):
                 continue
-            self._dispatched.add(q.id)
             owner = q.owner_id or min(a.id for a in self.app.actors.values() if a.role == q.owner_role)
             evidence = "；".join(e.summary for e in q.evidence) or "无"
             out.append(self.notify(owner, f"新问题 {q.id}（{q.family}）：{q.title}。证据：{evidence}",
                                    q.refs.get("session_id") if q.owner_role == "sales" else None))
+            self._dispatched.add(q.id)                       # 通知成功后才算派过；失败的下次 dispatch 再派
         return out
 
     # ---- 查询 ----
@@ -169,13 +171,16 @@ class AgentHub:
 
 
 def _run(fn, ctx: ToolContext, params, args: dict) -> ToolResult:
-    """门面 / 知识库的拒绝与校验失败（含模型给错的 id）原样回给模型；其他异常照常抛出。"""
+    """门面 / 知识库的拒绝与校验失败原样回给模型；模型给了不存在的 id（门面按 id 取值抛 KeyError，键就是模型给的参数）
+    也回给模型。其他异常（含内部缺字段的 KeyError）照常抛出。"""
     try:
         return fn(ctx, params.model_validate(args))
-    except KeyError as exc:
-        return ToolResult(ok=False, error=f"找不到 {exc.args[0]}")
     except (PermissionDenied, ValueError) as exc:
         return ToolResult(ok=False, error=str(exc))
+    except KeyError as exc:
+        if exc.args and exc.args[0] in args.values():
+            return ToolResult(ok=False, error=f"找不到 {exc.args[0]}")
+        raise
 
 
 def _append(path, line: str) -> None:

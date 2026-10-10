@@ -200,6 +200,9 @@ def draft_product_need(ctx: ToolContext, args: QuestionId) -> ToolResult:
     return ToolResult(data=_req(ctx.app.draft_requirement(args.question_id, ctx.principal.id)))
 
 
+LANG = {"pm": "product_lang", "rd": "chem_lang"}         # 编辑哪一层由门面按角色决定，这里只用来读原条目
+
+
 class EditArgs(BaseModel):
     req_id: str
     index: int                                # -1 = 追加
@@ -212,7 +215,9 @@ class EditArgs(BaseModel):
       "改写需求单的一条（产品经理改产品需求，研发改化学语言）；index=-1 追加；quote_refs 填客户原话的 turn id，ku_refs 填依据的知识",
       EditArgs)
 def edit_item(ctx: ToolContext, args: EditArgs) -> ToolResult:
-    item = ReqItem(text=args.text, quote_refs=args.quote_refs, ku_refs=args.ku_refs)
+    old = getattr(ctx.app.requirement_view(args.req_id, ctx.principal.id).requirement, LANG[ctx.principal.role])
+    slot = old[args.index].slot if -1 < args.index < len(old) else None      # 改写条件条目时保留其槽位标记
+    item = ReqItem(text=args.text, slot=slot, quote_refs=args.quote_refs, ku_refs=args.ku_refs)
     return ToolResult(data=_req(ctx.app.edit_req_item(args.req_id, args.index, item, ctx.principal.id)))
 
 
@@ -323,11 +328,10 @@ class TrialArgs(BaseModel):
 @tool("record_trial", "effect", ["rd"], "提议录入需求单关联产品的试样结果（条件取自需求单）", TrialArgs,
       "录入需求单 {req_id} 的试样结果：{result}（原因 {cause}）{note}")
 def record_trial(ctx: ToolContext, args: TrialArgs) -> ToolResult:
-    app = ctx.app
-    req = app.requirement_view(args.req_id, ctx.principal.id).requirement
-    trial = app.record_trial(Trial(id=f"trial:{len(app.events.query(kinds=['trial'])) + 1}", product_id=req.product_id,
-                                   requirement_id=req.id, rd=ctx.principal.id, conditions=req.known_slots,
-                                   result=args.result, cause=args.cause, note=args.note, at=get_clock().now()))
+    req, at = ctx.app.requirement_view(args.req_id, ctx.principal.id).requirement, get_clock().now()
+    trial = ctx.app.record_trial(Trial(id=f"trial:{req.id}@{at:%Y%m%d%H%M%S}", product_id=req.product_id,
+                                       requirement_id=req.id, rd=ctx.principal.id, conditions=req.known_slots,
+                                       result=args.result, cause=args.cause, note=args.note, at=at))
     return ToolResult(data={"trial_id": trial.id, "product_id": trial.product_id, "result": trial.result})
 
 
