@@ -70,10 +70,10 @@ export function Sales() {
       {current && detail ? <SessionBody d={detail} customer={L.name(current.customer_id)} /> : (
         <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始。客户只需描述宏观现象，系统负责追问、整理与推荐。" />
       )}
-      {sid && (live ? <AgentDock sessionId={sid} suggestions={suggestions} /> : (
+      {sid && (live ? <AgentDock key={sid} sessionId={sid} suggestions={suggestions} /> : (
         <Dock
           placeholder={speaker === "customer" ? "输入客户的话……" : "输入业务员的话……"}
-          onSend={(t) => api.addTurn(sid, speaker, t).then(refresh, fail)}
+          key={sid} onSend={(t) => api.addTurn(sid, speaker, t).then(refresh)}
           suggestions={suggestions}
           onPick={() => setSpeaker("sales")}
           accessory={<Segmented value={speaker} onChange={setSpeaker} items={[["customer", "客户"], ["sales", "业务员"]] as const} />}
@@ -141,6 +141,9 @@ function SessionBody({ d, customer }: { d: SessionDetail; customer: string }) {
           </div>
         </Group>
       )}
+      {!!d.ask_back_history.length && <Group title="回问记录" foot="客户回答后，回问从待办移入这里；补充信息已回填需求单。">
+        {d.ask_back_history.map((q) => <QuestionRow key={q.id} q={q} />)}</Group>}
+      {!live && <Group title="派单与确认记录" foot="角色助手离线，起草与确认由脚本执行。"><div className="p-4"><AgentConversation sessionId={v.session_id} /></div></Group>}
     </>
   );
 }

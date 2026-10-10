@@ -34,11 +34,13 @@ export default function App() {
   const [who, setWho] = useState<Partial<Record<Role, string>>>({});
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
   useEffect(() => {
     api.meta().then(setMeta, fail);
   }, [version]);
+  if (resetting) return <p role="status" className="p-10 text-ink-2">正在开启新一轮……</p>;
   if (!meta) return error ? <p className="p-10 text-danger">{error}</p> : null;
 
   // 三层对照、评测页不切换身份（各列的查看身份写在页面上），me 取产品经理
@@ -83,16 +85,20 @@ export default function App() {
             ))}
           </Popover>}
           <button className="icon-btn" title={`新开一轮（当前 ${meta.status.run_id}）`}
-                  onClick={() => api.reset().then(ctx.refresh, fail)}>
+                  onClick={() => {
+                    setError(null);
+                    setResetting(true);
+                    api.reset().then(() => api.meta()).then(setMeta).catch(fail).finally(() => setResetting(false));
+                  }}>
             <Refresh />
           </button>
         </div>
       </header>
 
-      {page === "sales" && <Sales key={me} />}
-      {page === "pm" && <Pm key={me} />}
-      {page === "rd" && <Rd key={me} />}
-      {page === "layers" && <Layers />}
+      {page === "sales" && <Sales key={`${meta.status.run_id}:${me}`} />}
+      {page === "pm" && <Pm key={`${meta.status.run_id}:${me}`} />}
+      {page === "rd" && <Rd key={`${meta.status.run_id}:${me}`} />}
+      {page === "layers" && <Layers key={meta.status.run_id} />}
       {page === "eval" && <Eval />}
 
       {error && (

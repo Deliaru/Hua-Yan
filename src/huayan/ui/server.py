@@ -58,7 +58,9 @@ def session(p):
     s = next(s for s in app.sessions() if s.id == p["id"])
     return {"view": app.view_session(p["id"], p["viewer"]), "phenomenon": s.need.phenomenon,
             "phenomenon_quote": s.need.phenomenon_quote,
-            "ask_back": [q for q in app.bus.list(family="ask_back") if q.refs.get("session_id") == p["id"]]}
+            "ask_back": [q for q in app.bus.list(family="ask_back") if q.refs.get("session_id") == p["id"]],
+            "ask_back_history": [q for q in app.bus.list(family="ask_back", status=None)
+                                 if q.refs.get("session_id") == p["id"] and q.status != "open"]}
 
 
 def questions(p):
@@ -73,6 +75,8 @@ def report(p):
 
 
 def offline_mainline(_):
+    if not app.status().gateway_mock:
+        raise ValueError("载入离线主线只用于角色助手离线模式")
     spec = importlib.util.spec_from_file_location("demo_mainline", MAINLINE)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

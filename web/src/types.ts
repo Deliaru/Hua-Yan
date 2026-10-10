@@ -45,7 +45,7 @@ export interface SessionView {
 }
 
 export interface SessionSummary { id: string; customer_id: string; sales_id: string; status: string; phenomenon: string | null }
-export interface SessionDetail { view: SessionView; phenomenon: string | null; phenomenon_quote: string; ask_back: Question[] }
+export interface SessionDetail { view: SessionView; phenomenon: string | null; phenomenon_quote: string; ask_back: Question[]; ask_back_history: Question[] }
 
 export interface Evidence { summary: string; quote: string }
 export interface Question {

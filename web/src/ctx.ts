@@ -47,7 +47,7 @@ export function useData<T>(load: () => Promise<T>, deps: unknown[]): T | null {
   const [data, setData] = useState<T | null>(null);
   useEffect(() => {
     let alive = true;
-    load().then((d) => alive && setData(d), fail);
+    load().then((d) => alive && setData(d), (e) => alive && fail(e));
     return () => {
       alive = false;
     };

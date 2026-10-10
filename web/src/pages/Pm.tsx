@@ -1,4 +1,5 @@
 // 产品经理工作台（L2）：问题队列、和产品经理助手对话、需求单（L3 知识只显示归属）、积分榜。
+import { useState } from "react";
 import { api } from "../api";
 import { useApp, useData, useLabels } from "../ctx";
 import { EmptyState, Group, PendingGroup, QuestionSection, RequirementDetail, Shell, useRequirementChoice } from "../components/Cards";
@@ -7,13 +8,14 @@ import { AgentConversation, AgentDock } from "../components/Dock";
 // 没有需求单时的空状态；离线时提供「载入离线主线」。
 export function NoRequirement() {
   const { meta, live, refresh, fail } = useApp();
+  const [busy, setBusy] = useState(false);
   return live ? (
     <EmptyState title="还没有需求单" text="L1 解决不了的需求会出现在左侧问题队列，告诉助手处理即可。" />
   ) : (
     <EmptyState title="还没有需求单"
                 text={meta.mainline_available ? "角色助手离线。载入离线主线，由脚本代替起草与确认，结果照常展示。" : "角色助手离线；离线主线由 WP-I 提供。"}
                 action={meta.mainline_available && (
-                  <button onClick={() => api.offlineMainline().then(refresh, fail)} className="btn btn-primary">载入离线主线</button>
+                  <button disabled={busy} onClick={() => { setBusy(true); api.offlineMainline().then(refresh, fail).finally(() => setBusy(false)); }} className="btn btn-primary">{busy ? "处理中……" : "载入离线主线"}</button>
                 )} />
   );
 }
@@ -43,7 +45,7 @@ export function Pm() {
   return (
     <Shell sidebar={<><QuestionSection role="pm" />{section}</>}>
       <PendingGroup />
-      {live && <AgentConversation sessionId={null} />}
+      {live ? <AgentConversation sessionId={null} /> : <Group title="派单与确认记录"><div className="p-4"><AgentConversation sessionId={null} /></div></Group>}
       {current ? <RequirementDetail id={current} /> : <NoRequirement />}
       <Ledger />
       {live && <AgentDock sessionId={null} />}
