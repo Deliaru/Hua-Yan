@@ -30,6 +30,14 @@ class SheetDraft(BaseModel):                  # 反向包装：产品需求＋�
     usage: str
 
 
+class ReuseProposal(BaseModel):               # 产品经理 Agent 查 L2 知识后的现成产品建议（v5.1）
+    product_id: str | None                    # None = 已查，无现成产品
+    ku_refs: list[str] = []                   # 依据的 L2 知识（案例、L2 转化对照）；采用时给归属人记 cited
+    customer_note: str = ""                   # 面向客户的一句说明（L1 可见，发出前过 leak_hits）
+    note: str = ""                            # 给业务员的依据说明，只写归属，不写案例原文
+    declined_reason: str = ""                 # 业务员不采用的理由
+
+
 class LeakHit(BaseModel):                     # 泄密匹配结果，只给句序号与类别，不含命中内容
     index: int                                # 按「。；！？\n」切句后的序号，从 0 开始
     source: Literal["sealed", "l3_term", "hypothesis"]
@@ -56,11 +64,12 @@ class Requirement(BaseModel):
     known_slots: dict[str, str]
     assigned_rd: str                          # 接单与签字的研发：建单时取该现象 L3 转化对照条数最多的研发（并列取 id 最小）
     escalate_note: str = ""                   # 业务员签字时的升级说明（L2/L3 可见）
+    reuse: ReuseProposal | None = None        # v5.1：现成产品建议；None = 还没查
     direction: str = ""                       # 空单时为空
     product_lang: list[ReqItem] = []          # L2/L3 可见；空单时为空
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
     hypotheses: list[str] = []                # 研发方向假设（只对 L3 可见）；泄密匹配的来源之一
-    status: Literal["draft", "rd_accepted", "rd_confirmed", "released", "rejected"]
+    status: Literal["draft", "reused", "rd_accepted", "rd_confirmed", "released", "rejected"]   # reused：业务员采用现成产品
     drafted_by: str = "pm:agent"              # L2 草稿的起草者
     chem_drafted_by: str | None = None        # L3 草稿的委托人（研发 actor id）
     rd_accepted_by: str | None = None         # 研发接单（= 立项）

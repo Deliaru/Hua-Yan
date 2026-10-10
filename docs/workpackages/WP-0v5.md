@@ -435,6 +435,29 @@ class AgentMessage(BaseModel):
 
 模拟业务周照常走真实链路；推进类决策由「模拟人」签字：问题提出即签（`sign` / `accept`），模拟退回率为 0；`human_decision` 不在模拟周中产生。机会汇聚的属性 `n_escalations` 改为统计 `escalate` 事件（即业务员签字后的升级）。需求卡、注入清单仍只有 `sim/`、`eval/` 可读（铁律 5）。
 
+## C13　v5.1 追加：现成产品复用（D17，已签字）
+
+```python
+# ⑦ escalation.py
+class ReuseProposal(BaseModel):               # 产品经理 Agent 查 L2 知识后的现成产品建议
+    product_id: str | None                    # None = 已查，无现成产品
+    ku_refs: list[str] = []                   # 依据的 L2 知识（案例、L2 转化对照）；采用时给归属人记 cited
+    customer_note: str = ""                   # 面向客户的一句说明（L1 可见，发出前过 leak_hits）
+    note: str = ""                            # 给业务员的依据说明，只写归属，不写案例原文
+    declined_reason: str = ""                 # 业务员不采用的理由
+
+class Requirement(BaseModel):
+    # …
+    status: Literal["draft", "reused", "rd_accepted", "rd_confirmed", "released", "rejected"]   # 增加 reused
+    reuse: ReuseProposal | None = None        # None = 还没查
+```
+
+- ⑤ requirement 属性：`reuse_checked` bool（`reuse` 不为空）、`reuse_pending` bool（有产品、未采用、未拒绝）、`reuse_declined` bool。
+- ⑧ 事件：`reuse_proposed`（`requirement_id, product_id, ku_refs`）、`reuse_adopted`（`requirement_id, product_id, session_id`）、`reuse_declined`（`requirement_id, product_id, reason`）。
+- ⑫ 门面：`save_reuse_proposal(req_id, product_id, ku_refs, customer_note, note, by)`（`pm:agent`，草稿）；`adopt_reuse(req_id, by)`（首个会话的业务员签字：按 Jev 披露版本给会话生成推荐卡，客户说明附在卡上，`customer_note` 过 `leak_hits`，所引 L2 知识记 cited，`status="reused"`，resolve `reuse_product`(sign)）；`decline_reuse(req_id, reason, by)`（业务员，resolve(return)，觉随后提出 `accept_requirement`）。业务员视图里的 `reuse` 只给产品（L1）、`customer_note` 与归属。
+- ⑭ 工具：`propose_reuse(req_id, product_id, ku_refs, customer_note, note)`，draft，pm。
+- 决策目录：新增 `reuse_product`（推进类，对象 requirement，主人 pm，签字人 sales）；`accept_requirement` 前置条件补 `attrs.reuse_checked and not attrs.reuse_pending and attrs.status == "draft"`。
+
 ## 待人确认的几处取舍
 
 1. **`Family` 用带格式约束的字符串**（C1）：代价是类型检查不再能发现拼错的 family，由模板加载时校验兜住。

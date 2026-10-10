@@ -2,7 +2,9 @@
 
 > 跨模块的数据格式与接口契约。**冻结后只能由人修改**。代码实现在 `src/huayan/contracts/`，必须与本文件一致。
 > 下列代码是规格（Python / pydantic v2 风格），字段名、类型、枚举值必须一致；函数签名必须一致，内部实现自由。
-> 版本：v5｜2026-10-11
+> 版本：v5.1｜2026-10-11
+>
+> **v5.1 追加（现成产品复用，REPLAN D17）**：升级建单后觉先提出 `reuse_product`，产品经理 Agent 用 L2 知识查现成产品，业务员签字采用后需求单 `status="reused"`、研发不介入。新增 `ReuseProposal` 与 `Requirement.reuse`；requirement 属性 `reuse_checked`、`reuse_pending`、`reuse_declined`；事件 `reuse_proposed`、`reuse_adopted`、`reuse_declined`；门面 `save_reuse_proposal`、`adopt_reuse`、`decline_reuse`；工具 `propose_reuse`。
 >
 > **v5 变更（觉是全过程的决策点发现器；产品经理由 Agent 担任；工作面 + 副驾，按钮即签字；依据 `workpackages/REPLAN-v5.md` 与 `workpackages/WP-0v5.md`）**：觉的对象增加 `session`、`requirement`，`Family` / `QFamily` 改为由模板目录校验的字符串，模板增加 `kind`、`signer_role`，`ScoredDecision` 逐条标 `scored_by`；问题增加签字人、准备完成时间、模板 id，处置动作改为 sign / accept / return 等，总线增加 `set_prepared`；需求单可以是空单，`pm_confirmed` 改为 `rd_accepted`（立项 ≡ 研发接单），增加指定研发、封存项、两栏与提炼草稿、退回理由，`ReqItem.edited_by`，试样增加客户评价，新增 `LeakHit` 与 `leak_hits`；会话增加回复与升级说明草稿；事件增加 `match` 等 8 种、删除 `requirement_confirmed`；Jev 不再升级；新增身份 `pm:agent`，积分只给人；`DecryptGrant.text`；删除路由配置；门面删除 `confirm_requirement` 与内部流程推进，新增升级、接单 / 退回、客户评价、草稿、`mark_prepared`、`questions`、`jue_timeline` 等原子方法与写后评估；`AgentMessage.target`，`pm:agent` 无生效工具，派单只派总线上的问题，删除「确认后派单」。
 >
@@ -596,6 +598,9 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState: ..
 | `n_leak_hits` | int | 说明书与用法上的 `leak_hits` 命中句数（第 7.1 节） |
 | `released` | bool | 已发布 |
 | `hours_in_status` | float | 停留在当前状态的业务小时（第二档：停滞） |
+| `reuse_checked` | bool | v5.1：产品经理 Agent 已查过现成产品（`reuse` 不为空） |
+| `reuse_pending` | bool | v5.1：有现成产品建议，业务员尚未采用或拒绝 |
+| `reuse_declined` | bool | v5.1：业务员不采用 |
 
 对象属性只放计数与状态，不放文本；文本类信号在构建时用规则匹配算成计数（铁律 3）。
 
@@ -626,7 +631,7 @@ class JueTemplate(BaseModel):
     urgency: str | None = None                # 数值表达式，截断到 [0,1]；为空时 1.0。紧急度是规则，不学习
 ```
 
-模板即**决策目录**，见 `config/templates/`，每个 family 一个文件。v4 已有：`ask_slot`（前置条件含 `attrs.layer == 1`）、`ask_back`（含 `attrs.layer >= 2`、未填、未答不清楚、`attrs.trans_splits >= 2`）、`opportunity`、`knowledge_conflict`、`leak_risk`；v5 新增 `escalate_need`、`accept_requirement`、`distortion`、`confirm_translation`、`contribution`、`market_eval`、`seal_points`、`seal_leak`、`release`（前置条件、主人、签字人见 `workpackages/REPLAN-v5.md` 第 4.3 节，均先用规则打分）。
+模板即**决策目录**，见 `config/templates/`，每个 family 一个文件。v4 已有：`ask_slot`（前置条件含 `attrs.layer == 1`）、`ask_back`（含 `attrs.layer >= 2`、未填、未答不清楚、`attrs.trans_splits >= 2`）、`opportunity`、`knowledge_conflict`、`leak_risk`；v5 新增 `escalate_need`、`reuse_product`（v5.1，主人 pm、签字人 sales；`accept_requirement` 的前置条件含 `attrs.reuse_checked and not attrs.reuse_pending`）、`accept_requirement`、`distortion`、`confirm_translation`、`contribution`、`market_eval`、`seal_points`、`seal_leak`、`release`（前置条件、主人、签字人见 `workpackages/REPLAN-v5.md` 第 4.3 节，均先用规则打分）。
 
 表达式求值器 `huayan.jue.expr` 复制自 JUE `discovery/expr.py`，只保留 `attrs.x`。基线（B1、B2、规则告警）也写成模板，放在 `config/baselines/<name>/`，由同一个原型在规则模式下运行。
 
@@ -775,6 +780,7 @@ v5：删除路由配置。发布方按模板的 `owner_role` / `signer_role` 与
 ```
 L1 场景需求卡（NeedState：槽位＋原话）
   → 业务员签字升级：门面建空需求单（指定研发 assigned_rd）
+  → 现成产品复用（v5.1）：产品经理 Agent 用 L2 知识查现成产品 → 业务员签字采用则推荐给客户、需求单关闭（reused）；否则继续
   → L2 产品需求语言（规则骨架 → 产品经理 Agent 用 L2 知识检索、逐条修改）→ 研发接单（= 立项）或写理由退回
   → L3 化学语言需求单（规则骨架 → 研发副驾用 L3 转化对照与机理起草 → 研发修改、确认）
   → 沉淀（研发副驾提炼 → 研发签字）
@@ -804,6 +810,13 @@ class SheetDraft(BaseModel):                  # 反向包装：产品需求＋�
     sheet: str
     usage: str
 
+class ReuseProposal(BaseModel):               # v5.1：产品经理 Agent 查 L2 知识后的现成产品建议
+    product_id: str | None                    # None = 已查，无现成产品
+    ku_refs: list[str] = []                   # 依据的 L2 知识（案例、L2 转化对照）；采用时给归属人记 cited
+    customer_note: str = ""                   # 面向客户的一句说明（L1 可见，发出前过 leak_hits）
+    note: str = ""                            # 给业务员的依据说明，只写归属，不写案例原文
+    declined_reason: str = ""                 # 业务员不采用的理由
+
 class LeakHit(BaseModel):                     # v5：泄密匹配结果，只给句序号与类别，不含命中内容
     index: int                                # 按「。；！？\n」切句后的序号，从 0 开始
     source: Literal["sealed", "l3_term", "hypothesis"]
@@ -827,11 +840,13 @@ class Requirement(BaseModel):
     known_slots: dict[str, str]
     assigned_rd: str                          # v5：接单与签字的研发；建单时取该现象 L3 转化对照条数最多的研发（并列取 id 最小）
     escalate_note: str = ""                   # v5：业务员签字时的升级说明（L2/L3 可见）
+    reuse: ReuseProposal | None = None        # v5.1：现成产品建议；None = 还没查
     direction: str = ""                       # v5：空单时为空
     product_lang: list[ReqItem] = []          # L2/L3 可见；v5：空单时为空
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
     hypotheses: list[str] = []                # 研发方向假设（v5：只对 L3 可见）；泄密匹配的来源之一
-    status: Literal["draft", "rd_accepted", "rd_confirmed", "released", "rejected"]   # v5：pm_confirmed → rd_accepted
+    status: Literal["draft", "reused", "rd_accepted", "rd_confirmed", "released", "rejected"]
+    # v5：pm_confirmed → rd_accepted；v5.1：reused = 业务员采用了现成产品，需求单关闭
     drafted_by: str = "pm:agent"              # v5：L2 草稿的起草者
     chem_drafted_by: str | None = None        # L3 草稿的委托人（研发 actor id）
     rd_accepted_by: str | None = None         # v5：研发接单（= 立项），原 pm_confirmed_by
@@ -874,6 +889,7 @@ class RequirementView(BaseModel):
     quotes: dict[str, str]                    # turn id → 客户原话
     cited: list[CitedKnowledge]
     # v5：对 L2 查看者，requirement 中的 sealed、points_draft、contribution_drafts、hypotheses 置空；L1 抛 PermissionDenied
+    # v5.1：业务员通过会话视图看到的现成产品建议只含产品（L1）、customer_note 与知识归属，不含案例原文
 
 class ContributionStat(BaseModel):            # 贡献看板的一行
     owner: str
@@ -932,7 +948,8 @@ EventKind = Literal["turn", "extraction", "ask_hint", "match", "recommend", "esc
                     "decrypt_request", "decrypt_approve", "question_published", "question_prepared",
                     "question_resolved", "requirement_created", "requirement_accepted", "requirement_returned",
                     "requirement_edited", "requirement_translated", "knowledge_contributed", "trial", "market_eval",
-                    "points_set", "product_released", "sheet_updated", "access_frozen", "human_decision",
+                    "points_set", "reuse_proposed", "reuse_adopted", "reuse_declined", "product_released", "sheet_updated",
+                    "access_frozen", "human_decision",
                     "agent_action_proposed", "agent_action_decided"]
 # v5：删除 requirement_confirmed
 
@@ -976,6 +993,9 @@ class EventLog:
 | `trial` | `trial_id, product_id, conditions, result, cause` |
 | `market_eval`（v5） | `requirement_id, trial_id, result` |
 | `points_set`（v5） | `requirement_id, n_sealed`（不含内容） |
+| `reuse_proposed`（v5.1） | `requirement_id, product_id, ku_refs`（product_id 为空 = 已查无现成产品） |
+| `reuse_adopted`（v5.1） | `requirement_id, product_id, session_id` |
+| `reuse_declined`（v5.1） | `requirement_id, product_id, reason` |
 | `product_released` | `product_id, requirement_id, phenomenon, applicable` |
 | `sheet_updated` | `product_id, slot, values` |
 | `access_frozen` | `actor_id` |
@@ -1219,6 +1239,14 @@ class HuayanApp:
     def escalate(self, session_id: str, by: str) -> Requirement: ...
         # v5：业务员签字。建空需求单（assigned_rd；escalate_note ← session.escalate_note）、resolve escalate_need(sign)、
         # session.status="escalated"、写 escalate 与 requirement_created
+    def save_reuse_proposal(self, req_id: str, product_id: str | None, ku_refs: list[str], customer_note: str,
+                            note: str, by: str) -> Requirement: ...
+        # v5.1：pm:agent，草稿；product_id 为空 = 已查无现成产品；写 reuse_proposed
+    def adopt_reuse(self, req_id: str, by: str) -> Session: ...
+        # v5.1：需求单首个会话的业务员签字；customer_note 过 leak_hits；按 Jev 披露版本给会话生成推荐卡（附客户说明）；
+        # 所引 L2 知识记 cited；status="reused"；resolve reuse_product(sign)；写 reuse_adopted
+    def decline_reuse(self, req_id: str, reason: str, by: str) -> Requirement: ...
+        # v5.1：业务员；写 declined_reason，resolve(return)，写 reuse_declined；觉随后提出 accept_requirement
     def draft_requirement(self, req_id: str, by: str) -> Requirement: ...
         # v5：by 必须是 pm:agent；对空单（draft）写入 L2 规则骨架
     def accept_requirement(self, req_id: str, by: str) -> Requirement: ...
@@ -1409,6 +1437,7 @@ class AgentHub:                               # HuayanApp.agents
 | `get_session(session_id)` | read | pm rd | `app.view_session(session_id, principal)` |
 | `match_translations(text)` | read | pm rd | `translate.match_translations` |
 | `find_products(phenomenon, slots)` | read | pm rd | `domain.match_candidates(phenomenon, slots, kb.products())` |
+| `propose_reuse(req_id, product_id, ku_refs, customer_note, note)` | draft | pm | `app.save_reuse_proposal`（v5.1） |
 | `draft_product_need(req_id)` | draft | pm | `app.draft_requirement`（v5 改参数） |
 | `get_requirement(req_id)` | read | pm rd | `app.requirement_view` |
 | `edit_item(req_id, index, text, quote_refs, ku_refs)` | draft | pm rd | `app.edit_req_item` |
