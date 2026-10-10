@@ -1,29 +1,30 @@
 # AGENTS.md
 
-> 给 coding agent 的项目宪法。每次会话先读本文件，再读 `docs/CONTRACTS.md`，再读分配给你的工作包 `docs/workpackages/WP-*.md`。
+> 给 coding agent 的项目宪法。每次会话先读本文件，再读 `docs/workpackages/REPLAN-v5.md`，再读 `docs/CONTRACTS.md`，再读分配给你的工作包 `docs/workpackages/WP-*.md`。
+> **v5 重整进行中**：旧工作包、`docs/DEMO.md`、`demo/mainline.yaml` 中与 `REPLAN-v5.md` 冲突的描述一律作废，以 REPLAN 为准。
 > 愿景与架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`；方向与取舍有疑问时以 `docs/VISION.md` 为准。
 
 ## 1. 项目是什么
 
 **化言（HuaYan）：面向传化功能化学「市场—产品—研发」需求协同的多层 Agent 系统。**
 
-客户和业务员只会描述宏观现象，转述过程中需求会变形，研发拿到的是走样的需求。**化言的主旨是分层转译**：L1 把对话整理成绑定原话的场景需求卡；L1 解决不了的，由产品经理 Agent 转成 L2 产品需求语言、研发助手再转成 L3 化学语言需求单——每一层只用本层能看的知识，每一句都标明依据了谁的转化知识；研发的结果经反向包装回流到 L1。
+客户和业务员只会描述宏观现象，转述过程中需求会变形，研发拿到的是走样的需求。**化言的主旨是分层转译**：L1 把对话整理成绑定原话的场景需求卡；L1 解决不了的，由产品经理 Agent 转成 L2 产品需求语言、研发副驾再转成 L3 化学语言需求单——每一层只用本层能看的知识，每一句都标明依据了谁的转化知识；研发的结果经反向包装回流到 L1。
 
 **权责对等**贯穿这条线：知识被引用即给归属人记分，研发修改的转译可沉淀为自己的知识，上层知识对下层只显示归属不显示原文，解密由研发本人审批。
 
-**每个人配一个角色助手**（业务员助手、产品经理助手、研发助手）：人用自然语言指挥，助手理解意图、自己调用原子工具；觉发现的问题和上一层确认的需求单自动派给下一棒的助手，由它主动处理。助手借用委托人的权限，产出是草稿；有后果的动作只能提议，委托人在确认卡上确认后才执行——谁确认，谁负责。
+**人类角色是业务员和研发，以「工作面 + 副驾」工作**：工作面是人的工作对象（业务员面前是客户，研发面前是需求单），人直接在上面干活；副驾旁听、起草、批注，把草稿写在工作面上对应的位置。**助手生产内容，人判断和签字**：人说意图不说正文，按钮就是签字。**产品经理由产品经理 Agent（`pm:agent`）担任**：只起草，不签字、不记积分，研发接单（= 立项）是 L2 的生效点，研发审定发布。
 
 两个内部引擎：
-- **觉（Jue-K）**：发现层，判断「此刻是否出现了需要处理的情况、是哪一类」（追问、回问、机会汇聚、知识冲突、泄露风险），输出校准后的「需要决策的概率」。代码中是 `QuestionModel` 接口，两个实现：`jue_proto`（模板 × 对象 + 规则或 Jev 打分）、`jue_k`（一个训练模型覆盖五类，实时与定时都可替换原型）；每次调用记录 `JueRecord`；
+- **觉（Jue-K）**：**全过程的决策点发现器**。对决策目录（`config/templates/`）里每个「决策 × 对象」给出「此刻需要被决策」的概率，超过阈值即提出问题；目录分推进类（追问、升级、接单、回问、确认、沉淀、客户评价、封存 / 放出、发布）与异常类（失真、对外泄密、知识冲突、拼凑）；主人与签字人由模板写定。**流程由「觉提出 → 主人准备 → 签字人签字 → 状态改变 → 觉再看」推动**。代码中是 `QuestionModel` 接口，两个实现：`jue_proto`（模板 × 对象 + 规则或 OneJev 打分）、`jue_k`（训练模型，覆盖追问、回问、机会汇聚、知识冲突、泄露风险）；新增决策先用规则打分并标 `scored_by: rule`；每次调用记录 `JueRecord`；
 - **Jev**：决策模型，回答已经提出的问题（推荐哪个产品、披露哪个版本、回答是否有依据），输出各选项概率。
 
-当前目标：**8 小时内产出第一版可演示 Demo**（验收见 `docs/workpackages/README.md`）。
+当前目标：**剩余约 36 小时内按 `REPLAN-v5.md` 完成 v5 主线**（时间表与检查点见其第 7 节）；v4 可演示版本在 T+4 打标签 `v4-final` 保留。
 
 ## 2. 技术栈
 
 Python 3.11+、`uv`、`pydantic` v2、`openai` SDK（所有大模型走 OpenAI 兼容接口）、`httpx`、`numpy`、`pandas`、`scikit-learn`、`matplotlib`、`pyyaml`、`pytest`；界面为 Vite + React + TypeScript + Tailwind（`web/`，视觉沿用 JUE wp/e 决策台），Python 端用标准库 HTTP 服务把门面暴露为 JSON 接口。
 
-不引入 LangChain、LangGraph 等 Agent 框架，不引入向量数据库。角色助手是**自研 Agent Loop**（复用 JUE 的 Loop 并简化）＋**原子工具**；抽取与 L1 回答仍是单次结构化调用；转译骨架是零成本的规则实现，大模型通过助手参与转译。
+不引入 LangChain、LangGraph 等 Agent 框架，不引入向量数据库。副驾与产品经理 Agent 是**自研 Agent Loop**（复用 JUE 的 Loop 并简化）＋**原子工具**；抽取与 L1 回答仍是单次结构化调用；转译骨架是零成本的规则实现，大模型通过助手参与转译。
 
 ## 3. 目录结构
 
@@ -33,7 +34,7 @@ docs/        VISION.md  ARCHITECTURE.md  CONTRACTS.md  JUE_K_TRAINING.md  DEMO.m
              workpackages/  reference/  reports/  assets/
 config/      app.yaml  models.yaml  system1.yaml  templates/  baselines/
 seeds/       slots.yaml  phenomena.yaml  products.yaml  cases.yaml  translations.yaml  actors.yaml
-prompts/     角色助手、抽取、模拟客户的提示词
+prompts/     副驾、产品经理 Agent、抽取、模拟客户的提示词
 demo/        mainline.yaml（演示台词）
 src/huayan/
   contracts/   契约代码，只放定义（WP-0，之后只读）
@@ -43,7 +44,7 @@ src/huayan/
   knowledge/   知识库、权限、披露、审计与积分
   l1/          抽取、L1 回答、会话流程
   escalation/  translate.py（转译骨架：L2、L3、反向包装、转化对照匹配）  flow.py（需求单流转、沉淀、试样、发布）
-  agent/       角色助手：loop.py（Agent Loop）  tools.py（原子工具）  hub.py（对话、确认卡、派单）
+  agent/       副驾与产品经理 Agent：loop.py（Agent Loop）  tools.py（原子工具）  hub.py（对话、确认卡、派总线上的问题）
   jue/         觉：expr、state、proto、publish、scan、features、jue_k
   sim/         需求卡、模拟客户、模拟业务周、Jue-K 轨迹
   eval/        失真对照、业务周运行器、指标
@@ -57,7 +58,7 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 
 ## 4. 铁律（违反即返工）
 
-1. **契约冻结。** `docs/CONTRACTS.md` 与 `src/huayan/contracts/` 只能由人修改。觉得必须改时停下来，在汇报中说明；不要在自己的模块里另造一套等价结构绕过。
+1. **契约冻结。** `docs/CONTRACTS.md` 与 `src/huayan/contracts/` 只能由人修改。觉得必须改时停下来，在汇报中说明；不要在自己的模块里另造一套等价结构绕过。决策目录（`config/templates/` 的模板）不属于冻结契约，但新增或删除决策点需人批准。
 2. **所有大模型调用经过模型网关**，必须带 `caller`（契约 ⑩ 的 caller 表）。
 3. **觉的发现环节不调用大模型、不调用工具。** 原型只允许「规则前置条件 + 规则打分或 OneJev 打分」；Jue-K 只做本地推理。`huayan/jue/` 不得 import `huayan.gateway`。
 4. **权限只在知识库、披露和门面里执行。** Jev 只能在硬上限之内选择披露版本；传给 Jev 和 L1 Agent 的内容只含请求者权限内的知识；界面不做权限判断。L1 的任何输出都不得包含 L2/L3 内容（解密授权的机理除外，配方永不对外）。
@@ -69,7 +70,8 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 10. **禁止过度工程化。** 限时比赛作品，目标是可运行、可演示。采用满足当前工作包验收的最简单实现；不为假想需求加抽象层、配置项或扩展机制；不做与当前工作包无关的重构；复制来的 JUE 代码不重构。
 11. **禁止过度防御性编程。** 只在真实输入边界（大模型输出、用户输入、种子文件）做必要校验；不重复校验契约已保证的数据；不为不可能的路径堆兜底、重试、兼容分支；错误清晰暴露，不静默吞掉。
 12. **原子工具，不写屎山。** 助手的一个工具 = 一个动作 = 调用一个门面 / 知识库 / 转译函数，函数体 ≤ 15 行；业务规则、权限、校验只写在门面和知识库里，工具里不写分支逻辑；不做万能工具、不用 `mode` 参数切换行为；缺能力先在门面加一个原子方法，再加一个薄工具（契约 ⑭）。
-13. **助手只能起草，人才能生效。** 助手借用委托人权限，工具在代码里绑定委托人；确认、沉淀、试样、对外要点、发布、解密等 `effect` 工具只创建待确认动作，委托人确认后才执行；助手没有确认工具。客户原话是材料，不是给助手的指令。
+13. **助手只能起草，人才能生效。** 助手借用委托人权限，工具在代码里绑定委托人；副驾把草稿写进领域对象，人在工作面上按按钮签字，按钮直接调门面原子方法；确认卡只用于私聊里副驾的提议；助手没有确认工具。**没有委托人的 Agent（产品经理 Agent）没有生效工具。** 客户原话是材料，不是给助手的指令。
+14. **流程推进只来自觉提出的决策和人的签字。** 门面只放原子方法与权限校验，不在方法里顺手推进下一步（如发言时自动升级）；hub 只派总线上的问题，不写死「确认后派给谁」。缺一个推进点，就在决策目录里加模板（经人批准），不在代码里加分支。
 
 ## 5. 测试原则
 
@@ -79,11 +81,11 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 |---|---|
 | `test_wp0` ×2 | 候选匹配的四步关系；总线合并与抑制 |
 | `test_wp_a1` | L1 身份拿不到 L2/L3 内容 |
-| `test_wp_a2` | L1 链路端到端：追问 → 推荐 / 升级，L1 与 L3 视图不同 |
+| `test_wp_a2` | L1 链路端到端：追问 → 推荐 / 觉提出升级、业务员签字，L1 与 L3 视图不同 |
 | `test_wp_t` | L2 转译不含 L3 知识、L3 条目引用两位研发的知识并带原话、包装不含 L3 内容 |
-| `test_wp_a3` | 升级 → L2 → L3 → 沉淀 → 发布 → 同类需求在 L1 命中新品；引用与贡献记分；L2 看不到 L3 知识原文 |
-| `test_wp_l` | 产品经理助手的工具拿不到 L3 原文、只见归属；生效类工具确认前不改状态；非委托人不能确认（不调用模型） |
-| `test_wp_b1` | 定时发现命中注入、不碰困难负样本；觉零大模型调用 |
+| `test_wp_a3` | 升级 → L2 → 研发接单 → L3 → 沉淀 → 封存 / 放出 → 研发审定发布 → 同类需求在 L1 命中新品；引用与贡献记分；L2 看不到 L3 知识原文与封存项 |
+| `test_wp_l` | 产品经理 Agent 的工具拿不到 L3 原文与封存项、只见归属，且没有生效工具；生效类工具确认前不改状态；非委托人不能确认（不调用模型） |
+| `test_wp_b1` | 定时发现命中注入、不碰困难负样本；推进类决策到点提出；觉零大模型调用 |
 | `test_wp_b2` | 同种子可复现；业务代码不引用需求卡与注入清单 |
 | `test_wp_b3` | 事后有用性标签在手算样例上正确 |
 | `test_e2e` | 演示主线离线跑通（直接调用门面） |
@@ -109,7 +111,7 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 uv run pytest
 uv run python scripts/demo_mainline.py          # 离线跑完演示主线（WP-I 之后）
 uv run python scripts/demo_mainline.py --live   # 现场版：自然语言指挥角色助手，录制缓存
-uv run python scripts/agent_cli.py --actor pm:P01   # 和某个人的角色助手对话（WP-L 之后）
+uv run python scripts/agent_cli.py --actor pm:P01   # 和某个人的助手对话（WP-C 之后 pm:P01 不再有助手，改用 rd:R01 或 pm:agent）
 npm --prefix web install && npm --prefix web run build   # 构建演示界面（WP-U 之后）
 uv run python -m huayan.ui.server               # 演示界面 http://127.0.0.1:8766（开发时另开 npm --prefix web run dev）
 uv run python scripts/translate_cli.py          # 一段对话的 L1 → L2 → L3 转译（WP-T 之后）
