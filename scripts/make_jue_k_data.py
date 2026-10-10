@@ -1,10 +1,12 @@
 """生成 Jue-K 训练数据 data/jue_k/samples.csv（契约 ⑨），并打印每类样本数与正例数。
 
 uv run python scripts/make_jue_k_data.py [--n-cards 2000 --weeks 40 --heldout crease_marks,low_whiteness]
-追问 / 回问：程序轨迹，按卡 70/15/15 划分，另留 2 个现象为 heldout；定时三类：多周业务周合成事件，按周 28/6/6 划分。
+追问 / 回问：程序轨迹，按卡 70/15/15 划分，另留 2 个现象为 heldout；定时三类：多周业务周在真实链路上跑出的事件，按周 28/6/6 划分
+（data/week/w1 由 make_sim.py 用另一个种子生成，不参与训练，留给 run_week.py 评估）。
 """
 import argparse
 import random
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +14,7 @@ import pandas as pd
 
 from huayan.contracts import SHANGHAI
 from huayan.domain import load_seeds
+from huayan.eval.week import chain_events
 from huayan.events import EventLog
 from huayan.jue.proto import JueProto
 from huayan.knowledge import AuditLog, KnowledgeBase
@@ -63,12 +66,13 @@ def main():
                  if row["family"] == "ask_back"]
 
     scheduled = JueProto(args.templates, None, "scheduled")
-    for w in range(args.weeks):
-        week_rng = random.Random(1000 + w)
-        items, cards, injections = make_week(seeds, start, args.week_days, week_rng)
-        split = "train" if w < args.weeks * 0.7 else "val" if w < args.weeks * 0.85 else "test"
-        rows += [{**row, "split": split} for row in week_rows(items, cards, injections, seeds, kb.products(), scheduled,
-                                                                start, args.week_days, f"week:{w}", week_rng)]
+    with tempfile.TemporaryDirectory() as work:
+        for w in range(args.weeks):
+            items, cards, injections = make_week(seeds, start, args.week_days, random.Random(1000 + w))
+            events = chain_events(items, cards, Path(work), f"w{w}")
+            split = "train" if w < args.weeks * 0.7 else "val" if w < args.weeks * 0.85 else "test"
+            rows += [{**row, "split": split} for row in week_rows(events, injections, seeds, kb.products(), scheduled,
+                                                                    start, args.week_days, f"week:{w}")]
 
     df = pd.DataFrame(rows)
     df = df[META + sorted(c for c in df.columns if c not in META)]

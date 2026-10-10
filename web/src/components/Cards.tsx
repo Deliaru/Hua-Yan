@@ -16,7 +16,7 @@ export const REQ_STATUS: Record<string, string> = {
 export const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 // 外壳：工具栏下方，左侧 272 宽侧栏（窗口栏材质），右侧内容列。
-export function Shell({ sidebar, children }: { sidebar: React.ReactNode; children: React.ReactNode }) {
+export function Shell({ sidebar, children, wide }: { sidebar: React.ReactNode; children: React.ReactNode; wide?: boolean }) {
   return (
     <>
       <aside className="sidebar fixed bottom-0 left-0 top-[52px] z-20 flex w-[272px] flex-col border-r border-sep">
@@ -24,7 +24,7 @@ export function Shell({ sidebar, children }: { sidebar: React.ReactNode; childre
         <StatusFooter />
       </aside>
       <main className="ml-[272px] pt-[52px]">
-        <div className="mx-auto flex max-w-[760px] flex-col gap-7 px-10 pb-40 pt-8">{children}</div>
+        <div className={`mx-auto flex ${wide ? "max-w-[1280px]" : "max-w-[760px]"} flex-col gap-7 px-10 pb-40 pt-8`}>{children}</div>
       </main>
     </>
   );

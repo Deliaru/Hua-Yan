@@ -32,6 +32,8 @@ export const api = {
   requirement: (id: string, viewer: string) => call<RequirementView>(`requirement?${q({ id, viewer })}`),
   ledger: () => call<Record<string, number>>("ledger"),
   contributions: (viewer: string) => call<ContributionStat[]>(`contributions?${q({ viewer })}`),
+  // 评测报告 docs/reports/<name>/metrics.json（WP-E）；图走 /reports/<name>/<file>.png
+  report: <T,>(name: "distortion" | "jue_k" | "week") => call<T>(`report?${q({ name })}`),
   // 角色助手（契约 ⑭）：只在助手运行（gateway_mock: false）时调用
   conversation: (actor: string, session_id: string | null) =>
     call<Conversation | null>(`agents/conversation?${q({ actor, session_id })}`),

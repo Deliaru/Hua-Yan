@@ -19,6 +19,8 @@ CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
 PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
 DIST = Path("web/dist")
 MAINLINE = Path("scripts/demo_mainline.py")      # WP-I 提供 run_offline(app)
+REPORTS = Path("docs/reports")
+REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）
 
 app = HuayanApp.build(CONFIG)
 lock = Lock()                                     # 门面不是线程安全的，一次只处理一个请求
@@ -63,6 +65,13 @@ def questions(p):
     return [q for q in app.bus.list(owner_role=p["role"]) if q.owner_id in (None, p["viewer"])]
 
 
+def report(p):
+    name = p["name"]
+    if name not in REPORT_NAMES:
+        raise KeyError(name)
+    return json.loads((REPORTS / name / "metrics.json").read_text(encoding="utf-8"))
+
+
 def offline_mainline(_):
     spec = importlib.util.spec_from_file_location("demo_mainline", MAINLINE)
     module = importlib.util.module_from_spec(spec)
@@ -101,6 +110,7 @@ GET = {
     "/api/requirement": lambda p: app.requirement_view(p["id"], p["viewer"]),
     "/api/ledger": lambda p: app.ledger.totals(),
     "/api/contributions": lambda p: app.contributions(p["viewer"]),
+    "/api/report": report,
     "/api/agents/conversation": lambda p: next((c for c in app.agents.conversations(p["actor"])
                                                 if c.session_id == p.get("session_id")), None),
     "/api/agents/trace": lambda p: app.agents.trace(p["conversation_id"]),
@@ -143,6 +153,18 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/api/"):
             self._api(GET, {})
+        elif self.path.startswith("/reports/"):                # 评测页的图：docs/reports/<报告>/<图>.png
+            _, _, name, file = self.path.split("?")[0].split("/", 3)
+            path = REPORTS / name / file
+            if name not in REPORT_NAMES or "/" in file or path.suffix != ".png" or not path.exists():
+                self.send_error(404)
+                return
+            data = path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
         else:
             super().do_GET()
 

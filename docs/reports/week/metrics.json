@@ -1,0 +1,450 @@
+{
+  "week": "data/week/w1",
+  "placeholder_seeds": true,
+  "opportunity_theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+  "runs": {
+    "jue_proto/ignore": "runs/week-w1-jue_proto-ignore",
+    "jue_proto/handle": "runs/week-w1-jue_proto-handle",
+    "jue_k/ignore": "runs/week-w1-jue_k-ignore",
+    "jue_k/handle": "runs/week-w1-jue_k-handle",
+    "rule_alert/ignore": "runs/week-w1-rule_alert-ignore",
+    "rule_alert/handle": "runs/week-w1-rule_alert-handle"
+  },
+  "detection": {
+    "jue_proto": {
+      "hits": 3,
+      "positives": 3,
+      "false_alarms": 1,
+      "hard_negatives": 4,
+      "mean_lead_hours": 44.3,
+      "n_found": 6,
+      "n_found_outside_injections": 2,
+      "jue_llm_calls": 0,
+      "detection": [
+        {
+          "injection": "inj:1",
+          "family": "opportunity",
+          "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+          "hard_negative": false,
+          "found_at": "2026-10-13T13:00:00+08:00",
+          "hit": true,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": 53.0,
+          "delay_hours": 20.7
+        },
+        {
+          "injection": "inj:2",
+          "family": "opportunity",
+          "object_id": "theme:crease_marks|equipment=卷染机,fiber=锦纶氨纶",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        },
+        {
+          "injection": "inj:3",
+          "family": "opportunity",
+          "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=涤纶",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        },
+        {
+          "injection": "inj:4",
+          "family": "knowledge_conflict",
+          "object_id": "knowledge:HY-LV101|fiber=涤棉",
+          "hard_negative": false,
+          "found_at": "2026-10-14T13:00:00+08:00",
+          "hit": true,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": 53.0,
+          "delay_hours": 19.7
+        },
+        {
+          "injection": "inj:5",
+          "family": "knowledge_conflict",
+          "object_id": "knowledge:HY-DS410|dye_class=分散染料",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        },
+        {
+          "injection": "inj:6",
+          "family": "leak_risk",
+          "object_id": "actor:sales:S02",
+          "hard_negative": false,
+          "found_at": "2026-10-14T15:00:00+08:00",
+          "hit": true,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": 27.0,
+          "delay_hours": 2.5
+        },
+        {
+          "injection": "inj:7",
+          "family": "leak_risk",
+          "object_id": "actor:sales:S01",
+          "hard_negative": true,
+          "found_at": "2026-10-16T11:00:00+08:00",
+          "hit": false,
+          "false_alarm": true,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": 1.6
+        }
+      ]
+    },
+    "jue_k": {
+      "hits": 3,
+      "positives": 3,
+      "false_alarms": 0,
+      "hard_negatives": 4,
+      "mean_lead_hours": 44.3,
+      "n_found": 5,
+      "n_found_outside_injections": 2,
+      "jue_llm_calls": 0,
+      "detection": [
+        {
+          "injection": "inj:1",
+          "family": "opportunity",
+          "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+          "hard_negative": false,
+          "found_at": "2026-10-13T13:00:00+08:00",
+          "hit": true,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": 53.0,
+          "delay_hours": 20.7
+        },
+        {
+          "injection": "inj:2",
+          "family": "opportunity",
+          "object_id": "theme:crease_marks|equipment=卷染机,fiber=锦纶氨纶",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        },
+        {
+          "injection": "inj:3",
+          "family": "opportunity",
+          "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=涤纶",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        },
+        {
+          "injection": "inj:4",
+          "family": "knowledge_conflict",
+          "object_id": "knowledge:HY-LV101|fiber=涤棉",
+          "hard_negative": false,
+          "found_at": "2026-10-14T13:00:00+08:00",
+          "hit": true,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": 53.0,
+          "delay_hours": 19.7
+        },
+        {
+          "injection": "inj:5",
+          "family": "knowledge_conflict",
+          "object_id": "knowledge:HY-DS410|dye_class=分散染料",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        },
+        {
+          "injection": "inj:6",
+          "family": "leak_risk",
+          "object_id": "actor:sales:S02",
+          "hard_negative": false,
+          "found_at": "2026-10-14T15:00:00+08:00",
+          "hit": true,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": 27.0,
+          "delay_hours": 2.5
+        },
+        {
+          "injection": "inj:7",
+          "family": "leak_risk",
+          "object_id": "actor:sales:S01",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        }
+      ]
+    },
+    "rule_alert": {
+      "hits": 1,
+      "positives": 3,
+      "false_alarms": 2,
+      "hard_negatives": 4,
+      "mean_lead_hours": 25.0,
+      "n_found": 6,
+      "n_found_outside_injections": 1,
+      "jue_llm_calls": 0,
+      "detection": [
+        {
+          "injection": "inj:1",
+          "family": "opportunity",
+          "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+          "hard_negative": false,
+          "found_at": "2026-10-14T17:00:00+08:00",
+          "hit": true,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": 25.0,
+          "delay_hours": 48.7
+        },
+        {
+          "injection": "inj:2",
+          "family": "opportunity",
+          "object_id": "theme:crease_marks|equipment=卷染机,fiber=锦纶氨纶",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        },
+        {
+          "injection": "inj:3",
+          "family": "opportunity",
+          "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=涤纶",
+          "hard_negative": true,
+          "found_at": null,
+          "hit": false,
+          "false_alarm": false,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": null
+        },
+        {
+          "injection": "inj:4",
+          "family": "knowledge_conflict",
+          "object_id": "knowledge:HY-LV101|fiber=涤棉",
+          "hard_negative": false,
+          "found_at": "2026-10-14T11:00:00+08:00",
+          "hit": false,
+          "false_alarm": false,
+          "early": true,
+          "lead_hours": null,
+          "delay_hours": 17.7
+        },
+        {
+          "injection": "inj:5",
+          "family": "knowledge_conflict",
+          "object_id": "knowledge:HY-DS410|dye_class=分散染料",
+          "hard_negative": true,
+          "found_at": "2026-10-16T17:00:00+08:00",
+          "hit": false,
+          "false_alarm": true,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": 1.7
+        },
+        {
+          "injection": "inj:6",
+          "family": "leak_risk",
+          "object_id": "actor:sales:S02",
+          "hard_negative": false,
+          "found_at": "2026-10-14T13:00:00+08:00",
+          "hit": false,
+          "false_alarm": false,
+          "early": true,
+          "lead_hours": null,
+          "delay_hours": 0.5
+        },
+        {
+          "injection": "inj:7",
+          "family": "leak_risk",
+          "object_id": "actor:sales:S01",
+          "hard_negative": true,
+          "found_at": "2026-10-16T11:00:00+08:00",
+          "hit": false,
+          "false_alarm": true,
+          "early": false,
+          "lead_hours": null,
+          "delay_hours": 1.6
+        }
+      ]
+    }
+  },
+  "consequences": {
+    "jue_proto/ignore": {
+      "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+      "found_at": "2026-10-13T13:00:00+08:00",
+      "escalations_after": 3,
+      "l1_hits_after": 0,
+      "escalations_by_day": {
+        "2026-10-12": 1,
+        "2026-10-13": 1,
+        "2026-10-14": 1,
+        "2026-10-15": 2
+      },
+      "all_escalations": 28
+    },
+    "jue_proto/handle": {
+      "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+      "found_at": "2026-10-13T13:00:00+08:00",
+      "escalations_after": 0,
+      "l1_hits_after": 3,
+      "escalations_by_day": {
+        "2026-10-12": 1,
+        "2026-10-13": 1
+      },
+      "all_escalations": 25
+    },
+    "jue_k/ignore": {
+      "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+      "found_at": "2026-10-13T13:00:00+08:00",
+      "escalations_after": 3,
+      "l1_hits_after": 0,
+      "escalations_by_day": {
+        "2026-10-12": 1,
+        "2026-10-13": 1,
+        "2026-10-14": 1,
+        "2026-10-15": 2
+      },
+      "all_escalations": 28
+    },
+    "jue_k/handle": {
+      "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+      "found_at": "2026-10-13T13:00:00+08:00",
+      "escalations_after": 0,
+      "l1_hits_after": 3,
+      "escalations_by_day": {
+        "2026-10-12": 1,
+        "2026-10-13": 1
+      },
+      "all_escalations": 25
+    },
+    "rule_alert/ignore": {
+      "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+      "found_at": "2026-10-14T17:00:00+08:00",
+      "escalations_after": 2,
+      "l1_hits_after": 0,
+      "escalations_by_day": {
+        "2026-10-12": 1,
+        "2026-10-13": 1,
+        "2026-10-14": 1,
+        "2026-10-15": 2
+      },
+      "all_escalations": 28
+    },
+    "rule_alert/handle": {
+      "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+      "found_at": "2026-10-14T17:00:00+08:00",
+      "escalations_after": 2,
+      "l1_hits_after": 0,
+      "escalations_by_day": {
+        "2026-10-12": 1,
+        "2026-10-13": 1,
+        "2026-10-14": 1,
+        "2026-10-15": 2
+      },
+      "all_escalations": 28
+    }
+  },
+  "handling": {
+    "jue_proto": [
+      {
+        "at": "2026-10-12T19:00:00+08:00",
+        "action": "approve",
+        "question_id": "q:7",
+        "requirement_id": "req:1",
+        "product_id": null,
+        "note": "没有覆盖该需求的研发中产品，暂不能确认"
+      },
+      {
+        "at": "2026-10-13T15:00:00+08:00",
+        "action": "approve",
+        "question_id": "q:10",
+        "requirement_id": "req:2",
+        "product_id": "HY-LV206"
+      },
+      {
+        "at": "2026-10-14T15:00:00+08:00",
+        "action": "release",
+        "requirement_id": "req:2",
+        "product_id": "HY-LV206"
+      }
+    ],
+    "jue_k": [
+      {
+        "at": "2026-10-12T19:00:00+08:00",
+        "action": "approve",
+        "question_id": "q:7",
+        "requirement_id": "req:1",
+        "product_id": null,
+        "note": "没有覆盖该需求的研发中产品，暂不能确认"
+      },
+      {
+        "at": "2026-10-13T15:00:00+08:00",
+        "action": "approve",
+        "question_id": "q:10",
+        "requirement_id": "req:2",
+        "product_id": "HY-LV206"
+      },
+      {
+        "at": "2026-10-14T15:00:00+08:00",
+        "action": "release",
+        "requirement_id": "req:2",
+        "product_id": "HY-LV206"
+      }
+    ],
+    "rule_alert": [
+      {
+        "at": "2026-10-14T19:00:00+08:00",
+        "action": "approve",
+        "question_id": "q:18",
+        "requirement_id": "req:1",
+        "product_id": "HY-LV206"
+      },
+      {
+        "at": "2026-10-15T19:00:00+08:00",
+        "action": "release",
+        "requirement_id": "req:1",
+        "product_id": "HY-LV206"
+      },
+      {
+        "at": "2026-10-16T15:00:00+08:00",
+        "action": "approve",
+        "question_id": "q:26",
+        "requirement_id": "req:2",
+        "product_id": null,
+        "note": "没有覆盖该需求的研发中产品，暂不能确认"
+      }
+    ]
+  }
+}
