@@ -1,0 +1,23 @@
+[project]
+name = "huayan"
+version = "0.1.0"
+description = "化言 HuaYan：市场—产品—研发需求协同的多层 Agent 系统（比赛原型）"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2,<3", "openai", "httpx", "numpy", "pandas", "scikit-learn",
+  "matplotlib", "pyyaml", "streamlit", "tzdata",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/huayan"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+testpaths = ["tests"]

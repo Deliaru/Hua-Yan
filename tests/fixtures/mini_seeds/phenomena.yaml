@@ -1,0 +1,18 @@
+placeholder: true
+source: "测试夹具：WP-0 手写的最小模拟数据，非真实资料"
+items:
+  - id: color_unlevel
+    label: 色花（匀染性差）
+    customer_phrases: [深一块浅一块, 颜色不匀, 色花, 发花]
+    required_slots: [fiber, equipment]
+    causes: "（模拟）上染速率过快或染液循环不均导致局部吸色差异；弹性面料在高张力设备中更明显。"
+    slot_priors:
+      fiber: {棉: 0.2, 涤纶: 0.4, 锦纶氨纶: 0.4}
+      equipment: {溢流染色机: 0.6, 气流染色机: 0.4}
+  - id: poor_fastness
+    label: 色牢度差
+    customer_phrases: [掉色, 洗了褪色, 牢度不好]
+    required_slots: [fiber]
+    causes: "（模拟）浮色未洗净或染料与纤维结合不牢。"
+    slot_priors:
+      fiber: {棉: 0.6, 涤纶: 0.3, 锦纶氨纶: 0.1}

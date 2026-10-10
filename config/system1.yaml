@@ -1,0 +1,6 @@
+# 格式同 JUE。OneJev 地址与模型名待人填写。
+base_url: "http://127.0.0.1:8000"
+model: "<待填写>"            # 服务名（qev serve --name），每次响应都会核对
+timeout_s: 120
+max_questions_per_call: 64
+gpu_price_per_hour: null     # 元/小时；null = 未定价

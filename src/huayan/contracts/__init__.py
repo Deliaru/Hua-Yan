@@ -1,0 +1,38 @@
+"""契约代码，与 docs/CONTRACTS.md 一致；只能由人修改。"""
+from ._base import SHANGHAI, BaseModel
+from .app import RunStatus, SessionView
+from .bus import Evidence, QFamily, Question, Resolution
+from .escalation import PMDraft, ReqItem, Requirement, Trial
+from .events import Event, EventKind
+from .gateway import LLMRequest, LLMResponse, LLMToolCall, Message, ModelGateway, Tier, Usage
+from .jev import JevDecision, S1Answer, S1Choice, S1Noul, S1Question, S1Result, S1Score, System1Client
+from .jue import (Discoverer, Family, JueObject, JueOutput, JueState, JueTemplate, ObjectType, QuestionModel,
+                  ScoredDecision)
+from .knowledge import (CUSTOMER_VERSIONS, KIND_LEVEL, AuditRecord, CardSection, DecryptGrant, KnowledgeHit,
+                        KnowledgeUnit, KUKind, LedgerEntry, RecommendationCard, Version)
+from .meter import Meter, MeterRecord
+from .seeds import (ROLE_LEVEL, Actor, Candidate, Case, Level, Phenomenon, Product, Role, Seeds, SlotDef,
+                    Translation)
+from .session import (AskHint, AssistantReply, CustomerProfile, ExtractedSlot, ExtractionResult, Intent, NeedState,
+                      Recommendation, Session, SlotFill, Turn)
+from .sim import Injection, NeedCard, WeekItem
+
+__all__ = [
+    "SHANGHAI", "BaseModel",
+    "Role", "Level", "ROLE_LEVEL", "Actor", "SlotDef", "Phenomenon", "Product", "Case", "Translation", "Seeds",
+    "Candidate",
+    "KUKind", "KIND_LEVEL", "KnowledgeUnit", "KnowledgeHit", "Version", "CUSTOMER_VERSIONS", "DecryptGrant",
+    "CardSection", "RecommendationCard", "AuditRecord", "LedgerEntry",
+    "Intent", "Turn", "SlotFill", "CustomerProfile", "NeedState", "ExtractedSlot", "ExtractionResult", "AskHint",
+    "Recommendation", "AssistantReply", "Session",
+    "S1Noul", "S1Choice", "S1Score", "S1Question", "S1Answer", "S1Result", "System1Client", "JevDecision",
+    "ObjectType", "Family", "JueObject", "JueState", "JueTemplate", "ScoredDecision", "JueOutput", "QuestionModel",
+    "Discoverer",
+    "QFamily", "Evidence", "Resolution", "Question",
+    "ReqItem", "PMDraft", "Requirement", "Trial",
+    "EventKind", "Event",
+    "NeedCard", "Injection", "WeekItem",
+    "Tier", "Message", "LLMRequest", "LLMToolCall", "Usage", "LLMResponse", "ModelGateway",
+    "MeterRecord", "Meter",
+    "SessionView", "RunStatus",
+]

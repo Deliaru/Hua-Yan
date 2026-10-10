@@ -1,0 +1,28 @@
+placeholder: true
+source: "测试夹具：WP-0 手写的最小模拟数据，非真实资料"
+items:
+  - id: fiber
+    label: 面料成分
+    values: [棉, 涤纶, 锦纶氨纶]
+    ask_text: 请问是什么面料？
+    ask_keywords: [面料, 什么布, 成分]
+    customer_phrases:
+      棉: [纯棉, 全棉]
+      涤纶: [涤纶布, 化纤布]
+      锦纶氨纶: [锦氨, 尼龙弹力]
+  - id: equipment
+    label: 染色设备
+    values: [溢流染色机, 气流染色机]
+    ask_text: 请问用的是什么染色设备？
+    ask_keywords: [设备, 什么缸, 染色机]
+    customer_phrases:
+      溢流染色机: [溢流缸, 溢流机]
+      气流染色机: [气流缸, 气流机]
+  - id: constraint
+    label: 环保要求
+    values: [无, 无APEO]
+    ask_text: 有没有环保方面的要求？
+    ask_keywords: [环保, 禁用]
+    customer_phrases:
+      无: [没什么要求, 没有特别要求]
+      无APEO: [不能含APEO, 不要APEO]

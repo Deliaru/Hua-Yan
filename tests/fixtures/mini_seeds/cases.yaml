@@ -1,0 +1,10 @@
+placeholder: true
+source: "测试夹具：WP-0 手写的最小模拟数据，非真实案例"
+items:
+  - id: case:1
+    phenomenon: color_unlevel
+    slots: {fiber: 涤纶, equipment: 溢流染色机}
+    product_id: T-101
+    scene_text: "（模拟）客户说涤纶布染出来深一块浅一块，溢流缸。"
+    pm_translation: "（模拟）涤纶分散染色匀染性差，建议缓染型匀染剂。"
+    owner: pm:P01

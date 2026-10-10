@@ -1,0 +1,13 @@
+placeholder: true
+source: "测试夹具：WP-0 手写的最小模拟数据，非真实资料"
+items:
+  - id: tr:1
+    scene_phrase: 深一块浅一块
+    chem_term: 上染速率不均 / 匀染性差
+    level: 2
+    owner: pm:P01
+  - id: tr:2
+    scene_phrase: 染液酸碱不稳
+    chem_term: 染浴 pH 漂移导致上染速率波动
+    level: 3
+    owner: rd:R01

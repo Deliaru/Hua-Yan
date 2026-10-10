@@ -11,16 +11,14 @@ dist/
 .env
 .env.*
 *.key
-config/*.local.yaml
 
-# 生成物（只提交 runs/demo_record/ 与 models/jue_k/ 的说明文件）
-data/
+# 生成物（只提交 runs/demo_record/、data/.gitkeep 与 models/jue_k/ 的说明文件）
 runs/*
 !runs/demo_record/
-models/*
-!models/jue_k/
-models/jue_k/*
-!models/jue_k/README.md
+data/*
+!data/.gitkeep
+models/*.pkl
+models/**/*.pkl
 
 # 编辑器 / 系统
 .idea/

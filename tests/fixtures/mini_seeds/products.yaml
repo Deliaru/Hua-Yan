@@ -1,0 +1,44 @@
+placeholder: true
+source: "测试夹具：WP-0 手写的最小模拟数据，型号虚构，非真实产品"
+items:
+  - id: T-101
+    name: 涤纶匀染剂 T-101（模拟）
+    category: 匀染剂
+    solves: [color_unlevel]
+    applicable: {fiber: [涤纶]}
+    sheet: "（模拟）用于涤纶分散染料染色，改善色花、条花。"
+    usage: "（模拟）1–2 g/L，染前加入。"
+    mechanism: "（模拟机理）缓染作用降低初期上染速率。"
+    formula: "（模拟配方）非离子表面活性剂复配体系。"
+    owner: rd:R01
+  - id: T-205
+    name: 锦氨匀染剂 T-205（模拟）
+    category: 匀染剂
+    solves: [color_unlevel]
+    applicable: {fiber: [锦纶氨纶], equipment: [溢流染色机]}
+    sheet: "（模拟）用于锦纶氨纶弹力面料酸性染料染色，改善色花。"
+    usage: "（模拟）0.5–1.5 g/L，溢流染色机中使用。"
+    mechanism: "（模拟机理）与染料竞争染座，均匀上染。"
+    formula: "（模拟配方）阴离子与两性表面活性剂复配。"
+    owner: rd:R01
+  - id: T-301
+    name: 棉用固色剂 T-301（模拟）
+    category: 固色剂
+    solves: [poor_fastness]
+    applicable: {fiber: [棉]}
+    sheet: "（模拟）提高棉织物活性染料的色牢度，减少掉色。"
+    usage: "（模拟）1–3 % o.w.f.，皂洗后固色。"
+    mechanism: "（模拟机理）阳离子聚合物与染料形成不溶性络合物。"
+    formula: "（模拟配方）阳离子聚胺类缩聚物。"
+    owner: rd:R01
+  - id: T-206
+    name: 气流锦氨匀染保护剂 T-206（模拟）
+    category: 匀染剂
+    solves: [color_unlevel]
+    applicable: {fiber: [锦纶氨纶], equipment: [气流染色机]}
+    sheet: "（模拟）用于低浴比气流染色机中的锦纶氨纶面料，改善色花。"
+    usage: "（模拟）0.8–1.2 g/L，气流染色机中使用。"
+    mechanism: "（模拟机理）低浴比下保持染液缓冲，抑制局部急染。"
+    formula: "（模拟配方）缓冲型匀染剂复配。"
+    owner: rd:R01
+    status: project
