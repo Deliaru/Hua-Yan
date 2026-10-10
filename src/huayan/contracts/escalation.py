@@ -14,17 +14,17 @@ class ReqItem(BaseModel):
     ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
 
 
-class PMDraft(BaseModel):                     # L2 转译（caller "agent:pm_draft"）：场景语言 → 产品需求语言
+class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理助手编辑）
     direction: str
     product_lang: list[ReqItem]
 
 
-class RDDraft(BaseModel):                     # L3 转译（caller "agent:rd_translate"）：产品需求 → 化学语言
+class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发助手编辑）
     chem_lang: list[ReqItem]
     hypotheses: list[str] = []                # 研发方向假设
 
 
-class SheetDraft(BaseModel):                  # 反向包装（caller "agent:package"）：研发结果 → L1 说明书
+class SheetDraft(BaseModel):                  # 反向包装：产品需求＋对外要点 → L1 说明书（规则模板，产品经理助手编辑）
     sheet: str
     usage: str
 
@@ -40,10 +40,13 @@ class Requirement(BaseModel):
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
     hypotheses: list[str] = []
     status: Literal["draft", "pm_confirmed", "rd_confirmed", "released", "rejected"]
-    drafted_by: str
+    drafted_by: str                           # L2 草稿的委托人（产品经理 actor id）
+    chem_drafted_by: str | None = None        # L3 草稿的委托人（研发 actor id）
     pm_confirmed_by: str | None = None
     rd_confirmed_by: str | None = None
-    product_id: str | None = None
+    public_points: str = ""                   # 研发确认可以对外的要点：L3 内容流向 L2/L1 的唯一出口
+    sheet: SheetDraft | None = None           # 反向包装草稿
+    product_id: str | None = None             # 目标产品：L3 确认时关联种子中 status=project 的产品；发布后即新产品
     created_at: datetime
 
 

@@ -22,6 +22,7 @@ WP-0。用 `tests/fixtures/mini_seeds/` 开发和测试。
 - `list(actor, kinds, phenomenon)`（契约 v2 新增）：按层级过滤后列出，供转译引擎取候选知识。
 - `products()` 返回当前已发布产品（结构化 `Product`），`add_product` 发布新品并生成 4 条知识，`update_applicable` 修改适用范围并写 `sheet_updated` 事件。
 - **检索 `search`**：对全部知识打分（字符二元组重合度 + 现象匹配加分，够用即可，不上向量库）→ 分成「可读」与「越权」两组 → 只返回可读组的前 k 条；越权组中分数超过阈值的条目只写进 `retrieve` 事件（`n_blocked`、`blocked_product_ids`）。被冻结的人检索时，越权组直接视为拒绝并写 `access_denied`。
+- **`search_blocked`**（契约 v3 新增）：与 `search` 同样打分，只取越权那一组的前 k 条，返回 `BlockedHint`（归属人、层级、类型），不含标题与正文、不写审计。角色助手据此告诉委托人「这件事研发 R01 知道」。和 `search` 共用打分函数，不另写一套。
 - `get`：越权抛 `PermissionDenied`，写审计 `deny` 与 `access_denied` 事件。
 - `freeze` / `is_frozen`：冻结集合存在实例上。
 

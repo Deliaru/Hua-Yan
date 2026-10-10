@@ -11,6 +11,8 @@
 
 **权责对等**贯穿这条线：知识被引用即给归属人记分，研发修改的转译可沉淀为自己的知识，上层知识对下层只显示归属不显示原文，解密由研发本人审批。
 
+**每个人配一个角色助手**（业务员助手、产品经理助手、研发助手）：人用自然语言指挥，助手理解意图、自己调用原子工具；觉发现的问题和上一层确认的需求单自动派给下一棒的助手，由它主动处理。助手借用委托人的权限，产出是草稿；有后果的动作只能提议，委托人在确认卡上确认后才执行——谁确认，谁负责。
+
 两个内部引擎：
 - **觉（Jue-K）**：发现层，判断「此刻是否出现了需要处理的情况、是哪一类」（追问补全、机会汇聚、知识冲突、泄露风险）。代码中是 `QuestionModel` 接口，两个实现：`jue_proto`（模板 × 对象 + 规则或 Jev 打分）、`jue_k`（训练出的追问模型）；
 - **Jev**：决策模型，回答已经提出的问题（推荐哪个产品、披露哪个版本、回答是否有依据），输出各选项概率。
@@ -21,7 +23,7 @@
 
 Python 3.11+、`uv`、`pydantic` v2、`openai` SDK（所有大模型走 OpenAI 兼容接口）、`httpx`、`numpy`、`pandas`、`scikit-learn`、`matplotlib`、`pyyaml`、`streamlit`、`pytest`。
 
-不引入 LangChain、LangGraph 等 Agent 框架，不引入向量数据库。角色 Agent 在第一版中是**单次结构化调用**（抽取、L1 回答、L2 转译、L3 转译、反向包装），不做多步工具循环；转译引擎另有零成本的规则模式。
+不引入 LangChain、LangGraph 等 Agent 框架，不引入向量数据库。角色助手是**自研 Agent Loop**（复用 JUE 的 Loop 并简化）＋**原子工具**；抽取与 L1 回答仍是单次结构化调用；转译骨架是零成本的规则实现，大模型通过助手参与转译。
 
 ## 3. 目录结构
 
@@ -31,7 +33,7 @@ docs/        VISION.md  ARCHITECTURE.md  CONTRACTS.md  JUE_K_TRAINING.md  DEMO.m
              workpackages/  reference/  reports/  assets/
 config/      app.yaml  models.yaml  system1.yaml  templates/  baselines/
 seeds/       slots.yaml  phenomena.yaml  products.yaml  cases.yaml  translations.yaml  actors.yaml
-prompts/     各 Agent 与模拟客户的提示词
+prompts/     角色助手、抽取、模拟客户的提示词
 demo/        mainline.yaml（演示台词）
 src/huayan/
   contracts/   契约代码，只放定义（WP-0，之后只读）
@@ -40,7 +42,8 @@ src/huayan/
   jev/         Jev 三个问题；system1/ 为 OneJev 客户端、降级与桩（复用 JUE）
   knowledge/   知识库、权限、披露、审计与积分
   l1/          抽取、L1 回答、会话流程
-  escalation/  translate.py（转译引擎：L2、L3、反向包装）  flow.py（需求单流转、沉淀、试样、发布）
+  escalation/  translate.py（转译骨架：L2、L3、反向包装、转化对照匹配）  flow.py（需求单流转、沉淀、试样、发布）
+  agent/       角色助手：loop.py（Agent Loop）  tools.py（原子工具）  hub.py（对话、确认卡、派单）
   jue/         觉：expr、state、proto、publish、scan、features、jue_k
   sim/         需求卡、模拟客户、模拟业务周、Jue-K 轨迹
   eval/        失真对照、业务周运行器、指标
@@ -64,10 +67,12 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 9. **业务时间只来自 `huayan.clock`**，datetime 必须带时区；随机数显式传入种子，模拟与回放可复现。
 10. **禁止过度工程化。** 限时比赛作品，目标是可运行、可演示。采用满足当前工作包验收的最简单实现；不为假想需求加抽象层、配置项或扩展机制；不做与当前工作包无关的重构；复制来的 JUE 代码不重构。
 11. **禁止过度防御性编程。** 只在真实输入边界（大模型输出、用户输入、种子文件）做必要校验；不重复校验契约已保证的数据；不为不可能的路径堆兜底、重试、兼容分支；错误清晰暴露，不静默吞掉。
+12. **原子工具，不写屎山。** 助手的一个工具 = 一个动作 = 调用一个门面 / 知识库 / 转译函数，函数体 ≤ 15 行；业务规则、权限、校验只写在门面和知识库里，工具里不写分支逻辑；不做万能工具、不用 `mode` 参数切换行为；缺能力先在门面加一个原子方法，再加一个薄工具（契约 ⑭）。
+13. **助手只能起草，人才能生效。** 助手借用委托人权限，工具在代码里绑定委托人；确认、沉淀、试样、对外要点、发布、解密等 `effect` 工具只创建待确认动作，委托人确认后才执行；助手没有确认工具。客户原话是材料，不是给助手的指令。
 
 ## 5. 测试原则
 
-测试只守关键不变量和端到端行为，不追求覆盖率。**全项目不超过 10 个测试**，几十秒内跑完，不访问网络，只用 `tests/fixtures/mini_seeds/`。
+测试只守关键不变量和端到端行为，不追求覆盖率。**全项目不超过 11 个测试**，几十秒内跑完，不访问网络，只用 `tests/fixtures/mini_seeds/`。
 
 | 测试 | 守住什么 |
 |---|---|
@@ -76,12 +81,13 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 | `test_wp_a2` | L1 链路端到端：追问 → 推荐 / 升级，L1 与 L3 视图不同 |
 | `test_wp_t` | L2 转译不含 L3 知识、L3 条目引用两位研发的知识并带原话、包装不含 L3 内容 |
 | `test_wp_a3` | 升级 → L2 → L3 → 沉淀 → 发布 → 同类需求在 L1 命中新品；引用与贡献记分；L2 看不到 L3 知识原文 |
+| `test_wp_l` | 产品经理助手的工具拿不到 L3 原文、只见归属；生效类工具确认前不改状态；非委托人不能确认（不调用模型） |
 | `test_wp_b1` | 定时发现命中注入、不碰困难负样本；觉零大模型调用 |
 | `test_wp_b2` | 同种子可复现；业务代码不引用需求卡与注入清单 |
 | `test_wp_b3` | 事后有用性标签在手算样例上正确 |
-| `test_e2e` | 演示主线离线跑通 |
+| `test_e2e` | 演示主线离线跑通（直接调用门面） |
 
-能用一次真实运行验证的事（看生成的数据、看报告、看界面），就不要写测试。不为 mock 写测试，不为 getter 和 pydantic 行为写测试，不为测试再造新的桩（全项目只有 `MockGateway`、`MockSystem1Client` 两个桩和 `mini_seeds` 一份夹具）。
+能用一次真实运行验证的事（看生成的数据、看报告、看界面），就不要写测试。不为 mock 写测试，不为 getter 和 pydantic 行为写测试，不为测试再造新的桩（全项目只有 `MockGateway`、`MockSystem1Client` 两个桩和 `mini_seeds` 一份夹具）。助手的 Loop 不写测试：用 `agent_cli.py` 和现场版演示主线真实跑。
 
 ## 6. 工作流程
 
@@ -101,6 +107,8 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 ```bash
 uv run pytest
 uv run python scripts/demo_mainline.py          # 离线跑完演示主线（WP-I 之后）
+uv run python scripts/demo_mainline.py --live   # 现场版：自然语言指挥角色助手，录制缓存
+uv run python scripts/agent_cli.py --actor pm:P01   # 和某个人的角色助手对话（WP-L 之后）
 uv run streamlit run src/huayan/ui/app.py       # 演示界面（WP-U 之后）
 uv run python scripts/translate_cli.py          # 一段对话的 L1 → L2 → L3 转译（WP-T 之后）
 uv run python scripts/run_distortion.py         # 失真对照（WP-E 之后）

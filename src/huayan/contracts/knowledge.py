@@ -30,6 +30,12 @@ class KnowledgeHit(BaseModel):
     score: float
 
 
+class BlockedHint(BaseModel):                 # 越权命中只告诉调用方「谁知道」，不给标题和正文
+    owner: str
+    level: Level
+    kind: KUKind
+
+
 Version = Literal["product", "product_usage", "full_mechanism", "internal"]
 CUSTOMER_VERSIONS: list[Version] = ["product", "product_usage", "full_mechanism"]   # Jev 只在这三者中选
 

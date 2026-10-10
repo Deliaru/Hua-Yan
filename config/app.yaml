@@ -2,7 +2,7 @@ seeds_dir: seeds
 templates_dir: config/templates
 run_root: runs
 system1_impl: mock            # mock | llm_fallback | onejev
-gateway_mock: true            # true 时用 MockGateway（离线）；现场演示设 false
+gateway_mock: true            # true 时用 MockGateway（离线），角色助手不运行；现场演示设 false
 extractor: rule               # rule | llm
 realtime_model: jue_proto     # jue_proto | jue_k
 jue_k_dir: models/jue_k
