@@ -1,0 +1,87 @@
+"""生成 Jue-K 训练数据 data/jue_k/samples.csv（契约 ⑨），并打印每类样本数与正例数。
+
+uv run python scripts/make_jue_k_data.py [--n-cards 2000 --weeks 40 --heldout crease_marks,low_whiteness]
+追问 / 回问：程序轨迹，按卡 70/15/15 划分，另留 2 个现象为 heldout；定时三类：多周业务周合成事件，按周 28/6/6 划分。
+"""
+import argparse
+import random
+from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
+
+from huayan.contracts import SHANGHAI
+from huayan.domain import load_seeds
+from huayan.events import EventLog
+from huayan.jue.proto import JueProto
+from huayan.knowledge import AuditLog, KnowledgeBase
+from huayan.sim import make_cards, make_week
+from huayan.sim.trajectory import trajectory
+from huayan.sim.week_events import week_rows
+
+META = ["family", "object_type", "object_id", "at", "source_id", "label", "split"]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--n-cards", type=int, default=2000)
+    ap.add_argument("--n-back-cards", type=int, default=3000, help="额外的应升级卡，只取回问样本")
+    ap.add_argument("--weeks", type=int, default=40)
+    ap.add_argument("--week-days", type=int, default=5)
+    ap.add_argument("--heldout", default="crease_marks,low_whiteness")
+    ap.add_argument("--seeds-dir", default="seeds")
+    ap.add_argument("--templates", default="config/templates")
+    ap.add_argument("--start", default="2026-10-12")
+    ap.add_argument("--out", default="data/jue_k")
+    args = ap.parse_args()
+
+    seeds = load_seeds(args.seeds_dir)
+    kb = KnowledgeBase.from_seeds(seeds, EventLog(), AuditLog())
+    start = datetime.fromisoformat(args.start).replace(tzinfo=SHANGHAI)
+    heldout = set(args.heldout.split(","))
+    rng = random.Random(args.seed)
+
+    realtime = JueProto(args.templates, None, "realtime")
+
+    def split_of(card):
+        r = rng.random()
+        return "heldout" if card.phenomenon in heldout else "train" if r < 0.7 else "val" if r < 0.85 else "test"
+
+    rows = []
+    for card in make_cards(seeds, args.n_cards, rng):
+        split = split_of(card)
+        rows += [{**row, "split": split} for row in trajectory(card, seeds, kb, realtime, rng, start)]
+    # 应升级的卡只占约两成，回问样本另补：继续抽卡，只保留应升级的、只取回问样本
+    extra = []
+    while len(extra) < args.n_back_cards:
+        extra += [c for c in make_cards(seeds, 500, rng) if c.truth_product is None]
+    for k, card in enumerate(extra[:args.n_back_cards]):
+        card = card.model_copy(update={"id": f"back:{k + 1}"})
+        split = split_of(card)
+        rows += [{**row, "split": split} for row in trajectory(card, seeds, kb, realtime, rng, start)
+                 if row["family"] == "ask_back"]
+
+    scheduled = JueProto(args.templates, None, "scheduled")
+    for w in range(args.weeks):
+        week_rng = random.Random(1000 + w)
+        items, cards, injections = make_week(seeds, start, args.week_days, week_rng)
+        split = "train" if w < args.weeks * 0.7 else "val" if w < args.weeks * 0.85 else "test"
+        rows += [{**row, "split": split} for row in week_rows(items, cards, injections, seeds, kb.products(), scheduled,
+                                                                start, args.week_days, f"week:{w}", week_rng)]
+
+    df = pd.DataFrame(rows)
+    df = df[META + sorted(c for c in df.columns if c not in META)]
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out / "samples.csv", index=False, encoding="utf-8")
+    table = df.groupby(["family", "split"])["label"].agg(n="size", positives="sum").unstack("split", fill_value=0)
+    print(f"写出 {out / 'samples.csv'}：{len(df)} 行（种子{'占位' if seeds.placeholder else '真实'}）")
+    print(table.to_string())
+    for family, n in df[df.label == 1].groupby("family").size().items():
+        if n < 100:
+            print(f"  注意：{family} 正例 {n} < 100")
+
+
+if __name__ == "__main__":
+    main()

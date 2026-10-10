@@ -1,0 +1,9 @@
+id: b2_info_value
+family: ask_slot
+object_type: slot
+decision_label: 是否追问该信息
+# 信息价值：只要问了可能改变候选集就问，不看先验
+precondition: "not attrs.filled and not attrs.unknown and attrs.asked < 2 and attrs.splits >= 2"
+worth_prompt: "信息价值规则：{object} 有 {attrs.splits} 种取值会改变候选集，是否追问？"
+title: "追问 {attrs.slot}"
+owner_role: sales

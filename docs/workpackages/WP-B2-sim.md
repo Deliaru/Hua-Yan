@@ -22,8 +22,8 @@ WP-0、WP-S（开发时先用小种子）。
 - 不调用大模型。
 
 ### 2. 模拟客户 `sim/customer.py`：`SimCustomer`
-- 模板模式（默认，零成本）：`opening` = 现象口语说法 + `opening_slots` 的口语说法；`reply` 用 `detect_asked_slots` 判断被问了什么，按真值回答口语说法；`unknown_slots` 回答「这个不太清楚」；`wants_mechanism` 的客户在收到推荐后追问「原理是什么？是调 pH 吧」这类带术语的话。
-- 大模型模式（`gateway` 不为 None）：caller `sim:customer`，提示词 `prompts/sim_customer.md`：只描述宏观现象，被问到才透露，不主动说化学术语（懂化学的客户除外）。演示中可选。
+- 模板模式（默认，零成本）：`opening` = 现象口语说法 + `opening_slots` 的口语说法；`reply` 用 `detect_asked_slots` 判断被问了什么，按真值回答口语说法；`unknown_slots` 回答「这个不太清楚」。**懂化学 ≠ 刨根问底**：`chem_savvy` 的客户开场就用化学语言说出成因判断（种子中该现象 `causes` 的第一句）并直接点名要一类助剂（该现象下产品的 `category`，如「匀染剂」「pH 缓冲剂」）；其中 `wants_mechanism` 的客户收到推荐后像同行一样请对方把作用原理直接讲明白（「原理直接讲明白就行，我们自己调工艺」），不考问、不刁难。不懂化学的客户只说宏观现象、要解决办法。
+- 大模型模式（`gateway` 不为 None）：caller `sim:customer`，提示词 `prompts/sim_customer.md`：不懂化学的客户只描述宏观现象，被问到才透露，不说化学术语；懂化学的客户按上面的口吻直接说判断和想要的助剂。演示中可选。
 
 ### 3. 模拟业务周 `sim/week.py`：`make_week(seeds, start, days, rng)`
 5 个业务日，每天 9:00–18:00：

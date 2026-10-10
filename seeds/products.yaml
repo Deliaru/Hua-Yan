@@ -1,0 +1,175 @@
+placeholder: true
+source: "占位：由大模型按印染行业常识编写的模拟数据，型号全部虚构（HY- 开头），非任何企业的真实产品与配方"
+items:
+  - id: HY-LV101
+    name: 涤纶高温匀染剂 HY-LV101
+    category: 匀染剂
+    solves: [color_unlevel]
+    applicable: {fiber: [涤纶, 涤棉]}
+    sheet: "用于涤纶及涤棉织物分散染料高温染色，改善色花、条花，兼有一定移染作用，对色光影响小。"
+    usage: "1.0–2.0 g/L，染前加入；升温段 80–130 ℃ 建议 1–1.5 ℃/min。"
+    mechanism: "（模拟）对分散染料有适度增溶，降低初始上染速率，并在 130 ℃ 保温段促进染料从高浓度区向低浓度区移染。"
+    formula: "配方要点：脂肪醇聚氧乙烯醚类非离子组分与芳香族酯类载体型组分复配，调节浊点以适应高温（模拟）。"
+    owner: rd:R01
+  - id: HY-LV120
+    name: 活性染料匀染剂 HY-LV120
+    category: 匀染剂
+    solves: [color_unlevel]
+    applicable: {fiber: [棉, 粘胶]}
+    sheet: "用于棉、粘胶等纤维素纤维活性染料浸染，减缓加碱后的急速固色，改善色花。"
+    usage: "0.5–1.0 g/L，加盐前加入；分批加碱效果更好。"
+    mechanism: "（模拟）与活性染料形成弱缔合，延缓染料在加碱初期的集中上染与固着，使固色过程更平缓。"
+    formula: "配方要点：低分子量聚合物分散组分配合螯合组分，不含磷（模拟）。"
+    owner: rd:R01
+  - id: HY-LV205
+    name: 锦氨匀染剂 HY-LV205
+    category: 匀染剂
+    solves: [color_unlevel]
+    applicable: {fiber: [锦纶, 锦纶氨纶], equipment: [溢流染色机, 卷染机]}
+    sheet: "用于锦纶及锦纶氨纶弹力面料酸性染料染色，改善色花与经柳，适合溢流染色机和卷染机。"
+    usage: "0.5–1.5 g/L，染前加入，40 ℃ 运行 10 分钟后加染料。"
+    mechanism: "（模拟）阴离子组分与酸性染料竞争锦纶上的氨基染座，两性组分与染料形成可逆络合物，在升温中逐步释放染料；配合弱酸性 pH 控制，降低初期上染速率。"
+    formula: "配方要点：烷基磺酸盐类阴离子组分与甜菜碱类两性组分复配（模拟）。"
+    owner: rd:R01
+  - id: HY-LV206
+    name: 气流锦氨缓染剂 HY-LV206
+    category: 匀染剂
+    solves: [color_unlevel]
+    applicable: {fiber: [锦纶氨纶], equipment: [气流染色机]}
+    sheet: "用于低浴比气流染色机中的锦纶氨纶弹力面料，改善色花，氨纶沾色低，不影响色光。"
+    usage: "0.8–1.2 g/L，染前加入，无需另加醋酸调 pH；染色温度不超过 98 ℃。"
+    mechanism: "（模拟）内含缓释酸组分，随升温缓慢释放酸，使染浴 pH 由中性逐步降至弱酸性，从而调 pH 降低锦纶初期上染速率，低浴比下不会因局部酸浓度过高而急染；配合优先吸附在氨纶上的保护组分，降低氨纶沾色，且不溶胀氨纶。"
+    formula: "配方要点：有机酸酯类缓释酸组分、少量两性匀染组分与芳香族聚醚类氨纶保护组分复配，低泡（模拟）。"
+    owner: rd:R02
+    status: project
+  - id: HY-CH310
+    name: 螯合分散剂 HY-CH310
+    category: 螯合分散剂
+    solves: [shade_variation, color_spots]
+    applicable: {water: [自来水, 硬水, 回用水]}
+    sheet: "螯合水中钙镁铁离子，防止染料与金属离子结合产生色点和色光漂移，改善批次重现性。"
+    usage: "0.5–1.0 g/L，染前加入；硬水或回用水取上限。"
+    mechanism: "（模拟）多齿配体螯合二价金属离子，同时对已形成的沉淀有分散作用，阻止其在布面沉积。"
+    formula: "配方要点：聚羧酸类与有机膦酸类螯合组分复配（模拟）。"
+    owner: rd:R01
+  - id: HY-RP330
+    name: 染色重现性改进剂 HY-RP330
+    category: pH 缓冲剂
+    solves: [shade_variation]
+    applicable: {fiber: [涤纶, 涤棉, 锦纶, 锦纶氨纶], water: [软水, 自来水]}
+    sheet: "稳定合成纤维染色过程中的染浴 pH，减少缸与缸之间的色差。"
+    usage: "1.0 g/L，替代醋酸调节 pH。"
+    mechanism: "（模拟）缓冲体系将染浴 pH 稳定在设定区间，抵消布面残碱与水质带来的 pH 漂移，使染料上染率在批次间一致。"
+    formula: "配方要点：弱酸及其盐组成的缓冲对，配少量分散组分（模拟）。"
+    owner: rd:R01
+  - id: HY-DS410
+    name: 高温分散剂 HY-DS410
+    category: 分散剂
+    solves: [color_spots]
+    applicable: {dye_class: [分散染料]}
+    sheet: "提高分散染料在高温染浴中的分散稳定性，防止染料凝聚产生色点、色渍。"
+    usage: "0.5–1.0 g/L，与染料同时加入。"
+    mechanism: "（模拟）吸附在染料颗粒表面形成空间位阻与电荷排斥，阻止高温下颗粒聚集长大。"
+    formula: "配方要点：萘磺酸甲醛缩合物类与木质素磺酸盐类分散组分复配（模拟）。"
+    owner: rd:R01
+  - id: HY-FX301
+    name: 无醛固色剂 HY-FX301
+    category: 固色剂
+    solves: [poor_fastness]
+    applicable: {fiber: [棉, 粘胶, 涤棉]}
+    sheet: "提高纤维素纤维活性、直接染料的湿处理牢度，不含甲醛，对色光影响小。"
+    usage: "1–3 % o.w.f.，皂洗后 40–50 ℃ 固色 20 分钟。"
+    mechanism: "（模拟）阳离子聚合物与阴离子染料形成难溶络合物，并在纤维表面成膜，减少染料水洗脱落。"
+    formula: "配方要点：阳离子聚胺类缩聚物，不使用甲醛类交联组分（模拟）。"
+    owner: rd:R02
+  - id: HY-RC320
+    name: 还原清洗剂 HY-RC320
+    category: 净洗剂
+    solves: [poor_fastness, bleeding_staining]
+    applicable: {fiber: [涤纶, 涤棉], dye_class: [分散染料]}
+    sheet: "用于涤纶及涤棉分散染料染色后的清洗，去除表面浮色，提高摩擦牢度，减少沾色。"
+    usage: "1.5–2.0 g/L，染后 70–80 ℃ 处理 15 分钟。"
+    mechanism: "（模拟）在弱酸至中性条件下还原破坏纤维表面未扩散进入的分散染料发色体，使其溶于水被洗去。"
+    formula: "配方要点：亚磺酸盐类还原组分配合低泡净洗组分（模拟）。"
+    owner: rd:R01
+  - id: HY-FX350
+    name: 锦纶固色剂 HY-FX350
+    category: 固色剂
+    solves: [poor_fastness]
+    applicable: {fiber: [锦纶, 锦纶氨纶]}
+    sheet: "提高锦纶及锦纶氨纶酸性染料染色的水洗和汗渍牢度。"
+    usage: "2–4 % o.w.f.，pH 4–5、70 ℃ 处理 20 分钟。"
+    mechanism: "（模拟）阴离子型固色组分在锦纶表面形成屏障层，封闭染料扩散出口，减少湿处理中的染料迁出。"
+    formula: "配方要点：芳香族磺酸缩合物类阴离子组分（模拟）。"
+    owner: rd:R02
+  - id: HY-SF501
+    name: 亲水柔软剂 HY-SF501
+    category: 柔软剂
+    solves: [harsh_hand, yellowing]
+    applicable: {fiber: [棉, 涤棉, 粘胶]}
+    sheet: "赋予纤维素纤维及涤棉织物柔软、蓬松、亲水的手感，低黄变。"
+    usage: "浸渍 1–3 % o.w.f.，或浸轧 20–40 g/L。"
+    mechanism: "（模拟）改性有机硅在纤维表面定向排列形成润滑膜，降低纤维间摩擦；亲水链段保留吸湿性，弱化氨基降低高温黄变倾向。"
+    formula: "配方要点：嵌段型亲水改性有机硅微乳液，控制氨值（模拟）。"
+    owner: rd:R02
+  - id: HY-AC601
+    name: 防皱润滑剂 HY-AC601
+    category: 防皱剂
+    solves: [crease_marks]
+    applicable: {equipment: [溢流染色机, 气流染色机]}
+    sheet: "用于绳状染色，降低织物折痕和擦伤，适合溢流染色机和气流染色机。"
+    usage: "1.0–2.0 g/L，染前加入，不影响上染。"
+    mechanism: "（模拟）在织物与织物、织物与设备之间形成水化润滑层，降低高温下折叠处的压力集中，避免折痕在玻璃化温度以上被定形。"
+    formula: "配方要点：聚丙烯酰胺类高分子润滑组分与少量聚醚组分复配（模拟）。"
+    owner: rd:R02
+  - id: HY-OB701
+    name: 棉用增白剂 HY-OB701
+    category: 荧光增白剂
+    solves: [low_whiteness]
+    applicable: {fiber: [棉, 涤棉, 粘胶]}
+    sheet: "用于纤维素纤维及涤棉中棉组分的增白，白度高、偏蓝光，可与漂白同浴。"
+    usage: "0.1–0.5 % o.w.f.，与双氧水漂白同浴使用。"
+    mechanism: "（模拟）吸收紫外光并发射蓝紫色荧光，补偿织物泛黄的蓝光缺失，提高视觉白度。"
+    formula: "配方要点：二苯乙烯类荧光增白组分配合稳定组分（模拟）。"
+    owner: rd:R02
+  - id: HY-PT801
+    name: 纤维保护剂 HY-PT801
+    category: 前处理助剂
+    solves: [strength_loss]
+    applicable: {fiber: [棉, 粘胶, 涤棉], bath_ph: [碱性, 中性]}
+    sheet: "用于纤维素纤维碱性前处理与漂白，减少纤维损伤，保持强力。"
+    usage: "1.0–2.0 g/L，与碱和双氧水同浴。"
+    mechanism: "（模拟）抑制金属离子催化的双氧水无效分解，控制有效氧的释放速度，减少纤维素的氧化降解。"
+    formula: "配方要点：有机稳定组分配合螯合组分，不含硅酸盐（模拟）。"
+    owner: rd:R02
+  - id: HY-AY901
+    name: 防酚黄变剂 HY-AY901
+    category: 防黄变剂
+    solves: [yellowing]
+    applicable: {fiber: [锦纶, 锦纶氨纶, 涤纶], constraint: [无特殊要求, 无APEO, 低温节能]}
+    sheet: "防止锦纶、氨纶及涤纶织物在存放和包装中发生酚黄变，适合浅色和白色产品。"
+    usage: "1–3 % o.w.f.，后整理浸渍，40 ℃ 处理 20 分钟。"
+    mechanism: "（模拟）在纤维表面形成弱酸性屏障，阻止抗氧剂与氮氧化物生成黄色醌类物质。"
+    formula: "配方要点：酸性有机组分配合渗透组分，渗透组分泡沫偏高（模拟）。"
+    owner: rd:R02
+  - id: HY-AS951
+    name: 防沾色皂洗剂 HY-AS951
+    category: 皂洗剂
+    solves: [bleeding_staining]
+    applicable: {fiber: [棉, 涤棉]}
+    sheet: "用于棉及涤棉的皂洗，去除浮色的同时防止脱落染料回沾白地。"
+    usage: "1.0–2.0 g/L，皂洗 90 ℃ 处理 10 分钟。"
+    mechanism: "（模拟）高分子组分包裹脱落的染料分子并保持其在水相中分散，阻止染料重新吸附到纤维上。"
+    formula: "配方要点：聚丙烯酸类分散组分与非离子净洗组分复配（模拟）。"
+    owner: rd:R02
+  - id: HY-AS960
+    name: 锦氨防沾剂 HY-AS960
+    category: 防沾色剂
+    solves: [bleeding_staining]
+    applicable: {fiber: [锦纶氨纶], dye_class: [分散染料]}
+    sheet: "用于锦纶氨纶面料，减少分散染料对氨纶组分的沾污。"
+    usage: "1.0 g/L，染色同浴加入。"
+    mechanism: "（模拟）优先吸附在氨纶表面，占据分散染料的吸附位点，降低氨纶对分散染料的沾污。"
+    formula: "配方要点：芳香族聚醚类阻沾组分（模拟）。"
+    owner: rd:R02
+    status: project

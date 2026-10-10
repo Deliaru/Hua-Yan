@@ -29,7 +29,7 @@ WP-A2、WP-T（规则骨架）。
 - **贡献看板**：`contributions(viewer_id)` 由积分账本与知识库汇总，按 `owner, ku_id` 统计被引用次数、积分、被哪些需求单 / 会话使用；非 L3 查看者看到的 L3 知识标题替换为「研发 X 的转化知识」。
 - **试样**：`record_trial` 只允许 L3；生成一条 L3 `trial` 知识；通过时记 `trial_pass`；记 `trial` 事件。
 - **反向包装与发布**：`package_sheet`（pm）调用 `translate.package_sheet(req)`，结果写入 `req.sheet`；`save_sheet` 修改；`release_product`（pm，需 `req.sheet` 与 `req.product_id`）以种子中的 `product_id` 产品为底（机理、配方要点来自它），`sheet`、`usage` 用 `req.sheet`，调用 `flow.release_product`。
-- **解密**：`request_decrypt` 仅当会话已有推荐、且 `profile.chem_savvy and profile.asked_mechanism` 时允许，发布 `decrypt_request` 问题，`owner_id` = 产品归属研发，审计 `decrypt_request`；`decide_decrypt` 只有 `owner_id` 本人可以审批，通过时生成 `DecryptGrant`、审计、记事件，之后该会话 L1 视图的卡片按新上限渲染 `full_mechanism`（不含配方）。
+- **解密**：`request_decrypt` 仅当会话已有推荐、且 `profile.chem_savvy` 时允许（懂化学的客户本来就可以直接讲明白；是否看到机理仍由归属研发审批），发布 `decrypt_request` 问题，`owner_id` = 产品归属研发，审计 `decrypt_request`；`decide_decrypt` 只有 `owner_id` 本人可以审批，通过时生成 `DecryptGrant`、审计、记事件，之后该会话 L1 视图的卡片按新上限渲染 `full_mechanism`（不含配方）。
 
 ### 2. 演示脚本 `scripts/demo_escalation.py`
 离线、直接调用门面：升级会话 → L2 起草、改一条、确认 → L3 起草、改一条并沉淀、确认 → 试样 → 对外要点 → 包装 → 发布 → 新会话同样的描述 → L1 命中新品；打印每一步的需求条目（带原话与依据）和积分变化。
@@ -39,7 +39,7 @@ WP-A2、WP-T（规则骨架）。
    - `rd:R01`、`rd:R02` 都有 `cited` 积分，`rd:R02` 有 `contributed` 积分；
    - `edit_req_item` 传入不存在的 turn id 抛 `ValueError`；
    - `requirement_view` 对 `pm:P01` 时，L3 知识的 `text` 为 None，对 `rd:R01` 不为 None；对 `sales:S01` 抛 `PermissionDenied`。
-2. 手动：解密流程——客户说「我懂一点，这个是靠控制 pH 降低上染速率吧？原理能讲讲吗」→ 申请 → 研发审批 → L1 卡片出现机理、不出现配方要点（贴输出）。
+2. 手动：解密流程——懂化学的客户说「应该是 pH 没控住、上染太快，你们有没有匀染剂？」，推荐后说「原理直接讲明白就行」→ 申请 → 研发审批 → L1 卡片出现机理、不出现配方要点（贴输出）。
 
 ## 不做
 转译骨架本身（WP-T）；助手与工具（WP-L）；真实 ELN；多级审批流；需求单编辑历史；积分兑换。
