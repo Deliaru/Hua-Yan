@@ -44,6 +44,7 @@ function MyKnowledge() {
           <span className="tag w-7 justify-center">L{s.level}</span>
           <span className="min-w-0 flex-1 truncate text-[14px]">{s.title}</span>
           <span className="num shrink-0 text-[13px] text-ink-2">{s.n_cited} 次引用 · {s.points} 分</span>
+          {!!s.used_by.length && <span className="text-[12px] text-ink-3">用于 {s.used_by.join("、")}</span>}
         </div>
       ))}
     </Group>
@@ -56,7 +57,7 @@ export function Rd() {
   return (
     <Shell sidebar={<><QuestionSection role="rd" />{section}</>}>
       <PendingGroup />
-      {live && <AgentConversation sessionId={null} />}
+      {live ? <AgentConversation sessionId={null} /> : <Group title="派单与确认记录"><div className="p-4"><AgentConversation sessionId={null} /></div></Group>}
       {current ? (
         <>
           <RequirementDetail id={current} initial="chem_lang" />

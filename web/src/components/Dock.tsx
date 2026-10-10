@@ -14,6 +14,7 @@ export function Dock({ placeholder, onSend, accessory, suggestions = [], onPick 
   suggestions?: Suggestion[];
   onPick?: () => void;
 }) {
+  const { fail } = useApp();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -21,16 +22,17 @@ export function Dock({ placeholder, onSend, accessory, suggestions = [], onPick 
     const t = text.trim();
     if (!t || busy) return;
     setBusy(true);
-    onSend(t).then(() => setText("")).finally(() => setBusy(false));
+    onSend(t).then(() => setText("")).catch(fail).finally(() => setBusy(false));
   };
   return (
     <div className="bar fixed bottom-0 left-[272px] right-0 z-20 border-t border-sep">
       <div className="mx-auto max-w-[760px] px-10 py-3">
+        {busy && <p role="status" className="mb-2 text-[13px] text-ink-2">处理中……</p>}
         {!!suggestions.length && (
           <div className="mb-2.5 flex flex-wrap items-center gap-2">
             <span className="text-[12px] text-ink-2">觉建议追问</span>
             {suggestions.map((s) => (
-              <button key={s.key} onClick={() => { setText(s.text); onPick?.(); input.current?.focus(); }}
+              <button key={s.key} disabled={busy} onClick={() => { setText(s.text); onPick?.(); input.current?.focus(); }}
                       className="flex h-7 items-center gap-2 rounded-full bg-white px-3 text-[13px] shadow-[0_0_0_.5px_rgba(0,0,0,.1),0_1px_1px_rgba(0,0,0,.04)] hover:bg-[#fafafa]">
                 <span className="text-ink-2">{s.label}</span>{s.text}<span className="num text-[12px] font-semibold text-attn-ink">{pct(s.p)}</span>
               </button>
@@ -40,9 +42,9 @@ export function Dock({ placeholder, onSend, accessory, suggestions = [], onPick 
         <form onSubmit={(e) => { e.preventDefault(); send(); }} className="flex items-center gap-2.5">
           {accessory}
           <div className="flex h-9 flex-1 items-center rounded-[18px] bg-white pl-4 pr-1 shadow-[0_0_0_.5px_rgba(0,0,0,.14)]">
-            <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder}
+            <input ref={input} value={text} disabled={busy} aria-label={placeholder} onChange={(e) => setText(e.target.value)} placeholder={placeholder}
                    className="h-full flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-3" />
-            <button disabled={!text.trim() || busy}
+            <button aria-label="发送" disabled={!text.trim() || busy}
                     className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-25">
               <ArrowUp />
             </button>
@@ -67,13 +69,13 @@ export function Bubble({ who, mine, children }: { who?: string; mine?: boolean; 
 
 // 和自己的角色助手的对话（契约 ⑭）：消息平铺、工具轨迹可展开；输入走底部 Dock。只在助手运行时使用。
 export function AgentConversation({ sessionId }: { sessionId: string | null }) {
-  const { me } = useApp();
+  const { me, live } = useApp();
   const [showTrace, setShowTrace] = useState(false);
   const conv = useData(() => api.conversation(me, sessionId), [me, sessionId]);
   const steps = useData(() => (conv ? api.trace(conv.id) : Promise.resolve([])), [conv?.id]);
   return (
     <section className="flex flex-col gap-2">
-      {!conv?.messages.length && <p className="text-[13px] text-ink-2">用自然语言告诉助手要做什么；派给你的问题也会出现在这里。</p>}
+      {!conv?.messages.length && live && <p className="text-[13px] text-ink-2">用自然语言告诉助手要做什么；派给你的问题也会出现在这里。</p>}
       {conv?.messages.map((m, i) =>
         m.role === "system" ? (
           <p key={i} className="my-1 self-center text-[12px] text-ink-2">{m.text}</p>
@@ -88,8 +90,8 @@ export function AgentConversation({ sessionId }: { sessionId: string | null }) {
       )}
       {showTrace && (
         <Group>
-          {steps?.map((s) => (
-            <div key={s.step} className="row !items-start text-[13px] leading-5">
+          {steps?.map((s, i) => (
+            <div key={i} className="row !items-start text-[13px] leading-5">
               <span className="num w-4 shrink-0 text-ink-3">{s.step}</span>
               <div className="min-w-0 flex-1">
                 <p><span className="font-semibold">{s.tool ?? "回复"}</span>
@@ -106,7 +108,7 @@ export function AgentConversation({ sessionId }: { sessionId: string | null }) {
 }
 
 export function AgentDock({ sessionId, suggestions }: { sessionId: string | null; suggestions?: Suggestion[] }) {
-  const { me, refresh, fail } = useApp();
+  const { me, refresh } = useApp();
   return <Dock placeholder="对助手说……" suggestions={suggestions}
-               onSend={(t) => api.chat(me, t, sessionId).then(refresh, fail)} />;
+               onSend={(t) => api.chat(me, t, sessionId).then(refresh)} />;
 }

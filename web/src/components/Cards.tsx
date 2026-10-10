@@ -46,7 +46,7 @@ function StatusFooter() {
     <div className="border-t border-sep px-[18px] py-3 text-[12px] leading-[18px] text-ink-2">
       <p className="flex items-center gap-1.5 font-semibold text-ink">
         <i className={`h-[7px] w-[7px] rounded-full ${degraded.length ? "border-[1.5px] border-ink-3" : "bg-[#34c759]"}`} />
-        {live ? "现场运行" : "离线演示"} · {degraded.length ? `${degraded.length} 项降级` : "全部正常"}
+        {s.replay ? "记录回放" : live ? "现场运行" : "离线演示"} · {degraded.length ? `${degraded.length} 项降级` : "全部正常"}
       </p>
       <p className="mt-0.5">{degraded.join(" · ")}</p>
       {!live && <p className="mt-0.5">确认由离线脚本代替，已标注</p>}
@@ -129,7 +129,9 @@ export function QuestionRow({ q }: { q: Question }) {
           <p className="mt-1 line-clamp-2 text-[12px] leading-[17px] text-ink-2">
             {q.evidence.map((x) => L.evidence(x.summary)).join(" · ") || (e?.quote ?? "")}
           </p>
-          <p className="mt-0.5 text-[12px] text-ink-3">{L.discoverer(q.discoverer)}</p>
+          <p className="mt-0.5 text-[12px] text-ink-3">{q.id} · {L.discoverer(q.discoverer)} · {L.scorer(q.scored_by)}</p>
+          {q.urgency != null && <p className="text-[12px] text-ink-3">紧急度 {pct(q.urgency)}{q.refs.requirement_id ? ` · ${q.refs.requirement_id}` : ""}</p>}
+          {q.status !== "open" && <p className="text-[12px] text-ink-2">{q.status === "resolved" ? "已处理" : q.status}</p>}
         </div>
         {q.p_need != null && <Need p={q.p_need} />}
       </div>
@@ -157,6 +159,7 @@ function PendingRow({ a }: { a: PendingAction }) {
   const { me, refresh, fail } = useApp();
   const [busy, setBusy] = useState(false);
   const decide = (approve: boolean) => {
+    if (busy) return;
     setBusy(true);
     (approve ? api.approve(a.id, me) : api.reject(a.id, me)).then(refresh, fail).finally(() => setBusy(false));
   };
@@ -167,6 +170,7 @@ function PendingRow({ a }: { a: PendingAction }) {
         <p className="mt-0.5 truncate text-[12px] text-ink-2">
           {[a.tool, ...Object.entries(a.args).map(([k, v]) => `${k} ${String(v)}`)].join(" · ")}
         </p>
+        {busy && <p role="status" className="mt-1 text-[12px] text-ink-2">处理中……</p>}
       </div>
       <button disabled={busy} onClick={() => decide(false)} className="btn btn-plain">拒绝</button>
       <button disabled={busy} onClick={() => decide(true)} className="btn btn-primary">确认</button>
@@ -217,7 +221,7 @@ function Disclosure({ label, children }: { label: string; children: React.ReactN
 }
 
 // 需求条目：文本、依据（归属人 · 知识标题或「L3 转化知识」· 被引用次数）、客户原话、起草与确认人。
-function ReqItems({ view, field }: { view: RequirementView; field: "product_lang" | "chem_lang" }) {
+export function ReqItems({ view, field }: { view: RequirementView; field: "product_lang" | "chem_lang" }) {
   const L = useLabels();
   const req = view.requirement;
   const cited = Object.fromEntries(view.cited.map((c) => [c.ku_id, c]));
@@ -241,11 +245,12 @@ function ReqItems({ view, field }: { view: RequirementView; field: "product_lang
                   {item.ku_refs.map((ref) => {
                     const c = cited[ref];
                     return (
-                      <p key={ref} className="text-[12px] leading-[18px] text-ink-2" title={c.text ?? "无权查看原文，只显示归属"}>
+                      <div key={ref} className="text-[12px] leading-[18px] text-ink-2">
                         <span className="text-ink">{L.name(c.owner)}</span>
                         {c.text == null ? <span className="text-ink-3">L3 转化知识 · 原文不可见</span> : c.title}
                         <span className="text-ink-3">　被引用 {c.n_cited} 次</span>
-                      </p>
+                        {c.text != null && <p className="mt-1 whitespace-pre-wrap">{c.text}</p>}
+                      </div>
                     );
                   })}
                 </Disclosure>

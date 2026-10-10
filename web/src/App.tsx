@@ -22,11 +22,13 @@ export default function App() {
   const [who, setWho] = useState<Partial<Record<Role, string>>>({});
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
   useEffect(() => {
     api.meta().then(setMeta, fail);
   }, [version]);
+  if (resetting) return <p role="status" className="p-10 text-ink-2">正在开启新一轮……</p>;
   if (!meta) return error ? <p className="p-10 text-danger">{error}</p> : null;
 
   const people = meta.actors.filter((a) => a.role === page);
@@ -69,15 +71,19 @@ export default function App() {
             ))}
           </Popover>
           <button className="icon-btn" title={`新开一轮（当前 ${meta.status.run_id}）`}
-                  onClick={() => api.reset().then(ctx.refresh, fail)}>
+                  onClick={() => {
+                    setError(null);
+                    setResetting(true);
+                    api.reset().then(() => api.meta()).then(setMeta).catch(fail).finally(() => setResetting(false));
+                  }}>
             <Refresh />
           </button>
         </div>
       </header>
 
-      {page === "sales" && <Sales key={me} />}
-      {page === "pm" && <Pm key={me} />}
-      {page === "rd" && <Rd key={me} />}
+      {page === "sales" && <Sales key={`${meta.status.run_id}:${me}`} />}
+      {page === "pm" && <Pm key={`${meta.status.run_id}:${me}`} />}
+      {page === "rd" && <Rd key={`${meta.status.run_id}:${me}`} />}
 
       {error && (
         <div className="popover anim-fade fixed right-4 top-[60px] flex max-w-[360px] items-start gap-2 px-3 py-2.5 text-[13px]">
