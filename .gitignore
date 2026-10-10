@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# 密钥与本地配置
+.env
+.env.*
+*.key
+config/*.local.yaml
+
+# 生成物（只提交 runs/demo_record/ 与 models/jue_k/ 的说明文件）
+data/
+runs/*
+!runs/demo_record/
+models/*
+!models/jue_k/
+models/jue_k/*
+!models/jue_k/README.md
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

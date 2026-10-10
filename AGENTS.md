@@ -1,0 +1,103 @@
+# AGENTS.md
+
+> 给 coding agent 的项目宪法。每次会话先读本文件，再读 `docs/CONTRACTS.md`，再读分配给你的工作包 `docs/workpackages/WP-*.md`。
+> 愿景与架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`；方向与取舍有疑问时以 `docs/VISION.md` 为准。
+
+## 1. 项目是什么
+
+**化言（HuaYan）：面向传化功能化学「市场—产品—研发」需求协同的多层 Agent 系统。**
+
+客户和业务员只会描述宏观现象，转述过程中需求会变形，研发拿到的是走样的需求。化言把对话中的需求转成可回查原话的化学语言需求单，按身份分层披露知识，L1 解决不了的需求逐层升级到产品经理和研发，新产品再回流到 L1 知识库。
+
+两个内部引擎：
+- **觉（Jue-K）**：发现层，判断「此刻是否出现了需要处理的情况、是哪一类」（追问补全、机会汇聚、知识冲突、泄露风险）。代码中是 `QuestionModel` 接口，两个实现：`jue_proto`（模板 × 对象 + 规则或 Jev 打分）、`jue_k`（训练出的追问模型）；
+- **Jev**：决策模型，回答已经提出的问题（推荐哪个产品、披露哪个版本、回答是否有依据），输出各选项概率。
+
+当前目标：**8 小时内产出第一版可演示 Demo**（验收见 `docs/workpackages/README.md`）。
+
+## 2. 技术栈
+
+Python 3.11+、`uv`、`pydantic` v2、`openai` SDK（所有大模型走 OpenAI 兼容接口）、`httpx`、`numpy`、`pandas`、`scikit-learn`、`matplotlib`、`pyyaml`、`streamlit`、`pytest`。
+
+不引入 LangChain、LangGraph 等 Agent 框架，不引入向量数据库。角色 Agent 在第一版中是**单次结构化调用**（抽取、L1 回答、产品经理起草），不做多步工具循环。
+
+## 3. 目录结构
+
+```
+AGENTS.md  README.md
+docs/        VISION.md  ARCHITECTURE.md  CONTRACTS.md  JUE_K_TRAINING.md  DEMO.md
+             workpackages/  reference/  reports/  assets/
+config/      app.yaml  models.yaml  system1.yaml  templates/  baselines/
+seeds/       slots.yaml  phenomena.yaml  products.yaml  cases.yaml  translations.yaml  actors.yaml
+prompts/     各 Agent 与模拟客户的提示词
+demo/        mainline.yaml（演示台词）
+src/huayan/
+  contracts/   契约代码，只放定义（WP-0，之后只读）
+  clock.py  meter.py  domain.py  events.py  bus.py   共用模块（WP-0，之后只读）
+  gateway/     模型网关（复用 JUE）
+  jev/         Jev 三个问题；system1/ 为 OneJev 客户端、降级与桩（复用 JUE）
+  knowledge/   知识库、权限、披露、审计与积分
+  l1/          抽取、L1 回答、会话流程
+  escalation/  产品经理起草、需求单、试样、新品发布
+  jue/         觉：expr、state、proto、publish、scan、features、jue_k
+  sim/         需求卡、模拟客户、模拟业务周、Jue-K 轨迹
+  eval/        业务周运行器、指标
+  ui/          Streamlit 界面
+  app.py       应用门面 HuayanApp（界面只通过它访问系统）
+scripts/     命令行脚本
+tests/       fixtures/mini_seeds/  test_*.py
+data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/jue_k/ 的说明文件）
+```
+
+## 4. 铁律（违反即返工）
+
+1. **契约冻结。** `docs/CONTRACTS.md` 与 `src/huayan/contracts/` 只能由人修改。觉得必须改时停下来，在汇报中说明；不要在自己的模块里另造一套等价结构绕过。
+2. **所有大模型调用经过模型网关**，必须带 `caller`（契约 ⑩ 的 caller 表）。
+3. **觉的发现环节不调用大模型、不调用工具。** 原型只允许「规则前置条件 + 规则打分或 OneJev 打分」；Jue-K 只做本地推理。`huayan/jue/` 不得 import `huayan.gateway`。
+4. **权限只在知识库、披露和门面里执行。** Jev 只能在硬上限之内选择披露版本；传给 Jev 和 L1 Agent 的内容只含请求者权限内的知识；界面不做权限判断。L1 的任何输出都不得包含 L2/L3 内容（解密授权的机理除外，配方永不对外）。
+5. **评估不作弊。** 觉、Jev、Agent、门面不得读取需求卡、注入清单和评测标签；只有 `sim/` 与 `eval/` 可以读。
+6. **降级必须标注。** Jev 走大模型降级或桩、觉用规则模式、抽取用规则时，结果上标 `scored_by` / `extracted_by`，界面状态条可见。
+7. **数据全部是模拟数据并明确标注。** 不提交任何传化真实资料、真实客户、真实配方，不提及其他化工企业名称。不提交密钥。文件读写显式 `encoding="utf-8"`。
+8. **动作全部模拟。** 立项、发布、冻结、试样只改变本系统内的状态，不对接任何外部系统。
+9. **业务时间只来自 `huayan.clock`**，datetime 必须带时区；随机数显式传入种子，模拟与回放可复现。
+10. **禁止过度工程化。** 限时比赛作品，目标是可运行、可演示。采用满足当前工作包验收的最简单实现；不为假想需求加抽象层、配置项或扩展机制；不做与当前工作包无关的重构；复制来的 JUE 代码不重构。
+11. **禁止过度防御性编程。** 只在真实输入边界（大模型输出、用户输入、种子文件）做必要校验；不重复校验契约已保证的数据；不为不可能的路径堆兜底、重试、兼容分支；错误清晰暴露，不静默吞掉。
+
+## 5. 测试原则
+
+测试只守关键不变量和端到端行为，不追求覆盖率。**全项目不超过 10 个测试**，几十秒内跑完，不访问网络，只用 `tests/fixtures/mini_seeds/`。
+
+| 测试 | 守住什么 |
+|---|---|
+| `test_wp0` ×2 | 候选匹配的四步关系；总线合并与抑制 |
+| `test_wp_a1` | L1 身份拿不到 L2/L3 内容 |
+| `test_wp_a2` | L1 链路端到端：追问 → 推荐 / 升级，L1 与 L3 视图不同 |
+| `test_wp_a3` | 升级 → 发布 → 同类需求在 L1 命中新品 |
+| `test_wp_b1` | 定时发现命中注入、不碰困难负样本；觉零大模型调用 |
+| `test_wp_b2` | 同种子可复现；业务代码不引用需求卡与注入清单 |
+| `test_wp_b3` | 事后有用性标签在手算样例上正确 |
+| `test_e2e` | 演示主线离线跑通 |
+
+能用一次真实运行验证的事（看生成的数据、看报告、看界面），就不要写测试。不为 mock 写测试，不为 getter 和 pydantic 行为写测试，不为测试再造新的桩（全项目只有 `MockGateway`、`MockSystem1Client` 两个桩和 `mini_seeds` 一份夹具）。
+
+## 6. 工作流程
+
+1. 读本文件、契约、自己的工作包。
+2. 只修改工作包「允许修改的范围」内的路径。
+3. 实现 → 工作包规定的测试 → 真实跑一次。
+4. 汇报：做了什么、改了哪些文件、验收逐条结果、遗留问题、发现的契约问题。
+5. 工作包「不做」里的事情不要做。
+
+## 7. Git
+
+- 主分支 `main`；A 用 `dev/a`，B 用 `dev/b`。每个工作包完成且本包测试通过后，由人合并进 `main`；集成（WP-I）与材料（WP-D）直接在 `main` 上进行。
+- 从 JUE 赛前代码复用的文件，文件头注明来源，README 中如实列出。保留完整提交历史。
+
+## 8. 命令
+
+```bash
+uv run pytest
+uv run python scripts/demo_mainline.py          # 离线跑完演示主线（WP-I 之后）
+uv run streamlit run src/huayan/ui/app.py       # 演示界面（WP-U 之后）
+uv run python scripts/run_week.py --week data/week/w1   # 模拟业务周对照（WP-E 之后）
+```

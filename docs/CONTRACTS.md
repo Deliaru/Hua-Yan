@@ -1,0 +1,937 @@
+# CONTRACTS.md
+
+> 跨模块的数据格式与接口契约。**冻结后只能由人修改**。代码实现在 `src/huayan/contracts/`，必须与本文件一致。
+> 下列代码是规格（Python / pydantic v2 风格），字段名、类型、枚举值必须一致；函数签名必须一致，内部实现自由。
+> 版本：v1｜2026-10-10
+>
+> 本文件只规定**模块之间**传递什么。模块内部的数据怎么组织，由各工作包自己决定，不要为了「统一」把内部结构也写进契约。
+
+---
+
+## 0. 通用约定
+
+- 所有 `datetime` 必须带时区，统一转换为 `Asia/Shanghai`；不带时区的输入直接报错。基类 `huayan.contracts._base.BaseModel`，所有模型 `extra="forbid"`。
+- 文件读写显式 `encoding="utf-8"`；面向 Excel 的 CSV 用 `utf-8-sig`。JSONL 一行一个对象。
+- 业务时间一律来自 `huayan.clock`：`get_clock().now()`。默认是 `WallClock`（现场演示），模拟业务周使用 `SimClock`。
+- 随机数一律显式传入 `random.Random(seed)`，不使用全局随机数。
+- **ID 格式**
+
+| 对象 | 格式 | 例子 |
+|---|---|---|
+| 人 | `<role>:<id>` | `sales:S01`、`customer:C01`、`pm:P01`、`rd:R01`、`supervisor:M01` |
+| 产品 | 虚构型号 | `HY-LV205` |
+| 现象、槽位 | 小写英文 | `color_unlevel`、`fiber` |
+| 知识单元 | `ku:<kind>:<ref>` | `ku:mechanism:HY-LV205` |
+| 会话 / 轮次 | `sess:<n>` / `turn:<sess>:<n>` | `sess:3`、`turn:sess:3:2` |
+| 问题 / 需求 / 试样 / 事件 | `q:<n>` / `req:<n>` / `trial:<n>` / `ev:<n>` | `q:12` |
+| 觉的对象 | 见 5.1 | `slot:sess:3/fiber` |
+
+- **角色与层级**（固定）
+
+```python
+Role = Literal["customer", "sales", "pm", "rd", "supervisor"]
+Level = Literal[1, 2, 3]
+ROLE_LEVEL: dict[Role, Level] = {"customer": 1, "sales": 1, "pm": 2, "rd": 3, "supervisor": 2}
+
+class Actor(BaseModel):
+    id: str                  # "sales:S01"
+    role: Role
+    name: str
+```
+
+---
+
+## ① 种子数据（`seeds/`）
+
+全部是**虚构的模拟数据**。每个文件结构为：
+
+```yaml
+placeholder: true            # true = 大模型生成的占位内容，待企业数据替换
+source: "说明来源，如：占位，由大模型按行业常识生成"
+items: [...]
+```
+
+### 1.1 槽位 `seeds/slots.yaml`
+
+```python
+class SlotDef(BaseModel):
+    id: str                                   # "fiber"
+    label: str                                # "面料成分"
+    values: list[str]                         # 枚举取值，如 ["棉", "涤纶", "锦纶", "锦纶氨纶", ...]
+    ask_text: str                             # 业务员追问话术，如「请问是什么面料？」
+    ask_keywords: list[str]                   # 识别业务员在问这个槽位的关键词，如 ["面料", "什么布", "成分"]
+    customer_phrases: dict[str, list[str]]    # 取值 → 客户口语说法（≥1 条）；不同取值之间的说法不得重复
+```
+
+槽位集合由种子决定，代码不得写死槽位 id（演示脚本和测试夹具除外）。
+
+### 1.2 现象 `seeds/phenomena.yaml`
+
+```python
+class Phenomenon(BaseModel):
+    id: str                                   # "color_unlevel"
+    label: str                                # "色花（匀染性差）"
+    customer_phrases: list[str]               # 客户的宏观描述，如「深一块浅一块」
+    required_slots: list[str]                 # 研发判断前必须问清的槽位（种子①；B1 基线使用）
+    causes: str                               # 常见原因与机理（L3 知识）
+    slot_priors: dict[str, dict[str, float]] = {}   # 种子③：该现象下各槽位取值的比例，每个槽位内和为 1
+```
+
+### 1.3 产品 `seeds/products.yaml`
+
+```python
+class Product(BaseModel):
+    id: str                                   # 虚构型号
+    name: str
+    category: str                             # 匀染剂 / 分散剂 / 防皱剂 …
+    solves: list[str]                         # 现象 id
+    applicable: dict[str, list[str]] = {}     # 槽位 → 适用取值；未列出的槽位不限
+    sheet: str                                # 产品说明（L1）
+    usage: str                                # 用法用量（L1）
+    mechanism: str                            # 作用机理（L3，可经审批解密）
+    formula: str                              # 配方要点（L3，永不对外）
+    owner: str                                # 知识归属研发，如 "rd:R01"
+    status: Literal["released", "project"] = "released"   # project = 研发中，不参与匹配，回流演示时发布
+```
+
+### 1.4 其他种子
+
+```python
+class Case(BaseModel):                        # seeds/cases.yaml，历史案例（L2）
+    id: str
+    phenomenon: str
+    slots: dict[str, str]
+    product_id: str | None                    # None = 当时没有解决
+    scene_text: str                           # 客户原话摘要
+    pm_translation: str                       # 产品经理的转述
+    owner: str                                # "pm:P01"
+
+class Translation(BaseModel):                 # seeds/translations.yaml，转化对照
+    id: str
+    scene_phrase: str                         # 「深一块浅一块」
+    chem_term: str                            # 「上染速率不均 / 匀染性差」
+    level: Literal[2, 3]
+    owner: str
+
+# seeds/actors.yaml：list[Actor]，至少包含 2 个业务员、4 个客户、1 个产品经理、2 个研发、1 个主管
+```
+
+### 1.5 领域函数 `huayan.domain`（WP-0 提供，所有包共用，不得各写一套）
+
+```python
+class Seeds(BaseModel):
+    slots: list[SlotDef]; phenomena: list[Phenomenon]; products: list[Product]
+    cases: list[Case]; translations: list[Translation]; actors: list[Actor]
+    placeholder: bool                         # 任一文件为占位即为 True
+
+class Candidate(BaseModel):
+    product_id: str
+    unknown_slots: list[str]                  # applicable 中有限定、但当前未知的槽位
+
+def load_seeds(seeds_dir: str | Path) -> Seeds: ...
+def consistent(product: Product, known: dict[str, str]) -> bool: ...
+    # 已知槽位中，凡是 product.applicable 有限定的，取值都在适用范围内
+def match_candidates(phenomenon: str, known: dict[str, str], products: list[Product]) -> list[Candidate]: ...
+    # status == "released" 且 phenomenon in solves 且 consistent；按 id 排序
+def correct_product(phenomenon: str, slots: dict[str, str], products: list[Product]) -> str | None: ...
+    # 全部真值下的候选；0 个 → None（应升级）；多个 → applicable 限定的槽位最多者，并列取 id 最小
+def detect_asked_slots(text: str, slots: list[SlotDef]) -> list[str]: ...   # 按 ask_keywords
+def find_slot_values(text: str, slots: list[SlotDef]) -> dict[str, tuple[str, str]]: ...
+    # 按 customer_phrases 与取值本身匹配：槽位 → (取值, 命中的原话片段)；同一槽位命中多个取值时取最长匹配
+def find_phenomenon(text: str, phenomena: list[Phenomenon]) -> tuple[str, str] | None: ...   # (现象 id, 原话片段)
+```
+
+---
+
+## ② 知识、权限与披露
+
+### 2.1 知识单元
+
+```python
+KUKind = Literal["sheet", "usage", "case", "translation", "requirement", "mechanism", "formula", "trial"]
+KIND_LEVEL: dict[KUKind, Level] = {"sheet": 1, "usage": 1, "case": 2, "requirement": 2,
+                                    "mechanism": 3, "formula": 3, "trial": 3}   # translation 取种子中的 level
+
+class KnowledgeUnit(BaseModel):
+    id: str                                   # "ku:<kind>:<ref>"
+    level: Level
+    kind: KUKind
+    title: str
+    text: str
+    product_id: str | None = None
+    phenomenon_ids: list[str] = []
+    owner: str                                # 知识归属人
+    decryptable: bool = False                 # 只有 mechanism 为 True
+    source: Literal["seed", "released", "trial"] = "seed"
+    created_at: datetime
+
+class KnowledgeHit(BaseModel):
+    ku: KnowledgeUnit
+    score: float
+```
+
+### 2.2 知识库 `huayan.knowledge.KnowledgeBase`（WP-A1）
+
+```python
+class PermissionDenied(Exception): ...
+
+class KnowledgeBase:
+    @classmethod
+    def from_seeds(cls, seeds: Seeds, events: EventLog, audit: AuditLog) -> "KnowledgeBase": ...
+        # 每个产品生成 sheet/usage/mechanism/formula 四条；每个案例、转化对照各一条
+    def products(self) -> list[Product]: ...                 # 当前已发布产品（含回流发布的新产品）
+    def product(self, product_id: str) -> Product: ...
+    def add_product(self, product: Product, at: datetime) -> list[KnowledgeUnit]: ...   # 发布，生成四条知识
+    def update_applicable(self, product_id: str, slot: str, values: list[str], by: str) -> None: ...
+    def add(self, ku: KnowledgeUnit) -> None: ...
+    def get(self, ku_id: str, actor: Actor) -> KnowledgeUnit: ...
+        # 越权抛 PermissionDenied，写审计 deny 与 access_denied 事件
+    def search(self, query: str, actor: Actor, *, phenomenon: str | None = None, k: int = 5,
+               session_id: str | None = None) -> list[KnowledgeHit]: ...
+        # 先按层级过滤再打分（关键词 / 字符二元组即可）。
+        # 被过滤掉、但本来会命中的条目：只记入 retrieve 事件的 n_blocked 与 blocked_product_ids，不返回给调用方。
+        # 被冻结的人（2.3）检索 L1 以外的意图时直接返回空。
+```
+
+### 2.3 权限 `huayan.knowledge.permission`（WP-A1）
+
+```python
+def level_of(actor: Actor) -> Level: ...
+def can_read(actor: Actor, ku: KnowledgeUnit) -> bool: ...      # ku.level <= level_of(actor)
+
+# 冻结状态存在 KnowledgeBase 实例上，不用模块级全局变量
+KnowledgeBase.is_frozen(actor_id: str) -> bool
+KnowledgeBase.freeze(actor_id: str, by: str, at: datetime) -> None   # 「泄露风险」处置；写 access_frozen 事件与审计
+```
+
+### 2.4 披露
+
+```python
+Version = Literal["product", "product_usage", "full_mechanism", "internal"]
+# product        产品名与说明                    L1 可见
+# product_usage  + 用法用量                      L1 可见（默认对外版本）
+# full_mechanism + 作用机理                      仅 L3，或 L1 在该客户×该产品有解密授权时
+# internal       + 配方要点 + 试样记录            仅 L3，永不对外
+CUSTOMER_VERSIONS = ["product", "product_usage", "full_mechanism"]   # Jev 只在这三者中选
+
+class DecryptGrant(BaseModel):
+    id: str
+    customer_id: str
+    product_id: str
+    session_id: str
+    approved_by: str                          # 产品的知识归属研发
+    at: datetime
+
+class CardSection(BaseModel):
+    title: str
+    text: str
+    ku_id: str
+    level: Level
+
+class RecommendationCard(BaseModel):          # 按「查看者」渲染的结果，不落盘
+    session_id: str
+    viewer: str
+    product_id: str | None                    # None = 已升级，无推荐
+    version: Version                          # 实际渲染的版本
+    sections: list[CardSection]
+    note: str = ""                            # 如「已转产品经理处理」「机理已经研发审批解密」
+
+# huayan.knowledge.disclosure（WP-A1）
+def cap(viewer: Actor, customer_id: str, product_id: str, grants: list[DecryptGrant]) -> Version: ...
+    # L1：product_usage；存在该客户×该产品的授权时 full_mechanism
+    # L2：product_usage（另可看案例与需求单，不看机理）
+    # L3：internal
+def render(product_id: str, version: Version, viewer: Actor, kb: KnowledgeBase) -> RecommendationCard: ...
+    # 只渲染 version 允许的知识单元；调用方保证 version 不超过 cap
+```
+
+**不变量（必须有测试）**：查看者为 L1 且无授权时，渲染结果和任何 L1 回复中不出现 level ≥ 2 的知识单元；任何情况下 L1 看不到 `formula` 与 `trial`。
+
+### 2.5 审计与积分（WP-A1）
+
+```python
+class AuditRecord(BaseModel):
+    ts: datetime
+    actor: str
+    action: Literal["disclose", "deny", "decrypt_request", "decrypt_approve", "decrypt_reject", "freeze"]
+    object_ids: list[str]                     # ku / 产品 / 会话
+    version: Version | None = None
+    session_id: str | None = None
+    reason: str = ""
+
+class LedgerEntry(BaseModel):
+    ts: datetime
+    owner: str                                # 获得积分的人
+    points: int
+    reason: Literal["cited", "trial_pass", "product_released", "bounty"]
+    ku_id: str | None = None
+    ref: str                                  # 会话 / 试样 / 产品 / 问题 id
+
+class AuditLog:   # append(record) / list(actor=None) ；写 runs/<run>/audit.jsonl
+class Ledger:     # add(entry) / totals() -> dict[owner, points] / list(owner=None)；写 ledger.jsonl
+```
+
+积分规则在 `config/app.yaml` 的 `points`：知识单元出现在一次推荐中，给其归属人记 `cited`；试样通过记 `trial_pass`；新品发布记 `product_released`；处理带悬赏的问题记 `bounty`。
+
+---
+
+## ③ 会话与需求
+
+```python
+Intent = Literal["need", "product_question", "mechanism_request", "smalltalk"]
+
+class Turn(BaseModel):
+    id: str                                   # "turn:sess:3:2"
+    session_id: str
+    n: int                                    # 从 1 开始
+    speaker: Literal["customer", "sales"]
+    text: str
+    ts: datetime
+
+class SlotFill(BaseModel):
+    slot: str
+    value: str | None                         # 必须是 SlotDef.values 中的值；status=unknown 时为 None
+    status: Literal["filled", "unknown"]      # unknown = 客户答「不清楚」
+    confidence: float = Field(ge=0, le=1)
+    quote: str                                # 客户原话片段（溯源）
+    turn_id: str
+
+class CustomerProfile(BaseModel):
+    chem_savvy: bool = False                  # 从对话判断客户是否懂化学
+    asked_mechanism: bool = False             # 客户是否明确要求了解原理
+    evidence_quote: str = ""
+
+class NeedState(BaseModel):
+    session_id: str
+    customer_id: str
+    sales_id: str
+    phenomenon: str | None = None
+    phenomenon_quote: str = ""
+    slots: dict[str, SlotFill] = {}
+    asked: dict[str, int] = {}                # 槽位 → 业务员已追问次数
+    turn_count: int = 0
+    profile: CustomerProfile = CustomerProfile()
+    last_intent: Intent = "need"
+    extracted_by: Literal["llm", "rule"] = "llm"
+
+    def known(self) -> dict[str, str]: ...    # status == "filled" 的槽位 → 取值
+
+class ExtractedSlot(BaseModel):               # 抽取 Agent 的输出单元
+    slot: str
+    value: str | None
+    status: Literal["filled", "unknown"]
+    confidence: float = Field(ge=0, le=1)
+    quote: str
+    turn_n: int
+
+class ExtractionResult(BaseModel):            # 抽取 Agent 结构化输出（caller "agent:extract"）
+    intent: Intent
+    phenomenon: str | None
+    phenomenon_quote: str = ""
+    slots: list[ExtractedSlot] = []           # 只含本次新增或改变的槽位
+    asked_slots: list[str] = []               # 最新一句业务员发言追问了哪些槽位
+    profile: CustomerProfile
+
+# huayan.l1.extract（WP-A2）
+class Extractor(Protocol):
+    name: Literal["llm", "rule"]
+    def extract(self, turns: list[Turn], prev: NeedState) -> ExtractionResult: ...
+def apply_extraction(prev: NeedState, result: ExtractionResult, turns: list[Turn]) -> NeedState: ...
+    # 取值不在枚举内的槽位丢弃；turn_n 换成 turn_id
+```
+
+`rule` 抽取器只用 `huayan.domain` 的 `find_phenomenon` / `find_slot_values` / `detect_asked_slots`，置信度固定 0.7，不调用大模型。模拟业务周和离线测试使用它。
+
+```python
+class AskHint(BaseModel):
+    session_id: str
+    slot: str
+    label: str                                # 槽位中文名
+    ask_text: str                             # 建议话术
+    p_need: float
+    scored_by: str                            # 同 JueOutput.scored_by
+
+class Recommendation(BaseModel):              # 会话里存的「决定」，渲染另做
+    product_id: str | None
+    candidates: list[Candidate]
+    match: JevDecision | None                 # 无候选时为 None
+    disclose: JevDecision | None
+    version: Version | None                   # 对 L1 披露的版本
+    escalated_question_id: str | None = None
+    at: datetime
+
+class AssistantReply(BaseModel):              # 问答类意图（product_question / mechanism_request）的回复
+    turn_id: str
+    text: str
+    ku_ids: list[str]
+    blocked: bool                             # 命中了高层级内容但被拦截
+    grounding: JevDecision | None = None
+
+class Session(BaseModel):
+    id: str
+    customer_id: str
+    sales_id: str
+    started_at: datetime
+    turns: list[Turn] = []
+    need: NeedState
+    hints: list[AskHint] = []                 # 当前有效的追问提示
+    replies: list[AssistantReply] = []
+    recommendation: Recommendation | None = None
+    status: Literal["open", "recommended", "escalated", "closed"] = "open"
+```
+
+---
+
+## ④ Jev（`huayan.jev`，WP-A2）
+
+### 4.1 System 1 题型（与 JUE 一致，客户端复制自 JUE）
+
+```python
+class S1Noul(BaseModel):   kind: Literal["noul"] = "noul";     text: str
+class S1Choice(BaseModel): kind: Literal["choice"] = "choice"; text: str; options: dict[str, str]
+class S1Score(BaseModel):  kind: Literal["score"] = "score";   text: str; levels: list[str]
+S1Question = S1Noul | S1Choice | S1Score
+
+class S1Answer(BaseModel):
+    probabilities: dict[str, float]           # noul: {"yes", "no"}
+    expected: float | None = None
+
+class S1Result(BaseModel):
+    answers: dict[str, S1Answer]
+    latency_ms: float
+    impl: Literal["onejev", "llm_fallback", "mock"]
+    degraded: bool                            # impl != "onejev"
+
+class System1Client(Protocol):
+    def ask(self, state: dict[str, Any], media: list, questions: dict[str, S1Question], caller: str) -> S1Result: ...
+```
+
+- `OneJevClient`、`LLMSystem1Fallback` 从 JUE 复制，只改 import；`build_system1(impl, config_path, gateway, meter)` 同 JUE，另支持 `impl="mock"`。
+- `MockSystem1Client`（确定性规则桩，`impl="mock"`），按 caller 区分：
+  - `jev:match`：候选权重 `1 / (1 + len(unknown_slots))`，`none` 权重为 0.2，归一化；
+  - `jev:disclose`：`profile.chem_savvy and profile.asked_mechanism` 且选项含 `full_mechanism` 时 0.7 给它；否则 0.7 给 `product_usage`；其余平分；
+  - `jev:grounding`：state 中 `hits` 非空时 `grounded` 0.7，否则 `none` 0.7；其余平分；
+  - 其他 caller：均匀分布；`S1Noul` 为 0.5。
+
+### 4.2 三个问题
+
+```python
+class JevDecision(BaseModel):
+    question: Literal["match", "disclose", "grounding"]
+    probabilities: dict[str, float]           # 选项 id → 概率
+    choice: str                               # 概率最大的选项
+    confident: bool
+    scored_by: Literal["onejev", "llm_fallback", "mock", "rule"]
+
+class Jev:
+    def __init__(self, system1: System1Client, match_threshold: float = 0.5): ...
+    def match(self, need: NeedState, candidates: list[Candidate], products: dict[str, Product]) -> JevDecision: ...
+        # 选项 = 候选产品 id + "none"；caller "jev:match"；confident = p(choice) ≥ match_threshold 且 choice != "none"
+        # 无候选时不调用 System 1：probabilities={"none": 1.0}，scored_by="rule"
+    def disclose(self, need: NeedState, product_id: str, cap: Version) -> JevDecision: ...
+        # 选项 = CUSTOMER_VERSIONS 中不超过 cap 的版本；只有一个选项时不调用，scored_by="rule"；caller "jev:disclose"
+    def grounding(self, answer: str, hits: list[KnowledgeHit]) -> JevDecision: ...
+        # 选项 grounded / partial / none；caller "jev:grounding"（可砍）
+```
+
+**传给 System 1 的 state 只含请求者权限内的内容**（第三个权限卡点）：
+
+```json
+{"need": {"phenomenon": "...", "slots": {"fiber": {"value": "锦纶氨纶", "quote": "..."}}, "profile": {...}},
+ "candidates": [{"id": "HY-LV205", "name": "...", "category": "...", "applicable": {...}, "unknown_slots": [...]}],
+ "hits": [{"title": "...", "text": "..."}]}
+```
+
+### 4.3 推荐与升级规则（WP-A2 实现，写死，不做配置）
+
+每轮发言后：抽取 → 觉追问（5.4）→ 若现象已知且**没有追问提示**，或业务员点了「直接推荐」，则匹配：
+- `choice == "none"`，或 `not confident` 且没有追问提示 → **升级**：发布 `escalate_need` 问题（第 ⑥ 节），`status="escalated"`；
+- `not confident` 但仍有追问提示 → 不推荐，继续追问；
+- 否则推荐 `choice`，`disclose` 选版本，对 L1 渲染，写 `recommend` 事件、披露审计、引用积分。
+
+---
+
+## ⑤ 觉（`huayan.jue`，WP-B1 / WP-B3）
+
+### 5.1 觉的输入：对象与状态
+
+```python
+ObjectType = Literal["slot", "theme", "knowledge", "actor"]
+
+class JueObject(BaseModel):
+    object_id: str
+    object_type: ObjectType
+    attrs: dict[str, float | int | str | bool]    # 命名见 5.2，不得增删字段名而不改契约
+
+class JueState(BaseModel):
+    at: datetime
+    mode: Literal["realtime", "scheduled"]
+    objects: dict[str, JueObject]
+    def to_s1_state(self, object_ids: list[str] | None = None) -> dict: ...
+        # {"at": iso, "objects": {id: {"type": ..., "attrs": {...}}}}
+```
+
+| 对象类型 | object_id | 模式 | 由谁构建 |
+|---|---|---|---|
+| `slot` | `slot:<session_id>/<slot>` | 实时 | `realtime_state(need, seeds, products, at)` |
+| `theme` | `theme:<phenomenon>|<slot>=<value>,...`（该现象 required_slots 中已知的部分，按槽位 id 排序） | 定时 | `scheduled_state(events, at, seeds, products)` |
+| `knowledge` | `knowledge:<product_id>|<slot>=<value>` | 定时 | 同上 |
+| `actor` | `actor:<actor_id>` | 定时 | 同上 |
+
+两个构建函数都在 `huayan.jue.state`（WP-B1），**只读 NeedState / 事件日志 / 种子 / 已发布产品**，不读需求卡、注入清单。
+
+### 5.2 属性命名表
+
+**slot（实时，追问补全；Jue-K 的特征也只来自这里）**
+
+| 属性 | 类型 | 含义 |
+|---|---|---|
+| `slot` | str | 槽位 id |
+| `phenomenon` | str | 现象 id；未识别为 `"unknown"` |
+| `filled` | bool | 已填 |
+| `unknown` | bool | 客户答过「不清楚」 |
+| `confidence` | float | 抽取置信度，未填为 0 |
+| `asked` | int | 业务员已追问次数 |
+| `required` | bool | 种子①中该现象必问 |
+| `turn` | int | 对话轮次 |
+| `n_filled` | int | 已填槽位数 |
+| `n_candidates` | int | 当前已知条件下的候选产品数 |
+| `splits` | int | 该槽位取各个值时，候选集会变成几种不同的集合（≥ 2 说明问了会改变推荐）；已填为 0 |
+| `prior_top` | float | 该现象下此槽位最常见取值的比例（种子③，没有则 0） |
+| `chem_savvy` | bool | 客户画像 |
+
+**theme（定时，机会汇聚）**：`phenomenon` str、`n_escalations` int（窗口内升级次数）、`n_customers` int（涉及客户数）、`n_matched` int（同主题被成功推荐次数）、`days_active` int（出现过的天数）、`open_project` bool（已有对应需求单在途）、`mean_p_none` float。
+
+**knowledge（定时，知识冲突）**：`product_id` str、`slot` str、`value` str、`claimed` bool（说明书声称适用）、`n_trials` int、`n_fail` int、`n_fail_product` int（失败原因为产品本身）、`fail_ratio` float、`n_recommended` int。
+
+**actor（定时，泄露风险）**：`role` str、`n_queries` int、`n_mech_requests` int、`n_blocked` int（被拦截的高层级命中数）、`blocked_top_share` float（被拦截命中中最集中的产品占比）、`n_distinct_products` int、`frozen` bool。
+
+定时窗口：机会汇聚、知识冲突 7 天，泄露风险 48 小时（`config/app.yaml` 可改）。
+
+### 5.3 模板 `config/templates/*.yaml`（一个模板一个文件）
+
+```python
+Family = Literal["ask_slot", "opportunity", "knowledge_conflict", "leak_risk"]
+
+class JueTemplate(BaseModel):
+    id: str
+    family: Family
+    object_type: ObjectType
+    decision_label: str                       # 「是否追问该信息」「是否立项」…
+    precondition: str | None = None           # 布尔表达式，只能引用 attrs.x
+    rule_score: str | None = None             # 数值表达式，规则模式下的 p_need（结果截断到 [0,1]）；为空时 1.0
+    worth_prompt: str                         # Jev 是非题，含 {object}
+    title: str                                # 发布后的问题标题，可含 {object} 与 {attrs.x}
+    owner_role: Role                          # ask_slot 为 sales（不进总线）
+    bounty_points: int = 0
+```
+
+表达式求值器 `huayan.jue.expr` 复制自 JUE `discovery/expr.py`，只保留 `attrs.x`。基线（B1、B2、规则告警）也写成模板，放在 `config/baselines/<name>/`，由同一个原型在规则模式下运行。
+
+### 5.4 觉模型接口
+
+```python
+class ScoredDecision(BaseModel):
+    family: Family
+    object_id: str
+    p_need: float | None = Field(default=None, ge=0, le=1)   # None = 前置条件未通过
+    urgency: float | None = None
+    precondition_passed: bool = True
+    template_id: str | None = None
+
+class JueOutput(BaseModel):
+    at: datetime
+    mode: Literal["realtime", "scheduled"]
+    model: Literal["jue_proto", "jue_k"]
+    scored_by: Literal["onejev", "rule", "jue_k"]
+    decisions: list[ScoredDecision]           # 覆盖本次评估的全部「模板 × 对象」；全部低概率即「无事」
+
+class QuestionModel(Protocol):
+    name: Literal["jue_proto", "jue_k"]
+    def propose(self, state: JueState) -> JueOutput: ...
+```
+
+- **`JueProto(templates_dir, system1, mode)`**：模板 × 匹配 `object_type` 的对象枚举全部组合；前置条件不通过的 `p_need=None`。`system1` 为 `OneJevClient` 时，通过者的 worth 题**一次** `ask` 批量打分（caller `jue:proto`），`scored_by="onejev"`；否则**不调用任何模型**，用 `rule_score`，`scored_by="rule"`。
+- **`JueK(model_dir)`**：只处理 `slot` 对象（实时追问补全），本地推理，`scored_by="jue_k"`（WP-B3）。
+- **铁律**：两个实现都不调用网关；觉每次 `propose` 写一条 `kind="jue"` 计量（耗时、对象数）。
+
+```python
+# huayan.jue.publish（WP-B1）
+def select_asks(out: JueOutput, state: JueState, seeds: Seeds, threshold: float, max_asks: int = 2) -> list[AskHint]: ...
+    # ask_slot 中 p_need ≥ threshold 的，按 p_need 降序取前 max_asks
+def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], bus: QuestionBus,
+            threshold: float) -> list[Question]: ...
+    # 定时：p_need ≥ threshold 的组合生成问题；证据取对象属性中的关键数字与相关事件 id
+
+# huayan.jue.scan（WP-B1）
+def scan(events: EventLog, at: datetime, model: QuestionModel, seeds: Seeds, products: list[Product],
+         templates: dict[str, JueTemplate], bus: QuestionBus, threshold: float) -> list[Question]: ...
+    # scheduled_state → propose → publish；新发布的问题列表
+```
+
+### 5.5 定时发现的对照接口（WP-E）
+
+```python
+class Discoverer(Protocol):
+    name: Literal["jue_proto", "rule_alert", "llm_poll"]
+    def discover(self, events: EventLog, at: datetime) -> list[Question]: ...
+```
+
+三者输入相同（同一事件日志），都不得读取注入清单和需求卡。
+
+---
+
+## ⑥ 问题总线（`huayan.bus`，WP-0 提供）
+
+```python
+QFamily = Literal["escalate_need", "opportunity", "knowledge_conflict", "leak_risk", "decrypt_request"]
+
+class Evidence(BaseModel):
+    summary: str
+    event_ids: list[str] = []
+    quote: str = ""
+
+class Resolution(BaseModel):
+    action: Literal["draft_requirement", "approve_project", "update_sheet", "freeze_access",
+                    "approve_decrypt", "reject_decrypt", "dismiss"]
+    by: str
+    note: str = ""
+
+class Question(BaseModel):
+    id: str
+    family: QFamily
+    title: str
+    object_id: str                            # sess:3 / theme:... / knowledge:... / actor:...
+    owner_role: Role
+    owner_id: str | None = None               # 指定到人（解密审批、知识冲突给知识归属人）
+    status: Literal["open", "resolved", "dismissed"] = "open"
+    p_need: float | None = None
+    scored_by: str                            # onejev / llm_fallback / mock / rule / jue_k / human
+    discoverer: Literal["jev", "jue_proto", "jue_k", "rule_alert", "llm_poll", "human"]
+    evidence: list[Evidence] = []
+    refs: dict[str, str] = {}                 # session_id / requirement_id / product_id / customer_id …
+    bounty_points: int = 0
+    dedup_key: str                            # f"{family}:{object_id}"
+    created_at: datetime
+    resolved_at: datetime | None = None
+    resolution: Resolution | None = None
+
+class QuestionBus:
+    def __init__(self, events: EventLog, path: Path | None = None, suppress_hours: float = 24): ...
+        # path：questions.jsonl，每次变化追加一行快照；None 时只在内存
+    def publish(self, q: Question) -> Question: ...
+        # 同 dedup_key 有 open 问题：合并证据，返回已有问题；
+        # 同 dedup_key 在 suppress_hours 内被 dismissed：丢弃，返回被丢弃的问题本身（status 不变）；
+        # 否则入库，写 question_published 事件。id 由总线分配。
+    def get(self, qid: str) -> Question: ...
+    def list(self, owner_role: Role | None = None, status: str | None = "open", family: QFamily | None = None) -> list[Question]: ...
+    def resolve(self, qid: str, resolution: Resolution, at: datetime) -> Question: ...
+        # dismiss → status=dismissed，其余 → resolved；写 question_resolved 事件
+```
+
+路由在 `config/app.yaml` 的 `routing`：`escalate_need → pm`、`opportunity → pm`、`knowledge_conflict → rd`（owner_id = 产品归属人）、`leak_risk → supervisor`、`decrypt_request → rd`（owner_id = 产品归属人）。发布方负责按路由填写 `owner_role` / `owner_id`。
+
+---
+
+## ⑦ 升级与回流（`huayan.escalation`，WP-A3）
+
+```python
+class ReqItem(BaseModel):
+    text: str
+    slot: str | None = None
+    quote_refs: list[str] = []                # turn id，可回查客户原话
+
+class PMDraft(BaseModel):                     # 产品经理 Agent 结构化输出（caller "agent:pm_draft"）
+    direction: str                            # 产品方向，如「低浴比条件下的锦纶氨纶匀染保护剂」
+    product_lang: list[ReqItem]               # 产品语言（L2）
+    chem_lang: list[ReqItem]                  # 化学语言研发需求单（L2/L3 可见）
+
+class Requirement(BaseModel):
+    id: str                                   # "req:<n>"
+    question_id: str
+    session_ids: list[str]
+    phenomenon: str
+    known_slots: dict[str, str]
+    direction: str
+    product_lang: list[ReqItem]
+    chem_lang: list[ReqItem]
+    status: Literal["draft", "confirmed", "released", "rejected"]
+    drafted_by: str                           # "agent:pm" 或 "pm:P01"
+    confirmed_by: str | None = None
+    product_id: str | None = None             # 发布后的新产品
+    created_at: datetime
+
+class Trial(BaseModel):
+    id: str
+    product_id: str
+    requirement_id: str | None = None
+    rd: str
+    conditions: dict[str, str]                # 试样条件（槽位 → 取值）
+    result: Literal["pass", "fail"]
+    cause: Literal["none", "product", "equipment", "operation"]
+    note: str = ""
+    at: datetime
+```
+
+```python
+# huayan.escalation（WP-A3）
+def draft_requirement(q: Question, sessions: list[Session], gateway, at) -> Requirement: ...
+    # caller "agent:pm_draft"；输入只含 L2 可见内容（会话原话、槽位、案例、转化对照）
+def release_product(req: Requirement, product: Product, kb, ledger, events, by: str, at) -> Product: ...
+    # product.status 改为 released → kb.add_product → 转化对照（L2）入库 → 给 product.owner 记 product_released
+    # → 写 product_released 事件 → req.status = "released"
+```
+
+演示中新产品取自种子里 `status="project"` 的产品（研发界面预填，可修改），模拟「研发在 ELN 中完成开发」。
+
+---
+
+## ⑧ 事件日志（`huayan.events`，WP-0 提供）
+
+```python
+EventKind = Literal["turn", "extraction", "ask_hint", "recommend", "escalate", "retrieve", "access_denied",
+                    "decrypt_request", "decrypt_approve", "question_published", "question_resolved",
+                    "requirement_confirmed", "trial", "product_released", "sheet_updated", "access_frozen"]
+
+class Event(BaseModel):
+    id: str                                   # 日志分配
+    ts: datetime
+    kind: EventKind
+    actor: str
+    session_id: str | None = None
+    payload: dict[str, Any] = {}
+
+class EventLog:
+    def __init__(self, path: Path | None = None): ...          # path 为 None 时只在内存
+    def append(self, kind: EventKind, actor: str, payload: dict, *, session_id: str | None = None,
+               ts: datetime | None = None) -> Event: ...        # ts 默认 get_clock().now()
+    def query(self, kinds: list[EventKind] | None = None, since: datetime | None = None,
+              until: datetime | None = None, actor: str | None = None) -> list[Event]: ...
+```
+
+**payload 字段（觉的定时状态只依赖这些字段）**
+
+| kind | payload |
+|---|---|
+| `turn` | `turn_id, speaker, text` |
+| `extraction` | `intent, phenomenon, filled: {slot: value}, extracted_by` |
+| `ask_hint` | `slots: [slot], p: {slot: p}, model` |
+| `recommend` | `product_id, version, p_choice, candidate_ids, phenomenon, known: {slot: value}, customer_id` |
+| `escalate` | `question_id, phenomenon, known, customer_id, p_none` |
+| `retrieve` | `query, intent, actor_level, hit_ku_ids, n_blocked, blocked_product_ids` |
+| `access_denied` | `object_id, reason` |
+| `decrypt_request` / `decrypt_approve` | `question_id, customer_id, product_id` |
+| `question_published` / `question_resolved` | `question_id, family, object_id, action`（resolved 时） |
+| `requirement_confirmed` | `requirement_id, phenomenon, known` |
+| `trial` | `trial_id, product_id, conditions, result, cause` |
+| `product_released` | `product_id, requirement_id, phenomenon, applicable` |
+| `sheet_updated` | `product_id, slot, values` |
+| `access_frozen` | `actor_id` |
+
+---
+
+## ⑨ 模拟与评测数据（`huayan.sim` WP-B2，`huayan.eval` WP-E）
+
+**以下文件只有模拟器和离线评估可以读。** 觉、Jev、Agent、应用门面都不得 import 读取它们的代码。
+
+```python
+class NeedCard(BaseModel):                    # data/sim/cards.jsonl
+    id: str
+    phenomenon: str
+    slots: dict[str, str]                     # 全部槽位真值
+    unknown_slots: list[str] = []             # 客户自己也说不清的槽位
+    opening_slots: list[str] = []             # 首句主动透露的槽位
+    customer_id: str
+    chem_savvy: bool
+    wants_mechanism: bool
+    truth_product: str | None                 # domain.correct_product；None = 应升级
+
+class Injection(BaseModel):                   # data/week/<week_id>/injections.jsonl
+    id: str
+    family: Literal["opportunity", "knowledge_conflict", "leak_risk"]
+    object_id: str                            # 按 5.1 的格式
+    hard_negative: bool
+    onset: datetime
+    earliest: datetime                        # 最早合理发现时刻
+    latest: datetime                          # 最晚有效发现时刻
+
+class WeekItem(BaseModel):                    # data/week/<week_id>/script.jsonl，驱动真实链路的剧本
+    at: datetime
+    kind: Literal["session", "trial", "query"]
+    actor: str                                # 业务员 / 研发
+    card_id: str | None = None                # session：模拟客户按这张卡回答
+    text: str = ""                            # query：业务员的提问
+    trial: Trial | None = None
+```
+
+```python
+# huayan.sim（WP-B2）
+class SimCustomer:
+    def __init__(self, card: NeedCard, seeds: Seeds, rng: random.Random, gateway=None): ...
+        # gateway 为 None：模板模式（用种子中的口语说法，零成本）；否则大模型扮演（caller "sim:customer"）
+    def opening(self) -> str: ...             # 只说现象 + opening_slots
+    def reply(self, sales_text: str) -> str: ...   # 被问到才透露；unknown_slots 答「不太清楚」
+
+def make_cards(seeds: Seeds, n: int, rng) -> list[NeedCard]: ...
+def make_week(seeds: Seeds, start: datetime, days: int, rng) -> tuple[list[WeekItem], list[NeedCard], list[Injection]]: ...
+```
+
+**Jue-K 训练数据** `data/jue_k/steps.csv`：每行 = 一条轨迹的一轮 × 一个槽位；列 = 5.2 中 slot 对象的全部属性 + `card_id, traj_id, label, split`。`label` 为事后有用性（`JUE_K_TRAINING.md` 第 3 节）；`split ∈ {train, val, test, heldout}`。
+
+**Jue-K 产物** `models/jue_k/`：`model.pkl`、`features.json`（特征名与编码）、`model_card.md`、`metrics.json`。特征构建 `huayan.jue.features.build(obj: JueObject) -> dict[str, float]` 训练与推理共用。
+
+**评测产物** `docs/reports/<name>/`：`metrics.json`、图（png）、`README.md`（一页说明，结果如实写）。
+
+---
+
+## ⑩ 模型网关与计量（复制自 JUE）
+
+```python
+class Tier(str, Enum):
+    FAST = "fast"; STRONG = "strong"; BACKUP = "backup"; MOCK = "mock"
+
+class Message(BaseModel):
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str
+    tool_call_id: str | None = None
+    tool_calls: list[LLMToolCall] = []
+
+class LLMRequest(BaseModel):
+    tier: Tier
+    caller: str                               # "<模块>:<用途>"，见下表
+    messages: list[Message]
+    tools: list[dict] | None = None
+    temperature: float = 0.2
+    max_tokens: int = 2048
+    timeout_s: float = 60
+
+class LLMToolCall(BaseModel):  call_id: str; name: str; arguments: dict[str, Any]
+class Usage(BaseModel):        input_tokens: int; output_tokens: int
+
+class LLMResponse(BaseModel):
+    content: str | None
+    tool_calls: list[LLMToolCall] = []
+    usage: Usage
+    latency_ms: float
+    model: str
+    tier: Tier
+    cost: float | None
+    fallback_used: bool = False
+
+class ModelGateway(Protocol):
+    def complete(self, req: LLMRequest) -> LLMResponse: ...
+    def structured(self, req: LLMRequest, schema: type[BaseModel]) -> tuple[BaseModel, LLMResponse]: ...
+```
+
+- `OpenAICompatGateway`（重试、降级、录制/回放缓存）与 `MockGateway`（`canned[caller]`）从 JUE 复制，只改 import。**录制/回放缓存就是「记录回放」演示模式的实现**：现场跑一次写缓存，回放时同样的输入直接命中。
+- caller 一览：`agent:extract`、`agent:l1_answer`、`agent:pm_draft`、`jev:match`、`jev:disclose`、`jev:grounding`（Jev 走大模型降级时透传）、`sim:customer`、`baseline:llm_poll`、`baseline:one_shot`。**不得出现 `jue:` 开头的大模型调用。**
+
+```python
+class MeterRecord(BaseModel):
+    ts: datetime                              # 墙钟
+    run_id: str
+    caller: str
+    kind: Literal["llm", "s1", "jue"]
+    model: str | None = None
+    impl: str | None = None
+    degraded: bool = False
+    n_questions: int | None = None
+    n_objects: int | None = None              # jue：本次评估的对象数
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: float = 0
+    cost: float | None = None
+    ok: bool = True
+    fallback_used: bool = False
+
+class FileMeter:  # FileMeter(run_dir, run_id).record(*, caller, kind, **fields)；写 metering.jsonl
+```
+
+---
+
+## ⑪ 配置 `config/app.yaml`
+
+```yaml
+seeds_dir: seeds
+templates_dir: config/templates
+run_root: runs
+system1_impl: mock            # mock | llm_fallback | onejev
+gateway_mock: true            # true 时用 MockGateway（离线）；现场演示设 false
+extractor: rule               # rule | llm
+realtime_model: jue_proto     # jue_proto | jue_k
+jue_k_dir: models/jue_k
+llm_cache_dir: runs/llm_cache # 录制/回放缓存；为空则不缓存
+replay: false                 # true = 记录回放模式，界面标明
+thresholds: {ask: 0.5, max_asks: 2, match: 0.5, publish: 0.5}
+windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
+routing: {escalate_need: pm, opportunity: pm, knowledge_conflict: rd, leak_risk: supervisor, decrypt_request: rd}
+points: {cited: 1, trial_pass: 5, product_released: 10}
+```
+
+`config/models.yaml`、`config/system1.yaml` 格式同 JUE。
+
+---
+
+## ⑫ 应用门面 `huayan.app.HuayanApp`（WP-A2 创建，A3、I 补全）
+
+界面**只**通过它访问系统；按身份裁剪在门面内完成，界面不做权限判断。
+
+```python
+class SessionView(BaseModel):
+    session_id: str
+    viewer: str
+    viewer_level: Level
+    turns: list[Turn]
+    slots: list[SlotFill]                     # 槽位 + 原话
+    hints: list[AskHint]
+    replies: list[AssistantReply]             # 已按查看者层级过滤
+    card: RecommendationCard | None
+    status: str
+    escalation_question_id: str | None = None
+    requirement: Requirement | None = None    # 只对 L2/L3 返回
+
+class RunStatus(BaseModel):
+    run_id: str
+    replay: bool
+    system1_impl: str                         # Jev 实际实现
+    realtime_model: str                       # 觉实时模型
+    extractor: str
+    gateway_mock: bool
+    simulated_data: bool = True
+    seeds_placeholder: bool
+
+class HuayanApp:
+    @classmethod
+    def build(cls, config_path: str = "config/app.yaml", run_id: str | None = None) -> "HuayanApp": ...
+    seeds: Seeds; kb: KnowledgeBase; bus: QuestionBus; events: EventLog
+    audit: AuditLog; ledger: Ledger; actors: dict[str, Actor]
+
+    # L1（WP-A2）
+    def start_session(self, customer_id: str, sales_id: str) -> Session: ...
+    def add_turn(self, session_id: str, speaker: Literal["customer", "sales"], text: str) -> Session: ...
+    def recommend_now(self, session_id: str) -> Session: ...
+    def view_session(self, session_id: str, viewer_id: str) -> SessionView: ...
+    def sessions(self) -> list[Session]: ...
+    def jue_trace(self, session_id: str) -> list[JueOutput]: ...         # 该会话每轮的实时觉输出，觉视图用
+    def status(self) -> RunStatus: ...
+
+    # L2 / L3（WP-A3）
+    def draft_requirement(self, question_id: str, by: str) -> Requirement: ...
+    def confirm_requirement(self, req_id: str, by: str, edited: PMDraft | None = None) -> Requirement: ...
+    def requirements(self, viewer_id: str) -> list[Requirement]: ...      # L1 调用抛 PermissionDenied
+    def record_trial(self, trial: Trial) -> Trial: ...
+    def release_product(self, req_id: str, product: Product, by: str) -> Product: ...
+    def request_decrypt(self, session_id: str, by: str) -> Question: ...
+    def decide_decrypt(self, question_id: str, by: str, approve: bool) -> Question: ...
+
+    # 觉定时发现与处置（WP-I）
+    def scan(self, at: datetime | None = None) -> list[Question]: ...
+    def resolve(self, question_id: str, action: str, by: str, note: str = "") -> Question: ...
+        # approve_project → 起草需求单；update_sheet → kb.update_applicable；freeze_access → permission.freeze
+```
+
+---
+
+## ⑬ 运行产物 `runs/<run_id>/`
+
+`events.jsonl`、`audit.jsonl`、`ledger.jsonl`、`metering.jsonl`、`questions.jsonl`（每次变化追加一行快照）、`sessions/<session_id>.json`（会话结束或每轮后覆盖写）。`runs/` 不入库，演示用的记录回放目录除外（`runs/demo_record/`）。
