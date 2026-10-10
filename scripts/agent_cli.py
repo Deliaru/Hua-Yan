@@ -75,7 +75,7 @@ def main():
     ap.add_argument("--run-id")
     args = ap.parse_args()
     app = build(args.config, args.run_id)
-    hub = AgentHub(app)                       # WP-I 在 HuayanApp.build 挂上 app.agents 后改用它
+    hub = app.agents
     if args.prelude:
         for customer, sales, turns in PRELUDE:
             session = app.start_session(customer, sales)

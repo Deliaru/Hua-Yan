@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665964764890372-1292","name":"record_customer_turn","arguments":{"text":"锦氨布深一块浅一块，应该是 pH 没控住、上染太快，你们有没有匀染剂？"}}],"usage":{"input_tokens":1016,"output_tokens":43},"latency_ms":3859.3447230014135,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

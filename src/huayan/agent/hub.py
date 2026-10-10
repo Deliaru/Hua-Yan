@@ -133,15 +133,19 @@ class AgentHub:
     # ---- 派单 ----
 
     def dispatch(self) -> list[Conversation]:
-        out = []
+        """同一次派单里同一个人（同一会话）的新问题合成一条通知，助手一轮看全再处理。"""
+        batches: dict[tuple[str, str | None], list] = {}
         for q in self.app.bus.list(status="open"):
             if q.id in self._dispatched or q.owner_role not in ("sales", "pm", "rd"):
                 continue
             owner = q.owner_id or min(a.id for a in self.app.actors.values() if a.role == q.owner_role)
-            evidence = "；".join(e.summary for e in q.evidence) or "无"
-            out.append(self.notify(owner, f"新问题 {q.id}（{q.family}）：{q.title}。证据：{evidence}",
-                                   q.refs.get("session_id") if q.owner_role == "sales" else None))
-            self._dispatched.add(q.id)                       # 通知成功后才算派过；失败的下次 dispatch 再派
+            batches.setdefault((owner, q.refs.get("session_id") if q.owner_role == "sales" else None), []).append(q)
+        out = []
+        for (owner, session_id), questions in batches.items():
+            lines = [f"{q.id}（{q.family}）：{q.title}。证据：{'；'.join(e.summary for e in q.evidence) or '无'}"
+                     for q in questions]
+            out.append(self.notify(owner, f"新问题 {len(questions)} 个：\n" + "\n".join(lines), session_id))
+            self._dispatched.update(q.id for q in questions)   # 通知成功后才算派过；失败的下次 dispatch 再派
         return out
 
     # ---- 查询 ----
@@ -171,16 +175,11 @@ class AgentHub:
 
 
 def _run(fn, ctx: ToolContext, params, args: dict) -> ToolResult:
-    """门面 / 知识库的拒绝与校验失败原样回给模型；模型给了不存在的 id（门面按 id 取值抛 KeyError，键就是模型给的参数）
-    也回给模型。其他异常（含内部缺字段的 KeyError）照常抛出。"""
+    """门面 / 知识库的拒绝与校验失败（含不存在的 id）原样回给模型；其他异常照常抛出。"""
     try:
         return fn(ctx, params.model_validate(args))
     except (PermissionDenied, ValueError) as exc:
         return ToolResult(ok=False, error=str(exc))
-    except KeyError as exc:
-        if exc.args and exc.args[0] in args.values():
-            return ToolResult(ok=False, error=f"找不到 {exc.args[0]}")
-        raise
 
 
 def _append(path, line: str) -> None:

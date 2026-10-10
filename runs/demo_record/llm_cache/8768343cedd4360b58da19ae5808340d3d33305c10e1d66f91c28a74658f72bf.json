@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"release_product-1791665929871395439-1288","name":"release_product","arguments":{"req_id":"req:1"}}],"usage":{"input_tokens":2868,"output_tokens":20},"latency_ms":3440.6518019968644,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

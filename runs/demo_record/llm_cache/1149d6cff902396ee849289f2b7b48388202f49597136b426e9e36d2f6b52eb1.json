@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665775322784059-1259","name":"record_customer_turn","arguments":{"text":"锦氨布在气流机里染，颜色不匀，回修了好几次"}}],"usage":{"input_tokens":1008,"output_tokens":35},"latency_ms":3174.754772997403,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

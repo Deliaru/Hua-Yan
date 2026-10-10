@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791665954162505750-1291","name":"search_knowledge","arguments":{"query":"LV205"}}],"usage":{"input_tokens":1125,"output_tokens":19},"latency_ms":5077.500843995949,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

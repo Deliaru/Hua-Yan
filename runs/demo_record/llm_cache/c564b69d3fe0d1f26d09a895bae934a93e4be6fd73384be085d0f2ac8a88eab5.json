@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791665838083884879-1272","name":"search_knowledge","arguments":{"kind":"translation","query":"匀染"}}],"usage":{"input_tokens":4917,"output_tokens":23},"latency_ms":3934.6439970031497,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

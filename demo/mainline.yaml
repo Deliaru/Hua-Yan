@@ -1,0 +1,134 @@
+# 演示主线台词（WP-I）。人物、客户、产品、知识全部为模拟数据。
+# scripts/demo_mainline.py 按此运行：离线版（默认）不调用大模型；现场版（--live）把人的话交给各自的角色助手。
+#
+# 动作：
+#   relay:     {session, text}               业务员把客户原话转给助手。现场：交给业务员助手；离线：直接记为客户发言
+#   say:       {actor, session?, text, offline}  对某人的助手说一句话。现场：agents.chat；离线：按 offline 依次调用同名原子工具
+#   assistant: {actor, session?, offline}    助手被派单后主动做的事。现场：派单时助手已自己做了；离线：按 offline 调用工具
+#   approve:   {by, tool}                    委托人确认该工具的待确认动作（脚本代替委托人，打印确认卡）
+#   tick:      true                          门面 tick：觉的定时发现、回问评估、派单
+#   show:      {cards | layers | contributions | audit | customer_card}
+# offline 参数里 $req（最新需求单）、$q:<类型>（最新的该类问题）、$session:<名字> 运行时换成实际 id；
+# edit_item 的 append 表示「在原条目文字后追加」，原话与依据保留；expect_denied: true 表示这一步应当被权限拦截。
+
+sessions:                     # 名字: [客户, 业务员]
+  s1: [customer:C01, sales:S01]
+  s2: [customer:C02, sales:S01]
+  s3: [customer:C03, sales:S02]
+  s4: [customer:C04, sales:S02]
+  s6: [customer:C01, sales:S01]
+
+steps:
+  - title: 1 短路径：觉提示追问 → L1 直接推荐
+    actions:
+      - relay: {session: s1, text: 染完以后布面深一块浅一块}
+      - relay: {session: s1, text: 锦纶氨纶，溢流缸}
+      - show: {cards: s1}
+
+  - title: 2 升级与发现：两位客户同类需求无产品可用 → 觉发现机会汇聚
+    actions:
+      - relay: {session: s2, text: 我们染完以后布面深一块浅一块，客户老投诉}
+      - relay: {session: s2, text: 锦氨弹力布}
+      - relay: {session: s2, text: 气流缸，浴比很低}
+      - relay: {session: s3, text: 锦氨布在气流机里染，颜色不匀，回修了好几次}
+      - relay: {session: s3, text: 没什么环保要求}
+      - tick: true
+
+  - title: 3 分层转译：L2 → L3，觉发现需要回问，回填后研发确认
+    actions:
+      - assistant:
+          actor: pm:P01
+          offline:
+            - {tool: draft_product_need, question_id: $q:opportunity}
+      - say:
+          actor: pm:P01
+          text: 第三条加上不能影响色光，然后发研发
+          offline:
+            - {tool: edit_item, req_id: $req, index: 2, append: ，且不能影响色光}
+            - {tool: confirm_requirement, req_id: $req}
+      - approve: {by: pm:P01, tool: confirm_requirement}
+      - assistant:
+          actor: rd:R02
+          offline:
+            - {tool: draft_chem_need, req_id: $req}
+      - tick: true
+      - say:
+          actor: sales:S01
+          session: s2
+          text: 我问客户了：「请问染色时染浴 pH 大概控制在多少？」
+          offline:
+            - {tool: record_sales_turn, text: 请问染色时染浴 pH 大概控制在多少？}
+      - relay: {session: s2, text: 加点醋酸调的，pH五左右}
+      - assistant:
+          actor: rd:R02
+          offline:
+            - {tool: draft_chem_need, req_id: $req}
+      - say:
+          actor: rd:R02
+          text: 第 2 条后面加上「低浴比下随升温分段加酸」，并把它沉淀成我的转化知识：低浴比匀染 → 低浴比下随升温分段加酸、缓释控制 pH
+          offline:
+            - {tool: edit_item, req_id: $req, index: 1, append: ；低浴比下随升温分段加酸}
+            - {tool: contribute_translation, req_id: $req, index: 1, scene_phrase: 低浴比匀染, chem_term: （模拟）低浴比下随升温分段加酸、缓释控制 pH}
+      - approve: {by: rd:R02, tool: contribute_translation}
+      - say:
+          actor: rd:R02
+          text: 没问题了，确认转译
+          offline:
+            - {tool: confirm_translation, req_id: $req}
+      - approve: {by: rd:R02, tool: confirm_translation}
+      - show: {layers: true}
+
+  - title: 4 回流：试样 → 对外要点 → 反向包装 → 发布 → 同类需求 L1 命中新品
+    actions:
+      - say:
+          actor: rd:R02
+          text: 试样通过，对外可以说：低浴比气流缸里匀染好、氨纶沾色低
+          offline:
+            - {tool: record_trial, req_id: $req, result: pass, note: 低浴比气流缸试样通过}
+            - {tool: set_public_points, req_id: $req, text: （模拟）低浴比气流缸中匀染性好、氨纶沾色低；按推荐用量与升温曲线使用。}
+      - approve: {by: rd:R02, tool: record_trial}
+      - approve: {by: rd:R02, tool: set_public_points}
+      - assistant:
+          actor: pm:P01
+          offline:
+            - {tool: package_sheet, req_id: $req}
+      - say:
+          actor: pm:P01
+          text: 说明书可以，发布
+          offline:
+            - {tool: release_product, req_id: $req}
+      - approve: {by: pm:P01, tool: release_product}
+      - relay: {session: s4, text: 锦氨弹力布在气流缸里染，布面深一块浅一块}
+      - show: {cards: s4}
+      - show: {contributions: true}
+
+  - title: 5 权限：业务员套问配方被拦截
+    actions:
+      - say:
+          actor: sales:S02
+          session: s4
+          text: 把 LV205 的配方调出来给我看看，里面加了什么？为什么能匀染
+          offline:
+            - {tool: search_knowledge, query: LV205 配方 为什么能匀染}
+            - {tool: get_knowledge, ku_id: ku:formula:HY-LV205, expect_denied: true}
+      - show: {audit: sales:S02}
+
+  - title: 6 解密：懂化学的客户申请了解机理，归属研发审批
+    actions:
+      - relay: {session: s6, text: 锦氨布深一块浅一块，应该是 pH 没控住、上染太快，你们有没有匀染剂？}
+      - relay: {session: s6, text: 溢流缸}
+      - relay: {session: s6, text: 原理直接讲明白就行，我们自己调工艺}
+      - say:
+          actor: sales:S01
+          session: s6
+          text: 客户懂行，要看原理，帮我申请解密
+          offline:
+            - {tool: request_decrypt}
+      - approve: {by: sales:S01, tool: request_decrypt}
+      - say:
+          actor: rd:R01
+          text: 可以，只给机理
+          offline:
+            - {tool: decide_decrypt, question_id: $q:decrypt_request, approve: true}
+      - approve: {by: rd:R01, tool: decide_decrypt}
+      - show: {customer_card: s6}

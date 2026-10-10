@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665729886064668-1252","name":"record_customer_turn","arguments":{"text":"染完以后布面深一块浅一块"}}],"usage":{"input_tokens":999,"output_tokens":26},"latency_ms":3803.5949840050307,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

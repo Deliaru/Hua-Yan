@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665738488728931-1253","name":"record_customer_turn","arguments":{"text":"锦纶氨纶，溢流缸"}}],"usage":{"input_tokens":1072,"output_tokens":25},"latency_ms":4307.383007995668,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

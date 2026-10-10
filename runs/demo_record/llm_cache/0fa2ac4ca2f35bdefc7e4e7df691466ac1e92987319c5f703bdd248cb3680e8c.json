@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791665851946992240-1275","name":"search_knowledge","arguments":{"query":"气流","kind":"translation"}}],"usage":{"input_tokens":5486,"output_tokens":23},"latency_ms":2374.86211599753,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

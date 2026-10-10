@@ -1,0 +1,1 @@
+{"content":"已帮您记录客户反馈（染色不匀/色花现象）。\n\n目前还需要了解面料和设备信息，建议您可以这样追问客户：\n> “请问咱们这是什么成分的面料？另外染色用的是什么设备，比如溢流机还是气流机？”","tool_calls":[],"usage":{"input_tokens":1184,"output_tokens":59},"latency_ms":4245.942888999707,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

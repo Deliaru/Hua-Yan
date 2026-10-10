@@ -1,0 +1,1 @@
+{"content":"发布新产品的提议已生成确认卡 **act:6**，目前正在等待您的确认。\n\n助手无法直接替您执行确认动作，请您前往确认卡 **act:6** 点击确认，确认后即可完成发布并使 L1 直接推荐该产品。","tool_calls":[],"usage":{"input_tokens":2641,"output_tokens":58},"latency_ms":4917.913731995213,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

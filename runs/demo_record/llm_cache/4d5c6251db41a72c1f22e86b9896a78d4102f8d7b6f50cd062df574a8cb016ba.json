@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665971330224098-1293","name":"record_customer_turn","arguments":{"text":"溢流缸"}}],"usage":{"input_tokens":1076,"output_tokens":20},"latency_ms":2725.840901999618,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

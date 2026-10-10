@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from huayan.agent import AgentHub
 from huayan.app import HuayanApp
 from huayan.knowledge import PermissionDenied
 
@@ -14,7 +13,7 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     path = tmp_path / "app.yaml"
     path.write_text(yaml.safe_dump(config), encoding="utf-8")
     app = HuayanApp.build(str(path))
-    hub = AgentHub(app)
+    hub = app.agents
     pm = hub.context("pm:P01")
     l3_texts = [u.text for u in app.kb._units.values() if u.level == 3]
 

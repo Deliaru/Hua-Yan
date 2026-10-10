@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"list_my_questions-1791666000471948102-1297","name":"list_my_questions","arguments":{}}],"usage":{"input_tokens":2044,"output_tokens":12},"latency_ms":5237.7108889995725,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

@@ -1,0 +1,1 @@
+{"content":"已帮您记录！等客户回复 pH 值后，您直接发给我记录就行，系统会自动回填给研发。","tool_calls":[],"usage":{"input_tokens":1638,"output_tokens":26},"latency_ms":3083.262909000041,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

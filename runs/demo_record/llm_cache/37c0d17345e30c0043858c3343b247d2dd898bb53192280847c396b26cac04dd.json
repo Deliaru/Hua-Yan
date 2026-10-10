@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665764876247408-1257","name":"record_customer_turn","arguments":{"text":"气流缸，浴比很低"}}],"usage":{"input_tokens":1115,"output_tokens":25},"latency_ms":4328.623517001688,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

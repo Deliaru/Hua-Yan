@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_sales_turn-1791665867744819215-1277","name":"record_sales_turn","arguments":{"text":"请问染色时染浴 pH 大概控制在多少？"}}],"usage":{"input_tokens":1480,"output_tokens":30},"latency_ms":3027.6593870003126,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

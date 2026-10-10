@@ -576,8 +576,10 @@ class HuayanApp:
         state = requirement_state(req, need, self.seeds, self.kb, at)
         out = self._propose(self.jue_realtime, state)
         refs = {oid: {"session_id": need.session_id, "sales_id": need.sales_id} for oid in state.objects}
-        return publish(out, state, self.templates, self.bus, self.config["thresholds"]["publish"],
-                       seeds=self.seeds, refs=refs)
+        # 回问和实时追问一样是「问不问客户」：Jue-K 输出校准概率，用同一个 ask_jue_k 阈值
+        thresholds = self.config["thresholds"]
+        threshold = thresholds["ask_jue_k"] if self.jue_realtime.name == "jue_k" else thresholds["publish"]
+        return publish(out, state, self.templates, self.bus, threshold, seeds=self.seeds, refs=refs)
 
     def tick(self):
         now = get_clock().now()

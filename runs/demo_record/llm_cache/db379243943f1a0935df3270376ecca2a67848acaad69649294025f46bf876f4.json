@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665941241420262-1289","name":"record_customer_turn","arguments":{"text":"锦氨弹力布在气流缸里染，布面深一块浅一块"}}],"usage":{"input_tokens":1008,"output_tokens":35},"latency_ms":3163.0147920004674,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

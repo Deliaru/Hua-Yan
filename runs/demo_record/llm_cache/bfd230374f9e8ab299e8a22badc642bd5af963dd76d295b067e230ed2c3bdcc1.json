@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"decide_decrypt-1791666020807311048-1300","name":"decide_decrypt","arguments":{"approve":true,"question_id":"q:5"}}],"usage":{"input_tokens":2212,"output_tokens":25},"latency_ms":3982.5661389986635,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}
