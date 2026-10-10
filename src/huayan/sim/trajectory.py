@@ -36,7 +36,8 @@ def _no_gain(need: NeedState, card: NeedCard, slot: str) -> bool:
         or need.known().get(slot) == card.slots[slot]
 
 
-def _answer(need: NeedState, card: NeedCard, slot: str, seeds: Seeds, rng: random.Random, turn: int) -> None:
+def answer(need: NeedState, card: NeedCard, slot: str, seeds: Seeds, rng: random.Random, turn: int) -> None:
+    """客户按真值回答该槽位，经过抽取噪声写入 NeedState（追问策略评估的回放也用它）。"""
     tid = f"turn:{need.session_id}:{turn}"
     if slot in card.unknown_slots:
         need.slots[slot] = SlotFill(slot=slot, value=None, status="unknown", confidence=0.7, quote="不太清楚", turn_id=tid)
@@ -79,14 +80,14 @@ def trajectory(card: NeedCard, seeds: Seeds, kb, model: QuestionModel, rng: rand
     need = NeedState(session_id=card.id, customer_id=card.customer_id, sales_id="sales:S01", phenomenon=card.phenomenon,
                      turn_count=1, profile=CustomerProfile(chem_savvy=card.chem_savvy), extracted_by="rule")
     for slot in card.opening_slots:
-        _answer(need, card, slot, seeds, rng, 1)
+        answer(need, card, slot, seeds, rng, 1)
     rows = []
     for turn in range(1, TURNS + 1):
         state = realtime_state(need, seeds, products, start + timedelta(minutes=turn))
         rows += _rows(model, state, lambda o: ask_label(need, card, o.attrs["slot"], products), card.id)
         for slot in _sales_asks(need, phen, seeds, rng):
             need.asked[slot] = need.asked.get(slot, 0) + 1
-            _answer(need, card, slot, seeds, rng, turn + 1)
+            answer(need, card, slot, seeds, rng, turn + 1)
         need.turn_count += 1
     if card.truth_product is None:
         for status, layer in (("draft", 2), ("pm_confirmed", 3)):
