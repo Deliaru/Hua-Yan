@@ -2,7 +2,7 @@ seeds_dir: seeds
 templates_dir: config/templates
 run_root: runs
 system1_impl: mock            # mock | llm_fallback | onejev
-gateway_mock: true            # true 时用 MockGateway（离线）；现场演示设 false
+gateway_mock: true            # true 时用 MockGateway（离线），角色助手不运行；现场演示设 false
 extractor: rule               # rule | llm
 realtime_model: jue_proto     # jue_proto | jue_k
 jue_k_dir: models/jue_k
@@ -11,4 +11,4 @@ replay: false                 # true = 记录回放模式，界面标明
 thresholds: {ask: 0.5, max_asks: 2, match: 0.5, publish: 0.5}
 windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
 routing: {escalate_need: pm, opportunity: pm, knowledge_conflict: rd, leak_risk: supervisor, decrypt_request: rd}
-points: {cited: 1, trial_pass: 5, product_released: 10}
+points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}

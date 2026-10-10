@@ -21,13 +21,19 @@ class KnowledgeUnit(BaseModel):
     phenomenon_ids: list[str] = []
     owner: str
     decryptable: bool = False                 # 只有 mechanism 为 True
-    source: Literal["seed", "released", "trial"] = "seed"
+    source: Literal["seed", "released", "trial", "contributed"] = "seed"
     created_at: datetime
 
 
 class KnowledgeHit(BaseModel):
     ku: KnowledgeUnit
     score: float
+
+
+class BlockedHint(BaseModel):                 # 越权命中只告诉调用方「谁知道」，不给标题和正文
+    owner: str
+    level: Level
+    kind: KUKind
 
 
 Version = Literal["product", "product_usage", "full_mechanism", "internal"]
@@ -73,6 +79,6 @@ class LedgerEntry(BaseModel):
     ts: datetime
     owner: str
     points: int
-    reason: Literal["cited", "trial_pass", "product_released", "bounty"]
+    reason: Literal["cited", "contributed", "trial_pass", "product_released", "bounty"]
     ku_id: str | None = None
     ref: str

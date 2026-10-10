@@ -60,10 +60,11 @@ class Case(BaseModel):
 
 class Translation(BaseModel):
     id: str
-    scene_phrase: str
-    chem_term: str
-    level: Literal[2, 3]
+    scene_phrase: str                         # 原文：客户的场景说法（L2 条目）或产品需求说法（L3 条目）
+    chem_term: str                            # 译文：L2 条目为产品需求语言，L3 条目为化学语言
+    level: Literal[2, 3]                      # 2 = 产品经理的「场景 → 产品需求」；3 = 研发的「→ 化学语言」
     owner: str
+    phenomenon_ids: list[str] = []
 
 
 class Seeds(BaseModel):
