@@ -1,0 +1,1 @@
+{"content":"已为您提议批准解密申请（仅开放机理层，配方保持加密保护）。\n\n已生成确认卡 **`act:8`**，请您在确认卡上点击确认以正式生效。","tool_calls":[],"usage":{"input_tokens":2473,"output_tokens":46},"latency_ms":3948.1792690057773,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

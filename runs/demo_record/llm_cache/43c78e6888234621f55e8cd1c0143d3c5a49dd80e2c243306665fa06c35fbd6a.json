@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"confirm_translation-1791665910780545688-1284","name":"confirm_translation","arguments":{"req_id":"req:1"}}],"usage":{"input_tokens":2806,"output_tokens":20},"latency_ms":3098.2051430037245,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

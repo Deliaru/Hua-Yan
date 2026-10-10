@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665756506953543-1256","name":"record_customer_turn","arguments":{"text":"锦氨弹力布"}}],"usage":{"input_tokens":1066,"output_tokens":22},"latency_ms":3383.515861998603,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"contribute_translation-1791665903589590803-1283","name":"contribute_translation","arguments":{"chem_term":"低浴比下随升温分段加酸、缓释控制 pH","req_id":"req:1","index":1,"scene_phrase":"低浴比匀染"}}],"usage":{"input_tokens":7722,"output_tokens":60},"latency_ms":3129.91395300196,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

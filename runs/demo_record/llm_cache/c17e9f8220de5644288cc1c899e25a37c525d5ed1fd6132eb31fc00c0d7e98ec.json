@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665749845456766-1255","name":"record_customer_turn","arguments":{"text":"我们染完以后布面深一块浅一块，客户老投诉"}}],"usage":{"input_tokens":1004,"output_tokens":31},"latency_ms":4029.7703179967357,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791665944998891244-1290","name":"search_knowledge","arguments":{"query":"HY-LV206"}}],"usage":{"input_tokens":1275,"output_tokens":21},"latency_ms":3718.1637969988515,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

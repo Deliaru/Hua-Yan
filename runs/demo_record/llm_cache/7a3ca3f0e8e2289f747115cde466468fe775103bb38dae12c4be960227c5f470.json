@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791665854754306846-1276","name":"search_knowledge","arguments":{"kind":"translation","query":"低浴比"}}],"usage":{"input_tokens":5686,"output_tokens":24},"latency_ms":2795.2410880025127,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

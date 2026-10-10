@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665874805076283-1278","name":"record_customer_turn","arguments":{"text":"加点醋酸调的，pH五左右"}}],"usage":{"input_tokens":1521,"output_tokens":27},"latency_ms":3940.452868999273,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

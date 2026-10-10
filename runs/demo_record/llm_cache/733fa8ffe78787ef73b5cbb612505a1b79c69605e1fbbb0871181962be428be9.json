@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791665849555154273-1274","name":"search_knowledge","arguments":{"query":"氨纶","kind":"translation"}}],"usage":{"input_tokens":5300,"output_tokens":23},"latency_ms":8028.5240189987235,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

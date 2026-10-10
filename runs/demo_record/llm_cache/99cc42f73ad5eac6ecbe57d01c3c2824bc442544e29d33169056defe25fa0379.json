@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"record_customer_turn-1791665982694753622-1295","name":"record_customer_turn","arguments":{"text":"原理直接讲明白就行，我们自己调工艺"}}],"usage":{"input_tokens":1214,"output_tokens":27},"latency_ms":4155.522629000188,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"confirm_requirement-1791665824466585952-1269","name":"confirm_requirement","arguments":{"req_id":"req:1"}}],"usage":{"input_tokens":4495,"output_tokens":20},"latency_ms":3130.40629200259,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

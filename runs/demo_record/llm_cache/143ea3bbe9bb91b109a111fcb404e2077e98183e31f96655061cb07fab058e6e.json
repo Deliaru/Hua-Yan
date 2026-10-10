@@ -1,0 +1,1 @@
+{"content":"已生成 L1 说明书草稿，并提议按此说明书发布新产品：\n\n- **产品说明**：针对锦纶氨纶面料与气流染色机工况，在低浴比下保持优良匀染效果、氨纶沾色低，且不影响色光，提升一次成功率。\n- **使用建议**：适用于锦纶氨纶、气流染色机，具体用量与工艺以试样为准。\n\n已生成确认卡 **act:6**，请前往确认卡确认以完成发布。","tool_calls":[],"usage":{"input_tokens":2996,"output_tokens":120},"latency_ms":3198.00027400197,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"request_decrypt-1791665986502577842-1296","name":"request_decrypt","arguments":{}}],"usage":{"input_tokens":1555,"output_tokens":10},"latency_ms":3778.9410359982867,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}
