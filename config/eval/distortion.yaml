@@ -1,0 +1,13 @@
+# 失真对照（WP-E）。G1 的转述噪声是**假设参数**，依据一线业务需求交流中的定性描述
+# 「客户和业务员不懂化学，只会描述宏观现象；业务员再加工转述，需求就变形了」；企业数据到位后用真实转述样本替换。
+seed: 20261011
+relay:                        # G1 业务员转述
+  habit_slots: [fiber]        # 业务员按习惯只问这些槽位
+  vague_prob: 0.3             # 现象被说成笼统的「染色有问题」
+  drop_prob: 0.2              # 每个已知槽位被漏掉
+  swap_prob: 0.1              # 每个已知槽位被记成同槽位的另一个取值
+jue:                          # G3 化言：觉用规则原型（config/templates/），阈值同 config/app.yaml
+  ask_threshold: 0.5
+  back_threshold: 0.5
+  max_rounds: 8
+  max_backs: 2
