@@ -19,6 +19,12 @@ def test_translation_release_and_ownership(tmp_path):
     session = app.start_session("customer:C01", "sales:S01")
     session = app.add_turn(session.id, "customer", "深一块浅一块，锦纶氨纶的，气流缸")
     req = app.draft_requirement(session.recommendation.escalated_question_id, "pm:P01")
+    old_id = req.id
+    session = app.add_turn(session.id, "customer", "还要求不要APEO")
+    with pytest.raises(ValueError, match="重新核对"):
+        app.confirm_requirement(old_id, "pm:P01")
+    req = app.draft_requirement(session.recommendation.escalated_question_id, "pm:P01")
+    assert req.id != old_id and req.known_slots["constraint"] == "无APEO"
     with pytest.raises(ValueError):
         app.edit_req_item(req.id, -1, ReqItem(text="伪造引用", quote_refs=["turn:missing"]), "pm:P01")
     with pytest.raises(ValueError):
@@ -46,6 +52,11 @@ def test_translation_release_and_ownership(tmp_path):
     app.record_trial(Trial(id="trial:1", product_id=req.product_id, requirement_id=req.id, rd="rd:R02",
         conditions=req.known_slots, result="pass", cause="none", at=get_clock().now()))
     app.release_product(req.id, "pm:P01")
+    rewards = [e for e in app.ledger.list() if e.reason == "product_released"]
+    assert len(rewards) == 1 and rewards[0].ku_id == "ku:sheet:T-206"
+    row = next(r for r in app.contributions("pm:P01") if r.ku_id == "ku:sheet:T-206")
+    assert row.points == app.config["points"]["product_released"]
+    assert row.n_cited == 0 and row.used_by == ["T-206"]
     with pytest.raises(ValueError):
         app.release_product(req.id, "pm:P01")
     other = app.start_session("customer:C02", "sales:S01")

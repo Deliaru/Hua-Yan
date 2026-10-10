@@ -18,7 +18,7 @@ from huayan.jev.system1 import build_system1
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.disclosure import VERSIONS, cap, render
 from huayan.l1.extract import LLMExtractor, RuleExtractor
-from huayan.l1.session import handle_turn, recommend, required_hints
+from huayan.l1.session import handle_turn, recommend, record_disclosure, required_hints
 from huayan.meter import FileMeter
 
 
@@ -81,7 +81,12 @@ class HuayanApp:
     def add_turn(self, session_id, speaker, text):
         if speaker not in ("customer", "sales") or not text.strip():
             raise ValueError("需要有效发言角色与非空文本")
+        previous = self._sessions[session_id].need
         session = handle_turn(self._sessions[session_id], speaker, text, self)
+        if (previous.phenomenon, previous.known()) != (session.need.phenomenon, session.need.known()):
+            for req in self._requirements.values():
+                if req.status == "draft" and session_id in req.session_ids:
+                    self._retire_draft(req)
         self._save_session(session)
         return session.model_copy(deep=True)
 
@@ -104,7 +109,10 @@ class HuayanApp:
                 version = maximum
             card = render(rec.product_id, version, viewer, self.kb, session_id=session_id,
                           customer_id=session.customer_id, grants=self.grants)
-        req = next((r for r in self._requirements.values() if session_id in r.session_ids), None) if level > 1 else None
+            if level == 1:
+                record_disclosure(card, self)
+        req = next((r for r in reversed(list(self._requirements.values()))
+                    if session_id in r.session_ids and r.status != "rejected"), None) if level > 1 else None
         if req is not None:
             req = self.requirement_view(req.id, viewer_id).requirement
         return SessionView(session_id=session_id, viewer=viewer_id, viewer_level=level, turns=session.turns,
@@ -134,13 +142,14 @@ class HuayanApp:
             raise ValueError(f"当前状态 {req.status}，需要状态 {', '.join(sorted(states))}")
         return req, actor
 
-    def _save_requirement(self, req):
+    def _save_requirement(self, req, *, viewer_id=None):
         path = self.run_dir / "requirements"
         path.mkdir(exist_ok=True)
         (path / f"{req.id.replace(':', '_')}.json").write_text(req.model_dump_json(), encoding="utf-8")
         for sid in req.session_ids:
             self._save_session(self._sessions[sid])
-        return req.model_copy(deep=True)
+        if viewer_id is not None:
+            return self.requirement_view(req.id, viewer_id).requirement
 
     def _validate_item(self, req, item, actor):
         turns = {t.id for sid in req.session_ids for t in self._sessions[sid].turns if t.speaker == "customer"}
@@ -152,6 +161,24 @@ class HuayanApp:
             except (KeyError, PermissionDenied) as exc:
                 raise ValueError("知识引用不存在或当前身份无权读取") from exc
 
+    def _retire_draft(self, req):
+        # 契约已有 rejected 状态用于废止旧草稿，保留原内容和引用供核对。
+        req.status = "rejected"
+        self._save_requirement(req)
+        question = self.bus.get(req.question_id)
+        if question.status == "open":
+            self.bus.publish(question.model_copy(update={"evidence": [Evidence(
+                summary=f"草稿 {req.id} 已失效：需求条件变化，需重新起草并核对后确认")]}))
+
+    def _draft_needs_review(self, req):
+        sessions = [self._sessions[sid] for sid in req.session_ids]
+        known = sessions[0].need.known()
+        for session in sessions[1:]:
+            known = {key: value for key, value in known.items() if session.need.known().get(key) == value}
+        return (any(s.need.phenomenon != req.phenomenon for s in sessions) or known != req.known_slots or
+                any(e.ts > req.created_at and e.session_id in req.session_ids and e.payload.get("conditions_changed")
+                    for e in self.events.query(kinds=["extraction"], since=req.created_at)))
+
     def draft_requirement(self, question_id, by):
         actor = self._actor(by, {"pm"})
         if self.kb.is_frozen(by):
@@ -161,9 +188,13 @@ class HuayanApp:
             raise ValueError("只能为待处理的升级或机会汇聚起草需求")
         if question.owner_id is not None and question.owner_id != by:
             raise PermissionDenied("问题已指派给其他负责人")
-        existing = next((r for r in self._requirements.values() if r.question_id == question_id), None)
+        existing = next((r for r in reversed(list(self._requirements.values()))
+                         if r.question_id == question_id and r.status != "rejected"), None)
+        if existing and existing.status == "draft" and self._draft_needs_review(existing):
+            self._retire_draft(existing)
+            existing = None
         if existing:
-            return existing.model_copy(deep=True)
+            return self.requirement_view(existing.id, by).requirement
         ids = question.refs.get("session_ids", question.refs.get("session_id", "")).split(",")
         sessions = [self._sessions[sid] for sid in dict.fromkeys(ids) if sid]
         if not sessions or not sessions[0].need.phenomenon:
@@ -183,7 +214,7 @@ class HuayanApp:
         for item in req.product_lang:
             self._validate_item(req, item, actor)
         self._requirements[req.id] = req
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def edit_req_item(self, req_id, index, item: ReqItem, by):
         actor = self._actor(by, {"pm", "rd"})
@@ -199,7 +230,7 @@ class HuayanApp:
             raise ValueError("条目索引不存在；追加请使用 -1")
         if actor.role == "rd":
             req.chem_drafted_by = by
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def remove_req_item(self, req_id, index, by):
         actor = self._actor(by, {"pm", "rd"})
@@ -209,17 +240,23 @@ class HuayanApp:
         if not 0 <= index < len(items):
             raise ValueError("条目索引不存在")
         items.pop(index)
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def set_direction(self, req_id, text, by):
         req, _ = self._requirement(req_id, by, {"pm"}, {"draft"})
         if not text.strip():
             raise ValueError("产品方向不能为空")
         req.direction = text
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def confirm_requirement(self, req_id, by):
-        req, actor = self._requirement(req_id, by, {"pm"}, {"draft"})
+        req, actor = self._requirement(req_id, by, {"pm"}, {"draft", "rejected"})
+        if req.status == "rejected" or self._draft_needs_review(req):
+            if req.status == "draft":
+                self._retire_draft(req)
+            raise ValueError("草稿已失效，需求条件需重新核对；请重新起草并核对后确认")
+        if self.bus.get(req.question_id).status != "open":
+            raise ValueError("关联问题已非待处理状态，不能确认旧草稿")
         if not req.product_lang:
             raise ValueError("需求单没有产品需求条目")
         for item in req.product_lang:
@@ -228,7 +265,7 @@ class HuayanApp:
         self.events.append("requirement_confirmed", by,
             {"requirement_id": req.id, "phenomenon": req.phenomenon, "known": req.known_slots})
         self.bus.resolve(req.question_id, Resolution(action="draft_requirement", by=by), get_clock().now())
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def translate_requirement(self, req_id, by):
         req, actor = self._requirement(req_id, by, {"rd"}, {"pm_confirmed"})
@@ -238,7 +275,7 @@ class HuayanApp:
         for item in draft.chem_lang:
             self._validate_item(req, item, actor)
         req.chem_lang, req.hypotheses, req.chem_drafted_by = draft.chem_lang, draft.hypotheses, by
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def confirm_translation(self, req_id, by):
         req, actor = self._requirement(req_id, by, {"rd"}, {"pm_confirmed"})
@@ -258,7 +295,7 @@ class HuayanApp:
                 self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=unit.owner, ku_id=ref, ref=req.id,
                     points=self.config["points"]["cited"], reason="cited"))
         self.events.append("requirement_translated", by, {"requirement_id": req.id, "ku_refs": refs})
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def contribute_translation(self, req_id, item_index, scene_phrase, chem_term, by):
         req, actor = self._requirement(req_id, by, {"rd"}, {"pm_confirmed", "rd_confirmed"})
@@ -277,7 +314,7 @@ class HuayanApp:
         if not text.strip():
             raise ValueError("对外要点不能为空")
         req.public_points, req.sheet = text, None
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def requirements(self, viewer_id):
         viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})
@@ -347,7 +384,7 @@ class HuayanApp:
         if not req.public_points or not sheet.sheet.strip() or not sheet.usage.strip():
             raise ValueError("需要研发对外要点以及非空说明书和用法")
         req.sheet = sheet.model_copy(deep=True)
-        return self._save_requirement(req)
+        return self._save_requirement(req, viewer_id=by)
 
     def release_product(self, req_id, by):
         req, _ = self._requirement(req_id, by, {"pm"}, {"rd_confirmed"})
@@ -361,13 +398,16 @@ class HuayanApp:
         product = seed.model_copy(update={"sheet": req.sheet.sheet, "usage": req.sheet.usage}, deep=True)
         released = flow.release_product(req, product, self.kb, self.ledger, self.events, by, get_clock().now())
         self._save_requirement(req)
-        return released
+        # 发布者为 L2；完整机理和配方保存在知识库，只返回公开产品字段。
+        return released.model_copy(update={"mechanism": "", "formula": ""}, deep=True)
 
     def contributions(self, viewer_id):
         viewer = self._actor(viewer_id)
         result = []
         for unit in self.kb._units.values():
-            entries = [e for e in self.ledger.list(unit.owner) if e.ku_id == unit.id]
+            entries = [e for e in self.ledger.list(unit.owner) if e.ku_id == unit.id or (
+                e.ku_id is None and e.reason == "product_released" and unit.kind == "sheet"
+                and e.ref == unit.product_id)]
             if not entries:
                 continue
             result.append(ContributionStat(owner=unit.owner, ku_id=unit.id, level=unit.level,

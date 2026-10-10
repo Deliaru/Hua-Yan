@@ -19,7 +19,7 @@ def release_product(req, product, kb, ledger, events, by, at):
     released = product.model_copy(update={"status": "released"}, deep=True)
     kb.add_product(released, at)
     ledger.add(LedgerEntry(ts=at, owner=product.owner, points=ledger.points["product_released"],
-                          reason="product_released", ref=product.id))
+                          reason="product_released", ku_id=f"ku:sheet:{product.id}", ref=product.id))
     events.append("product_released", by, {"product_id": product.id, "requirement_id": req.id,
         "phenomenon": req.phenomenon, "applicable": product.applicable}, ts=at)
     req.status = "released"
