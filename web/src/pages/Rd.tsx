@@ -2,7 +2,7 @@
 import { api } from "../api";
 import { useApp, useData, useLabels } from "../ctx";
 import { Empty, Layout, PageHead, PendingStack, QuestionStack, RecCard, RequirementPanel, Section, useRequirementChoice } from "../components/Cards";
-import { AgentConversation, AgentDock, Dock } from "../components/Dock";
+import { AgentConversation, AgentDock, Bubble, Dock } from "../components/Dock";
 import { OfflineNote } from "./Pm";
 
 function SessionSource({ reqId }: { reqId: string }) {
@@ -11,17 +11,15 @@ function SessionSource({ reqId }: { reqId: string }) {
   const ids = view?.requirement.session_ids ?? [];
   const sessions = useData(() => Promise.all(ids.map((sid) => api.session(sid, me))), [ids.join(","), me]);
   return (
-    <Section title="会话原文" aside={<span className="chip">研发可见内部版</span>}>
+    <Section title="会话原文" aside={<span className="tag">研发可见内部版</span>}>
       {!sessions?.length && <Empty>这张需求单没有关联会话。</Empty>}
       {sessions?.map((d) => (
-        <div key={d.view.session_id} className="mt-2 first:mt-0">
-          <p className="mb-1.5 text-[12px] text-black/55">{d.view.session_id}</p>
+        <div key={d.view.session_id} className="flex flex-col gap-3">
+          <p className="meta">{d.view.session_id}</p>
           {d.view.turns.map((t) => (
-            <p key={t.id} className="text-[14px] leading-6">
-              <span className="mr-2 text-[12px] text-black/55">{t.speaker === "customer" ? "客户" : "业务员"}</span>{t.text}
-            </p>
+            <Bubble key={t.id} who={t.speaker === "customer" ? "客户" : "业务员"} mine={t.speaker === "sales"}>{t.text}</Bubble>
           ))}
-          {d.view.card && <div className="mt-2"><RecCard card={d.view.card} /></div>}
+          {d.view.card && <RecCard card={d.view.card} />}
         </div>
       ))}
     </Section>
@@ -34,14 +32,24 @@ function MyKnowledge() {
   const ledger = useData(() => api.ledger(), []);
   const mine = (stats ?? []).filter((s) => s.owner === me);
   return (
-    <Section title="我的知识" aside={<span className="num chip">总积分 {ledger?.[me] ?? 0}</span>}>
+    <Section title="我的知识" aside={
+      <span className="flex items-baseline gap-1.5"><span className="meta">总积分</span>
+        <span className="num text-[24px] font-medium leading-none">{ledger?.[me] ?? 0}</span></span>}>
       {!mine.length && <Empty>还没有归属于你的知识。</Empty>}
-      {mine.map((s) => (
-        <div key={s.ku_id} className="flex items-baseline justify-between gap-3 border-b border-black/5 py-1.5 text-[14px] last:border-0">
-          <span className="min-w-0"><span className="chip mr-2">L{s.level}</span>{s.title}</span>
-          <span className="num shrink-0 text-black/60">被引用 {s.n_cited} 次 · {s.points} 分</span>
-        </div>
-      ))}
+      <div className="grid gap-2 sm:grid-cols-2">
+        {mine.map((s) => (
+          <div key={s.ku_id} className="cell !px-4 !py-3">
+            <div className="flex items-start justify-between gap-3">
+              <p className="min-w-0 text-[15px] font-medium leading-6">{s.title}</p>
+              <span className="tag shrink-0">L{s.level}</span>
+            </div>
+            <div className="mt-2 flex items-baseline gap-4">
+              <span><span className="num text-[20px] font-medium">{s.n_cited}</span><span className="meta ml-1">次引用</span></span>
+              <span><span className="num text-[20px] font-medium">{s.points}</span><span className="meta ml-1">分</span></span>
+            </div>
+          </div>
+        ))}
+      </div>
     </Section>
   );
 }
@@ -58,9 +66,9 @@ export function Rd() {
   );
   return (
     <Layout rail={rail}>
-      <PageHead kicker={`研发工作台 · L3 · ${L.name(me)}`} title="把产品需求转成化学语言" />
+      <PageHead kicker={`研发工作台 · L3 · ${L.name(me).replace("（模拟）", "")}`} title="把产品需求转成化学语言" />
       {live ? <AgentConversation sessionId={null} /> : <OfflineNote />}
-      <div className="mt-3">{picker}</div>
+      {picker && <div>{picker}</div>}
       {current ? (
         <>
           <RequirementPanel id={current} initial="chem_lang" />

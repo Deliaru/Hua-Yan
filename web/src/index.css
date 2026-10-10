@@ -1,9 +1,9 @@
-/* 设计系统复制自 JUE wp/e 的 web/src/index.css；去掉滑动条与 React Flow 样式。 */
+/* 设计系统：以 JUE wp/e 的 web/src/index.css 为底，材质按 Hark（hark.com）的卡片实测值重做。 */
 @import "tailwindcss";
 
 @theme {
   --color-accent: #e8590c;
-  --color-ink: #111114;
+  --color-ink: #1d1d1f;
   --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
   --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 }
@@ -12,112 +12,111 @@ html, body, #root { height: 100%; }
 body {
   @apply text-ink font-sans antialiased;
   background: #8fabcc;
-  font-size: 14px;
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
 }
 ::selection { background: rgba(232, 89, 12, .2); }
 
 /* ── 设计规范 ─────────────────────────────────────────────
-   字阶：12 / 13 / 14（正文）/ 15 / 20 / 28 / 44；不使用 12 以下的字号
-   文字：主文字 ink；次级 black/60；辅助 black/55，不再更浅
-   间距：卡片内边距 16（p-4），大卡片 24（p-6）；卡片间距 12
-   颜色：橙色 accent 只表示「需要决策」（待决数量、概率、超过门槛的格子）；
-         黑色 ink 只表示「当前选中」（导航、分段切换、播放键）
+   字阶：13（辅助）/ 14（标签）/ 15（正文）/ 17（卡片标题）/ 24（数字）/ 40（页标题）
+   文字：主文字 ink #1d1d1f；次级 ink/50；更弱 ink/35（只给占位）
+   间距：卡片内边距 20、圆角 24；格子内边距 8/12、圆角 12；卡片间距 10
+   颜色：橙色 accent 只表示「需要决策」；ink 实心只表示「当前选中 / 主操作」；降级用红色
    ───────────────────────────────────────────────────── */
 
-/* ── 表面层级 ─────────────────────────────────────────────
-   rail   左栏：整条磨砂，右缘用遮罩渐隐，不画分界线
-   glass  浮在天空上的卡片：高饱和磨砂，无描边，大范围低浓度投影
-   sheet  聚焦层 / 文档：近乎不透明，不再叠加模糊
-   cell   卡片内的小格
-   chip   卡片内的小标签
+/* ── 材质（Hark 实测）─────────────────────────────────────
+   card   浮在天空上的面板：白 66.7% + 模糊 50px，单层大范围低浓度投影，无描边
+   cell   面板内的格子：白 60%，无投影
+   pill   导航 / 输入胶囊：白 55% + 模糊 50px
+   sheet  文档层：近乎不透明
    ───────────────────────────────────────────────────── */
 @layer components {
-.rail {
-  background: rgba(255, 255, 255, .16);
-  backdrop-filter: blur(48px) saturate(1.6);
-  -webkit-backdrop-filter: blur(48px) saturate(1.6);
-}
-.glass {
+.card {
   position: relative;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, .6);
-  backdrop-filter: blur(40px) saturate(1.8);
-  -webkit-backdrop-filter: blur(40px) saturate(1.8);
-  /* 不画描边：只用极淡的内光和大范围低浓度投影，让边缘自然融进天空 */
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, .35),
-    0 10px 40px -8px rgba(40, 70, 120, .12);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, .667);
+  backdrop-filter: blur(50px) saturate(1.8);
+  -webkit-backdrop-filter: blur(50px) saturate(1.8);
+  box-shadow: 0 8px 40px rgba(29, 29, 31, .12);
+  padding: 20px;
 }
-.glass-hover { transition: background .25s, transform .25s cubic-bezier(.2, .8, .2, 1), box-shadow .25s; }
-.glass-hover:hover {
-  background: rgba(255, 255, 255, .72);
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, .45),
-    0 16px 48px -10px rgba(40, 70, 120, .18);
-}
+.card-hover { transition: background .25s, box-shadow .25s, scale .12s ease-out; }
+.card-hover:hover { background: rgba(255, 255, 255, .78); box-shadow: 0 12px 48px rgba(29, 29, 31, .16); }
+.card-on, .card-on:hover { background: rgba(255, 255, 255, .94); box-shadow: 0 14px 48px rgba(29, 29, 31, .2); }
+.press { transition: scale .12s ease-out; }
+.press:active:not(:disabled) { scale: .97; }
+.cell { border-radius: 12px; background: rgba(255, 255, 255, .6); padding: 8px 12px; }
 .sheet {
-  border-radius: 26px;
-  background: rgba(250, 250, 249, .94);
-  box-shadow:
-    0 0 0 .5px rgba(17, 24, 39, .06),
-    0 2px 6px rgba(17, 24, 39, .04),
-    0 30px 80px -24px rgba(17, 24, 39, .35);
+  border-radius: 24px;
+  background: rgba(252, 252, 251, .95);
+  box-shadow: 0 0 0 .5px rgba(29, 29, 31, .06), 0 24px 64px -20px rgba(29, 29, 31, .3);
+  padding: 24px;
 }
-.cell { border-radius: 12px; background: rgba(255, 255, 255, .85); }
-.sheet .cell { background: #fff; box-shadow: 0 0 0 .5px rgba(17, 24, 39, .06); }
-.tag {
-  display: inline-block;
-  border-radius: 7px;
-  background: #fff;
-  padding: 1px 7px;
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 20px;
-  color: var(--color-ink);
-  box-shadow: 0 0 0 .5px rgba(17, 24, 39, .08);
-}
-.chip {
-  border-radius: 6px;
-  background: rgba(17, 24, 39, .055);
-  padding: 1px 6px;
-  font-size: 12px;
-  line-height: 18px;
-  color: rgba(17, 17, 20, .72);
-}
+.sheet .cell { background: rgba(29, 29, 31, .04); }
 .pill {
   border-radius: 999px;
-  background: rgba(255, 255, 255, .42);
-  backdrop-filter: blur(24px) saturate(1.6);
-  box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .6), 0 4px 16px -8px rgba(17, 24, 39, .15);
+  background: rgba(255, 255, 255, .55);
+  backdrop-filter: blur(50px) saturate(1.6);
+  -webkit-backdrop-filter: blur(50px) saturate(1.6);
 }
-.seg-on { background: #fff; color: var(--color-ink); box-shadow: 0 1px 2px rgba(17, 24, 39, .08), 0 2px 8px -2px rgba(17, 24, 39, .12); }
+.seg-on { background: var(--color-ink); color: #f9f9fa; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 36px; padding: 0 16px; border-radius: 999px;
+  font-size: 14px; font-weight: 500; white-space: nowrap;
+  transition: scale .12s ease-out, background .2s, opacity .2s;
+}
+.btn:active:not(:disabled) { scale: .97; }
+.btn:disabled { opacity: .3; }
+.btn-ink { background: var(--color-ink); color: #f9f9fa; }
+.btn-soft { background: rgba(255, 255, 255, .6); color: var(--color-ink); }
+.btn-soft:hover { background: rgba(255, 255, 255, .85); }
+.label { font-size: 14px; line-height: 18px; color: rgba(29, 29, 31, .5); }
+.meta { font-size: 13px; line-height: 18px; color: rgba(29, 29, 31, .5); }
+.tag {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px;
+  background: rgba(29, 29, 31, .06); font-size: 12.5px; font-weight: 500; color: rgba(29, 29, 31, .7);
+}
+.tag-accent { background: rgba(232, 89, 12, .1); color: var(--color-accent); }
+.tag-red { background: rgba(220, 38, 38, .08); color: #dc2626; }
 .on-sky { color: #fff; text-shadow: 0 1px 1px rgba(30, 50, 90, .12), 0 4px 24px rgba(30, 50, 90, .22); }
 .num { font-variant-numeric: tabular-nums; }
-
 }
 
-/* ── 滚动条 ── */
-* { scrollbar-width: thin; scrollbar-color: rgba(17, 24, 39, .18) transparent; }
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(17, 24, 39, .16); }
-::-webkit-scrollbar-thumb:hover { background: rgba(17, 24, 39, .28); }
-.fade-y { mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 16px), transparent 100%); }
+/* ── 渐进模糊：页面上下边缘六层叠加（Hark 的做法），内容滑过边缘时逐级融化，不画分界线 ── */
+.edge { position: fixed; left: 0; right: 0; height: 92px; pointer-events: none; z-index: 15; }
+.edge > i { position: absolute; inset: 0; }
+.edge-top { top: 0; }
+.edge-bottom { bottom: 0; }
+.edge > i:nth-child(1) { backdrop-filter: blur(.5px); }
+.edge > i:nth-child(2) { backdrop-filter: blur(1px); }
+.edge > i:nth-child(3) { backdrop-filter: blur(2px); }
+.edge > i:nth-child(4) { backdrop-filter: blur(4px); }
+.edge > i:nth-child(5) { backdrop-filter: blur(8px); }
+.edge > i:nth-child(6) { backdrop-filter: blur(16px); }
+.edge-bottom > i:nth-child(1) { mask-image: linear-gradient(transparent 0%, black 0%, black 16.7%, transparent 33.3%); }
+.edge-bottom > i:nth-child(2) { mask-image: linear-gradient(transparent 0%, black 16.7%, black 33.3%, transparent 50%); }
+.edge-bottom > i:nth-child(3) { mask-image: linear-gradient(transparent 16.7%, black 33.3%, black 50%, transparent 66.7%); }
+.edge-bottom > i:nth-child(4) { mask-image: linear-gradient(transparent 33.3%, black 50%, black 66.7%, transparent 83.3%); }
+.edge-bottom > i:nth-child(5) { mask-image: linear-gradient(transparent 50%, black 66.7%, black 83.3%, transparent 100%); }
+.edge-bottom > i:nth-child(6) { mask-image: linear-gradient(transparent 66.7%, black 83.3%, black 100%); }
+.edge-top > i:nth-child(1) { mask-image: linear-gradient(to top, transparent 0%, black 0%, black 16.7%, transparent 33.3%); }
+.edge-top > i:nth-child(2) { mask-image: linear-gradient(to top, transparent 0%, black 16.7%, black 33.3%, transparent 50%); }
+.edge-top > i:nth-child(3) { mask-image: linear-gradient(to top, transparent 16.7%, black 33.3%, black 50%, transparent 66.7%); }
+.edge-top > i:nth-child(4) { mask-image: linear-gradient(to top, transparent 33.3%, black 50%, black 66.7%, transparent 83.3%); }
+.edge-top > i:nth-child(5) { mask-image: linear-gradient(to top, transparent 50%, black 66.7%, black 83.3%, transparent 100%); }
+.edge-top > i:nth-child(6) { mask-image: linear-gradient(to top, transparent 66.7%, black 83.3%, black 100%); }
+
+/* ── 滚动条：隐藏，靠渐进模糊提示可滚动 ── */
+* { scrollbar-width: none; }
+::-webkit-scrollbar { display: none; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-33.3%); } }
-.anim-rise { animation: rise .32s cubic-bezier(.2, .8, .2, 1) both; }
-.anim-fade { animation: fade .22s ease-out both; }
+.anim-rise { animation: rise .32s cubic-bezier(.2, .8, .2, 1) backwards; }
+.anim-fade { animation: fade .22s ease-out backwards; }
 .anim-drift { animation: drift 300s linear infinite; will-change: transform; }
 @media (prefers-reduced-motion: reduce) {
   .anim-drift { animation: none; }
-}
-/* 左栏右缘与上下边缘渐隐，代替分界线 */
-.rail-mask {
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent), linear-gradient(to bottom, transparent 0, #000 72px, #000 calc(100% - 32px), transparent);
-  mask-composite: intersect;
-  -webkit-mask-composite: source-in;
 }

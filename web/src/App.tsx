@@ -43,17 +43,19 @@ export default function App() {
     <AppCtx.Provider value={ctx}>
       <div className="min-h-full">
         <Backdrop />
-        <header className="sticky top-0 z-20 grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4 px-5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink font-serif text-[16px] text-white shadow-[0_2px_10px_rgba(0,0,0,.18)]">化</span>
-            <span className="on-sky font-serif text-[20px]">化言</span>
+        <div className="edge edge-top">{[...Array(6)].map((_, i) => <i key={i} />)}</div>
+        <div className="edge edge-bottom">{[...Array(6)].map((_, i) => <i key={i} />)}</div>
+        <header className="sticky top-0 z-20 grid h-[76px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="pill flex h-11 w-11 shrink-0 items-center justify-center font-serif text-[18px]">化</span>
+            <span className="on-sky font-serif text-[22px]">化言</span>
           </div>
-          <Segmented items={PAGES} value={page} onChange={setPage} dark />
+          <Segmented items={PAGES} value={page} onChange={setPage} />
           <div className="flex items-center justify-self-end gap-2">
-            <Segmented size="sm" items={people.map((a) => [a.id, a.name] as const)} value={me}
+            <Segmented size="sm" items={people.map((a) => [a.id, a.name.replace("（模拟）", "")] as const)} value={me}
                        onChange={(id) => setWho({ ...who, [page]: id })} />
             <button
-              className="pill whitespace-nowrap px-2.5 py-0.5 text-[12px] text-black/60 hover:text-black/80"
+              className="btn pill press !h-9 text-ink/70 hover:text-ink"
               title={`当前 ${meta.status.run_id}；重建门面，开始新的 run`}
               onClick={() => api.reset().then(ctx.refresh, fail)}
             >
@@ -68,9 +70,9 @@ export default function App() {
 
         {error && (
           <button onClick={() => setError(null)}
-                  className="glass anim-rise fixed right-5 top-20 z-40 max-w-[360px] px-4 py-3 text-left text-[13px] text-red-600">
+                  className="card anim-rise fixed right-5 top-20 z-40 max-w-[360px] !py-3 text-left text-[14px] text-red-600">
             {error}
-            <span className="ml-2 text-black/55">✕</span>
+            <span className="ml-2 text-ink/40">✕</span>
           </button>
         )}
       </div>

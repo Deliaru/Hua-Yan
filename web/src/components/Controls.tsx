@@ -1,29 +1,27 @@
-// 复制自 JUE wp/e 的 web/src/components/Controls.tsx（只保留分段切换）
-// 分段切换。dark：主导航用黑色选中态；默认白色选中态。
+// 分段切换，源自 JUE wp/e 的 web/src/components/Controls.tsx；样式按 Hark 顶部导航胶囊重做：
+// 白 55% 磨砂胶囊，内边距 2，选中项为实心 ink。
 export function Segmented<K extends string | number>({
   items,
   value,
   onChange,
-  dark,
   size = "md",
   wrap,
 }: {
   items: readonly (readonly [K, string])[];
   value: K;
   onChange: (k: K) => void;
-  dark?: boolean;
   size?: "sm" | "md";
   wrap?: boolean;
 }) {
   return (
-    <div className={`pill inline-flex p-[3px] ${wrap ? "flex-wrap gap-y-0.5 !rounded-[16px]" : ""} ${size === "sm" ? "text-[12px]" : "text-[13px]"}`}>
+    <div className={`pill inline-flex p-[2px] ${wrap ? "flex-wrap !rounded-[20px]" : ""}`}>
       {items.map(([k, label]) => (
         <button
           key={k}
           onClick={() => onChange(k)}
-          className={`whitespace-nowrap rounded-full transition-all duration-200 ${size === "sm" ? "px-2.5 py-0.5" : "px-3.5 py-1"} ${
-            value === k ? (dark ? "bg-ink text-white shadow-[0_2px_8px_rgba(0,0,0,.2)]" : "seg-on") : "text-black/55 hover:text-black/80"
-          }`}
+          className={`press whitespace-nowrap rounded-full font-medium transition-colors duration-200 ${
+            size === "sm" ? "h-8 px-3 text-[13px]" : "h-11 px-4 text-[15px]"} ${
+            value === k ? "seg-on" : "text-ink/50 hover:text-ink/80"}`}
         >
           {label}
         </button>
