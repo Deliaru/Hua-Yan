@@ -1,6 +1,6 @@
 {
   "samples": "data/jue_k/samples.csv",
-  "rows": 13643,
+  "rows": 13929,
   "by_family": {
     "ask_back": {
       "n": {
@@ -15,9 +15,9 @@
         "test": 61,
         "heldout": 52
       },
-      "val_auc": 0.605333218825146,
-      "val_brier_raw": 0.19806616473266647,
-      "val_brier_calibrated": 0.18251455632077773
+      "val_auc": 0.6150377877018207,
+      "val_brier_raw": 0.19841039628248192,
+      "val_brier_calibrated": 0.18188564817808817
     },
     "ask_slot": {
       "n": {
@@ -32,9 +32,9 @@
         "test": 265,
         "heldout": 188
       },
-      "val_auc": 0.742687267132556,
-      "val_brier_raw": 0.18287806781185234,
-      "val_brier_calibrated": 0.16769134946660552
+      "val_auc": 0.743261905203255,
+      "val_brier_raw": 0.1822036645382042,
+      "val_brier_calibrated": 0.16779128316831465
     },
     "knowledge_conflict": {
       "n": {
@@ -50,7 +50,7 @@
         "heldout": 0
       },
       "val_auc": 1.0,
-      "val_brier_raw": 3.142831508261132e-11,
+      "val_brier_raw": 6.827003248638688e-11,
       "val_brier_calibrated": 0.0
     },
     "leak_risk": {
@@ -66,15 +66,15 @@
         "test": 41,
         "heldout": 0
       },
-      "val_auc": 0.9080729166666667,
-      "val_brier_raw": 0.08547408295251917,
-      "val_brier_calibrated": 0.08111702127659574
+      "val_auc": 0.9289062499999999,
+      "val_brier_raw": 0.12692750539033407,
+      "val_brier_calibrated": 0.08532196969696969
     },
     "opportunity": {
       "n": {
-        "train": 697,
-        "val": 165,
-        "test": 146,
+        "train": 910,
+        "val": 218,
+        "test": 166,
         "heldout": 0
       },
       "positives": {
@@ -83,9 +83,9 @@
         "test": 59,
         "heldout": 0
       },
-      "val_auc": 0.9454814814814815,
-      "val_brier_raw": 0.10189668669379752,
-      "val_brier_calibrated": 0.0755522706742219
+      "val_auc": 0.9694172494172495,
+      "val_brier_raw": 0.06017867285633732,
+      "val_brier_calibrated": 0.05724770642201835
     }
   }
 }

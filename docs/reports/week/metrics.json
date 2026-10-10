@@ -108,12 +108,12 @@
       ]
     },
     "jue_k": {
-      "hits": 2,
+      "hits": 3,
       "positives": 3,
       "false_alarms": 0,
       "hard_negatives": 4,
-      "mean_lead_hours": 53.0,
-      "n_found": 4,
+      "mean_lead_hours": 44.3,
+      "n_found": 5,
       "n_found_outside_injections": 2,
       "jue_llm_calls": 0,
       "detection": [
@@ -182,12 +182,12 @@
           "family": "leak_risk",
           "object_id": "actor:sales:S02",
           "hard_negative": false,
-          "found_at": null,
-          "hit": false,
+          "found_at": "2026-10-14T15:00:00+08:00",
+          "hit": true,
           "false_alarm": false,
           "early": false,
-          "lead_hours": null,
-          "delay_hours": null
+          "lead_hours": 27.0,
+          "delay_hours": 2.5
         },
         {
           "injection": "inj:7",

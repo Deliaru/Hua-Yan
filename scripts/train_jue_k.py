@@ -21,10 +21,10 @@ from huayan.jue.features import build, vectorize
 
 META = ["family", "object_type", "object_id", "at", "source_id", "label", "split"]
 SOURCES = {"ask_slot": "程序轨迹（需求卡 + 随机追问策略 + 抽取噪声）", "ask_back": "程序轨迹结束时构造的需求单（应升级的卡）",
-           "opportunity": "多周模拟业务周的合成事件", "knowledge_conflict": "多周模拟业务周的合成事件",
-           "leak_risk": "多周模拟业务周的合成事件"}
+           "opportunity": "多周模拟业务周在真实链路上跑出的事件", "knowledge_conflict": "多周模拟业务周在真实链路上跑出的事件",
+           "leak_risk": "多周模拟业务周在真实链路上跑出的事件"}
 LABELS = {"ask_slot": "补上 / 改正真实值后，最终推荐是否由错变对", "ask_back": "补上 / 改正真实值后，本层转化对照命中集合是否变化",
-          "opportunity": "落在非困难负样本注入的 [earliest, latest] 内、object_id 一致",
+          "opportunity": "落在非困难负样本注入的 [earliest, latest] 内、object_id 一致（注入外、≥ 2 位客户升级的主题不进样本）",
           "knowledge_conflict": "同 opportunity", "leak_risk": "同 opportunity"}
 
 
@@ -99,7 +99,7 @@ def model_card(summary: dict, n_features: int) -> str:
 |---|---|---|---|---|
 {rows}
 
-- 追问、回问按需求卡划分 70 / 15 / 15，另留 2 个现象（`crease_marks`、`low_whiteness`）为 heldout，不参与训练与校准；定时三类按业务周划分 28 / 6 / 6。
+- 追问、回问按需求卡划分 70 / 15 / 15，另留 2 个现象（`crease_marks`、`low_whiteness`）为 heldout，不参与训练与校准；定时三类按业务周划分 28 / 6 / 6；`data/week/w1`（另一个种子）不参与训练，由 `scripts/run_week.py` 评估。
 - 回问样本另补了 3,000 张应升级的卡（只取回问样本）；种子 `tr:50`～`tr:57` 是为回问补的挂在槽位取值上的 L3 转化对照。
 
 ## 适用范围
@@ -112,7 +112,9 @@ def model_card(summary: dict, n_features: int) -> str:
 - 追问只在前置条件通过的组合上打分：已填的槽位不进追问，模型不负责「对低置信度的值复问」。
 - 抽取噪声中填错的置信度（0.4～0.6）与填对的（0.7～0.95）不重叠，比真实抽取更容易分辨。
 - 回问的正例主要取决于该现象下槽位取值的先验（模型看不到真实值），且只来自挂在槽位取值上的少数几条转化对照。
-- 定时三类来自合成事件，比真实链路干净；注入与困难负样本的模式固定，正例少，模型容易学到模式本身。
+- 定时三类的事件来自真实链路（`eval.week.chain_events`：抽取规则、Jev 桩、转译规则模式），与线上定时发现共用状态构建；但注入与困难负样本的模式固定，正例少，模型容易学到模式本身。
+- 升级事件里的 `p_none` 来自 Jev 桩；换成 OneJev 或大模型降级后，机会汇聚的 `mean_p_none` 分布会变，需要用对应配置重跑样本。
+- 知识库检索目前把全部排名里被拦截的知识都计入 `n_blocked`（每次检索几十条），泄露风险主要靠「要求讲原理的次数」区分；检索口径改了之后要重新生成样本并重训。
 - 转化对照匹配的字符二元组规则会让相近取值误命中（如「溢流染色机」命中「气流染色机」），影响回问的取值区分度。
 """
 

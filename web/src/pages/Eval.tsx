@@ -74,12 +74,12 @@ function JueKBlock() {
   const s = j.scheduled_detection;
   return (
     <Group title="Jue-K：一个模型覆盖五类决策，输出校准概率"
-           foot="来源：docs/reports/jue_k/。训练与测试都在程序生成的对话轨迹与合成业务周事件上；追问 / 回问另有未见现象（heldout）的结果见报告。在真实链路事件上的表现见下方业务周。">
+           foot="来源：docs/reports/jue_k/。追问 / 回问来自程序生成的对话轨迹（另有未见现象 heldout 的结果见报告）；定时三类来自生成的业务周在真实链路上跑出的事件。留出周 w1 上的对照见下方业务周。">
       <Table head={["决策（测试集）", "样本（正例）", "Jue-K AUC", "Jue-K ECE", "原型规则 AUC", "原型规则 ECE"]}
              rows={Object.entries(j.calibration).filter(([k]) => k.endsWith("/test")).map(([k, c]) => [
                FAMILY[k.split("/")[0]], `${c.jue_k.n}（${c.positives}）`, c.jue_k.auc.toFixed(3), c.jue_k.ece.toFixed(3),
                c.jue_proto_rule.auc.toFixed(3), c.jue_proto_rule.ece.toFixed(3)])} />
-      <Table head={[`定时发现（${s.weeks.length} 个合成测试周）`, "注入命中", "困难负样本误报"]}
+      <Table head={[`定时发现（${s.weeks.length} 个测试周，真实链路事件）`, "注入命中", "困难负样本误报"]}
              rows={([["Jue-K", s.jue_k], ["原型规则", s.jue_proto_rule]] as const).map(([n, d]) =>
                [n, `${d.hits} / ${d.positives}`, `${d.hard_false_alarms} / ${d.hard_negatives}`])} />
       <Figure src="/reports/jue_k/reliability.png" alt="可靠性图" />
@@ -95,7 +95,7 @@ function WeekBlock() {
   return (
     <Group title="业务周：真实链路上的定时发现，机会汇聚处置 vs 不处置"
            foot={`来源：docs/reports/week/。1 个程序生成的模拟业务周（${w.week}），剧本逐条驱动应用门面；抽取规则、Jev 桩、转译规则模式；`
-             + "处置动作由运行器按固定延迟代替人执行。数量很小，只看方向。泄露风险一行受检索噪声影响（每次检索都被拦截几十条），暂不成立，见报告 README。"}>
+             + "处置动作由运行器按固定延迟代替人执行。数量很小，只看方向。觉原型的泄露风险一行受检索噪声影响（每次检索都被拦截几十条），不成立；Jue-K 在留出周上区分开了两人，见报告 README。"}>
       <Table head={["发现器", "真注入命中", "困难负样本误报", "平均提前（小时）", "注入外发现", "发现环节大模型调用"]}
              rows={names.map((d) => {
                const s = w.detection[d];

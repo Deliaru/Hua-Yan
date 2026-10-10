@@ -11,9 +11,10 @@ import yaml
 
 from huayan.app import HuayanApp
 from huayan.clock import SimClock, get_clock, set_clock
-from huayan.contracts import NeedCard, Trial, WeekItem
+from huayan.contracts import Event, NeedCard, Trial, WeekItem
+from huayan.events import EventLog
 from huayan.jue.proto import JueProto, load_templates
-from huayan.sim import SimCustomer
+from huayan.sim import SimCustomer, to_jsonl
 from huayan.sim.week_events import TICK_HOURS
 
 RULE_ALERT = "config/baselines/rule_alert"
@@ -60,6 +61,18 @@ def run_week(week_dir: str | Path, policy: str, discoverer: str, run_root: str =
                                                 encoding="utf-8")
     set_clock(None)
     return app.run_dir
+
+
+def chain_events(items: list[WeekItem], cards: list[NeedCard], work_dir: Path, name: str) -> EventLog:
+    """Jue-K 定时样本用：把一个生成的业务周写到 work_dir/name，按 ignore 分支在真实链路上跑一遍，读回事件日志。"""
+    week_dir = work_dir / name
+    week_dir.mkdir(parents=True, exist_ok=True)
+    (week_dir / "script.jsonl").write_text(to_jsonl(items), encoding="utf-8")
+    (week_dir / "cards.jsonl").write_text(to_jsonl(cards), encoding="utf-8")
+    run = run_week(week_dir, "ignore", "jue_proto", str(work_dir))
+    events = EventLog()
+    events.events = [Event.model_validate_json(l) for l in (run / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    return events
 
 
 def _build(run_root: str, run_id: str, discoverer: str) -> HuayanApp:

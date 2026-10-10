@@ -1,6 +1,6 @@
 """评估 Jue-K → docs/reports/jue_k/：
 1. 校准（主结果）：每类在 test（追问 / 回问另加 heldout）上的 AUC、Brier、ECE，校准前后与原型规则分数对照；五类可靠性图；
-2. 定时发现：6 个测试周（与训练同一生成方式、未参与训练）上，Jue-K 与原型规则模式按 WP-E 口径比较窗口内发现、提前量、困难负样本误报。
+2. 定时发现：6 个测试周（与训练同一生成方式、在真实链路上跑出事件、未参与训练）上，Jue-K 与原型规则模式按 WP-E 口径比较窗口内发现、提前量、困难负样本误报。
 ECE 用 10 个等频分箱、可靠性图用 10 个等宽分箱，做法参照 JUE-r2 eval/calibration.py。
 
 uv run python scripts/eval_jue_k.py（先跑 make_jue_k_data.py、train_jue_k.py；追问操作点见 eval_ask_policies.py）
@@ -9,6 +9,7 @@ import argparse
 import json
 import pickle
 import random
+import tempfile
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from sklearn.metrics import roc_auc_score
 
 from huayan.contracts import SHANGHAI
 from huayan.domain import load_seeds
+from huayan.eval.week import chain_events
 from huayan.events import EventLog
 from huayan.jue.expr import evaluate
 from huayan.jue.features import vectorize
@@ -30,7 +32,7 @@ from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.state import collect_scheduled
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.sim import make_week
-from huayan.sim.week_events import TICK_HOURS, synth_events
+from huayan.sim.week_events import TICK_HOURS
 from train_jue_k import META, features
 
 FAMILIES = ["ask_slot", "ask_back", "opportunity", "knowledge_conflict", "leak_risk"]
@@ -53,10 +55,10 @@ def detection(seeds, products, models: dict, weeks: range, start: datetime, days
     result = {name: {"hits": 0, "positives": 0, "lead_hours": [], "hard_false_alarms": 0, "hard_negatives": 0,
                      "other_alarms": 0} for name in models}
     by_family = {name: {} for name in models}
+    work = tempfile.TemporaryDirectory()
     for w in weeks:
-        rng = random.Random(1000 + w)
-        items, cards, injections = make_week(seeds, start, days, rng)
-        events = synth_events(items, cards, seeds, products, rng)
+        items, cards, injections = make_week(seeds, start, days, random.Random(1000 + w))
+        events = chain_events(items, cards, Path(work.name), f"w{w}")
         ticks = [datetime.combine(start.date() + timedelta(days=d), time(h), tzinfo=start.tzinfo)
                  for d in range(days) for h in TICK_HOURS]
         for name, model in models.items():
