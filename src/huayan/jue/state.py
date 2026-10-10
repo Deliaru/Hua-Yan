@@ -1,35 +1,67 @@
-"""契约 5.1 / 5.2：把会话与事件日志变成「对象 × 属性」。只读 NeedState、事件日志、种子与已发布产品。"""
+"""契约 5.1 / 5.2：把会话、需求单与事件日志变成「对象 × 属性」。只读 NeedState、需求单、事件日志、种子与知识库。"""
+from __future__ import annotations
+
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
-from huayan.contracts import JueObject, JueState, NeedState, Product, Seeds
+from huayan.contracts import Actor, JueObject, JueState, NeedState, Phenomenon, Product, Requirement, Seeds, SlotDef
 from huayan.domain import match_candidates
+from huayan.escalation.translate import match_translations
 from huayan.events import EventLog
+
+if TYPE_CHECKING:
+    from huayan.knowledge import KnowledgeBase
 
 WINDOWS = {"theme_days": 7, "knowledge_days": 7, "actor_hours": 48}   # 与 config/app.yaml 的 windows 一致
 _PRODUCT_KU = {"sheet", "usage", "mechanism", "formula"}
+_INTERNAL = Actor(id="system:jue", role="rd", name="觉（内部身份，只用于计算 trans_splits）")
 
 
 def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: datetime) -> JueState:
+    return JueState(at=at, mode="realtime", objects=_slot_objects(need.session_id, need.known(), need, seeds, products, 1))
+
+
+def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase, at: datetime) -> JueState:
+    """需求单起草中的槽位（draft → layer 2，pm_confirmed → layer 3）；已知槽位以 req.known_slots 为准。"""
+    layer = {"draft": 2, "pm_confirmed": 3}.get(req.status)
+    if layer is None:
+        return JueState(at=at, mode="realtime", objects={})
+    need = need.model_copy(update={"phenomenon": req.phenomenon})
+    return JueState(at=at, mode="realtime",
+                    objects=_slot_objects(req.id, req.known_slots, need, seeds, kb.products(), layer, kb))
+
+
+def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: Seeds, products: list[Product],
+                  layer: int, kb: KnowledgeBase | None = None) -> dict[str, JueObject]:
     ph = need.phenomenon
     phen = next((p for p in seeds.phenomena if p.id == ph), None)
-    known = need.known()
     ids = lambda k: tuple(c.product_id for c in match_candidates(ph, k, products))
     objects = {}
     for slot in seeds.slots:
         fill = need.slots.get(slot.id)
-        filled = fill is not None and fill.status == "filled"
+        filled = slot.id in known
         splits = 0 if filled or ph is None else len({ids({**known, slot.id: v}) for v in slot.values})
+        trans = 0 if filled or kb is None else _trans_splits(phen, known, slot, kb, layer)
         prior = phen.slot_priors.get(slot.id, {}) if phen else {}
-        oid = f"slot:{need.session_id}/{slot.id}"
+        oid = f"slot:{owner}/{slot.id}"
         objects[oid] = JueObject(object_id=oid, object_type="slot", attrs={
             "slot": slot.id, "phenomenon": ph or "unknown", "filled": filled,
-            "unknown": fill is not None and fill.status == "unknown",
-            "confidence": fill.confidence if filled else 0.0, "asked": need.asked.get(slot.id, 0),
-            "required": phen is not None and slot.id in phen.required_slots, "turn": need.turn_count,
-            "n_filled": len(known), "n_candidates": len(ids(known)) if ph else 0, "splits": splits,
-            "prior_top": max(prior.values(), default=0.0), "chem_savvy": need.profile.chem_savvy})
-    return JueState(at=at, mode="realtime", objects=objects)
+            "unknown": not filled and fill is not None and fill.status == "unknown",
+            "confidence": (fill.confidence if fill is not None and fill.value == known[slot.id] else 1.0) if filled else 0.0,
+            "asked": need.asked.get(slot.id, 0), "required": phen is not None and slot.id in phen.required_slots,
+            "turn": need.turn_count, "n_filled": len(known), "n_candidates": len(ids(known)) if ph else 0,
+            "splits": splits, "prior_top": max(prior.values(), default=0.0), "chem_savvy": need.profile.chem_savvy,
+            "layer": layer, "trans_splits": trans})
+    return objects
+
+
+def _trans_splits(phen: Phenomenon, known: dict[str, str], slot: SlotDef, kb: KnowledgeBase, layer: int) -> int:
+    """该槽位取各个值时，本层转化对照的命中集合有几种。以内部 L3 身份匹配，只产出计数，不外泄内容。"""
+    def hits(k: dict[str, str]) -> frozenset[str]:
+        text = " ".join([phen.label, *k.values()])
+        return frozenset(h.ku.id for h in match_translations(text, kb, _INTERNAL, phen.id) if h.ku.level == layer)
+    return len({hits({**known, slot.id: v}) for v in slot.values})
 
 
 def theme_id(phenomenon: str, known: dict[str, str], seeds: Seeds) -> str:

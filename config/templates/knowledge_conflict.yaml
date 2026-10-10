@@ -8,4 +8,6 @@ rule_score: "attrs.fail_ratio"
 worth_prompt: "产品 {attrs.product_id} 的说明书声称适用 {attrs.slot}={attrs.value}，但 {attrs.n_trials} 次试样中失败 {attrs.n_fail} 次，其中 {attrs.n_fail_product} 次原因为产品本身。说明书与试样结果是否冲突、需要更新？"
 title: "{attrs.product_id} 在 {attrs.value} 上试样反复失败，说明书是否需要更新？"
 owner_role: rd
+# 还在被推荐，损害在扩大
+urgency: "min(1, attrs.n_recommended / 5)"
 bounty_points: 5

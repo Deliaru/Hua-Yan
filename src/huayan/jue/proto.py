@@ -20,6 +20,11 @@ def render(text: str, obj: JueObject) -> str:
     return text.format(object=obj.object_id, attrs=SimpleNamespace(**obj.attrs))
 
 
+def urgency(t: JueTemplate, o: JueObject) -> float:
+    """模板的紧急度表达式（规则，不学习），截断到 [0,1]；为空时 1.0。原型与 Jue-K 共用。"""
+    return 1.0 if t.urgency is None else min(1.0, max(0.0, float(evaluate(t.urgency, o.attrs))))
+
+
 class JueProto:
     name = "jue_proto"
 
@@ -42,9 +47,12 @@ class JueProto:
         else:
             scores = [self._rule(t, o) for t, o in passed]
         p = {(t.id, o.object_id): s for (t, o), s in zip(passed, scores)}
-        decisions = [ScoredDecision(family=t.family, object_id=o.object_id, template_id=t.id,
-                                    p_need=p.get((t.id, o.object_id)), precondition_passed=(t.id, o.object_id) in p)
-                     for t, o in pairs]
+        decisions = []
+        for t, o in pairs:
+            ok = (t.id, o.object_id) in p
+            decisions.append(ScoredDecision(family=t.family, object_id=o.object_id, template_id=t.id,
+                                            p_need=p.get((t.id, o.object_id)), urgency=urgency(t, o) if ok else None,
+                                            precondition_passed=ok))
         if self.meter is not None:
             self.meter.record(caller="jue:proto", kind="jue", impl="onejev" if onejev else "rule",
                               n_objects=len(state.objects), latency_ms=(time.perf_counter() - start) * 1000)

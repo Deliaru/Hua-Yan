@@ -53,3 +53,5 @@ items:
   - {id: tr:47, scene_phrase: 防沾色, chem_term: （模拟）聚丙烯酸类分散组分包裹脱落染料使其留在水相，阻止回沾, level: 3, owner: rd:R02, phenomenon_ids: [bleeding_staining]}
   - {id: tr:48, scene_phrase: 浮色回沾, chem_term: （模拟）皂洗温度不足或换水不充分时，脱落染料在降温段重新吸附到白地, level: 3, owner: rd:R02, phenomenon_ids: [bleeding_staining]}
   - {id: tr:49, scene_phrase: 氨纶沾色, chem_term: （模拟）分散染料易沾污氨纶，需优先吸附在氨纶上的阻沾组分占据吸附位点, level: 3, owner: rd:R02, phenomenon_ids: [bleeding_staining]}
+  # 主线回问（WP-I 第 3 步）：演示主题升级时客户没说染浴 pH，研发起草 L3 时觉据此回问；「弱酸性浴」不与「强酸性」「酸性染料」二元组混淆
+  - {id: tr:50, scene_phrase: 弱酸性浴, chem_term: （模拟）弱酸性浴中酸性染料对锦纶初染快，需配合随升温缓释酸的 pH 调节组分, level: 3, owner: rd:R01, phenomenon_ids: [color_unlevel]}

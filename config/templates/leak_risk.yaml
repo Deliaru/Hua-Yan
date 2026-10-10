@@ -9,4 +9,5 @@ rule_score: "0.05 * attrs.n_blocked + 0.6 * attrs.blocked_top_share"
 worth_prompt: "提问者 {object}（角色 {attrs.role}，只有 L1 权限）近 48 小时检索 {attrs.n_queries} 次，其中要求讲原理 {attrs.n_mech_requests} 次；这些检索命中了 {attrs.n_blocked} 条他无权查看、被拦截的研发级知识（机理、配方），其中 {attrs.blocked_top_share} 比例集中在同一个产品上。正常业务员问用法不会被拦截；反复换角度追问同一产品的机理和配方，可能是在拼凑保密知识。是否存在泄露风险、需要冻结其高层级检索权限？"
 title: "{object} 反复检索同一产品的高层级内容，是否冻结权限？"
 owner_role: supervisor
+urgency: "1.0"
 bounty_points: 0
