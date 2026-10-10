@@ -1,0 +1,84 @@
+placeholder: true
+source: "占位：由大模型按印染行业常识编写的模拟数据，现象、原因与比例均为虚构，待企业数据替换"
+items:
+  - id: color_unlevel
+    label: 色花（匀染性差）
+    customer_phrases: [深一块浅一块, 颜色不匀, 发花, 色花]
+    required_slots: [fiber, equipment]
+    causes: "（模拟）初期上染速率过快、染液与织物交换不充分，导致局部吸色量差异。锦纶对酸性染料亲和力高、上染集中在低温段；氨纶在高张力或低浴比设备中受力不均，色花更明显。涤纶分散染料在升温段控制不当时易出现条花。"
+    slot_priors:
+      fiber: {涤纶: 0.35, 锦纶氨纶: 0.25, 棉: 0.2, 涤棉: 0.1, 锦纶: 0.05, 粘胶: 0.05}
+      equipment: {溢流染色机: 0.5, 气流染色机: 0.3, 卷染机: 0.1, 经轴染色机: 0.1}
+  - id: shade_variation
+    label: 缸差（批次色差）
+    customer_phrases: [这缸和上缸颜色不一样, 每缸颜色对不上, 缸差, 批次之间色差]
+    required_slots: [fiber, water]
+    causes: "（模拟）批次间染浴 pH、水中钙镁离子、升温曲线和浴比的波动，使染料上染率与色光重现性下降。水质稳定时主要来自 pH 漂移与工艺执行偏差，硬水或软水不稳时金属离子影响染料色光。"
+    slot_priors:
+      fiber: {涤纶: 0.3, 棉: 0.3, 锦纶氨纶: 0.2, 涤棉: 0.1, 粘胶: 0.05, 锦纶: 0.05}
+      water: {自来水: 0.85, 软水: 0.07, 硬水: 0.05, 回用水: 0.03}
+  - id: color_spots
+    label: 色斑色点
+    customer_phrases: [一点一点的色点, 布面有斑点, 色斑, 色渍]
+    required_slots: [dye_class, water]
+    causes: "（模拟）水中钙镁及铁离子与染料或助剂形成不溶物沉积在布面；分散染料在高温下分散稳定性下降而凝聚，形成焦油状色点；染料溶解不充分也会产生色点。"
+    slot_priors:
+      dye_class: {活性染料: 0.5, 分散染料: 0.3, 酸性染料: 0.15, 还原染料: 0.05}
+      water: {自来水: 0.4, 硬水: 0.35, 回用水: 0.15, 软水: 0.1}
+  - id: poor_fastness
+    label: 色牢度差
+    customer_phrases: [一洗就掉色, 洗了褪色, 牢度不够, 摩擦掉色]
+    required_slots: [fiber, dye_class]
+    causes: "（模拟）纤维表面浮色未清除干净，或染料与纤维结合不牢。活性染料水解染料残留影响皂洗牢度；分散染料在涤纶表面残留影响摩擦与升华牢度；酸性染料在锦纶上湿牢度偏低。"
+    slot_priors:
+      fiber: {棉: 0.45, 涤纶: 0.2, 锦纶氨纶: 0.15, 涤棉: 0.1, 粘胶: 0.05, 锦纶: 0.05}
+      dye_class: {活性染料: 0.5, 分散染料: 0.25, 酸性染料: 0.2, 还原染料: 0.05}
+  - id: harsh_hand
+    label: 手感发硬
+    customer_phrases: [摸起来硬邦邦, 手感发硬, 手感太糙, 板硬]
+    required_slots: [fiber, process]
+    causes: "（模拟）前处理过度损伤纤维表面、残留碱或盐、助剂成膜过硬，使纤维间摩擦增大。纤维素纤维失去天然油脂后尤其明显，需要柔软剂在纤维表面形成润滑层。"
+    slot_priors:
+      fiber: {棉: 0.4, 涤纶: 0.25, 涤棉: 0.15, 粘胶: 0.1, 锦纶氨纶: 0.1}
+      process: {浸染: 0.6, 连续轧染: 0.25, 冷轧堆: 0.1, 印花: 0.05}
+  - id: crease_marks
+    label: 起皱折痕
+    customer_phrases: [布面有折痕, 起皱印子去不掉, 鸡爪印, 折皱]
+    required_slots: [fiber, equipment]
+    causes: "（模拟）织物在绳状染色中高温下长时间折叠受压，纤维在玻璃化温度以上定形出折痕。降温过快、浴比过小、布速不当都会加重。需要降低织物与织物、织物与设备之间的摩擦。"
+    slot_priors:
+      fiber: {涤纶: 0.3, 锦纶氨纶: 0.3, 棉: 0.2, 涤棉: 0.1, 锦纶: 0.1}
+      equipment: {溢流染色机: 0.45, 气流染色机: 0.3, 卷染机: 0.15, 经轴染色机: 0.1}
+  - id: low_whiteness
+    label: 白度不足
+    customer_phrases: [白得不够, 白度上不去, 发灰不够白, 白布不白]
+    required_slots: [fiber, process]
+    causes: "（模拟）漂白时双氧水分解过快或无效分解，天然色素去除不彻底；增白剂与纤维不匹配或用量不当。纤维素纤维与涤纶需要不同类型的增白剂。"
+    slot_priors:
+      fiber: {棉: 0.55, 涤棉: 0.25, 涤纶: 0.15, 粘胶: 0.05}
+      process: {浸染: 0.5, 连续轧染: 0.3, 冷轧堆: 0.2}
+  - id: strength_loss
+    label: 强力下降
+    customer_phrases: [一扯就破, 强力下降, 布变脆了, 撕破强力不够]
+    required_slots: [fiber, bath_ph]
+    causes: "（模拟）纤维素纤维在强碱、高温和氧化条件下发生氧化降解，聚合度下降；金属离子催化双氧水无效分解会加剧损伤。锦纶在强酸性高温条件下也会水解。"
+    slot_priors:
+      fiber: {棉: 0.5, 粘胶: 0.2, 涤棉: 0.2, 锦纶: 0.1}
+      bath_ph: {碱性: 0.6, 中性: 0.2, 弱酸性: 0.15, 强酸性: 0.05}
+  - id: yellowing
+    label: 泛黄
+    customer_phrases: [放一阵就发黄, 白的变黄了, 泛黄, 黄变]
+    required_slots: [fiber, constraint]
+    causes: "（模拟）包装材料中的抗氧剂与氮氧化物反应生成黄色物质（酚黄变），锦纶与氨纶尤其敏感；柔软剂中的氨基在高温定形时氧化也会导致黄变。"
+    slot_priors:
+      fiber: {锦纶氨纶: 0.35, 涤纶: 0.3, 棉: 0.25, 锦纶: 0.1}
+      constraint: {无特殊要求: 0.6, 无APEO: 0.25, 低泡: 0.1, 低温节能: 0.05}
+  - id: bleeding_staining
+    label: 渗色沾色
+    customer_phrases: [白地被染上颜色, 沾色, 渗色, 串色]
+    required_slots: [fiber, dye_class, process]
+    causes: "（模拟）未固着的染料在水洗或后处理中脱落并重新沾到白地或另一组分上。涤棉中分散染料沾污棉组分、锦氨中分散染料沾污氨纶都很常见；印花白地沾色多与水洗时染料再沉积有关。"
+    slot_priors:
+      fiber: {涤棉: 0.3, 锦纶氨纶: 0.3, 棉: 0.2, 涤纶: 0.2}
+      dye_class: {活性染料: 0.4, 分散染料: 0.4, 酸性染料: 0.2}
+      process: {浸染: 0.5, 印花: 0.3, 连续轧染: 0.2}

@@ -1,0 +1,14 @@
+id: opportunity
+family: opportunity
+object_type: theme
+decision_label: 是否立项
+# 同类需求至少升级 2 次、还没有在途立项就进入评估（同一客户反复升级也进来，作为 Jue-K 要学会区分的困难负样本）
+precondition: "attrs.n_escalations >= 2 and not attrs.open_project"
+# 规则：至少两个不同客户才算机会
+rule_score: "(attrs.n_customers >= 2) * (0.1 * attrs.n_escalations + 0.15 * attrs.n_customers + 0.3 * attrs.mean_p_none)"
+worth_prompt: "需求主题 {object}：「升级」表示业务员在会话中找不到任何适用的现有产品、已转给产品经理。该主题 {attrs.days_active} 天内升级 {attrs.n_escalations} 次，来自 {attrs.n_customers} 个不同客户，同主题被现有产品成功解决 {attrs.n_matched} 次，系统判断「现有产品都不合适」的平均概率 {attrs.mean_p_none}，目前没有在途的立项。多个客户反复提出同一个现有产品解决不了的需求，说明存在市场机会。是否应该立项开发对应的新产品？"
+title: "{object}需求反复出现且无产品可用，是否立项？"
+owner_role: pm
+# 涉及客户越多越紧急
+urgency: "min(1, attrs.n_customers / 4)"
+bounty_points: 10

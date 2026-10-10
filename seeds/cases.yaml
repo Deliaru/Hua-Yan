@@ -1,0 +1,59 @@
+placeholder: true
+source: "占位：由大模型编写的模拟历史案例，客户与对话均为虚构"
+items:
+  - id: case:1
+    phenomenon: color_unlevel
+    slots: {fiber: 涤纶, equipment: 溢流染色机, dye_class: 分散染料}
+    product_id: HY-LV101
+    scene_text: "（模拟）客户说纯涤的布染深色，溢流缸出来深一块浅一块，尤其是布头布尾。"
+    pm_translation: "（模拟）涤纶分散染料高温染色匀染性差，升温段上染过快，建议高温匀染剂并放慢升温。"
+    owner: pm:P01
+  - id: case:2
+    phenomenon: color_unlevel
+    slots: {fiber: 锦纶氨纶, equipment: 溢流染色机, dye_class: 酸性染料}
+    product_id: HY-LV205
+    scene_text: "（模拟）客户做尼龙加弹力的瑜伽服面料，溢流缸染浅色发花，回修好几次。"
+    pm_translation: "（模拟）锦纶酸性染料低温段上染集中，浅色更明显，需要竞争染座型的锦氨匀染剂。"
+    owner: pm:P01
+  - id: case:3
+    phenomenon: color_spots
+    slots: {dye_class: 活性染料, water: 硬水}
+    product_id: HY-CH310
+    scene_text: "（模拟）客户用井水，棉布染完布面有一点一点的色点，换了染料批次也一样。"
+    pm_translation: "（模拟）硬水中钙镁离子与活性染料或助剂形成沉淀，需要螯合分散剂。"
+    owner: pm:P01
+  - id: case:4
+    phenomenon: poor_fastness
+    slots: {fiber: 棉, dye_class: 活性染料}
+    product_id: HY-FX301
+    scene_text: "（模拟）客户的纯棉T恤深色款一洗就掉色，终端客户投诉，要求不能含甲醛。"
+    pm_translation: "（模拟）活性染料深色皂洗牢度不足，水解染料残留，建议无醛固色剂。"
+    owner: pm:P01
+  - id: case:5
+    phenomenon: crease_marks
+    slots: {fiber: 锦纶氨纶, equipment: 气流染色机}
+    product_id: HY-AC601
+    scene_text: "（模拟）客户的锦氨面料在气流缸里染完有鸡爪印，定形也去不掉。"
+    pm_translation: "（模拟）绳状染色高温下折叠处摩擦与压力集中，需要防皱润滑剂。"
+    owner: pm:P01
+  - id: case:6
+    phenomenon: strength_loss
+    slots: {fiber: 棉, bath_ph: 碱性}
+    product_id: HY-PT801
+    scene_text: "（模拟）客户说全棉布漂完以后布变脆了，撕一下就破。"
+    pm_translation: "（模拟）碱氧漂白中双氧水无效分解损伤纤维素，需要纤维保护剂控制分解。"
+    owner: pm:P01
+  - id: case:7
+    phenomenon: color_unlevel
+    slots: {fiber: 锦纶氨纶, equipment: 气流染色机, dye_class: 酸性染料}
+    product_id: null
+    scene_text: "（模拟）客户新上了气流缸做锦氨面料，深一块浅一块，用溢流缸那套助剂也不行。"
+    pm_translation: "（模拟）低浴比气流染色机中锦纶上染更快，现有锦氨匀染剂只验证过溢流和卷染。初步判断要让染浴 pH 随升温逐步下降来控制上染速率，需研发评估缓染方案。"
+    owner: pm:P01
+  - id: case:8
+    phenomenon: bleeding_staining
+    slots: {fiber: 锦纶氨纶, dye_class: 分散染料, process: 浸染}
+    product_id: null
+    scene_text: "（模拟）客户做锦氨面料拼色，用了点分散的，染完氨纶那部分被沾上颜色。"
+    pm_translation: "（模拟）分散染料沾污氨纶组分，现有防沾色产品只针对棉和涤棉。需要一种优先吸附在氨纶上的阻沾组分，需研发评估。"
+    owner: pm:P01
