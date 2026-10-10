@@ -71,6 +71,13 @@ def offline_mainline(_):
     return {"ok": True}
 
 
+def turn(p):
+    # 离线模式直接录入发言；和 chat 一样之后 tick，问题队列与回问才会更新
+    session = app.add_turn(p["session_id"], p["speaker"], p["text"])
+    app.tick()
+    return session
+
+
 def chat(p):
     conv = app.agents.chat(p["actor"], p["text"], p.get("session_id"))
     app.tick()
@@ -103,7 +110,7 @@ POST = {
     "/api/reset": reset,
     "/api/offline-mainline": offline_mainline,
     "/api/sessions": lambda p: app.start_session(p["customer_id"], p["sales_id"]),
-    "/api/turn": lambda p: app.add_turn(p["session_id"], p["speaker"], p["text"]),
+    "/api/turn": turn,
     "/api/agents/chat": chat,
     "/api/agents/approve": lambda p: decide(p, True),
     "/api/agents/reject": lambda p: decide(p, False),

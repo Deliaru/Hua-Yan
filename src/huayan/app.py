@@ -1,13 +1,15 @@
 """应用门面：负责身份与视图边界，界面只调用这里。"""
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
 import yaml
 
+from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
 from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionStat, DecryptGrant,
-    Evidence, KnowledgeUnit, LedgerEntry, NeedState, Question, ReqItem, Requirement,
+    Evidence, JueRecord, KnowledgeUnit, LedgerEntry, NeedState, Question, ReqItem, Requirement,
     RequirementView, Resolution, RunStatus, Session, SessionView, SheetDraft, Trial)
 from huayan.domain import consistent, load_seeds
 from huayan.escalation import flow
@@ -15,10 +17,14 @@ from huayan.events import EventLog
 from huayan.gateway import build_gateway
 from huayan.jev import Jev
 from huayan.jev.system1 import build_system1
+from huayan.jue.jue_k import JueK
+from huayan.jue.proto import JueProto, load_templates
+from huayan.jue.publish import publish, select_asks
+from huayan.jue.state import collect_scheduled, realtime_state, requirement_state
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.disclosure import VERSIONS, cap, render
 from huayan.l1.extract import LLMExtractor, RuleExtractor
-from huayan.l1.session import handle_turn, recommend, record_disclosure, required_hints
+from huayan.l1.session import handle_turn, recommend, record_disclosure
 from huayan.meter import FileMeter
 
 
@@ -57,8 +63,34 @@ class HuayanApp:
                          else LLMExtractor(app.seeds, app.gateway))
         app._sessions, app._requirements, app._trials = {}, {}, {}
         app.grants = []
-        app.ask_hints = lambda need: required_hints(need, app.seeds, app.config["thresholds"]["max_asks"])
+        app.templates = load_templates(app.config["templates_dir"])
+        app.jue_realtime = app._jue_model(app.config["realtime_model"], "realtime")
+        app.jue_scheduled = app._jue_model(app.config["scheduled_model"], "scheduled")
+        app._jue_trace, app._answers = {}, {}
+        app._last_scan, app._n_escalations = None, 0
+        app.agents = AgentHub(app)
         return app
+
+    def _jue_model(self, name, mode):
+        # 原型在 system1 为 OneJev 时用它打分，否则规则模式；Jue-K 只做本地推理。
+        if name == "jue_k":
+            return JueK(self.config["jue_k_dir"], self.config["templates_dir"], mode, self.meter)
+        return JueProto(self.config["templates_dir"], self.system1, mode, self.meter)
+
+    def _propose(self, model, state):
+        out = model.propose(state)
+        with (self.run_dir / "jue_samples.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(JueRecord(state=state, output=out).model_dump_json() + "\n")
+        return out
+
+    def ask_hints(self, need):
+        """实时觉：每轮对话后给业务员的追问提示；输出记入 jue_trace。"""
+        state = realtime_state(need, self.seeds, self.kb.products(), get_clock().now())
+        out = self._propose(self.jue_realtime, state)
+        self._jue_trace.setdefault(need.session_id, []).append(out)
+        thresholds = self.config["thresholds"]
+        threshold = thresholds["ask_jue_k"] if self.jue_realtime.name == "jue_k" else thresholds["ask"]
+        return select_asks(out, state, self.seeds, threshold, thresholds["max_asks"])
 
     def _actor(self, actor_id, roles=None):
         actor = self.actors.get(actor_id)
@@ -90,13 +122,37 @@ class HuayanApp:
             raise ValueError("需要有效发言角色与非空文本")
         current = _find(self._sessions, session_id, "会话")
         previous = current.need
-        session = handle_turn(current, speaker, text, self)
+        asks = [q for q in self.bus.list(family="ask_back") if q.refs["session_id"] == session_id]
+        session = handle_turn(current, speaker, text, self, answering=bool(asks))
+        answered = self._answer_ask_back(session, asks) if speaker == "customer" else set()
         if (previous.phenomenon, previous.known()) != (session.need.phenomenon, session.need.known()):
             for req in self._requirements.values():
-                if req.status == "draft" and session_id in req.session_ids:
+                if req.status == "draft" and session_id in req.session_ids and req.id not in answered:
                     self._retire_draft(req)
         self._save_session(session)
         return session.model_copy(deep=True)
+
+    def _answer_ask_back(self, session, asks):
+        """客户本轮答了回问的槽位：回问结案，取值写入需求单，通知需求单当前的起草人。返回被回填的需求单 id。"""
+        turn, answered = session.turns[-1], set()
+        for q in asks:
+            fill = session.need.slots.get(q.refs["slot"])
+            if fill is None or fill.turn_id != turn.id:
+                continue
+            req = self._requirements[q.refs["requirement_id"]]
+            if fill.status == "filled":
+                req.known_slots[fill.slot] = fill.value
+            self._answers.setdefault(req.id, {})[fill.slot] = turn.id
+            self.bus.resolve(q.id, Resolution(action="answered", by=session.customer_id,
+                                              note=fill.value or "客户不清楚"), get_clock().now())
+            self._save_requirement(req)
+            answered.add(req.id)
+            drafter = req.drafted_by if req.status == "draft" else req.chem_drafted_by
+            if drafter and not self.config["gateway_mock"]:
+                label = next(s.label for s in self.seeds.slots if s.id == fill.slot)
+                self.agents.notify(drafter, f"回问 {q.id} 已有答复：{label} = {fill.value or '客户不清楚'}"
+                                            f"（原话「{fill.quote}」），已写入需求单 {req.id}，请据此更新条目。")
+        return answered
 
     def recommend_now(self, session_id):
         session = recommend(_find(self._sessions, session_id, "会话"), self)
@@ -133,13 +189,13 @@ class HuayanApp:
 
     def jue_trace(self, session_id):
         _find(self._sessions, session_id, "会话")
-        return []
+        return [out.model_copy(deep=True) for out in self._jue_trace.get(session_id, [])]
 
     def status(self):
         return RunStatus(run_id=self.run_id, replay=self.config["replay"],
-            system1_impl=self.config["system1_impl"], realtime_model="required_stub",
-            extractor=self.extractor.name, gateway_mock=self.config["gateway_mock"],
-            seeds_placeholder=self.seeds.placeholder)
+            system1_impl=self.config["system1_impl"], realtime_model=self.jue_realtime.name,
+            scheduled_model=self.jue_scheduled.name, extractor=self.extractor.name,
+            gateway_mock=self.config["gateway_mock"], seeds_placeholder=self.seeds.placeholder)
 
     def _requirement(self, req_id, by, roles, states):
         actor = self._actor(by, roles)
@@ -183,8 +239,12 @@ class HuayanApp:
         known = sessions[0].need.known()
         for session in sessions[1:]:
             known = {key: value for key, value in known.items() if session.need.known().get(key) == value}
+        # 回问得到的答复已写入需求单，不算条件变化
+        answers = self._answers.get(req.id, {})
+        known.update({slot: req.known_slots[slot] for slot in answers if slot in req.known_slots})
         return (any(s.need.phenomenon != req.phenomenon for s in sessions) or known != req.known_slots or
                 any(e.ts > req.created_at and e.session_id in req.session_ids and e.payload.get("conditions_changed")
+                    and e.payload["turn_id"] not in answers.values()
                     for e in self.events.query(kinds=["extraction"], since=req.created_at)))
 
     def draft_requirement(self, question_id, by):
@@ -272,7 +332,12 @@ class HuayanApp:
         req.status, req.pm_confirmed_by = "pm_confirmed", by
         self.events.append("requirement_confirmed", by,
             {"requirement_id": req.id, "phenomenon": req.phenomenon, "known": req.known_slots})
-        self.bus.resolve(req.question_id, Resolution(action="draft_requirement", by=by), get_clock().now())
+        self._settle(req.question_id, Resolution(action="draft_requirement", by=by))
+        # 机会汇聚立项时，这些会话各自的升级也由这张需求单承接
+        for q in self.bus.list(family="escalate_need"):
+            if q.refs.get("session_id") in req.session_ids:
+                self.bus.resolve(q.id, Resolution(action="draft_requirement", by=by, note=f"已并入需求单 {req.id}"),
+                                 get_clock().now())
         return self._save_requirement(req, viewer_id=by)
 
     def translate_requirement(self, req_id, by):
@@ -464,3 +529,67 @@ class HuayanApp:
         result = self.bus.resolve(question_id, Resolution(action="approve_decrypt" if approve else "reject_decrypt",
                                                          by=by), at)
         return result.model_copy(deep=True)
+
+    # 觉定时发现与处置（WP-I）
+    def _settle(self, question_id, resolution):
+        """人处置问题：带悬赏的给处置人记 bounty 积分。"""
+        q = self.bus.resolve(question_id, resolution, get_clock().now())
+        if q.bounty_points and resolution.action != "dismiss":
+            self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=resolution.by, points=q.bounty_points,
+                                        reason="bounty", ref=q.id))
+        return q
+
+    def scan(self, at=None):
+        at = at or get_clock().now()
+        state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"])
+        out = self._propose(self.jue_scheduled, state)
+        self._last_scan = at
+        return publish(out, state, self.templates, self.bus, self.config["thresholds"]["publish"],
+                       seeds=self.seeds, refs=refs)
+
+    def resolve(self, question_id, action, by, note=""):
+        actor = self._actor(by)
+        q = _find(self.bus.questions, question_id, "问题")
+        if q.status != "open":
+            raise ValueError("问题已处理")
+        if actor.role != q.owner_role or q.owner_id not in (None, by):
+            raise PermissionDenied("只有问题的负责人可以处置")
+        allowed = {"opportunity": "approve_project", "escalate_need": "approve_project",
+                   "knowledge_conflict": "update_sheet", "leak_risk": "freeze_access"}
+        if action != "dismiss" and allowed.get(q.family) != action:
+            raise ValueError(f"{q.family} 问题不能执行 {action}")
+        if action == "approve_project":
+            # 起草后问题保持 open，产品经理确认需求单时结案（confirm_requirement）
+            self.draft_requirement(question_id, by)
+            return q.model_copy(deep=True)
+        if action == "update_sheet":
+            pid, slot, value = q.refs["product_id"], *q.object_id.split("|")[1].split("=")
+            current = self.kb.product(pid).applicable.get(slot) or next(
+                s.values for s in self.seeds.slots if s.id == slot)
+            self.kb.update_applicable(pid, slot, [v for v in current if v != value], by)
+        elif action == "freeze_access":
+            self.kb.freeze(q.refs["actor_id"], by, get_clock().now())
+        return self._settle(question_id, Resolution(action=action, by=by, note=note)).model_copy(deep=True)
+
+    def _ask_back(self, req, at):
+        need = self._sessions[req.session_ids[0]].need
+        state = requirement_state(req, need, self.seeds, self.kb, at)
+        out = self._propose(self.jue_realtime, state)
+        refs = {oid: {"session_id": need.session_id, "sales_id": need.sales_id} for oid in state.objects}
+        return publish(out, state, self.templates, self.bus, self.config["thresholds"]["publish"],
+                       seeds=self.seeds, refs=refs)
+
+    def tick(self):
+        now = get_clock().now()
+        # 业务时钟可能不走（模拟时钟），所以用升级事件数判断「上次 tick 后出现过升级」
+        n_escalations = len(self.events.query(kinds=["escalate"]))
+        found = []
+        if (self._last_scan is None or n_escalations > self._n_escalations
+                or now - self._last_scan >= timedelta(minutes=30)):
+            found += self.scan(now)
+        for req in list(self._requirements.values()):
+            if req.status in ("draft", "pm_confirmed"):
+                found += self._ask_back(req, now)
+        self._n_escalations = n_escalations
+        self.agents.dispatch()
+        return [q.model_copy(deep=True) for q in found]

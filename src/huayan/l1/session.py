@@ -1,20 +1,11 @@
-"""L1 链路；required_hints 是 WP-I 将替换的明确标注的追问替身。"""
+"""L1 链路：抽取 → 觉的追问提示（门面 ask_hints）→ Jev 推荐或升级 → L1 回答。"""
 from huayan.clock import get_clock
-from huayan.contracts import (AskHint, AuditRecord, Evidence, LedgerEntry, Question,
+from huayan.contracts import (AuditRecord, Evidence, LedgerEntry, Question,
                               Recommendation, Resolution, Turn)
 from huayan.domain import match_candidates
 from huayan.knowledge.disclosure import cap, render
 from .answer import answer
 from .extract import apply_extraction, validate_extraction
-
-
-def required_hints(need, seeds, max_asks=2):
-    phenomenon = next((p for p in seeds.phenomena if p.id == need.phenomenon), None)
-    if not phenomenon:
-        return []
-    return [AskHint(session_id=need.session_id, slot=s.id, label=s.label, ask_text=s.ask_text,
-                    p_need=0.8, scored_by="rule") for s in seeds.slots
-            if s.id in phenomenon.required_slots and s.id not in need.slots and need.asked.get(s.id, 0) < 2][:max_asks]
 
 
 def record_disclosure(card, deps):
@@ -96,7 +87,8 @@ def retire_escalation(session, deps, note):
         deps.bus.resolve(q.id, Resolution(action="dismiss", by="system:l1", note=note), get_clock().now())
 
 
-def handle_turn(session, speaker, text, deps):
+def handle_turn(session, speaker, text, deps, answering=False):
+    """answering：会话有待回答的回问，客户这轮是在为需求单补信息，L1 不再自行撤销升级、追问或推荐。"""
     n = len(session.turns) + 1
     turn = Turn(id=f"turn:{session.id}:{n}", session_id=session.id, n=n, speaker=speaker,
                 text=text, ts=get_clock().now())
@@ -111,13 +103,13 @@ def handle_turn(session, speaker, text, deps):
     deps.events.append("extraction", session.sales_id, {"intent": result.intent, "phenomenon": result.phenomenon,
         "filled": session.need.known(), "extracted_by": deps.extractor.name,
         "conditions_changed": conditions_changed, "turn_id": turn.id}, session_id=session.id)
-    if conditions_changed:
+    if conditions_changed and not answering:
         retire_escalation(session, deps, "客户需求条件已变化，旧升级依据失效，重新评估")
         session.recommendation, session.status = None, "open"
-    if result.intent == "need" or conditions_changed:
+    if (result.intent == "need" or conditions_changed) and not answering:
         session.hints = deps.ask_hints(session.need)
         deps.events.append("ask_hint", session.sales_id, {"slots": [h.slot for h in session.hints],
-            "p": {h.slot: h.p_need for h in session.hints}, "model": "required_stub"}, session_id=session.id)
+            "p": {h.slot: h.p_need for h in session.hints}, "model": deps.jue_realtime.name}, session_id=session.id)
         if not session.hints:
             recommend(session, deps)
         elif session.status == "recommended":

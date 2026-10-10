@@ -37,7 +37,7 @@ function StatusFooter() {
   const degraded = [
     s.seeds_placeholder && "种子占位",
     s.system1_impl !== "onejev" && (s.system1_impl === "mock" ? "Jev 用桩" : "Jev 大模型降级"),
-    !["jue_proto", "jue_k"].includes(s.realtime_model) && "觉实时用规则桩",
+    [s.realtime_model, s.scheduled_model].includes("jue_proto") && s.system1_impl !== "onejev" && "觉用规则打分",
     s.extractor !== "llm" && "抽取用规则",
     s.gateway_mock && "角色助手离线",
     s.replay && "记录回放",

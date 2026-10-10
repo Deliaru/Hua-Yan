@@ -160,7 +160,7 @@ def test_l1_recommend_and_escalate(tmp_path, monkeypatch):
     assert unknown.need.asked["equipment"] == 1
     assert not unknown.hints
     assert (app.run_dir / "sessions/sess_1.json").exists()
-    assert app.status().realtime_model == "required_stub"
+    assert app.status().realtime_model == "jue_proto"
     bad = ExtractionResult(intent="need", phenomenon="color_unlevel", profile=CustomerProfile(), slots=[
         ExtractedSlot(slot="fiber", value="虚构面料", status="filled", confidence=0.9,
                       quote="锦纶氨纶", turn_n=2)])
