@@ -2,18 +2,19 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { AppCtx } from "./ctx";
 import type { Meta, Role } from "./types";
-import { Backdrop } from "./components/Backdrop";
-import { Segmented } from "./components/Controls";
+import { Popover, Segmented } from "./components/Controls";
+import { ChevronDown, Close, Refresh } from "./components/Icons";
 import { Sales } from "./pages/Sales";
 import { Pm } from "./pages/Pm";
 import { Rd } from "./pages/Rd";
 
 const PAGES = [
-  ["sales", "业务员 · L1"],
-  ["pm", "产品经理 · L2"],
-  ["rd", "研发 · L3"],
+  ["sales", "业务员"],
+  ["pm", "产品经理"],
+  ["rd", "研发"],
 ] as const;
 type Page = (typeof PAGES)[number][0];
+const short = (name: string) => name.replace("（模拟）", "");
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -26,10 +27,11 @@ export default function App() {
   useEffect(() => {
     api.meta().then(setMeta, fail);
   }, [version]);
-  if (!meta) return error ? <p className="p-10 text-red-600">{error}</p> : null;
+  if (!meta) return error ? <p className="p-10 text-danger">{error}</p> : null;
 
   const people = meta.actors.filter((a) => a.role === page);
   const me = who[page] ?? people[0].id;
+  const myName = short(people.find((a) => a.id === me)!.name);
   const ctx = {
     meta,
     me,
@@ -41,41 +43,48 @@ export default function App() {
 
   return (
     <AppCtx.Provider value={ctx}>
-      <div className="min-h-full">
-        <Backdrop />
-        <div className="edge edge-top">{[...Array(6)].map((_, i) => <i key={i} />)}</div>
-        <div className="edge edge-bottom">{[...Array(6)].map((_, i) => <i key={i} />)}</div>
-        <header className="sticky top-0 z-20 grid h-[76px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="pill flex h-11 w-11 shrink-0 items-center justify-center font-serif text-[18px]">化</span>
-            <span className="on-sky font-serif text-[22px]">化言</span>
-          </div>
-          <Segmented items={PAGES} value={page} onChange={setPage} />
-          <div className="flex items-center justify-self-end gap-2">
-            <Segmented size="sm" items={people.map((a) => [a.id, a.name.replace("（模拟）", "")] as const)} value={me}
-                       onChange={(id) => setWho({ ...who, [page]: id })} />
-            <button
-              className="btn pill press !h-9 text-ink/70 hover:text-ink"
-              title={`当前 ${meta.status.run_id}；重建门面，开始新的 run`}
-              onClick={() => api.reset().then(ctx.refresh, fail)}
-            >
-              新开一轮
+      <header className="bar fixed inset-x-0 top-0 z-30 flex h-[52px] items-center border-b border-sep px-4">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-gradient-to-b from-[#3a3a3c] to-ink text-[13px] font-semibold text-white">化</span>
+          <span className="text-[14px] font-semibold">化言</span>
+          <span className="tag" title="全部为模拟数据：占位种子与程序生成的对话，不含任何真实客户与配方">模拟数据</span>
+        </div>
+        <div className="absolute left-1/2 -translate-x-1/2">
+          <Segmented items={PAGES} value={page} onChange={setPage} wide />
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <Popover align="right" trigger={(toggle) => (
+            <button onClick={toggle} className="flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#8e8e93] text-[11px] font-semibold text-white">
+                {myName.endsWith("工") ? myName.at(-2) : myName.at(-1)}
+              </span>
+              <span className="text-[13px]">{myName}</span>
+              <span className="text-ink-2"><ChevronDown /></span>
             </button>
-          </div>
-        </header>
-
-        {page === "sales" && <Sales key={me} />}
-        {page === "pm" && <Pm key={me} />}
-        {page === "rd" && <Rd key={me} />}
-
-        {error && (
-          <button onClick={() => setError(null)}
-                  className="card anim-rise fixed right-5 top-20 z-40 max-w-[360px] !py-3 text-left text-[14px] text-red-600">
-            {error}
-            <span className="ml-2 text-ink/40">✕</span>
+          )}>
+            {(close) => people.map((a) => (
+              <button key={a.id} className="menu-item" onClick={() => { setWho({ ...who, [page]: a.id }); close(); }}>
+                <span className="w-3">{a.id === me ? "✓" : ""}</span>{short(a.name)}
+              </button>
+            ))}
+          </Popover>
+          <button className="icon-btn" title={`新开一轮（当前 ${meta.status.run_id}）`}
+                  onClick={() => api.reset().then(ctx.refresh, fail)}>
+            <Refresh />
           </button>
-        )}
-      </div>
+        </div>
+      </header>
+
+      {page === "sales" && <Sales key={me} />}
+      {page === "pm" && <Pm key={me} />}
+      {page === "rd" && <Rd key={me} />}
+
+      {error && (
+        <div className="popover anim-fade fixed right-4 top-[60px] flex max-w-[360px] items-start gap-2 px-3 py-2.5 text-[13px]">
+          <span className="flex-1 text-danger">{error}</span>
+          <button onClick={() => setError(null)} className="icon-btn !h-5 !w-5"><Close /></button>
+        </div>
+      )}
     </AppCtx.Provider>
   );
 }
