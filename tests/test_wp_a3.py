@@ -10,7 +10,6 @@ from huayan.knowledge import PermissionDenied
 
 
 def test_translation_release_and_ownership(tmp_path):
-    pytest.importorskip("huayan.escalation.translate", reason="等待 B 线 WP-T 转译引擎集成")
     config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
     config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"))
     path = tmp_path / "app.yaml"
