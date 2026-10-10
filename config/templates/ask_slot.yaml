@@ -1,0 +1,11 @@
+id: ask_slot
+family: ask_slot
+object_type: slot
+decision_label: 是否追问该信息
+# 未填、没答过「不清楚」、问过不到 2 次、现象已知；问了会改变候选集，或是必问项且候选不止一个
+precondition: "not attrs.filled and not attrs.unknown and attrs.asked < 2 and attrs.phenomenon != 'unknown' and (attrs.splits >= 2 or (attrs.required and attrs.n_candidates >= 2))"
+# 能分出的候选集越多越该问；最常见取值占比越高，问了越可能白问
+rule_score: "0.4 + 0.15 * attrs.splits - 0.3 * attrs.prior_top"
+worth_prompt: "会话中客户反映的现象是「{attrs.phenomenon}」，尚未确认槽位「{attrs.slot}」（{object}）；已知 {attrs.n_filled} 项条件，当前候选产品 {attrs.n_candidates} 个，该信息有 {attrs.splits} 种可能改变候选集。此刻是否需要追问该信息？"
+title: "追问 {attrs.slot}"
+owner_role: sales

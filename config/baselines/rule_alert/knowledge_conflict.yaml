@@ -1,0 +1,10 @@
+id: rule_alert_knowledge_conflict
+family: knowledge_conflict
+object_type: knowledge
+decision_label: 是否更新说明书
+# 常见告警：任一试样失败
+precondition: "attrs.n_fail >= 1"
+worth_prompt: "{attrs.product_id} 在 {attrs.slot}={attrs.value} 上有 {attrs.n_fail} 次试样失败，是否更新说明书？"
+title: "{attrs.product_id} 在 {attrs.value} 上试样失败，是否更新说明书？"
+owner_role: rd
+bounty_points: 5
