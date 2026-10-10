@@ -7,18 +7,30 @@ import { ChevronDown, Close, Refresh } from "./components/Icons";
 import { Sales } from "./pages/Sales";
 import { Pm } from "./pages/Pm";
 import { Rd } from "./pages/Rd";
+import { Layers } from "./pages/Layers";
+import { Eval } from "./pages/Eval";
 
 const PAGES = [
   ["sales", "业务员"],
   ["pm", "产品经理"],
   ["rd", "研发"],
+  ["layers", "三层对照"],
+  ["eval", "评测"],
 ] as const;
 type Page = (typeof PAGES)[number][0];
 const short = (name: string) => name.replace("（模拟）", "");
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [page, setPage] = useState<Page>("sales");
+  // 页面记在地址的 # 上：可以直接打开 #layers、#eval，页面之间也能互相链接
+  const fromHash = () => PAGES.find(([k]) => `#${k}` === location.hash)?.[0] ?? "sales";
+  const [page, setPageState] = useState<Page>(fromHash);
+  const setPage = (p: Page) => { location.hash = p; setPageState(p); };
+  useEffect(() => {
+    const sync = () => setPageState(fromHash());
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
   const [who, setWho] = useState<Partial<Record<Role, string>>>({});
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -29,8 +41,10 @@ export default function App() {
   }, [version]);
   if (!meta) return error ? <p className="p-10 text-danger">{error}</p> : null;
 
-  const people = meta.actors.filter((a) => a.role === page);
-  const me = who[page] ?? people[0].id;
+  // 三层对照、评测页不切换身份（各列的查看身份写在页面上），me 取产品经理
+  const role = page === "layers" || page === "eval" ? null : page;
+  const people = meta.actors.filter((a) => a.role === (role ?? "pm"));
+  const me = (role && who[role]) || people[0].id;
   const myName = short(people.find((a) => a.id === me)!.name);
   const ctx = {
     meta,
@@ -53,7 +67,7 @@ export default function App() {
           <Segmented items={PAGES} value={page} onChange={setPage} wide />
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <Popover align="right" trigger={(toggle) => (
+          {role && <Popover align="right" trigger={(toggle) => (
             <button onClick={toggle} className="flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#8e8e93] text-[11px] font-semibold text-white">
                 {myName.endsWith("工") ? myName.at(-2) : myName.at(-1)}
@@ -63,11 +77,11 @@ export default function App() {
             </button>
           )}>
             {(close) => people.map((a) => (
-              <button key={a.id} className="menu-item" onClick={() => { setWho({ ...who, [page]: a.id }); close(); }}>
+              <button key={a.id} className="menu-item" onClick={() => { setWho({ ...who, [role]: a.id }); close(); }}>
                 <span className="w-3">{a.id === me ? "✓" : ""}</span>{short(a.name)}
               </button>
             ))}
-          </Popover>
+          </Popover>}
           <button className="icon-btn" title={`新开一轮（当前 ${meta.status.run_id}）`}
                   onClick={() => api.reset().then(ctx.refresh, fail)}>
             <Refresh />
@@ -78,6 +92,8 @@ export default function App() {
       {page === "sales" && <Sales key={me} />}
       {page === "pm" && <Pm key={me} />}
       {page === "rd" && <Rd key={me} />}
+      {page === "layers" && <Layers />}
+      {page === "eval" && <Eval />}
 
       {error && (
         <div className="popover anim-fade fixed right-4 top-[60px] flex max-w-[360px] items-start gap-2 px-3 py-2.5 text-[13px]">
