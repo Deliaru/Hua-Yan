@@ -64,6 +64,8 @@ class KnowledgeBase:
         return [p.model_copy(deep=True) for p in self._products.values()]
 
     def product(self, product_id: str) -> Product:
+        if product_id not in self._products:
+            raise ValueError(f"产品 {product_id} 不存在")
         return self._products[product_id].model_copy(deep=True)
 
     def add_product(self, product: Product, at: datetime) -> list[KnowledgeUnit]:
@@ -93,6 +95,8 @@ class KnowledgeBase:
                                session_id=session_id)
 
     def get(self, ku_id: str, actor: Actor) -> KnowledgeUnit:
+        if ku_id not in self._units:
+            raise ValueError(f"知识 {ku_id} 不存在")
         ku = self._units[ku_id]
         if not self._readable(actor, ku):
             self._deny(actor, [ku_id], "无权读取该层级知识")

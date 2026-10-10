@@ -22,6 +22,13 @@ from huayan.l1.session import handle_turn, recommend, record_disclosure, require
 from huayan.meter import FileMeter
 
 
+def _find(table, key, what):
+    # 调用方（助手工具的参数来自大模型）给的 id 不存在时抛 ValueError，工具层统一回给模型。
+    if key not in table:
+        raise ValueError(f"{what} {key} 不存在")
+    return table[key]
+
+
 class HuayanApp:
     @classmethod
     def build(cls, config_path: str = "config/app.yaml", run_id: str | None = None):
@@ -81,8 +88,9 @@ class HuayanApp:
     def add_turn(self, session_id, speaker, text):
         if speaker not in ("customer", "sales") or not text.strip():
             raise ValueError("需要有效发言角色与非空文本")
-        previous = self._sessions[session_id].need
-        session = handle_turn(self._sessions[session_id], speaker, text, self)
+        current = _find(self._sessions, session_id, "会话")
+        previous = current.need
+        session = handle_turn(current, speaker, text, self)
         if (previous.phenomenon, previous.known()) != (session.need.phenomenon, session.need.known()):
             for req in self._requirements.values():
                 if req.status == "draft" and session_id in req.session_ids:
@@ -91,12 +99,12 @@ class HuayanApp:
         return session.model_copy(deep=True)
 
     def recommend_now(self, session_id):
-        session = recommend(self._sessions[session_id], self)
+        session = recommend(_find(self._sessions, session_id, "会话"), self)
         self._save_session(session)
         return session.model_copy(deep=True)
 
     def view_session(self, session_id, viewer_id):
-        viewer, session = self._actor(viewer_id), self._sessions[session_id]
+        viewer, session = self._actor(viewer_id), _find(self._sessions, session_id, "会话")
         level = level_of(viewer)
         if level == 1 and viewer_id not in (session.customer_id, session.sales_id):
             raise PermissionDenied("只能查看自己参与的会话")
@@ -124,7 +132,7 @@ class HuayanApp:
         return [s.model_copy(deep=True) for s in self._sessions.values()]
 
     def jue_trace(self, session_id):
-        self._sessions[session_id]
+        _find(self._sessions, session_id, "会话")
         return []
 
     def status(self):
@@ -137,7 +145,7 @@ class HuayanApp:
         actor = self._actor(by, roles)
         if self.kb.is_frozen(by):
             raise PermissionDenied("高层级访问已冻结")
-        req = self._requirements[req_id]
+        req = _find(self._requirements, req_id, "需求单")
         if req.status not in states:
             raise ValueError(f"当前状态 {req.status}，需要状态 {', '.join(sorted(states))}")
         return req, actor
@@ -158,7 +166,7 @@ class HuayanApp:
         for ref in item.ku_refs:
             try:
                 self.kb.get(ref, actor)
-            except (KeyError, PermissionDenied) as exc:
+            except (ValueError, PermissionDenied) as exc:
                 raise ValueError("知识引用不存在或当前身份无权读取") from exc
 
     def _retire_draft(self, req):
@@ -183,7 +191,7 @@ class HuayanApp:
         actor = self._actor(by, {"pm"})
         if self.kb.is_frozen(by):
             raise PermissionDenied("高层级访问已冻结")
-        question = self.bus.get(question_id)
+        question = _find(self.bus.questions, question_id, "问题")
         if question.family not in ("escalate_need", "opportunity") or question.status != "open":
             raise ValueError("只能为待处理的升级或机会汇聚起草需求")
         if question.owner_id is not None and question.owner_id != by:
@@ -326,7 +334,7 @@ class HuayanApp:
         viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})
         if self.kb.is_frozen(viewer.id):
             raise PermissionDenied("高层级访问已冻结")
-        req = self._requirements[req_id].model_copy(deep=True)
+        req = _find(self._requirements, req_id, "需求单").model_copy(deep=True)
         # 契约允许 L2 看化学需求条目，但机理假设与所引知识原文仅对 L3 开放。
         if level_of(viewer) < 3:
             req.hypotheses = []
@@ -418,7 +426,7 @@ class HuayanApp:
 
     def request_decrypt(self, session_id, by):
         actor = self._actor(by, {"sales"})
-        session = self._sessions[session_id]
+        session = _find(self._sessions, session_id, "会话")
         if by != session.sales_id or self.kb.is_frozen(by):
             raise PermissionDenied("只能为自己的有效会话申请解密")
         rec, profile = session.recommendation, session.need.profile
@@ -439,7 +447,7 @@ class HuayanApp:
 
     def decide_decrypt(self, question_id, by, approve):
         self._actor(by, {"rd"})
-        question = self.bus.get(question_id)
+        question = _find(self.bus.questions, question_id, "问题")
         if question.family != "decrypt_request" or question.status != "open":
             raise ValueError("只能审批待处理的解密申请")
         if question.owner_id != by or self.kb.is_frozen(by):
