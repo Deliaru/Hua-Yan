@@ -1,6 +1,7 @@
 """契约 7.1：转译引擎的规则骨架。每层只用 kb.list 给该身份的知识；每条都带原话（quote_refs）与依据（ku_refs）；不调用大模型。"""
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -66,12 +67,19 @@ def _known(sessions: list[Session]) -> dict[str, str]:
     return known
 
 
+def _residual(item: ReqItem, sessions: list[Session]) -> bool:
+    """未命中的发言去掉槽位原话片段后还剩内容（如「交期必须三天内」），就作为未转译条目保留；只回答了槽位的由条件条目承载。"""
+    turn = next(t for s in sessions for t in s.turns if t.id == item.quote_refs[0])
+    text = turn.text
+    for fill in (f for s in sessions for f in s.need.slots.values() if f.turn_id == turn.id):
+        text = text.replace(fill.quote, "")
+    return len(re.sub(r"[\W_]", "", text)) >= 2
+
+
 def draft_product_need(q: Question, sessions: list[Session], kb: KnowledgeBase, pm: Actor, at: datetime) -> PMDraft:
     phenomenon = sessions[0].need.phenomenon
     sources = [ReqItem(text=t.text, quote_refs=[t.id]) for s in sessions for t in s.turns if t.speaker == "customer"]
-    covered = {f.turn_id for s in sessions for f in s.need.slots.values()}
-    items = [i for i in _translate(sources, kb, pm, phenomenon, level=2)
-             if i.ku_refs or not set(i.quote_refs) <= covered]       # 只回答了槽位的发言由条件条目承载
+    items = [i for i in _translate(sources, kb, pm, phenomenon, level=2) if i.ku_refs or _residual(i, sessions)]
     for i in items:
         if i.ku_refs:
             i.text = "客户反映" + i.text

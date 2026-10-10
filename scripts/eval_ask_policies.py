@@ -66,8 +66,10 @@ def accuracy_at(sweep: list[dict], budget: float, index: np.ndarray) -> float:
 def paired(a: list[dict], b: list[dict], n: int, rounds: int = 1000) -> dict:
     """同预算下 a − b 的正确率差（百分点）与配对 bootstrap 95% 区间。"""
     rng, full = np.random.default_rng(0), np.arange(n)
+    low = max(min(p["mean_asks"] for p in sweep) for sweep in (a, b))
+    high = min(max(p["mean_asks"] for p in sweep) for sweep in (a, b))
     out = {}
-    for budget in BUDGETS:
+    for budget in (x for x in BUDGETS if low <= x <= high):     # 只比两条曲线都覆盖的预算，不外推
         diffs = [accuracy_at(a, budget, i) - accuracy_at(b, budget, i) for i in (rng.integers(0, n, n) for _ in range(rounds))]
         out[str(budget)] = {"diff_pp": 100 * (accuracy_at(a, budget, full) - accuracy_at(b, budget, full)),
                             "ci95_pp": [100 * float(np.percentile(diffs, 2.5)), 100 * float(np.percentile(diffs, 97.5))]}

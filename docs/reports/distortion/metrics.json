@@ -1,0 +1,77 @@
+{
+  "n_cards": 60,
+  "cards": "data/sim/cards.jsonl",
+  "seed": 20261011,
+  "placeholder_seeds": true,
+  "relay_assumption": {
+    "habit_slots": [
+      "fiber"
+    ],
+    "vague_prob": 0.3,
+    "drop_prob": 0.2,
+    "swap_prob": 0.1
+  },
+  "jue": {
+    "ask_threshold": 0.5,
+    "back_threshold": 0.5,
+    "max_rounds": 8,
+    "max_backs": 2
+  },
+  "calls": {
+    "jue": 202,
+    "llm": 0,
+    "s1": 0
+  },
+  "metrics": {
+    "G1 业务员转述": {
+      "completeness": 0.510989010989011,
+      "slot_error": 0.06578947368421052,
+      "mistranslation": null,
+      "asks": 1.0,
+      "backs": 0.0,
+      "backs_useful": null,
+      "traceable": 0.0,
+      "returned": 0.9666666666666667
+    },
+    "G2 一次性翻译": {
+      "completeness": 0.4010989010989011,
+      "slot_error": 0.0,
+      "mistranslation": 0.10784313725490197,
+      "asks": 0.0,
+      "backs": 0.0,
+      "backs_useful": null,
+      "traceable": 1.0,
+      "returned": 1.0
+    },
+    "G3 化言（不含回问）": {
+      "completeness": 0.8516483516483516,
+      "slot_error": 0.0,
+      "mistranslation": 0.0,
+      "asks": 1.3666666666666667,
+      "backs": 0.0,
+      "backs_useful": null,
+      "traceable": 1.0,
+      "returned": 0.43333333333333335
+    },
+    "G3 化言": {
+      "completeness": 0.8956043956043956,
+      "slot_error": 0.0,
+      "mistranslation": 0.0,
+      "asks": 1.3666666666666667,
+      "backs": 0.9,
+      "backs_useful": 0.4074074074074074,
+      "traceable": 1.0,
+      "returned": 0.3
+    }
+  },
+  "labels": {
+    "completeness": "关键信息完整率",
+    "slot_error": "槽位错误率",
+    "mistranslation": "错译率",
+    "asks": "平均追问次数",
+    "backs": "平均回问次数",
+    "backs_useful": "回问事后有用比例",
+    "traceable": "可回查率",
+    "returned": "研发需退回比例"
+  }
+}
