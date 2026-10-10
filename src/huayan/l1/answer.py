@@ -45,8 +45,8 @@ def answer(session, deps, *, check_grounding=False):
     # 先记完整检索事件；明确型号不受当前会话现象筛选，以免查别的产品时答错。
     hits = deps.kb.search(query, actor, session_id=session.id,
                           phenomenon=None if targets else session.need.phenomenon)
-    blocked = session.need.last_intent == "mechanism_request" or any(
-        word in turn.text for word in ("配方", "机理", "原理", "为什么", "成分"))
+    # 是否问机理只看抽取给出的意图；能看到什么由知识库按层级裁剪。
+    blocked = session.need.last_intent == "mechanism_request"
     public_request = not blocked or any(word in turn.text for word in ("怎么用", "用法", "用量", "说明书", "产品说明"))
     if targets and public_request:
         hits = [KnowledgeHit(ku=deps.kb.get(f"ku:{kind}:{pid}", actor), score=1.0)

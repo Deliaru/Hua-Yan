@@ -35,7 +35,10 @@ class RuleExtractor:
                     if slot not in {s.slot for s in result.slots}:
                         result.slots.append(ExtractedSlot(slot=slot, value=None, status="unknown",
                             confidence=0.7, quote=text, turn_n=turn.n))
-        if any(word in text for word in ("原理", "为什么", "配方", "成分", "机理")):
+        # 「成分」在说布料（面料用词或本轮抽到面料取值）时是需求，不算问机理
+        about_fabric = "fiber" in {s.slot for s in result.slots} or any(
+            word in text for word in ("面料", "布", "纱", "纤维", "料子", "材质"))
+        if any(word in text for word in ("原理", "为什么", "配方", "机理")) or ("成分" in text and not about_fabric):
             result.intent = "mechanism_request"
             profile.asked_mechanism = True
         elif any(word in text for word in ("是什么产品", "怎么用", "用法")):
