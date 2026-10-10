@@ -28,7 +28,7 @@ WP-U、WP-E。
 
 ### 4. 提交前检查（两人一起）
 - `git grep` 检查无密钥、无 `.env`；`seeds/` 中没有真实公司资料或其他企业名称；
-- 新机器按 README 能启动（至少在另一个目录全新 clone 跑一次 `uv sync && uv run pytest && uv run streamlit run src/huayan/ui/app.py`）；
+- 新机器按 README 能启动（至少在另一个目录全新 clone 跑一次 `uv sync && uv run pytest && npm --prefix web install && npm --prefix web run build && uv run python -m huayan.ui.server`）；
 - 仓库为私有，邀请 `DsChHack`；复用 JUE 模块的范围由负责人最终确认。
 
 ## 验收

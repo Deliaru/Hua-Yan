@@ -21,7 +21,7 @@
 
 ## 2. 技术栈
 
-Python 3.11+、`uv`、`pydantic` v2、`openai` SDK（所有大模型走 OpenAI 兼容接口）、`httpx`、`numpy`、`pandas`、`scikit-learn`、`matplotlib`、`pyyaml`、`streamlit`、`pytest`。
+Python 3.11+、`uv`、`pydantic` v2、`openai` SDK（所有大模型走 OpenAI 兼容接口）、`httpx`、`numpy`、`pandas`、`scikit-learn`、`matplotlib`、`pyyaml`、`pytest`；界面为 Vite + React + TypeScript + Tailwind（`web/`，视觉沿用 JUE wp/e 决策台），Python 端用标准库 HTTP 服务把门面暴露为 JSON 接口。
 
 不引入 LangChain、LangGraph 等 Agent 框架，不引入向量数据库。角色助手是**自研 Agent Loop**（复用 JUE 的 Loop 并简化）＋**原子工具**；抽取与 L1 回答仍是单次结构化调用；转译骨架是零成本的规则实现，大模型通过助手参与转译。
 
@@ -47,8 +47,9 @@ src/huayan/
   jue/         觉：expr、state、proto、publish、scan、features、jue_k
   sim/         需求卡、模拟客户、模拟业务周、Jue-K 轨迹
   eval/        失真对照、业务周运行器、指标
-  ui/          Streamlit 界面
+  ui/          server.py（界面的 JSON 接口，只调门面）
   app.py       应用门面 HuayanApp（界面只通过它访问系统）
+web/         演示界面（Vite + React）
 scripts/     命令行脚本
 tests/       fixtures/mini_seeds/  test_*.py
 data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/jue_k/ 的说明文件）
@@ -109,7 +110,8 @@ uv run pytest
 uv run python scripts/demo_mainline.py          # 离线跑完演示主线（WP-I 之后）
 uv run python scripts/demo_mainline.py --live   # 现场版：自然语言指挥角色助手，录制缓存
 uv run python scripts/agent_cli.py --actor pm:P01   # 和某个人的角色助手对话（WP-L 之后）
-uv run streamlit run src/huayan/ui/app.py       # 演示界面（WP-U 之后）
+npm --prefix web install && npm --prefix web run build   # 构建演示界面（WP-U 之后）
+uv run python -m huayan.ui.server               # 演示界面 http://127.0.0.1:8766（开发时另开 npm --prefix web run dev）
 uv run python scripts/translate_cli.py          # 一段对话的 L1 → L2 → L3 转译（WP-T 之后）
 uv run python scripts/run_distortion.py         # 失真对照（WP-E 之后）
 uv run python scripts/run_week.py --week data/week/w1   # 模拟业务周对照（WP-E 之后）
