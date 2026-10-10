@@ -1,6 +1,6 @@
 # WP-E 失真对照、业务周对照、三层对照页与评测页
 
-> 负责：B｜时段：5:45–7:15｜分支：`dev/b`
+> 负责：B｜时段：**前半 3:30–5:00**（与 WP-B3 同时开第二个 Agent）＋**后半 5:45–7:00**｜分支：`dev/b`
 
 ## 目标
 1. **失真对照（必做）**：用数字回答「化言的转译比现在的做法少走样多少」——同一批需求卡上，业务员转述 / 一次性翻译 / 化言三组，比较到达研发时的需求信息。
@@ -9,6 +9,11 @@
 
 ## 依赖
 WP-I（门面完整）、WP-T（规则模式）、WP-B2（需求卡、模拟客户、业务周）、WP-B3（Jue-K 报告）。
+
+| 段 | 内容 | 依赖 |
+|---|---|---|
+| 前半 | 失真对照全部代码（G1、G2、G3、指标、`config/eval/distortion.yaml`）并先跑出不含回问的结果；评测页框架 | WP-B2、WP-T、WP-B1（G3 的回问在 B3 第 ① 段合并后接上） |
+| 后半 | G3 加回问重跑与出图；业务周（真实链路，三种发现器）；三层对照页；评测页填数 | WP-I、WP-B3 第 ③ 段 |
 
 ## 必读
 `CONTRACTS.md` 第 ③、⑤ 5.5、⑦、⑨、⑫ 节；`ARCHITECTURE.md` 第 8、9 节（失真来源的定性描述）。
@@ -26,12 +31,13 @@ WP-I（门面完整）、WP-T（规则模式）、WP-B2（需求卡、模拟客�
 - **三组**，都用 `SimCustomer` 模板模式、同一个随机种子：
   - **G1 业务员转述**：不用觉的提示；业务员只按习惯问 `relay.habit_slots` 中的槽位（默认只问面料）；然后按**转述噪声模型**写给研发：现象以 `relay.vague_prob` 的概率被说成笼统的「染色有问题」，每个已知槽位以 `relay.drop_prob` 的概率漏掉、以 `relay.swap_prob` 的概率被记成同槽位的另一个取值；没有原话、没有依据。参数放 `config/eval/distortion.yaml`，**在报告中标明是假设**，写出依据；企业数据到位后用真实转述样本替换。
   - **G2 一次性翻译**：不追问，只有客户开场白；规则抽取得到槽位，再用**全部**转化对照（L2、L3 混在一起、不按现象过滤）对开场白做一次匹配，直接产出化学语言条目。只有开场白一轮可回查，引用不记归属。
-  - **G3 化言**：按觉的提示追问（取第一条提示的话术，最多 8 轮）→ `NeedState` → `translate.draft_product_need` → `draft_chem_need`（规则模式）。`Question` 由评测代码直接构造一个 `escalate_need`（不经过总线）。
+  - **G3 化言**：按觉的提示追问（取第一条提示的话术，最多 8 轮）→ `NeedState` → `translate.draft_product_need` → `draft_chem_need`（规则模式）→ **回问**（契约 v4）：对 L3 草稿调用一次 `requirement_state` + 觉（规则原型），`ask_back` 中 p ≥ 阈值的槽位（最多 2 个）让模拟客户各回答一次，回填后重新起草 L3。`Question` 由评测代码直接构造一个 `escalate_need`（不经过总线）。
 - **指标**（每组一行，写 `metrics.json` 与 `table.csv`）：
   - 关键信息完整率：研发拿到的、值正确的必问槽位 / 必问槽位；
   - 槽位错误率：值错误的槽位 / 研发拿到的槽位；
   - 错译率：引用的转化知识不属于该卡现象的条目 / 全部条目；
   - 平均追问次数；
+  - 回问次数（仅 G3）：觉在转译时发起的回问，以及其中事后有用（补上后 L3 命中改变）的比例；
   - 可回查率：带客户原话（`quote_refs`）的条目 / 全部条目；
   - 研发需退回比例：现象不明、或任一必问槽位缺失 / 错误的卡的比例。
 - 图：三组 × 指标的分组柱状图；`README.md` 一页说明，必须如实写两点：G1 的噪声来自假设参数；模板客户与规则抽取共用种子中的口语说法表，G3 的槽位错误率偏乐观。
@@ -41,12 +47,12 @@ WP-I（门面完整）、WP-T（规则模式）、WP-B2（需求卡、模拟客�
 ### 2. 业务周运行器 `eval/week.py`：`run_week(week_dir, policy, discoverer) -> run_dir`
 - `HuayanApp.build` 使用 `SimClock`，并覆盖配置：`extractor: rule`、`system1_impl: mock`、`gateway_mock: true`（零成本；如实标注「业务周中抽取为规则、Jev 为桩、转译为规则模式」）。
 - 按 `script.jsonl` 推进时钟：`session`（模拟客户开场 → 按觉的提示追问 → 直到推荐或升级，最多 8 轮；没有提示仍未推荐时 `recommend_now`）、`trial`（`record_trial`）、`query`（以该业务员身份发起一句提问）。
-- 每 2 个业务小时 `scan` 一次。`discoverer="jue_proto"` 用 `config/templates/`；`"rule_alert"` 用 `config/baselines/rule_alert/`。
+- 每 2 个业务小时 `scan` 一次。`discoverer="jue_proto"` 用 `config/templates/`；`"rule_alert"` 用 `config/baselines/rule_alert/`；`"jue_k"`（契约 v4）用 `models/jue_k/`。Jue-K 训练用的是合成事件，这里是它在真实链路事件上的评估。
 - **只做机会汇聚的处置分支**：`policy="handle"` 时，新出现的机会汇聚问题在 2 业务小时后走 `approve_project` → L2 确认 → L3 确认 → 1 个业务日后发布种子中覆盖该主题的研发中产品（包装用规则模式）；`policy="ignore"` 时不处置。其他 family 两个分支都只记录发现。
 - 运行器可以读需求卡（它在扮演客户）；**注入清单只在算指标时读取**。
 
 ### 3. 业务周指标 `eval/metrics.py` → `docs/reports/week/`
-- 发现：每类注入是否在 `[earliest, latest]` 内被发现（问题 `object_id` 与注入一致）、提前量；困难负样本误报数；发现环节大模型调用次数（应为 0）。觉与规则告警各一行。
+- 发现：每类注入是否在 `[earliest, latest]` 内被发现（问题 `object_id` 与注入一致）、提前量；困难负样本误报数；发现环节大模型调用次数（应为 0）。觉原型、Jue-K 与规则告警各一行。
 - 后果（机会汇聚，处置 vs 不处置）：发现后同主题的升级次数（产品经理被打扰次数）与 L1 直接命中次数。
 - 图：按天的升级次数（两个分支对比）；发现时间线。`README.md` 如实写；规则告警在某类上更好就照写。
 
@@ -64,11 +70,12 @@ WP-I（门面完整）、WP-T（规则模式）、WP-B2（需求卡、模拟客�
 
 ### 6. 觉视图 `ui/pages/6_觉视图.py`（可选，时间不够先砍）
 - 实时：选一个会话，按轮显示每个槽位的 `p_need`（热力表）、当轮提示、`scored_by`、大模型调用数（应为 0）；
-- 定时：「执行一次扫描」按钮与发现的问题列表（概率、证据、负责人）。
+- 定时：「执行一次扫描」按钮与发现的问题列表（概率、紧急度、证据、负责人）；
+- 数据引擎：`jue_samples.jsonl` 的记录条数与按类型的概率分布。
 
 ## 验收
 1. `uv run python scripts/run_distortion.py --cards data/sim/cards.jsonl --n 60` 生成 `docs/reports/distortion/`；同一种子重跑一致；首版 Demo 验收第 5 条的三组对照有图有表。
-2. `uv run python scripts/run_week.py --week data/week/w1` 生成两个分支、两种发现器的运行目录与 `docs/reports/week/`；机会汇聚的处置与不处置差异在图上可见。
+2. `uv run python scripts/run_week.py --week data/week/w1` 生成两个分支、三种发现器的运行目录与 `docs/reports/week/`；机会汇聚的处置与不处置差异在图上可见。
 3. 三层对照页在演示主线跑完后能打开，三列内容与首版 Demo 验收第 2 条一致；评测页数字与报告一致。
 
 ## 不做

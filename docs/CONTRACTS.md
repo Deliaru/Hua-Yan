@@ -2,7 +2,9 @@
 
 > 跨模块的数据格式与接口契约。**冻结后只能由人修改**。代码实现在 `src/huayan/contracts/`，必须与本文件一致。
 > 下列代码是规格（Python / pydantic v2 风格），字段名、类型、枚举值必须一致；函数签名必须一致，内部实现自由。
-> 版本：v3｜2026-10-11
+> 版本：v4｜2026-10-11
+>
+> **v4 变更（觉回到「发现需要决策的情况，并给出校准概率」）**：Jue-K 从「只做追问」扩为**一个模型覆盖全部决策类型**，实时与定时都可以替换原型；新增决策类型 `ask_back`（需求单在 L2/L3 起草时发现缺一个会改变转译的信息，派回原业务员向客户回问），slot 对象增加 `layer`、`trans_splits`，新增 `requirement_state`；模板增加 `urgency` 表达式，`ScoredDecision.urgency`、`Question.urgency` 照填；新增 `JueRecord` 与 `jue_samples.jsonl`（每次觉调用的完整状态与输出，数据引擎）；`Discoverer` 增加 `jue_k`；`QFamily` 增加 `ask_back`，处置增加 `answered`，路由 `ask_back → sales`；配置增加 `scheduled_model`，`RunStatus` 增加同名字段；Jue-K 训练数据改为 `data/jue_k/samples.csv`，`features.build(obj, family)`；门面 `tick` / `add_turn` 增加回问的发布与回填；助手 `notify` 增加 `session_id`，业务员助手增加 `list_my_questions`。
 >
 > **v3 变更（角色助手）**：每个 L1/L2/L3 的人配一个角色助手（Agent Loop + 原子工具，第 ⑭ 节）。人用自然语言指挥助手，觉发现的问题派给对应人的助手主动处理；生效类动作由助手提议、委托人在确认卡上确认后执行。随之：转译引擎只保留规则模式（大模型通过助手参与），删去 `agent:pm_draft` / `agent:rd_translate` / `agent:package` 三个单次调用，caller 改为 `agent:sales` / `agent:pm` / `agent:rd`；`Requirement` 增加 `chem_drafted_by`、`public_points`、`sheet`；知识库增加 `search_blocked`；门面第 ⑫ 节的 L2/L3 方法改为原子方法，增加 `tick`；事件增加 `agent_action_proposed`、`agent_action_decided`。
 >
@@ -495,16 +497,22 @@ class JueState(BaseModel):
 
 | 对象类型 | object_id | 模式 | 由谁构建 |
 |---|---|---|---|
-| `slot` | `slot:<session_id>/<slot>` | 实时 | `realtime_state(need, seeds, products, at)` |
+| `slot` | `slot:<session_id>/<slot>`（`layer=1`，对话中）／`slot:<req_id>/<slot>`（`layer=2/3`，需求单起草中） | 实时 | `realtime_state(need, seeds, products, at)`／`requirement_state(req, need, seeds, kb, at)` |
 | `theme` | `theme:<phenomenon>|<slot>=<value>,...`（该现象 required_slots 中已知的部分，按槽位 id 排序） | 定时 | `scheduled_state(events, at, seeds, products)` |
 | `knowledge` | `knowledge:<product_id>|<slot>=<value>` | 定时 | 同上 |
 | `actor` | `actor:<actor_id>` | 定时 | 同上 |
 
-两个构建函数都在 `huayan.jue.state`（WP-B1），**只读 NeedState / 事件日志 / 种子 / 已发布产品**，不读需求卡、注入清单。
+三个构建函数都在 `huayan.jue.state`（WP-B1 写前两个，WP-B3 增加 `requirement_state`），**只读 NeedState / 需求单 / 事件日志 / 种子 / 知识库**，不读需求卡、注入清单。
+
+```python
+def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase, at: datetime) -> JueState: ...
+    # 只对 status 为 draft（layer=2）或 pm_confirmed（layer=3）的需求单；为该现象每个槽位生成一个 slot 对象；
+    # need = 需求单首个会话的 NeedState，已知槽位以 req.known_slots 为准；mode="realtime"
+```
 
 ### 5.2 属性命名表
 
-**slot（实时，追问补全；Jue-K 的特征也只来自这里）**
+**slot（实时：对话中的追问 `ask_slot`、需求单起草中的回问 `ask_back`）**
 
 | 属性 | 类型 | 含义 |
 |---|---|---|
@@ -521,6 +529,8 @@ class JueState(BaseModel):
 | `splits` | int | 该槽位取各个值时，候选集会变成几种不同的集合（≥ 2 说明问了会改变推荐）；已填为 0 |
 | `prior_top` | float | 该现象下此槽位最常见取值的比例（种子③，没有则 0） |
 | `chem_savvy` | bool | 客户画像 |
+| `layer` | int | 1 = 对话中（`realtime_state`）；2 = L2 起草中、3 = L3 起草中（`requirement_state`） |
+| `trans_splits` | int | 该槽位取各个值时，本层转化对照（layer 2 看 L2、layer 3 看 L3；layer 1 恒为 0）的命中集合会变成几种（≥ 2 说明问了会改变转译）；已填为 0。计算：text = 现象名 + 已知槽位取值（含假设取值 v）拼接，以 level=3 的内部身份调用 `match_translations(text, kb, actor, phenomenon)`，再按层级筛选；只产出计数，不外泄内容 |
 
 **theme（定时，机会汇聚）**：`phenomenon` str、`n_escalations` int（窗口内升级次数）、`n_customers` int（涉及客户数）、`n_matched` int（同主题被成功推荐次数）、`days_active` int（出现过的天数）、`open_project` bool（已有对应需求单在途）、`mean_p_none` float。
 
@@ -530,10 +540,12 @@ class JueState(BaseModel):
 
 定时窗口：机会汇聚、知识冲突 7 天，泄露风险 48 小时（`config/app.yaml` 可改）。
 
+Jue-K 的特征来自以上全部对象类型的属性（`features.build(obj, family)`，缺失的属性记 0）。
+
 ### 5.3 模板 `config/templates/*.yaml`（一个模板一个文件）
 
 ```python
-Family = Literal["ask_slot", "opportunity", "knowledge_conflict", "leak_risk"]
+Family = Literal["ask_slot", "ask_back", "opportunity", "knowledge_conflict", "leak_risk"]
 
 class JueTemplate(BaseModel):
     id: str
@@ -544,9 +556,12 @@ class JueTemplate(BaseModel):
     rule_score: str | None = None             # 数值表达式，规则模式下的 p_need（结果截断到 [0,1]）；为空时 1.0
     worth_prompt: str                         # Jev 是非题，含 {object}
     title: str                                # 发布后的问题标题，可含 {object} 与 {attrs.x}
-    owner_role: Role                          # ask_slot 为 sales（不进总线）
+    owner_role: Role                          # ask_slot 为 sales（不进总线）；ask_back 为 sales（进总线，owner_id = 会话的业务员）
     bounty_points: int = 0
+    urgency: str | None = None                # 数值表达式，截断到 [0,1]；为空时 1.0。紧急度是规则，不学习
 ```
+
+模板共 5 个：`ask_slot`（前置条件含 `attrs.layer == 1`）、`ask_back`（含 `attrs.layer >= 2`、未填、未答不清楚、`attrs.trans_splits >= 2`）、`opportunity`、`knowledge_conflict`、`leak_risk`。
 
 表达式求值器 `huayan.jue.expr` 复制自 JUE `discovery/expr.py`，只保留 `attrs.x`。基线（B1、B2、规则告警）也写成模板，放在 `config/baselines/<name>/`，由同一个原型在规则模式下运行。
 
@@ -557,7 +572,7 @@ class ScoredDecision(BaseModel):
     family: Family
     object_id: str
     p_need: float | None = Field(default=None, ge=0, le=1)   # None = 前置条件未通过
-    urgency: float | None = None
+    urgency: float | None = None              # 前置条件通过时 = 模板 urgency 表达式的值；未通过为 None
     precondition_passed: bool = True
     template_id: str | None = None
 
@@ -574,8 +589,17 @@ class QuestionModel(Protocol):
 ```
 
 - **`JueProto(templates_dir, system1, mode)`**：模板 × 匹配 `object_type` 的对象枚举全部组合；前置条件不通过的 `p_need=None`。`system1` 为 `OneJevClient` 时，通过者的 worth 题**一次** `ask` 批量打分（caller `jue:proto`），`scored_by="onejev"`；否则**不调用任何模型**，用 `rule_score`，`scored_by="rule"`。
-- **`JueK(model_dir)`**：只处理 `slot` 对象（实时追问补全），本地推理，`scored_by="jue_k"`（WP-B3）。
-- **铁律**：两个实现都不调用网关；觉每次 `propose` 写一条 `kind="jue"` 计量（耗时、对象数）。
+- **`JueK(model_dir, templates_dir, mode)`**（WP-B3）：**一个模型覆盖全部五类决策**。与原型用同一套模板枚举「模板 × 对象」、同一套前置条件（不通过的 `p_need=None`）；通过者由同一个梯度提升模型一次批量推理，按 `family` 分别校准，输出校准概率；`scored_by="jue_k"`。实时（`ask_slot`、`ask_back`）与定时（三类）都可以把原型换成它，运行链路、发布层、界面不改。
+- **紧急度**：两个实现都用模板的 `urgency` 表达式填 `ScoredDecision.urgency`（规则，不学习，如实标注）。
+- **铁律**：两个实现都不调用网关；觉每次 `propose` 写一条 `kind="jue"` 计量（耗时、对象数）；调用方（门面）把每次的状态与输出写成一条 `JueRecord`（数据引擎）。
+
+```python
+class JueRecord(BaseModel):                   # runs/<run_id>/jue_samples.jsonl，每次 propose 一行
+    state: JueState
+    output: JueOutput
+```
+
+记录覆盖全部组合（包括低概率的「无事」）。上线后用真实处置结果（问题被处置 / 驳回、回问后转译是否改变）回填标签，再训练与校准。
 
 ```python
 # huayan.jue.publish（WP-B1）
@@ -584,6 +608,8 @@ def select_asks(out: JueOutput, state: JueState, seeds: Seeds, threshold: float,
 def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], bus: QuestionBus,
             threshold: float) -> list[Question]: ...
     # 定时：p_need ≥ threshold 的组合生成问题；证据取对象属性中的关键数字与相关事件 id
+    # ask_back 也走 publish：owner_role=sales，owner_id=会话的业务员，refs={session_id, requirement_id, slot}；
+    # 所有问题的 urgency 取自 ScoredDecision
 
 # huayan.jue.scan（WP-B1）
 def scan(events: EventLog, at: datetime, model: QuestionModel, seeds: Seeds, products: list[Product],
@@ -595,18 +621,18 @@ def scan(events: EventLog, at: datetime, model: QuestionModel, seeds: Seeds, pro
 
 ```python
 class Discoverer(Protocol):
-    name: Literal["jue_proto", "rule_alert", "llm_poll"]
+    name: Literal["jue_proto", "jue_k", "rule_alert", "llm_poll"]
     def discover(self, events: EventLog, at: datetime) -> list[Question]: ...
 ```
 
-三者输入相同（同一事件日志），都不得读取注入清单和需求卡。
+四者输入相同（同一事件日志），都不得读取注入清单和需求卡。
 
 ---
 
 ## ⑥ 问题总线（`huayan.bus`，WP-0 提供）
 
 ```python
-QFamily = Literal["escalate_need", "opportunity", "knowledge_conflict", "leak_risk", "decrypt_request"]
+QFamily = Literal["escalate_need", "ask_back", "opportunity", "knowledge_conflict", "leak_risk", "decrypt_request"]
 
 class Evidence(BaseModel):
     summary: str
@@ -615,7 +641,7 @@ class Evidence(BaseModel):
 
 class Resolution(BaseModel):
     action: Literal["draft_requirement", "approve_project", "update_sheet", "freeze_access",
-                    "approve_decrypt", "reject_decrypt", "dismiss"]
+                    "approve_decrypt", "reject_decrypt", "dismiss", "answered"]   # answered：回问已由客户回答
     by: str
     note: str = ""
 
@@ -628,6 +654,7 @@ class Question(BaseModel):
     owner_id: str | None = None               # 指定到人（解密审批、知识冲突给知识归属人）
     status: Literal["open", "resolved", "dismissed"] = "open"
     p_need: float | None = None
+    urgency: float | None = None              # v4：觉发现的问题来自 ScoredDecision；其他来源为 None
     scored_by: str                            # onejev / llm_fallback / mock / rule / jue_k / human
     discoverer: Literal["jev", "jue_proto", "jue_k", "rule_alert", "llm_poll", "human"]
     evidence: list[Evidence] = []
@@ -651,7 +678,7 @@ class QuestionBus:
         # dismiss → status=dismissed，其余 → resolved；写 question_resolved 事件
 ```
 
-路由在 `config/app.yaml` 的 `routing`：`escalate_need → pm`、`opportunity → pm`、`knowledge_conflict → rd`（owner_id = 产品归属人）、`leak_risk → supervisor`、`decrypt_request → rd`（owner_id = 产品归属人）。发布方负责按路由填写 `owner_role` / `owner_id`。
+路由在 `config/app.yaml` 的 `routing`：`escalate_need → pm`、`ask_back → sales`（owner_id = 会话的业务员）、`opportunity → pm`、`knowledge_conflict → rd`（owner_id = 产品归属人）、`leak_risk → supervisor`、`decrypt_request → rd`（owner_id = 产品归属人）。发布方负责按路由填写 `owner_role` / `owner_id`。
 
 ---
 
@@ -873,9 +900,13 @@ def make_cards(seeds: Seeds, n: int, rng) -> list[NeedCard]: ...
 def make_week(seeds: Seeds, start: datetime, days: int, rng) -> tuple[list[WeekItem], list[NeedCard], list[Injection]]: ...
 ```
 
-**Jue-K 训练数据** `data/jue_k/steps.csv`：每行 = 一条轨迹的一轮 × 一个槽位；列 = 5.2 中 slot 对象的全部属性 + `card_id, traj_id, label, split`。`label` 为事后有用性（`JUE_K_TRAINING.md` 第 3 节）；`split ∈ {train, val, test, heldout}`。
+**Jue-K 训练数据** `data/jue_k/samples.csv`：每行 = 某时刻 × 某个「模板 × 对象」组合（只收前置条件通过的，与推理一致）；列 = `family, object_type, object_id, at, source_id, label, split` + 5.2 全部属性的并集（缺失留空）。来源两类（`JUE_K_TRAINING.md` v3）：
+- `ask_slot` / `ask_back`：程序生成的对话轨迹（`source_id` = 卡 id），标签为事后有用性；
+- `opportunity` / `knowledge_conflict` / `leak_risk`：多个随机种子的模拟业务周（`source_id` = 周 id），由剧本与需求卡直接合成事件、每 2 个业务小时构建一次定时状态；标签 = 该组合落在某条**非困难负样本**注入的 `[earliest, latest]` 内且 `object_id` 一致。
 
-**Jue-K 产物** `models/jue_k/`：`model.pkl`、`features.json`（特征名与编码）、`model_card.md`、`metrics.json`。特征构建 `huayan.jue.features.build(obj: JueObject) -> dict[str, float]` 训练与推理共用。
+`split ∈ {train, val, test, heldout}`：轨迹按卡划分，另留 2 个现象为 heldout；业务周按周划分。
+
+**Jue-K 产物** `models/jue_k/`：`model.pkl`（模型 + 按 family 的 isotonic 校准层）、`features.json`（特征名与编码）、`model_card.md`、`metrics.json`。特征构建 `huayan.jue.features.build(obj: JueObject, family: Family) -> dict[str, float]` 训练与推理共用。
 
 **评测产物** `docs/reports/<name>/`：`metrics.json`、图（png）、`README.md`（一页说明，结果如实写）。
 
@@ -956,12 +987,13 @@ system1_impl: mock            # mock | llm_fallback | onejev
 gateway_mock: true            # true 时用 MockGateway（离线），角色助手不运行（第 ⑭ 节）；现场演示设 false
 extractor: rule               # rule | llm
 realtime_model: jue_proto     # jue_proto | jue_k
+scheduled_model: jue_proto    # jue_proto | jue_k（v4）
 jue_k_dir: models/jue_k
 llm_cache_dir: runs/llm_cache # 录制/回放缓存；为空则不缓存
 replay: false                 # true = 记录回放模式，界面标明
 thresholds: {ask: 0.5, max_asks: 2, match: 0.5, publish: 0.5}
 windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
-routing: {escalate_need: pm, opportunity: pm, knowledge_conflict: rd, leak_risk: supervisor, decrypt_request: rd}
+routing: {escalate_need: pm, ask_back: sales, opportunity: pm, knowledge_conflict: rd, leak_risk: supervisor, decrypt_request: rd}
 points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
 ```
 
@@ -996,6 +1028,7 @@ class RunStatus(BaseModel):
     gateway_mock: bool
     simulated_data: bool = True
     seeds_placeholder: bool
+    scheduled_model: str = "jue_proto"       # 觉定时模型（v4）
 
 class HuayanApp:
     @classmethod
@@ -1006,6 +1039,8 @@ class HuayanApp:
     # L1（WP-A2）
     def start_session(self, customer_id: str, sales_id: str) -> Session: ...
     def add_turn(self, session_id: str, speaker: Literal["customer", "sales"], text: str) -> Session: ...
+        # v4：客户发言填上某个槽位、且该会话该槽位有 open 的 ask_back 问题时：resolve(answered)，取值写入需求单 known_slots，
+        # 并 agents.notify 需求单当前的起草人（draft → drafted_by；pm_confirmed → chem_drafted_by）
     def recommend_now(self, session_id: str) -> Session: ...
     def view_session(self, session_id: str, viewer_id: str) -> SessionView: ...
     def sessions(self) -> list[Session]: ...
@@ -1050,7 +1085,9 @@ class HuayanApp:
     def resolve(self, question_id: str, action: str, by: str, note: str = "") -> Question: ...
         # approve_project → 起草需求单；update_sheet → kb.update_applicable；freeze_access → permission.freeze
     def tick(self) -> list[Question]: ...
-        # 上次 tick 后出现过升级、或距上次扫描 ≥ 30 业务分钟则 scan；然后 agents.dispatch()；返回本次新发现的问题。
+        # 上次 tick 后出现过升级、或距上次扫描 ≥ 30 业务分钟则 scan；
+        # v4：每次对 draft / pm_confirmed 的需求单 requirement_state → 实时模型 propose → publish（ask_back）；
+        # 然后 agents.dispatch()；返回本次新发现的问题。门面每次调用觉都追加一条 JueRecord
         # 界面在每次 chat / approve 之后、脚本在每一步之后调用
 ```
 
@@ -1058,7 +1095,7 @@ class HuayanApp:
 
 ## ⑬ 运行产物 `runs/<run_id>/`
 
-`events.jsonl`、`audit.jsonl`、`ledger.jsonl`、`metering.jsonl`、`questions.jsonl`（每次变化追加一行快照）、`sessions/<session_id>.json`（会话结束或每轮后覆盖写）、`conversations/<conv_id>.json`（助手对话，每轮覆盖写）、`pending.jsonl`、`agent_trace.jsonl`。`runs/` 不入库，演示用的记录回放目录除外（`runs/demo_record/`）。
+`events.jsonl`、`audit.jsonl`、`ledger.jsonl`、`metering.jsonl`、`questions.jsonl`（每次变化追加一行快照）、`sessions/<session_id>.json`（会话结束或每轮后覆盖写）、`conversations/<conv_id>.json`（助手对话，每轮覆盖写）、`pending.jsonl`、`agent_trace.jsonl`、`jue_samples.jsonl`（v4，`JueRecord`）。`runs/` 不入库，演示用的记录回放目录除外（`runs/demo_record/`）。
 
 ---
 
@@ -1131,10 +1168,11 @@ class AgentHub:                               # HuayanApp.agents
     def __init__(self, app: "HuayanApp"): ...
     def chat(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation: ...
         # 委托人说一句话 → 跑一轮 Loop → 返回整段对话；业务员必须带 session_id
-    def notify(self, actor_id: str, text: str) -> Conversation: ...
-        # 派单：写一条 system 消息到该人的 inbox 对话并跑一轮 Loop（助手主动处理，如起草）
+    def notify(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation: ...
+        # 派单：写一条 system 消息到该人的 inbox 对话（带 session_id 时写到该会话的对话）并跑一轮 Loop（助手主动处理，如起草）
     def dispatch(self) -> list[Conversation]: ...
-        # 把总线上新出现、尚未派过的 open 问题（owner_role 为 pm / rd）notify 给负责人（owner_id，空则该角色 id 最小的人）
+        # 把总线上新出现、尚未派过的 open 问题（owner_role 为 pm / rd / sales）notify 给负责人（owner_id，空则该角色 id 最小的人）；
+        # sales 的 ask_back 按 refs["session_id"] 派到该会话的对话
     def approve(self, action_id: str, by: str) -> PendingAction: ...
         # by 必须是 principal，否则 PermissionDenied；执行该工具，结果写回对话，写 agent_action_decided；再按「确认后派单」notify 下一棒
     def reject(self, action_id: str, by: str, note: str = "") -> PendingAction: ...
@@ -1169,7 +1207,7 @@ class AgentHub:                               # HuayanApp.agents
 | `get_need_card()` | read | sales | `app.view_session(session, principal)` |
 | `recommend_now()` | draft | sales | `app.recommend_now(session)` |
 | `request_decrypt()` | effect | sales | `app.request_decrypt(session, principal)` |
-| `list_my_questions()` | read | pm rd | `app.bus.list(owner_role=角色)`，只留 owner_id 为空或为本人的 |
+| `list_my_questions()` | read | sales pm rd | `app.bus.list(owner_role=角色)`，只留 owner_id 为空或为本人的 |
 | `get_session(session_id)` | read | pm rd | `app.view_session(session_id, principal)` |
 | `match_translations(text)` | read | pm rd | `translate.match_translations` |
 | `find_products(phenomenon, slots)` | read | pm rd | `domain.match_candidates(phenomenon, slots, kb.products())` |

@@ -6,7 +6,7 @@ from typing import Literal
 from ._base import BaseModel, datetime
 from .seeds import Role
 
-QFamily = Literal["escalate_need", "opportunity", "knowledge_conflict", "leak_risk", "decrypt_request"]
+QFamily = Literal["escalate_need", "ask_back", "opportunity", "knowledge_conflict", "leak_risk", "decrypt_request"]
 
 
 class Evidence(BaseModel):
@@ -17,7 +17,7 @@ class Evidence(BaseModel):
 
 class Resolution(BaseModel):
     action: Literal["draft_requirement", "approve_project", "update_sheet", "freeze_access",
-                    "approve_decrypt", "reject_decrypt", "dismiss"]
+                    "approve_decrypt", "reject_decrypt", "dismiss", "answered"]
     by: str
     note: str = ""
 
@@ -31,6 +31,7 @@ class Question(BaseModel):
     owner_id: str | None = None
     status: Literal["open", "resolved", "dismissed"] = "open"
     p_need: float | None = None
+    urgency: float | None = None
     scored_by: str                            # onejev / llm_fallback / mock / rule / jue_k / human
     discoverer: Literal["jev", "jue_proto", "jue_k", "rule_alert", "llm_poll", "human"]
     evidence: list[Evidence] = []
