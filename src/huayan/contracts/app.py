@@ -31,3 +31,4 @@ class RunStatus(BaseModel):
     gateway_mock: bool
     simulated_data: bool = True
     seeds_placeholder: bool
+    scheduled_model: str = "jue_proto"

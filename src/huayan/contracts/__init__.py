@@ -8,8 +8,8 @@ from .escalation import (CitedKnowledge, ContributionStat, PMDraft, RDDraft, Req
 from .events import Event, EventKind
 from .gateway import LLMRequest, LLMResponse, LLMToolCall, Message, ModelGateway, Tier, Usage
 from .jev import JevDecision, S1Answer, S1Choice, S1Noul, S1Question, S1Result, S1Score, System1Client
-from .jue import (Discoverer, Family, JueObject, JueOutput, JueState, JueTemplate, ObjectType, QuestionModel,
-                  ScoredDecision)
+from .jue import (Discoverer, Family, JueObject, JueOutput, JueRecord, JueState, JueTemplate, ObjectType,
+                  QuestionModel, ScoredDecision)
 from .knowledge import (CUSTOMER_VERSIONS, KIND_LEVEL, AuditRecord, BlockedHint, CardSection, DecryptGrant, KnowledgeHit,
                         KnowledgeUnit, KUKind, LedgerEntry, RecommendationCard, Version)
 from .meter import Meter, MeterRecord
@@ -28,7 +28,7 @@ __all__ = [
     "Intent", "Turn", "SlotFill", "CustomerProfile", "NeedState", "ExtractedSlot", "ExtractionResult", "AskHint",
     "Recommendation", "AssistantReply", "Session",
     "S1Noul", "S1Choice", "S1Score", "S1Question", "S1Answer", "S1Result", "System1Client", "JevDecision",
-    "ObjectType", "Family", "JueObject", "JueState", "JueTemplate", "ScoredDecision", "JueOutput", "QuestionModel",
+    "ObjectType", "Family", "JueObject", "JueState", "JueTemplate", "ScoredDecision", "JueOutput", "JueRecord", "QuestionModel",
     "Discoverer",
     "QFamily", "Evidence", "Resolution", "Question",
     "ReqItem", "PMDraft", "RDDraft", "SheetDraft", "Requirement", "Trial", "CitedKnowledge", "RequirementView",

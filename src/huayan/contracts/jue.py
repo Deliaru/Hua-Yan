@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from huayan.events import EventLog
 
 ObjectType = Literal["slot", "theme", "knowledge", "actor"]
-Family = Literal["ask_slot", "opportunity", "knowledge_conflict", "leak_risk"]
+Family = Literal["ask_slot", "ask_back", "opportunity", "knowledge_conflict", "leak_risk"]
 
 
 class JueObject(BaseModel):
@@ -45,6 +45,7 @@ class JueTemplate(BaseModel):
     title: str                                # 可含 {object} 与 {attrs.x}
     owner_role: Role
     bounty_points: int = 0
+    urgency: str | None = None                # 数值表达式，截断到 [0,1]；为空时 1.0
 
 
 class ScoredDecision(BaseModel):
@@ -64,11 +65,16 @@ class JueOutput(BaseModel):
     decisions: list[ScoredDecision]
 
 
+class JueRecord(BaseModel):                   # runs/<run_id>/jue_samples.jsonl
+    state: JueState
+    output: JueOutput
+
+
 class QuestionModel(Protocol):
     name: Literal["jue_proto", "jue_k"]
     def propose(self, state: JueState) -> JueOutput: ...
 
 
 class Discoverer(Protocol):
-    name: Literal["jue_proto", "rule_alert", "llm_poll"]
+    name: Literal["jue_proto", "jue_k", "rule_alert", "llm_poll"]
     def discover(self, events: EventLog, at: datetime) -> list[Question]: ...
