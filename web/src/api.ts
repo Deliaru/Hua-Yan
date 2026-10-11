@@ -37,7 +37,7 @@ export const api = {
   timeline: (target: string, viewer: string) => call<JueTimeline>(`timeline?${q({ target_id: target, viewer })}`),
   ledger: () => call<Record<string, number>>("ledger"),
   contributions: (viewer: string) => call<ContributionStat[]>(`contributions?${q({ viewer })}`),
-  report: <T,>(name: "distortion" | "jue_k" | "week") => call<T>(`report?${q({ name })}`),
+  report: <T,>(name: "distortion" | "distortion_300" | "jue_k" | "week") => call<T>(`report?${q({ name })}`),
   // 单卡对照按查看者裁剪（WP-E2）：L1 只拿到三组统计，L2/L3 有单卡明细
   singleCard: <T,>(viewer: string) => call<T>(`report?${q({ name: "single_card", viewer })}`),
 

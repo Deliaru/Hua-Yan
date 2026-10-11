@@ -34,11 +34,12 @@ const DO: Record<string, [number, string]> = {
 // 导览指向的按钮：sign:<family> 签字区的主按钮；reply 追问提词与「发出」；send「发出」；send-rec 填进发给客户；
 // customer「演示自动填入」与「录入」；new-session 新建客户会话；trial 试样通过；回放部署另有 chat / edit / reuse-note。
 // arg 是台词要填的内容（客户 id、对 Agent 说的话、要补的文字），由对应输入处的「演示自动填入」使用。只在轮到当前身份时高亮。
-type Target = { who: string | null; target: string | null; arg: string | null };
-let current: Target = { who: null, target: null, arg: null };
+// customer：这一步发生在哪位客户的会话里（回放部署按台词给出），业务员工作面据此选中、高亮那段会话。
+type Target = { who: string | null; target: string | null; arg: string | null; customer: string | null };
+let current: Target = { who: null, target: null, arg: null, customer: null };
 const subs = new Set<() => void>();
 function publish(t: Target) {
-  if (t.who === current.who && t.target === current.target && t.arg === current.arg) return;
+  if (t.who === current.who && t.target === current.target && t.arg === current.arg && t.customer === current.customer) return;
   current = t;
   subs.forEach((f) => f());
 }
@@ -56,7 +57,7 @@ export function useGuideArg(target: string): string | null {
   return useGlow(target) ? g.arg : null;
 }
 
-type Plan = { step: number; who: string | null; todo: string; raised: string | null; target: string | null; arg?: string | null };
+type Plan = { step: number; who: string | null; todo: string; raised: string | null; target: string | null; arg?: string | null; customer?: string | null };
 
 // 台词里签字动作 → 决策 family（与 scripts/demo_mainline.py 的 FAMILIES 一致）
 const SIGN_FAMILY: Record<string, string> = {
@@ -97,9 +98,9 @@ export function Guide() {
     : derive(state, sales, rd, customers, L));
   const key = plan ? `${plan.step}|${plan.who}|${plan.target}|${plan.raised}` : "";
   useEffect(() => { if (key) setOpen(true); }, [key]);   // 走到新的一步自动展开
-  useEffect(() => publish({ who: plan?.who ?? null, target: plan?.target ?? null, arg: plan?.arg ?? null }),
-            [plan?.who, plan?.target, plan?.arg]);
-  useEffect(() => () => publish({ who: null, target: null, arg: null }), []);
+  useEffect(() => publish({ who: plan?.who ?? null, target: plan?.target ?? null, arg: plan?.arg ?? null, customer: plan?.customer ?? null }),
+            [plan?.who, plan?.target, plan?.arg, plan?.customer]);
+  useEffect(() => () => publish({ who: null, target: null, arg: null, customer: null }), []);
   if (!plan) return null;
   const { step, who, todo, raised } = plan;
   const mine = who === me;
@@ -156,13 +157,26 @@ type GuideState = {
   sessions: SessionSummary[]; view: RequirementView | null; session: SessionView | null; script: NextAction | null; open: Question[];
 };
 
+// 台词段（demo/mainline.yaml 的 steps 编号）落在导览十步里的哪一步
+const CHAPTER_STEP: Record<string, number> = { 1: 1, 2: 2, 3: 4, 4: 6, 5: 6, 6: 7, 7: 9, 支线: 3 };
+
 // 回放部署：下一步就是台词里的下一个动作；要填的文字给出原文并由「演示自动填入」填好，保证与录制一致
 function fromScript(n: NextAction, trialBy: string, L: ReturnType<typeof useLabels>): Plan {
-  const no = `台词 ${Math.min(n.index + 1, n.total)}/${n.total}`;
+  const part = n.chapter?.split("：")[0].replace(/（[^）]*）/, "") ?? "";
+  const no = `台词 ${Math.min(n.index + 1, n.total)}/${n.total}${part ? ` · ${part.replace(/^(\d+)\s*/, "第 $1 段 ")}` : ""}`;
   if (!n.action) return { step: 9, who: null, target: null, raised: null,
     todo: "录制好的演示主线与支线已全部走完。可以点右上角「载入检查点」回到某一步，或「重置进度」从头再来" };
   const [kind, b] = Object.entries(n.action)[0];
   const salesOf = (alias: string) => n.sessions[alias].sales;
+  const plan = scriptPlan(kind, b, no, salesOf, trialBy, L);
+  const alias = b.session ?? b.args?.session;
+  // 客户、发出、对 Agent 说话不对应决策：主线进度按台词段定（如回问的「发出」在第 4 段，属于化学转译）
+  const step = kind === "sign" || kind === "edit" || kind === "trial" ? plan.step : CHAPTER_STEP[part.match(/^\d+/)?.[0] ?? "支线"] ?? plan.step;
+  return { ...plan, step, customer: alias ? n.sessions[alias].customer : null };
+}
+
+function scriptPlan(kind: string, b: Record<string, any>, no: string, salesOf: (alias: string) => string, trialBy: string,
+                    L: ReturnType<typeof useLabels>): Plan {
   switch (kind) {
     case "start":
       return { step: 0, who: b.sales, target: "new-session", arg: b.customer, raised: no,

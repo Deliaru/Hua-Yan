@@ -29,6 +29,10 @@ EN = {"completeness": "key info complete", "slot_error": "slot error", "mistrans
       GROUPS[3]: "G3 HuaYan"}                                           # 图中用英文，避免依赖中文字体
 
 
+def _rows(table) -> dict:
+    return {g: {k: (None if v is None or v != v else float(v)) for k, v in row.items()} for g, row in table.to_dict("index").items()}
+
+
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cards", default="data/sim/cards.jsonl")
@@ -61,9 +65,12 @@ def run(args, trace: bool = False):
         "n_cards": len(cards), "cards": args.cards, "seed": cfg["seed"], "placeholder_seeds": seeds.placeholder,
         "relay_assumption": cfg["relay"], "jue": cfg["jue"],
         "calls": {"jue": calls.count("jue"), "llm": calls.count("llm"), "s1": calls.count("s1")},
-        "metrics": {g: {k: (None if v is None or v != v else float(v)) for k, v in row.items()}
-                    for g, row in table.to_dict("index").items()},
-        "labels": METRICS}
+        "metrics": _rows(table),
+        "labels": METRICS,
+        # 现实中只有 L1 解决不了（truth_product 为空）的需求才会到研发：按此拆开，界面与路演以「应升级」为准
+        "by_route": {route: {"n_cards": len(ids), "metrics": _rows(summarize(df[df.card_id.isin(ids)]))}
+                     for route, ids in (("escalate", {c.id for c in cards if c.truth_product is None}),
+                                        ("l1", {c.id for c in cards if c.truth_product is not None}))}}
     (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
 
     fig, axis = plt.subplots(figsize=(11, 4.5))

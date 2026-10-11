@@ -26,7 +26,7 @@ PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
 DIST = Path("web/dist")
 REPORTS = Path("docs/reports")
 MAINLINE = Path("demo/mainline.yaml")
-REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）；single_card 经门面按查看者读取
+REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week")   # 评测页只读这几份报告（WP-E）；300 张卡用于按「应升级」拆开；single_card 经门面按查看者读取
 
 T0 = datetime(2026, 10, 12, 9, 0, tzinfo=SHANGHAI)
 lock = RLock()                                    # 载入检查点时，同一线程会再次调用 Api.call。
@@ -194,8 +194,11 @@ class Api:
         actions = demo_actions()
         writes = [a for a in actions if "expect" not in a and "checkpoint" not in a]
         sessions = {a["start"]["session"]: a["start"] for a in actions if "start" in a}
+        script = yaml.safe_load(MAINLINE.read_text(encoding="utf-8"))
+        chapters = [step["title"] for step in script["steps"] for a in step["actions"] if "expect" not in a and "checkpoint" not in a]
+        done = self.writes >= len(writes)
         return {"index": self.writes, "total": len(writes), "sessions": sessions,
-                "action": writes[self.writes] if self.writes < len(writes) else None}
+                "action": None if done else writes[self.writes], "chapter": None if done else chapters[self.writes]}
 
     def call(self, method, path, params):
         with lock:

@@ -50,6 +50,28 @@ export function SideHead({ children, aside }: { children: React.ReactNode; aside
   return <div className="side-head"><span>{children}</span>{aside}</div>;
 }
 
+// 分级标识：L1 场景语言 / L2 产品需求语言 / L3 化学语言（颜色与架构总览的回流色带一致）
+export const LAYER_NAME = { 1: "场景语言", 2: "产品需求语言", 3: "化学语言" } as const;
+const LAYER_COLOR = { 1: "#2a9fd0", 2: "#5b7cfa", 3: "#9b4fe0" } as const;
+
+export function LayerChip({ layer }: { layer: 1 | 2 | 3 }) {
+  const c = LAYER_COLOR[layer];
+  return (
+    <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[11.5px] font-semibold"
+          style={{ color: c, background: `${c}17`, boxShadow: `inset 0 0 0 1px ${c}33` }}>
+      L{layer}<span className="font-normal">· {LAYER_NAME[layer]}</span>
+    </span>
+  );
+}
+
+export function LayerNote({ layer, children }: { layer: 1 | 2 | 3; children: React.ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 text-[12.5px] leading-5 text-ink-2">
+      <LayerChip layer={layer} /><span className="min-w-0">{children}</span>
+    </p>
+  );
+}
+
 // 「Agent 起草」：草稿未经人修改
 // Agent 离线时草稿由规则骨架生成，标「离线 · 规则生成」而不是「Agent 起草」（铁律 6：降级必须标注）
 export function AgentMark({ who = "Agent 起草" }: { who?: string }) {

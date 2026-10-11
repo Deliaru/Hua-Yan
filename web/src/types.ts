@@ -167,4 +167,5 @@ export interface NextAction {
   total: number;
   sessions: Record<string, { session: string; customer: string; sales: string }>;
   action: ScriptAction | null;
+  chapter: string | null;       // 这个动作所在的台词段标题，如「4 接单与 L3：……」
 }

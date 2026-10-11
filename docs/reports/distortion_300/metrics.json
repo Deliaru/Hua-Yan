@@ -1,0 +1,171 @@
+{
+  "n_cards": 300,
+  "cards": "data/sim/cards.jsonl",
+  "seed": 20261011,
+  "placeholder_seeds": true,
+  "relay_assumption": {
+    "habit_slots": [
+      "fiber"
+    ],
+    "vague_prob": 0.3,
+    "drop_prob": 0.2,
+    "swap_prob": 0.1
+  },
+  "jue": {
+    "model": "jue_k",
+    "jue_k_dir": "models/jue_k",
+    "ask_threshold": 0.15,
+    "back_threshold": 0.15,
+    "max_rounds": 8,
+    "max_backs": 2
+  },
+  "calls": {
+    "jue": 859,
+    "llm": 0,
+    "s1": 0
+  },
+  "metrics": {
+    "G1 业务员转述": {
+      "completeness": 0.46254071661237783,
+      "slot_error": 0.09280742459396751,
+      "mistranslation": null,
+      "asks": 1.0,
+      "backs": 0.0,
+      "backs_useful": null,
+      "traceable": 0.0,
+      "returned": 0.96
+    },
+    "G2 一次性翻译": {
+      "completeness": 0.43431053203040176,
+      "slot_error": 0.0,
+      "mistranslation": 0.0994263862332696,
+      "asks": 0.0,
+      "backs": 0.0,
+      "backs_useful": null,
+      "traceable": 1.0,
+      "returned": 0.9833333333333333
+    },
+    "G3 化言（不含回问）": {
+      "completeness": 0.7133550488599348,
+      "slot_error": 0.0,
+      "mistranslation": 0.0,
+      "asks": 0.8633333333333333,
+      "backs": 0.0,
+      "backs_useful": null,
+      "traceable": 1.0,
+      "returned": 0.68
+    },
+    "G3 化言": {
+      "completeness": 0.7893593919652552,
+      "slot_error": 0.0,
+      "mistranslation": 0.0,
+      "asks": 0.8633333333333333,
+      "backs": 0.8166666666666667,
+      "backs_useful": 0.37142857142857144,
+      "traceable": 1.0,
+      "returned": 0.5166666666666667
+    }
+  },
+  "labels": {
+    "completeness": "关键信息完整率",
+    "slot_error": "槽位错误率",
+    "mistranslation": "错译率",
+    "asks": "平均追问次数",
+    "backs": "平均回问次数",
+    "backs_useful": "回问事后有用比例",
+    "traceable": "可回查率",
+    "returned": "研发需退回比例"
+  },
+  "by_route": {
+    "escalate": {
+      "n_cards": 41,
+      "metrics": {
+        "G1 业务员转述": {
+          "completeness": 0.49242424242424243,
+          "slot_error": 0.1,
+          "mistranslation": null,
+          "asks": 1.0,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 0.0,
+          "returned": 0.9512195121951219
+        },
+        "G2 一次性翻译": {
+          "completeness": 0.5075757575757576,
+          "slot_error": 0.0,
+          "mistranslation": 0.10227272727272728,
+          "asks": 0.0,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 1.0,
+          "returned": 0.9512195121951219
+        },
+        "G3 化言（不含回问）": {
+          "completeness": 0.9015151515151515,
+          "slot_error": 0.0,
+          "mistranslation": 0.0,
+          "asks": 1.3170731707317074,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 1.0,
+          "returned": 0.1951219512195122
+        },
+        "G3 化言": {
+          "completeness": 0.9090909090909091,
+          "slot_error": 0.0,
+          "mistranslation": 0.0,
+          "asks": 1.3170731707317074,
+          "backs": 0.6585365853658537,
+          "backs_useful": 0.2962962962962963,
+          "traceable": 1.0,
+          "returned": 0.1951219512195122
+        }
+      }
+    },
+    "l1": {
+      "n_cards": 259,
+      "metrics": {
+        "G1 业务员转述": {
+          "completeness": 0.45754119138149557,
+          "slot_error": 0.09164420485175202,
+          "mistranslation": null,
+          "asks": 1.0,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 0.0,
+          "returned": 0.9613899613899614
+        },
+        "G2 一次性翻译": {
+          "completeness": 0.4220532319391635,
+          "slot_error": 0.0,
+          "mistranslation": 0.09885057471264368,
+          "asks": 0.0,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 1.0,
+          "returned": 0.9884169884169884
+        },
+        "G3 化言（不含回问）": {
+          "completeness": 0.6818757921419518,
+          "slot_error": 0.0,
+          "mistranslation": 0.0,
+          "asks": 0.7915057915057915,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 1.0,
+          "returned": 0.7567567567567568
+        },
+        "G3 化言": {
+          "completeness": 0.7693282636248415,
+          "slot_error": 0.0,
+          "mistranslation": 0.0,
+          "asks": 0.7915057915057915,
+          "backs": 0.8416988416988417,
+          "backs_useful": 0.38073394495412843,
+          "traceable": 1.0,
+          "returned": 0.5675675675675675
+        }
+      }
+    }
+  }
+}

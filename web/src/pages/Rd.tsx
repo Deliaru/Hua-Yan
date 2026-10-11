@@ -5,9 +5,10 @@ import { api } from "../api";
 import { ACTION, REQ_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { AgentMessage, CitedKnowledge, LeakHit, Question, ReqItem, RequirementView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
+import { ChevronRight } from "../components/Icons";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
 import { useGlow, useGuideArg } from "../components/Guide";
-import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead } from "../components/ui";
+import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip } from "../components/ui";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
 const reqsOf = (q: Question) => q.refs.requirement_id ? [q.refs.requirement_id] : (q.refs.requirement_ids ?? "").split(",").filter(Boolean);
@@ -136,6 +137,8 @@ function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode })
   const glowTrial = useGlow("trial");
   const ended = ({ reused: "已复用现成产品，没有立项", merged: "已并入另一张单", rejected: "已失效" } as Record<string, string>)[req.status];
   const nodes = (t?.nodes ?? []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const doneNodes = nodes.filter((n) => n.resolved_at != null);
+  const [all, setAll] = useState(false);
   // 需求单视图里没有试样状态：试样通过后觉会提出「客户评价」，以此判断试样已录入
   const trial = req.status === "rd_confirmed" && !nodes.some((n) => n.family === "market_eval" || n.family === "seal_points");
   return (
@@ -148,7 +151,15 @@ function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode })
         </div>
         <div className="group">
           {ended && <div className="row text-[14px] text-ink-2">这张单{ended}。</div>}
-          {nodes.map((n) => {
+          {/* 已处置的默认折成一行，只展开还在进行的：签字区紧跟在下面，不用往下翻 */}
+          {!!doneNodes.length && (
+            <button type="button" onClick={() => setAll(!all)} className="row row-btn !min-h-[40px] text-[12.5px] text-ink-2">
+              <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-white">✓</span>
+              <span className="min-w-0 flex-1 truncate">已处置 {doneNodes.length} 项：{doneNodes.map((n) => L.family(n.family)).join(" · ")}</span>
+              <span className="link shrink-0">{all ? "收起" : "展开"}<ChevronRight open={all} /></span>
+            </button>
+          )}
+          {nodes.filter((n) => all || n.resolved_at == null).map((n) => {
             const done = n.resolved_at != null, ready = !done && n.prepared_at != null;
             return (
               <div key={n.question_id} className={`row !min-h-[44px] ${ready ? "attn-edge" : ""}`}>
@@ -216,6 +227,7 @@ function RequirementSheet({ view, notes, selectItem }: { view: RequirementView; 
       <SheetNotes reqId={req.id} notes={notes} />
       {/* 放出与封存紧跟签字区：审定发布时要拿说明书对照这两栏 */}
       {(req.public_points || !!req.sealed.length) && (
+        <div className="flex flex-col gap-1.5">
         <div className="grid grid-cols-2 gap-4">
           <Group title="已放出的对外要点"><div className="row text-[14px] leading-[21px]">{req.public_points || "—"}</div></Group>
           <Group title="已封存（只有研发可见）">
@@ -223,14 +235,17 @@ function RequirementSheet({ view, notes, selectItem }: { view: RequirementView; 
             {!req.sealed.length && <div className="row text-[13px] text-ink-2">无</div>}
           </Group>
         </div>
+        <p className="px-1 text-[12px] text-ink-3">L3 向下只有两个出口：你放出的对外要点（包装成说明书交给 L1），和你本人批准的解密；封存项不会出现在任何下层。</p>
+        </div>
       )}
       <div>
         <div className="group-title flex items-baseline justify-between">
-          <span>化学要点 · L3</span>
+          <span className="flex items-center gap-2"><LayerChip layer={3} />化学要点</span>
           <span className="font-normal text-ink-3">
             {req.rd_confirmed_by ? `${L.name(req.rd_confirmed_by)} 已确认` : req.status === "rd_accepted" ? "可直接修改；改过的条目可沉淀为你的知识" : ""}
           </span>
         </div>
+        <p className="mb-2 px-1 text-[12px] leading-[18px] text-ink-3">只有研发可见。每条都带客户原话和依据了哪位研发的转化知识；产品经理 Agent 只见归属、看不到原文。</p>
         <div className="group">
           <div className="grid grid-cols-[1fr_280px] border-b border-sep bg-[#fafafb] text-[11px] font-semibold tracking-[.04em] text-ink-3">
             <span className="px-5 py-2">研发要做到什么</span>
@@ -264,7 +279,7 @@ function Point({ n, index, item, view, cited, l2, editable, notes, select }: {
   const basis = item.ku_refs.map((r) => cited[r]).filter(Boolean);
   const from = l2.find((p) => p.quote_refs.some((q) => item.quote_refs.includes(q)));
   return (
-    <div className="grid grid-cols-[1fr_280px] border-b border-sep last:border-b-0">
+    <div className="group/pt grid grid-cols-[1fr_280px] border-b border-sep last:border-b-0">
       <div className="flex gap-3 px-5 py-3.5">
         <span className="num w-5 shrink-0 pt-[2px] text-[13px] font-semibold text-ink-3">{n + 1}</span>
         <div className="min-w-0 flex-1">
@@ -281,11 +296,11 @@ function Point({ n, index, item, view, cited, l2, editable, notes, select }: {
             {item.edited_by == null ? <AgentMark /> : <span>{L.name(item.edited_by)} 修改</span>}
             {basis.map((c) => <KnowledgeChip key={c.ku_id} c={c} />)}
             {editable && !editing && <button type="button" className="link !text-[12px]" onClick={() => setEditing(true)}>修改</button>}
+            <button type="button" className="link !text-[12px] opacity-0 transition-opacity group-hover/pt:opacity-100 focus:opacity-100" onClick={select}>就此条问 Agent</button>
             {editable && mine && text !== mine && (
               <button type="button" className="chip glow" onClick={() => { setText(mine); setEditing(true); }}>演示自动填入</button>
             )}
           </div>
-          <button className="mt-1 text-[12px] text-accent" onClick={select}>就此条与 Agent 协作</button>
           <Notes notes={notes.filter((m) => m.role === "assistant")} />
         </div>
       </div>
@@ -341,7 +356,8 @@ function ReqContext({ view }: { view: RequirementView }) {
         </Group>
       )}
       {!!l2.length && (
-        <Group title="产品需求 · L2" foot={`产品经理 Agent 起草${req.rd_accepted_by ? ` · ${L.name(req.rd_accepted_by)} 已接单` : ""}`}>
+        <Group title={<span className="flex items-center gap-2"><LayerChip layer={2} />产品需求</span>}
+               foot={`产品经理 Agent 用 L2 知识把客户原话转成产品需求，看不到 L3 原文与封存项${req.rd_accepted_by ? ` · ${L.name(req.rd_accepted_by)} 已接单` : ""}`}>
           {l2.map((it, i) => <div key={i} className="row !min-h-0 !py-2 text-[13px] leading-5">{splitArrow(it.text).body}</div>)}
         </Group>
       )}
@@ -405,6 +421,9 @@ function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: Reac
   const owners = [...new Set(points.flatMap((it) => it.ku_refs.map((r) => cited[r]?.owner).filter(Boolean)))] as string[];
   const edited = points.filter((it) => it.edited_by != null).length;
   const known = Object.entries(req.known_slots);
+  // 回问还没答复时门面会拒绝确认；这里提前说明在等什么（是否可签仍由门面判断）
+  const t = useData(() => api.timeline(req.id, me), [req.id, me]);
+  const waiting = (t?.nodes ?? []).filter((n) => (n.family === "ask_back" || n.family === "distortion") && n.resolved_at == null);
   return (
     <>
       <div className="row !items-start flex-col !gap-1">
@@ -423,6 +442,9 @@ function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: Reac
       <div className="row !items-start">
         <div className="flex flex-1 flex-col gap-2">
           <p className="text-[13px] text-ink-2">每条的来历（客户原话）在下方「化学要点 · L3」，理解有偏差可以直接「修改」。确认后按这几条安排试样。</p>
+          {!!waiting.length && <p className="rounded-[8px] bg-attn-bg px-3 py-2 text-[13px] leading-5 text-attn-ink">
+            还在等客户补充信息：{waiting.map((n) => n.family === "ask_back" ? `${L.name(n.owner_id)} 正在回头问客户（回问）` : "转译和客户原话对不上，待核对").join("；")}。
+            答复回填需求单后再确认，否则确认会被拒绝；这期间可以先看、先改。</p>}
           <div className="flex flex-wrap gap-2"><Act label="确认" run={() => api.confirm(req.id, me)} />{dismiss}</div>
         </div>
       </div>

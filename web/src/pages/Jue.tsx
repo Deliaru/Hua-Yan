@@ -1,13 +1,13 @@
-// 觉视图（REPLAN 3.2 第 6 条、3.6）：一条需求线程上觉的历次判断。横轴业务时间，每个决策一条泳道；
-// Jue-K / OneJev 打分画曲线与虚线阈值，规则打分画阶跃并标「规则 · 到点」，不标概率。
-// 节点 = 被提出的问题：提出、准备完成、签字三个时刻。泳道与点由接口按查看者裁剪，界面不再过滤。
+// 觉视图（REPLAN 3.2 第 6 条、3.6）：一条需求线程上觉的历次判断。主体是「决策日志」：每个被提出的问题一张卡，
+// 写清觉为什么提出、打了多少分、交给谁准备、谁签了字；原来的泳道概率图收进「概率曲线」。
+// 泳道图：Jue-K / OneJev 打分画曲线与虚线阈值，规则打分画阶跃并标「规则 · 到点」，不标概率。泳道与点由接口按查看者裁剪，界面不再过滤。
 import { useState } from "react";
 import { api } from "../api";
 import { ACTION, REQ_STATUS, hhmm, isModel, pct, useApp, useData, useLabels } from "../ctx";
 import type { JueTimeline, TimelineNode, TimelinePoint } from "../types";
 import { Popover } from "../components/Controls";
 import { ChevronDown } from "../components/Icons";
-import { EmptyState, Group, PageHead } from "../components/ui";
+import { Disclosure, EmptyState, Group, PageHead } from "../components/ui";
 
 // 业务员选自己的会话，研发选需求单（需求单线程含其全部会话）
 export function JuePage() {
@@ -30,7 +30,7 @@ function Jue({ targets }: { targets: { id: string; label: string }[] }) {
   return (
     <div className="mx-auto flex max-w-[1080px] flex-col gap-6 px-8 pb-24 pt-7">
       <PageHead title="觉视图"
-                subtitle="流程由「觉提出 → 主人准备 → 签字人签字 → 状态改变 → 觉再看」推动；绝大多数时刻是平的。"
+                subtitle="这条需求从头到尾，「谁此刻要决定什么」都是觉提出来的：觉提出 → 主人准备 → 签字人签字 → 状态改变 → 觉再看。"
                 aside={target && (
                   <Popover align="right" trigger={(toggle) => (
                     <button onClick={toggle} className="btn btn-plain">{target.label}<ChevronDown /></button>
@@ -50,7 +50,93 @@ function Jue({ targets }: { targets: { id: string; label: string }[] }) {
 
 const W = 1000, LEFT = 150, RIGHT = 24, LANE = 76, TOP = 28;
 
+// 觉在什么情况下提出（按决策目录的前置条件写成人话；具体打分见卡片右上角）
+const WHY: Record<string, string> = {
+  ask_slot: "客户只说了现象，这项信息会改变候选产品或是研发必问，客户还没说",
+  escalate_need: "现象已明确，L1 匹配倾向「现有产品都不合适」，业务员还没升级",
+  reuse_product: "刚升级：先查有没有说明书没写、但案例里用过的现成产品",
+  accept_requirement: "产品需求（L2）已起草，等研发接单；接单即立项",
+  opportunity: "同一主题的需求反复升级、又没有产品可用：可能是一个值得合并立项的机会",
+  ask_back: "化学语言（L3）转译中，这项信息的不同取值会改变引用的知识，客户还没说",
+  confirm_translation: "化学要点（L3）已起草，等研发确认",
+  contribution: "研发改过、且没被已有知识覆盖的条目，值得沉淀为研发本人的知识",
+  market_eval: "试样通过，等业务员带回客户的评价",
+  seal_points: "客户评价通过，决定哪些封存、哪些对外放出",
+  release: "说明书已按放出的要点包装好，等研发审定发布",
+  distortion: "转译遗漏约束或缺少原话依据",
+  seal_leak: "对外说明命中了封存项或 L3 术语",
+  knowledge_conflict: "某产品在某个条件下试样反复失败，说明书可能要更新",
+  leak_risk: "有人短时间内反复检索同一产品的高层级内容",
+};
+
 function Timeline({ tl }: { tl: JueTimeline }) {
+  const nodes = [...tl.nodes].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return (
+    <>
+      <div className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3">
+        <div className="group px-4 py-3 text-[12.5px] leading-[19px] text-ink-2">
+          <p className="mb-1 text-[13px] font-semibold text-ink">觉是什么</p>
+          看着整条需求链，只在「此刻需要有人决定」时提出问题，交给主人准备、签字人签字。它是本地小模型，不调用大模型。
+        </div>
+        <Count n={tl.n_judgments} label="觉判断" unit="次" note="绝大多数时刻不打扰" />
+        <Count n={tl.n_questions} label="提出决策" unit="个" note={`人签字 ${tl.n_signatures} 次`} />
+        <Count n={tl.n_llm_calls} label="觉的大模型调用" unit="次" note="取自计量器" />
+      </div>
+      <section>
+        <div className="group-title">决策日志 · 按提出时间</div>
+        {nodes.length ? (
+          <ol className="relative flex flex-col gap-3 pl-[76px] before:absolute before:bottom-3 before:left-[63px] before:top-3 before:w-px before:bg-sep">
+            {nodes.map((n) => <Entry key={n.question_id} n={n} point={tl.points.find((p) => p.family === n.family && p.raised && p.at === n.created_at)} />)}
+          </ol>
+        ) : <div className="group"><div className="row text-[13px] text-ink-2">觉还没有在这条线程上提出决策。</div></div>}
+      </section>
+      <div className="px-1">
+        <Disclosure label="概率曲线：觉的每一次判断（每个决策一条泳道）"><Chart tl={tl} /></Disclosure>
+      </div>
+    </>
+  );
+}
+
+function Entry({ n, point }: { n: TimelineNode; point?: TimelinePoint }) {
+  const L = useLabels();
+  const state = n.resolved_at ? "done" : n.prepared_at ? "ready" : "preparing";
+  // 主人直接回答（如产品经理 Agent 查无现成产品）时没有「准备完成」这一步
+  const steps: [string, string | null, boolean][] = [
+    ["提出", hhmm(n.created_at), true],
+    ...(n.resolved_at && !n.prepared_at ? [] : [[`${L.name(n.owner_id)} 准备`, n.prepared_at && hhmm(n.prepared_at), !!n.prepared_at] as [string, string | null, boolean]]),
+    [n.signer_id ? `${L.name(n.resolved_at ? n.by : n.signer_id)} ${n.resolved_at ? ACTION[n.action ?? ""] ?? "已处置" : "签字"}` : "提示类，无需签字",
+     n.resolved_at && hhmm(n.resolved_at), !!n.resolved_at],
+  ];
+  return (
+    <li className="relative">
+      <span className="num absolute -left-[76px] top-3 w-[48px] text-right text-[12px] text-ink-3">{hhmm(n.created_at)}</span>
+      <span className={`absolute -left-[17px] top-[15px] h-[9px] w-[9px] rounded-full ring-4 ring-bg ${state === "done" ? "bg-ink-3" : "bg-attn"}`} />
+      <div className={`group px-4 py-3 ${state === "done" ? "" : "attn-edge"}`}>
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[14px] font-semibold">{L.family(n.family)}</p>
+          <span className="shrink-0 text-[12px]">
+            {point && isModel(point.scored_by) && point.p_need != null
+              ? <span className="num font-semibold text-attn-ink">{L.scorer(point.scored_by)} {pct(point.p_need)} <span className="font-normal text-ink-3">· 阈值 {pct(point.threshold)}</span></span>
+              : <span className="text-ink-3">规则 · 到点</span>}
+          </span>
+        </div>
+        <p className="mt-0.5 text-[12.5px] leading-[19px] text-ink-2">{WHY[n.family] ?? ""}</p>
+        <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
+          {steps.map(([label, at, on], i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              {i > 0 && <span className="text-ink-3">→</span>}
+              <span className={`tag ${on ? (i === steps.length - 1 ? "tag-accent" : "") : "!bg-transparent !font-normal text-ink-3 ring-1 ring-sep"}`}>
+                {label}{at && <span className="num ml-1 font-normal opacity-70">{at}</span>}
+              </span>
+            </span>
+          ))}
+        </p>
+      </div>
+    </li>
+  );
+}
+
+function Chart({ tl }: { tl: JueTimeline }) {
   const L = useLabels();
   const [sel, setSel] = useState<TimelineNode | null>(null);
   const lanes = [...new Set([...tl.points.map((p) => p.family), ...tl.nodes.map((n) => n.family)])];
@@ -64,7 +150,7 @@ function Timeline({ tl }: { tl: JueTimeline }) {
   const ticks = [...new Map(isos.map((t) => [Date.parse(t), t])).values()];
   return (
     <>
-      <Group foot="橙点 = 这一次判断提出了问题；○ 提出 · ◆ 准备完成 · ■ 签字。点节点看主人、签字人与处置。">
+      <Group foot="黑线是觉每次判断给出的概率（规则打分画成到点即升的阶跃），橙色虚线是阈值，橙点 = 这一次判断提出了问题；下方横条是问题的全过程：○ 提出 · ◆ 准备完成 · ■ 签字。点横条看详情。">
         <svg viewBox={`0 0 ${W} ${H}`} className="block w-full" role="img" aria-label="觉的判断时间线">
           {ticks.map((t) => (
             <g key={t}>
@@ -80,12 +166,6 @@ function Timeline({ tl }: { tl: JueTimeline }) {
         </svg>
       </Group>
       {sel && <NodeDetail n={sel} />}
-      <div className="grid grid-cols-4 gap-4">
-        <Count n={tl.n_judgments} label="觉判断" unit="次" />
-        <Count n={tl.n_llm_calls} label="觉的大模型调用" unit="次" note="取自计量器" />
-        <Count n={tl.n_questions} label="提出决策" unit="个" />
-        <Count n={tl.n_signatures} label="人签字" unit="次" />
-      </div>
     </>
   );
 }
@@ -193,8 +273,9 @@ function NodeDetail({ n }: { n: TimelineNode }) {
 function Count({ n, label, unit, note }: { n: number; label: string; unit: string; note?: string }) {
   return (
     <div className="group px-4 py-3">
-      <p className="text-[12px] text-ink-2">{label}{note && <span className="text-ink-3"> · {note}</span>}</p>
+      <p className="text-[12px] text-ink-2">{label}</p>
       <p className="num text-[26px] font-semibold leading-8">{n}<span className="ml-1 text-[13px] font-normal text-ink-2">{unit}</span></p>
+      {note && <p className="text-[11.5px] text-ink-3">{note}</p>}
     </div>
   );
 }

@@ -5,12 +5,14 @@ import { api } from "../api";
 import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { AgentMessage, AskHint, Question, RecommendationCard, SessionSummary, SessionView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
-import { useGlow, useGuideArg } from "../components/Guide";
+import { useGlow, useGuideArg, useGuide } from "../components/Guide";
 import { Popover } from "../components/Controls";
 import { Plus } from "../components/Icons";
-import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead } from "../components/ui";
+import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote } from "../components/ui";
 
-function SalesSidebar({ mine, current, choose }: { mine: SessionSummary[]; current: string | null; choose: (id: string) => void }) {
+function SalesSidebar({ mine, current, guided, choose }: {
+  mine: SessionSummary[]; current: string | null; guided: string | null; choose: (id: string) => void;
+}) {
   const { meta, me, refresh, fail } = useApp();
   const L = useLabels();
   const start = (customer: string) => api.startSession(customer, me).then((s) => { choose(s.id); refresh(); }, fail);
@@ -31,7 +33,8 @@ function SalesSidebar({ mine, current, choose }: { mine: SessionSummary[]; curre
         </Popover>
       }>客户会话</SideHead>
       {mine.map((s) => (
-        <button key={s.id} onClick={() => choose(s.id)} className={`side-row ${s.id === current ? "on" : ""}`}>
+        <button key={s.id} onClick={() => choose(s.id)}
+                className={`side-row ${s.id === current ? "on" : ""} ${s.id === guided && s.id !== current ? "glow" : ""}`}>
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[13px] font-semibold">{s.customer_id ? L.name(s.customer_id) : "样例客户"}</span>
             <span className="shrink-0 text-[12px] text-ink-2">{SESSION_STATUS[s.status] ?? s.status}</span>
@@ -60,14 +63,17 @@ export function Sales() {
   const { me } = useApp();
   const [chosen, choose] = useState<string | null>(null);
   const mine = useMySessions();
-  const current = mine.find((s) => s.id === chosen) ?? mine[0] ?? null;
+  // 导览指向的会话（轮到本人时）：没手动选过就直接打开它，选过别的就在侧栏高亮它
+  const g = useGuide();
+  const guided = g.who === me && g.customer ? mine.find((s) => s.customer_id === g.customer)?.id ?? null : null;
+  const current = mine.find((s) => s.id === chosen) ?? mine.find((s) => s.id === guided) ?? mine[0] ?? null;
   const sid = current?.id ?? null;
   const view = useData(() => (sid ? api.session(sid, me) : Promise.resolve(null)), [sid, me]);
   const questions = useData(() => api.questions(me), [me]);
   const mineQs = (questions ?? []).filter((q) => !q.refs.session_id || q.refs.session_id === sid);
   return (
     <>
-      <Side><SalesSidebar mine={mine} current={sid} choose={choose} /></Side>
+      <Side><SalesSidebar mine={mine} current={sid} guided={guided} choose={choose} /></Side>
       {current && view ? <SessionDesk key={sid} summary={current} v={view} questions={mineQs} />
         : <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始。演示者扮客户，直接在工作面上录入客户的话。" />}
     </>
@@ -90,6 +96,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
         <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pt-7">
           <PageHead title={summary.customer_id ? L.name(summary.customer_id) : "样例客户"}
                     subtitle={`${summary.phenomenon ? L.phen(summary.phenomenon) : "尚未识别现象"} · ${SESSION_STATUS[v.status] ?? v.status}`} />
+          <LayerNote layer={1}>你在 L1：你和你的 Agent 只看得到说明书和用法，研发的知识只显示「谁懂」、不显示内容。现有产品解决不了时签字升级，需求带着客户原话交给 L2 产品经理 Agent。</LayerNote>
           {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的高层级访问已被主管冻结：客户只能拿到说明书与用法，暂不能申请解密。</p>}
           <PendingActions />
           <div className="grid grid-cols-[minmax(280px,5fr)_minmax(320px,6fr)] items-start gap-5">
@@ -99,7 +106,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
         </div>
       </div>
       <Composer v={v} reply={reply} setReply={setReply} replyNotes={notesFor(conv?.messages, `${v.session_id}/reply`)} />
-      <AgentPanel title="觉的决策" sessionId={v.session_id} focus={v.session_id} external>
+      <AgentPanel title="觉提出的决策 · 待你处理" sessionId={v.session_id} focus={v.session_id} external>
         {v.card || v.reuse || questions.length
           ? <Decisions v={v} questions={questions} fill={setReply} replyEmpty={!reply.trim()} escalateNotes={notesFor(conv?.messages, `${v.session_id}/escalate`)} />
           : <p className="text-[13px] leading-5 text-ink-3">此刻没有需要你签字的决策。觉每听一句都会再看一遍：该推荐、该升级、该回问时出现在这里。</p>}

@@ -1,9 +1,9 @@
 // 单卡对照（评测页内，REPLAN 3.6、WP-E2）：同一张需求卡、同一个模拟客户，左边一次性翻译，右边化言；
-// 按轮播放，右边同步显示觉的逐轮追问概率；底部是研发会不会退回，再接 60 张卡三组统计。
-// 数据取自 report?name=single_card（按查看者裁剪：业务员只看到三组统计）。
+// 按轮播放，右边同步显示觉的逐轮追问概率；底部是研发会不会退回。多卡统计在评测页「失真对照」。
+// 数据取自 report?name=single_card（门面按查看者裁剪：业务员只看到三组统计，评测页固定按研发视角取数）。
 import { useState } from "react";
 import { api } from "../api";
-import { isModel, pct, useApp, useData, useLabels } from "../ctx";
+import { isModel, pct, useData, useLabels } from "../ctx";
 import { Group } from "../components/ui";
 
 interface Line { text: string; quote: string | null; owner?: string }
@@ -26,19 +26,10 @@ interface Card {
 // L1 身份只拿到模拟标注与三组统计
 type Report = Card | { simulated: boolean; stats: Stats };
 
-export function SingleCard() {
-  const { me } = useApp();
-  const r = useData(() => api.singleCard<Report>(me), [me]);
-  if (!r) return null;
-  if (!("huayan" in r)) {
-    return (
-      <section className="flex flex-col gap-4">
-        <div className="group-title">单卡对照 <span className="tag ml-1.5">模拟数据</span></div>
-        <div className="group px-5 py-4 text-[13px] text-ink-2">单卡明细含需求单中间过程，只对产品经理 Agent 与研发开放；切到研发身份可逐轮播放。</div>
-        <StatsTable stats={r.stats} />
-      </section>
-    );
-  }
+// 评测页是展示页，固定按研发视角取数（人已同意）；裁剪仍由门面按 viewer 执行
+export function SingleCard({ viewer }: { viewer: string }) {
+  const r = useData(() => api.singleCard<Report>(viewer), [viewer]);
+  if (!r || !("huayan" in r)) return null;
   return <Player card={r} />;
 }
 
@@ -92,7 +83,6 @@ function Player({ card }: { card: Card }) {
           {done && <Outcome side={card.huayan} />}
         </Group>
       </div>
-      <StatsTable stats={card.stats} />
     </section>
   );
 }
@@ -136,38 +126,5 @@ function Outcome({ side }: { side: Side }) {
         )}
       </div>
     </>
-  );
-}
-
-// 三组统计只摘三项，完整指标在下方「失真对照」（同一份报告，不另算）
-const KEY: [string, string][] = [["completeness", "关键信息完整率"], ["returned", "研发退回比例"], ["traceable", "可回查原话"]];
-
-function StatsTable({ stats }: { stats: Stats }) {
-  const L = useLabels();
-  const groups = Object.entries(stats).filter(([k, v]) => /^G\d/.test(k) && typeof v === "object") as [string, Group3][];
-  const sel = stats.selection as Selection | undefined;
-  return (
-    <Group title={`${stats.n_cards ?? ""} 张卡三组统计`}
-           foot={<>完整指标见下方「失真对照」，同一份报告，不另算。{sel && <>本卡的选法：{
-             sel.rule.replace(/\s*([a-z_]+)(?=、)/, (_, id) => `「${L.phen(id)}」`)}（同现象 {sel.n_same_phenomenon} 张，符合 {sel.n_eligible} 张）。</>}</>}>
-      <div className="px-4 py-2">
-        <table className="w-full table-fixed text-[13px]">
-          <thead>
-            <tr>
-              <th className="w-[34%] py-1.5 text-left font-semibold text-ink-2">指标</th>
-              {groups.map(([g]) => <th key={g} className="py-1.5 text-right font-semibold text-ink-2">{g.replace(/^G\d\s*/, "")}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {KEY.map(([k, label]) => (
-              <tr key={k} className="border-t border-sep">
-                <td className="py-2">{label}</td>
-                {groups.map(([g, v]) => <td key={g} className="num py-2 text-right">{v[k] == null ? "—" : pct(v[k]!)}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Group>
   );
 }

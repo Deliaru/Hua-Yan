@@ -1,11 +1,12 @@
-// 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list（架构总览、工作面、觉视图、三层对照、评测、知识与积分）。
+// 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list（架构总览、演示工作面、沉浸工作面、觉视图、三层对照、评测、知识与积分）。
+// 演示工作面是只读的讲解页；沉浸工作面是真实的工作面，导览带着走演示主线。
 // 没有产品经理页面：产品经理 Agent 的产出只在研发工作面、三层对照、觉视图上出现（REPLAN 3.2 第 5 条）。
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
 import type { Meta, Role, RunStatus } from "./types";
 import { Popover } from "./components/Controls";
-import { ChevronDown, Close, NavArch, NavDesk, NavEval, NavJue, NavLayers, NavLedger, Refresh } from "./components/Icons";
+import { ChevronDown, Close, NavArch, NavDesk, NavEval, NavJue, NavLayers, NavLedger, NavStory, Refresh } from "./components/Icons";
 import { Logo } from "./components/Logo";
 import { Sales } from "./pages/Sales";
 import { Rd } from "./pages/Rd";
@@ -15,11 +16,13 @@ import { Layers } from "./pages/Layers";
 import { Eval } from "./pages/Eval";
 import { Ledger } from "./pages/Ledger";
 import { Overview } from "./pages/Overview";
+import { Story } from "./pages/Story";
 import { Guide, useGuide } from "./components/Guide";
 
 const PAGES = [
   ["overview", "架构总览", NavArch],
-  ["desk", "工作面", NavDesk],
+  ["story", "演示工作面", NavStory],
+  ["desk", "沉浸工作面", NavDesk],
   ["jue", "觉视图", NavJue],
   ["layers", "三层对照", NavLayers],
   ["eval", "评测", NavEval],
@@ -39,7 +42,7 @@ export default function App() {
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, []);
-  const [me, setMe] = useState<string | null>(null);
+  const [me, setMe] = useState<string | null>(() => new URLSearchParams(location.search).get("as"));   // ?as=rd:R02 直接以某人身份打开
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -114,6 +117,7 @@ export default function App() {
 
       <main className="ml-[232px] pt-[52px]">
         {page === "overview" && <Overview />}
+        {page === "story" && <Story toDesk={() => setPage("desk")} />}
         {page === "desk" && (actor.role === "sales" ? <Sales key={key} /> : actor.role === "rd" ? <Rd key={key} /> : <Supervisor key={key} />)}
         {page === "jue" && <JuePage key={key} />}
         {page === "layers" && <Layers key={meta.status.run_id} />}
