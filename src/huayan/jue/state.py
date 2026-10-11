@@ -179,32 +179,50 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
 
 
 def _themes(events, at, seeds, since):
-    # 立项（处置或确认需求单）与发布之前的升级视为已处理；立项后未发布即 open_project
-    req_theme, handled, released = {}, {}, set()
-    for e in events.query(["question_resolved", "requirement_confirmed", "product_released"], until=at):
+    # 生命周期不限窗口：历史接单在今天仍可在途；复用状态取截至 at 的最后一次决定。
+    history = sorted(events.query(["escalate", "recommend", "reuse_proposed", "reuse_declined", "reuse_adopted",
+                                   "requirement_accepted", "requirements_merged", "product_released"], until=at),
+                     key=lambda e: e.ts)
+    req_theme, handled, reuse_closed, projects = {}, {}, set(), set()
+    for e in history:
         p = e.payload
-        if e.kind == "requirement_confirmed":
+        if e.kind == "escalate":
+            req_theme[p["requirement_id"]] = theme_id(p["phenomenon"], p["known"], seeds)
+        elif e.kind == "reuse_proposed":
+            (reuse_closed.add if p["product_id"] is None else reuse_closed.discard)(p["requirement_id"])
+        elif e.kind == "reuse_declined":
+            reuse_closed.add(p["requirement_id"])
+        elif e.kind == "reuse_adopted":
+            reuse_closed.discard(p["requirement_id"])
+        elif e.kind == "requirement_accepted":
+            # 补齐槽位会改变主题；升级仍按当时的主题分组，接单也须处理该旧主题。
+            handled[req_theme[p["requirement_id"]]] = e.ts
             req_theme[p["requirement_id"]] = key = theme_id(p["phenomenon"], p["known"], seeds)
+            projects.add(p["requirement_id"])
+            handled[key] = e.ts
+        elif e.kind == "requirements_merged":
+            handled[req_theme[p["target"]]] = e.ts
         elif e.kind == "product_released":
-            key = req_theme.get(p["requirement_id"])
-        elif p["family"] == "opportunity" and p["action"] in ("approve_project", "draft_requirement"):
-            key = p["object_id"]
-        else:
+            projects.discard(p["requirement_id"])
+            handled[req_theme[p["requirement_id"]]] = e.ts
+    open_themes = {req_theme[rid] for rid in projects}
+    groups, phenomena = defaultdict(list), {}
+    for e in history:
+        if e.kind not in {"escalate", "recommend"} or e.ts < since:
             continue
-        handled[key] = e.ts
-        (released.add if e.kind == "product_released" else released.discard)(key)
-    groups = defaultdict(list)
-    for e in events.query(["escalate", "recommend"], since=since, until=at):
         key = theme_id(e.payload["phenomenon"], e.payload["known"], seeds)
-        if e.kind == "recommend" or e.ts > handled.get(key, since):
-            groups[key].append(e)
+        phenomena[key] = e.payload["phenomenon"]
+        evs = groups[key]  # 窗口内有活动但尚不能汇聚的主题仍保留，升级计数为 0。
+        if e.kind == "recommend" or (e.payload["requirement_id"] in reuse_closed
+                                      and (key not in handled or e.ts > handled[key])):
+            evs.append(e)
     for key, evs in groups.items():
         esc = [e for e in evs if e.kind == "escalate"]
         yield JueObject(object_id=key, object_type="theme", attrs={
-            "phenomenon": evs[0].payload["phenomenon"], "n_escalations": len(esc),
+            "phenomenon": phenomena[key], "n_escalations": len(esc),
             "n_customers": len({e.payload["customer_id"] for e in esc}),
             "n_matched": len(evs) - len(esc), "days_active": len({e.ts.date() for e in evs}),
-            "open_project": key in handled and key not in released,
+            "open_project": key in open_themes,
             "mean_p_none": sum(e.payload["p_none"] for e in esc) / len(esc) if esc else 0.0,
         }), {"event_ids": [e.id for e in esc], "session_ids": sorted({e.session_id for e in esc if e.session_id})}
 

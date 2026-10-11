@@ -11,7 +11,7 @@ from huayan.jev.system1 import MockSystem1Client
 from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import ask_hints
 from huayan.jue.scan import scan
-from huayan.jue.state import requirement_state, session_state
+from huayan.jue.state import collect_scheduled, requirement_state, session_state, theme_id
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.meter import FileMeter
 
@@ -24,10 +24,13 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     meter = FileMeter(tmp_path, "t")
     system1 = MockSystem1Client(meter)        # 不是 OneJev：觉必须走规则分，不调用任何模型
     events, t0 = EventLog(), sim_clock.now()
-    escalate = lambda i, cust, ph, known: events.append(
-        "escalate", "sales:S01", {"question_id": f"q:x{i}", "phenomenon": ph, "known": known,
-                                  "customer_id": cust, "p_none": 0.8},
-        session_id=f"sess:{i}", ts=t0 + timedelta(hours=5 * i))
+    def escalate(i, cust, ph, known):
+        ts = t0 + timedelta(hours=5 * i)
+        events.append("escalate", "sales:S01", {"question_id": f"q:x{i}", "requirement_id": f"req:{i}",
+            "phenomenon": ph, "known": known, "customer_id": cust, "p_none": 0.8},
+            session_id=f"sess:{i}", ts=ts)
+        events.append("reuse_proposed", "pm:agent", {"requirement_id": f"req:{i}", "product_id": None,
+                                                     "ku_refs": []}, ts=ts)
     # 注入：3 个客户 4 次「锦纶氨纶 + 气流染色机」色花升级
     for i, cust in enumerate(["customer:C01", "customer:C02", "customer:C03", "customer:C02"]):
         escalate(i, cust, "color_unlevel", {"fiber": "锦纶氨纶", "equipment": "气流染色机"})
@@ -102,10 +105,137 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     assert session_state(session, session_events, t0 + timedelta(minutes=1)).objects["session:sess:20"].attrs["escalated"]
 
     _check_requirement_states(mini_seeds, t0)
+    _check_theme_states(mini_seeds, t0, model)
 
     # 觉零大模型调用：计量里只有 jue 记录，且觉的源码不引用网关
     assert {json.loads(line)["kind"] for line in meter.path.read_text(encoding="utf-8").splitlines()} == {"jue"}
     assert not any("huayan.gateway" in p.read_text(encoding="utf-8") for p in (ROOT / "src/huayan/jue").glob("*.py"))
+
+
+def _check_theme_states(seeds, t0, model):
+    events = EventLog()
+    known = {"fiber": "锦纶氨纶", "equipment": "气流染色机"}
+    assert theme_id("color_unlevel", dict(reversed(list(known.items()))), seeds) == TARGET
+
+    def escalate(i, at):
+        return events.append("escalate", "sales:S01", {"question_id": f"q:{i}", "requirement_id": f"req:{i}",
+            "phenomenon": "color_unlevel", "known": known, "customer_id": f"customer:C{i}", "p_none": 0.8},
+            session_id=f"sess:{i}", ts=at)
+
+    def reuse(i, product, at):
+        events.append("reuse_proposed", "pm:agent", {"requirement_id": f"req:{i}", "product_id": product,
+                                                     "ku_refs": []}, ts=at)
+
+    def snapshot(at, count, *, opened=False, due=False, target=TARGET):
+        before = [e.model_dump() for e in events.events]
+        state, refs = collect_scheduled(events, at, seeds, seeds.products)
+        attrs = state.objects[target].attrs
+        assert attrs["n_escalations"] == attrs["n_customers"] == count
+        assert attrs["open_project"] is opened
+        decision = next(d for d in model.propose(state).decisions if d.object_id == target)
+        assert decision.precondition_passed is due
+        if due:
+            assert decision.p_need >= 0.5
+        assert [e.model_dump() for e in events.events] == before
+        return attrs, refs[target]
+
+    # 匹配无解还未签字，不生成机会主题；复用未查、待签也不计升级。
+    events.append("match", "sales:S01", {"phenomenon": "color_unlevel", "known": known, "p_none": 1.0,
+        "p_choice": {}, "candidate_ids": [], "customer_id": "customer:C0", "scored_by": "mock"},
+        session_id="sess:0", ts=t0)
+    assert collect_scheduled(events, t0, seeds, seeds.products)[0].objects == {}
+    first, second = escalate(1, t0), escalate(2, t0)
+    snapshot(t0, 0)
+    reuse(1, None, t0)
+    reuse(2, "T-205", t0)
+    snapshot(t0, 1)
+    # 先写未来事件再补录当前决定，必须按业务时间读取。
+    later = t0 + timedelta(hours=1)
+    reuse(2, None, later)
+    events.append("reuse_declined", "rd:R01", {"requirement_id": "req:2", "product_id": "T-205",
+                                               "reason": "（模拟）条件不适用"}, ts=t0)
+    attrs, refs = snapshot(t0, 2, due=True)
+    assert attrs["mean_p_none"] == 0.8 and attrs["days_active"] == 1
+    assert refs == {"event_ids": [first.id, second.id], "session_ids": ["sess:1", "sess:2"]}
+    snapshot(t0 + timedelta(days=7), 2, due=True)  # 尚未处理的主题也包含窗口起点。
+    reuse(2, "T-205", t0)  # 再次提议后回到待签，同时间戳按写入顺序。
+    snapshot(t0, 1)
+    snapshot(later, 2, due=True)
+    events.append("reuse_adopted", "rd:R01", {"requirement_id": "req:2", "product_id": "T-205",
+                                              "session_id": "sess:2"}, ts=later)
+    snapshot(later, 1)
+
+    third = escalate(3, later)
+    reuse(3, None, later)
+    merge = {"question_id": "q:opportunity", "target": "req:1", "members": ["req:3"]}
+    events.append("merge_proposed", "pm:agent", merge, ts=later)
+    _, refs = snapshot(later, 2, due=True)
+    assert refs["event_ids"] == [first.id, third.id]
+    merged_at = later + timedelta(minutes=1)
+    events.append("requirements_merged", "rd:R01", merge, ts=merged_at)
+    snapshot(later, 2, due=True)  # 未来签字不影响当前，草稿不能当作已处理。
+    snapshot(merged_at, 0)
+
+    # 两个在途单独立跟踪，历史接单超出 7 天窗口仍生效。
+    for i in (1, 4):
+        if i == 4:
+            escalate(i, merged_at)
+            reuse(i, None, merged_at)
+        events.append("requirement_accepted", "rd:R01", {"requirement_id": f"req:{i}",
+            "phenomenon": "color_unlevel", "known": known, "ku_refs": []}, ts=merged_at)
+    snapshot(merged_at, 0, opened=True)
+    at = t0 + timedelta(days=9)
+    for i, ts in ((5, at - timedelta(days=7)), (6, at), (7, at - timedelta(days=7, seconds=1))):
+        escalate(i, ts)
+        reuse(i, None, ts)
+    events.append("recommend", "sales:S01", {"product_id": "T-205", "version": "product_usage",
+        "p_choice": 0.8, "candidate_ids": ["T-205"], "phenomenon": "color_unlevel", "known": known,
+        "customer_id": "customer:C8"}, session_id="sess:8", ts=at)
+    attrs, refs = snapshot(at, 2, opened=True)
+    assert attrs["n_matched"] == 1 and attrs["days_active"] == 2
+    assert refs["session_ids"] == ["sess:5", "sess:6"]  # 窗口闭区间，推荐不混入机会证据。
+    for i in (1, 4):
+        released_at = at + timedelta(minutes=i)
+        events.append("product_released", "rd:R01", {"product_id": f"T-sim-{i}",
+            "requirement_id": f"req:{i}", "phenomenon": "color_unlevel", "applicable": {}}, ts=released_at)
+        snapshot(at, 2, opened=True)
+        snapshot(released_at, 0, opened=i == 1)
+    # 处理前的升级不重提；新一轮已查无产品的升级仍可重新到点。
+    new_at = at + timedelta(hours=1)
+    for i in (8, 9):
+        escalate(i, new_at)
+        reuse(i, None, new_at)
+    snapshot(new_at, 2, due=True)
+
+    # 升级时缺设备，接单前补齐：接单须同时处理旧主题，并在新主题标记在途。
+    events = EventLog()
+    known = {"fiber": "锦纶氨纶"}
+    original = theme_id("color_unlevel", known, seeds)
+    for i in (1, 2):
+        escalate(i, t0)
+        reuse(i, None, t0)
+    known = {**known, "equipment": "气流染色机"}
+    for i in (3, 4):
+        escalate(i, t0)
+        reuse(i, None, t0)
+    accepted_at = t0 + timedelta(hours=1)
+    events.append("requirement_accepted", "rd:R01", {"requirement_id": "req:1",
+        "phenomenon": "color_unlevel", "known": known, "ku_refs": []}, ts=accepted_at)
+    snapshot(t0, 2, due=True, target=original)  # 尚未接单时，两个主题均可到点。
+    snapshot(t0, 2, due=True)
+    _, refs = snapshot(accepted_at, 0, target=original)
+    assert refs == {"event_ids": [], "session_ids": []}
+    snapshot(accepted_at, 0, opened=True)
+    # 新主题后续升级也不能在该项目发布前重复立项；发布后旧升级仍不复活。
+    for i in (5, 6):
+        escalate(i, accepted_at + timedelta(minutes=1))
+        reuse(i, None, accepted_at + timedelta(minutes=1))
+    snapshot(accepted_at + timedelta(minutes=1), 2, opened=True)
+    released_at = accepted_at + timedelta(minutes=2)
+    events.append("product_released", "rd:R01", {"product_id": "T-sim-1", "requirement_id": "req:1",
+        "phenomenon": "color_unlevel", "applicable": {}}, ts=released_at)
+    snapshot(released_at, 0, target=original)
+    snapshot(released_at, 0)
 
 
 def _check_requirement_states(seeds, t0):
