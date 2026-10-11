@@ -25,15 +25,14 @@ from huayan.contracts import SHANGHAI
 from huayan.domain import load_seeds
 from huayan.eval.week import chain_events
 from huayan.events import EventLog
-from huayan.jue.expr import evaluate
 from huayan.jue.features import vectorize
 from huayan.jue.jue_k import JueK
-from huayan.jue.proto import JueProto, load_templates
+from huayan.jue.proto import JueProto
 from huayan.jue.state import collect_scheduled
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.sim import make_week
 from huayan.sim.week_events import TICK_HOURS
-from train_jue_k import META, features
+from train_jue_k import features, rule_scores
 
 FAMILIES = ["ask_slot", "ask_back", "opportunity", "knowledge_conflict", "leak_risk"]
 
@@ -108,12 +107,10 @@ def main():
         artifact = pickle.load(stream)
     columns = json.loads((Path(args.model_dir) / "features.json").read_text(encoding="utf-8"))["columns"]
     raw = artifact["classifier"].predict_proba(np.asarray(vectorize(features(df), columns)))[:, 1]
-    cal = np.array([artifact["calibrators"][f].predict([r])[0] for f, r in zip(df.family, raw)])
-    templates = {t.family: t for t in load_templates(args.templates).values()}
-    attrs = [c for c in df.columns if c not in META]
-    rule = np.array([min(1.0, max(0.0, float(evaluate(templates[row["family"]].rule_score,
-                                                         {k: v for k, v in row.items() if k in attrs and pd.notna(v)}))))
-                     for row in df.to_dict("records")])
+    rule = rule_scores(df, args.templates)
+    # 回落规则的类没有校准器：「jue_k」一栏即最终使用的分数（规则），与 JueK 推理一致
+    cal = np.array([artifact["calibrators"][f].predict([r])[0] if f in artifact["calibrators"] else q
+                    for f, r, q in zip(df.family, raw, rule)])
     y = df.label.to_numpy()
 
     calibration, curves = {}, {}
