@@ -5,30 +5,36 @@ import { api } from "../api";
 import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { AgentMessage, AskHint, Question, RecommendationCard, SessionSummary, SessionView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
+import { useGlow, useGuideArg, useGuide } from "../components/Guide";
 import { Popover } from "../components/Controls";
 import { Plus } from "../components/Icons";
-import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead } from "../components/ui";
+import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote } from "../components/ui";
 
-function SalesSidebar({ mine, current, choose }: { mine: SessionSummary[]; current: string | null; choose: (id: string) => void }) {
+function SalesSidebar({ mine, current, guided, choose }: {
+  mine: SessionSummary[]; current: string | null; guided: string | null; choose: (id: string) => void;
+}) {
   const { meta, me, refresh, fail } = useApp();
   const L = useLabels();
   const start = (customer: string) => api.startSession(customer, me).then((s) => { choose(s.id); refresh(); }, fail);
+  const glow = useGlow("new-session");
+  const pickCustomer = useGuideArg("new-session");
   return (
     <>
       <SideHead aside={
-        <Popover trigger={(toggle) => <button onClick={toggle} className="icon-btn !h-6 !w-6" title="新建客户会话"><Plus /></button>}>
+        <Popover align="right" trigger={(toggle) => <button onClick={toggle} className={`icon-btn !h-6 !w-6 ${glow ? "glow" : ""}`} title="新建客户会话"><Plus /></button>}>
           {(close) => (
             <>
               <p className="px-2.5 pb-1 pt-0.5 text-[12px] text-ink-2">新建客户会话</p>
               {meta.actors.filter((a) => a.role === "customer").map((c) => (
-                <button key={c.id} className="menu-item" onClick={() => { start(c.id); close(); }}>{L.name(c.id)}</button>
+                <button key={c.id} className={`menu-item ${c.id === pickCustomer ? "glow font-semibold" : ""}`} onClick={() => { start(c.id); close(); }}>{L.name(c.id)}</button>
               ))}
             </>
           )}
         </Popover>
       }>客户会话</SideHead>
       {mine.map((s) => (
-        <button key={s.id} onClick={() => choose(s.id)} className={`side-row ${s.id === current ? "on" : ""}`}>
+        <button key={s.id} onClick={() => choose(s.id)}
+                className={`side-row ${s.id === current ? "on" : ""} ${s.id === guided && s.id !== current ? "glow" : ""}`}>
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[13px] font-semibold">{s.customer_id ? L.name(s.customer_id) : "样例客户"}</span>
             <span className="shrink-0 text-[12px] text-ink-2">{SESSION_STATUS[s.status] ?? s.status}</span>
@@ -57,14 +63,17 @@ export function Sales() {
   const { me } = useApp();
   const [chosen, choose] = useState<string | null>(null);
   const mine = useMySessions();
-  const current = mine.find((s) => s.id === chosen) ?? mine[0] ?? null;
+  // 导览指向的会话（轮到本人时）：没手动选过就直接打开它，选过别的就在侧栏高亮它
+  const g = useGuide();
+  const guided = g.who === me && g.customer ? mine.find((s) => s.customer_id === g.customer)?.id ?? null : null;
+  const current = mine.find((s) => s.id === chosen) ?? mine.find((s) => s.id === guided) ?? mine[0] ?? null;
   const sid = current?.id ?? null;
   const view = useData(() => (sid ? api.session(sid, me) : Promise.resolve(null)), [sid, me]);
   const questions = useData(() => api.questions(me), [me]);
   const mineQs = (questions ?? []).filter((q) => !q.refs.session_id || q.refs.session_id === sid);
   return (
     <>
-      <Side><SalesSidebar mine={mine} current={sid} choose={choose} /></Side>
+      <Side><SalesSidebar mine={mine} current={sid} guided={guided} choose={choose} /></Side>
       {current && view ? <SessionDesk key={sid} summary={current} v={view} questions={mineQs} />
         : <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始。演示者扮客户，直接在工作面上录入客户的话。" />}
     </>
@@ -87,6 +96,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
         <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pt-7">
           <PageHead title={summary.customer_id ? L.name(summary.customer_id) : "样例客户"}
                     subtitle={`${summary.phenomenon ? L.phen(summary.phenomenon) : "尚未识别现象"} · ${SESSION_STATUS[v.status] ?? v.status}`} />
+          <LayerNote layer={1}>你在 L1：你和你的 Agent 只看得到说明书和用法，研发的知识只显示「谁懂」、不显示内容。现有产品解决不了时签字升级，需求带着客户原话交给 L2 产品经理 Agent。</LayerNote>
           {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的高层级访问已被主管冻结：客户只能拿到说明书与用法，暂不能申请解密。</p>}
           <PendingActions />
           <div className="grid grid-cols-[minmax(280px,5fr)_minmax(320px,6fr)] items-start gap-5">
@@ -96,9 +106,9 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
         </div>
       </div>
       <Composer v={v} reply={reply} setReply={setReply} replyNotes={notesFor(conv?.messages, `${v.session_id}/reply`)} />
-      <AgentPanel title="觉的决策" sessionId={v.session_id} focus={v.session_id} external>
+      <AgentPanel title="觉提出的决策 · 待你处理" sessionId={v.session_id} focus={v.session_id} external>
         {v.card || v.reuse || questions.length
-          ? <Decisions v={v} questions={questions} fill={setReply} escalateNotes={notesFor(conv?.messages, `${v.session_id}/escalate`)} />
+          ? <Decisions v={v} questions={questions} fill={setReply} replyEmpty={!reply.trim()} escalateNotes={notesFor(conv?.messages, `${v.session_id}/escalate`)} />
           : <p className="text-[13px] leading-5 text-ink-3">此刻没有需要你签字的决策。觉每听一句都会再看一遍：该推荐、该升级、该回问时出现在这里。</p>}
       </AgentPanel>
     </>
@@ -110,6 +120,9 @@ function Timeline({ v, lit }: { v: SessionView; lit: string | null }) {
   const { refresh } = useApp();
   const [said, setSaid] = useState("");
   const [busy, setBusy] = useState(false);
+  const glow = useGlow("customer");
+  // 演示台词里这位客户还有下一句时才给「演示自动填入」；没有就只能由演示者自己输入
+  const line = useData(() => api.nextLine(v.session_id), [v.session_id, v.turns.length])?.text ?? null;
   const [err, setErr] = useState<string | null>(null);
   const run = (p: Promise<unknown>, done?: () => void) => {
     setBusy(true);
@@ -146,9 +159,9 @@ function Timeline({ v, lit }: { v: SessionView; lit: string | null }) {
           <span className="w-9 shrink-0 text-[11px] font-semibold text-ink-2">客户</span>
           <input value={said} onChange={(e) => setSaid(e.target.value)} aria-label="客户说" disabled={busy}
                  placeholder="客户说……（演示者录入）" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-3" />
-          <button type="button" className="chip" disabled={busy}
-                  onClick={() => run(api.nextLine(v.session_id).then((r) => { if (r.text) setSaid(r.text); }))}>下一句</button>
-          <button className="btn btn-plain !h-[26px] !px-2.5" disabled={busy || !said.trim()}>录入</button>
+          {line && <button type="button" className={`chip ${glow && !said.trim() ? "glow" : ""}`} disabled={busy}
+                           onClick={() => setSaid(line)}>演示自动填入</button>}
+          <button className={`btn btn-plain !h-[26px] !px-2.5 ${glow && said.trim() ? "glow" : ""}`} disabled={busy || !said.trim()}>录入</button>
         </form>
         {err && <p role="alert" className="px-4 pb-2 text-[12px] text-danger">{err}</p>}
       </div>
@@ -164,6 +177,9 @@ function Composer({ v, reply, setReply, replyNotes }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fromAgent = !!v.reply_draft && reply === v.reply_draft;
+  const ask = useGlow("reply"), rec = useGlow("send-rec"), sendNow = useGlow("send");
+  const glow = ask || rec || sendNow;
+  const pick = ask && !reply.trim();   // 导览：先挑追问提词（或让 Agent 起草），有了话再「发出」
   const send = () => {
     if (!reply.trim() || busy) return;
     setBusy(true);
@@ -179,7 +195,7 @@ function Composer({ v, reply, setReply, replyNotes }: {
             <span className="eyebrow mr-1">觉建议追问</span>
             {v.hints.map((h) => (
               <button key={h.slot} type="button" onClick={() => setReply(h.ask_text)}
-                      className="anim-rise flex h-[30px] items-center gap-2 rounded-full bg-attn-bg pl-3 pr-2.5 text-[13px] shadow-[0_0_0_.5px_rgba(176,80,10,.28)] transition-colors hover:bg-[#fff0d9]">
+                      className={`anim-rise flex h-[30px] items-center gap-2 rounded-full bg-attn-bg pl-3 pr-2.5 ${pick ? "glow" : ""} text-[13px] shadow-[0_0_0_.5px_rgba(176,80,10,.28)] transition-colors hover:bg-[#fff0d9]`}>
                 <span className="font-semibold text-attn-ink">{h.label}</span>
                 <span>{h.ask_text}</span>
                 <span className="num text-[11px] text-attn-ink">{need(h)}</span>
@@ -193,7 +209,7 @@ function Composer({ v, reply, setReply, replyNotes }: {
             {fromAgent && <AgentMark />}
             {!reply && !agentOnline && <span className="text-[12px] text-ink-3">Agent 离线，无草稿</span>}
             <span className="ml-auto flex gap-1.5">
-              <Act kind="chip" label="帮我回一句" disabled={!agentOnline} run={() => api.chat(me, "帮我回一句", v.session_id, v.session_id)} />
+              <Act kind="chip" label="帮我回一句" glow={pick && !v.hints.length} disabled={!agentOnline} run={() => api.chat(me, "帮我回一句", v.session_id, v.session_id)} />
               <Act kind="chip" label="直接推荐" run={() => api.recommend(v.session_id)} />
             </span>
           </div>
@@ -206,7 +222,7 @@ function Composer({ v, reply, setReply, replyNotes }: {
               {err ? <p role="alert" className="text-[12px] text-danger">{err}，未发出</p> : <Notes notes={replyNotes} />}
             </div>
             <span className="kbd">Ctrl ↵</span>
-            <button className="btn btn-primary" disabled={!reply.trim() || busy}>{busy ? "发送中……" : "发出"}</button>
+            <button className={`btn btn-primary ${glow && reply.trim() ? "glow" : ""}`} disabled={!reply.trim() || busy}>{busy ? "发送中……" : "发出"}</button>
           </div>
         </form>
       </div>
@@ -259,15 +275,15 @@ function NeedCard({ v, phenomenon, lit, setLit }: {
   );
 }
 
-function Decisions({ v, questions, fill, escalateNotes }: {
-  v: SessionView; questions: Question[]; fill: (t: string) => void; escalateNotes: AgentMessage[];
+function Decisions({ v, questions, fill, replyEmpty, escalateNotes }: {
+  v: SessionView; questions: Question[]; fill: (t: string) => void; replyEmpty: boolean; escalateNotes: AgentMessage[];
 }) {
   const L = useLabels();
   const by = (f: string) => questions.filter((q) => q.family === f);
   const handled = new Set(["escalate_need", "ask_back", "market_eval"]);
   return (
     <>
-      {v.card && v.reuse?.status !== "adopted" && <RecCard card={v.card} sid={v.session_id} fill={fill} />}
+      {v.card && v.reuse?.status !== "adopted" && <RecCard card={v.card} sid={v.session_id} fill={fill} replyEmpty={replyEmpty} />}
       {by("escalate_need").map((q) => <EscalateCard key={q.id} q={q} v={v} notes={escalateNotes} />)}
       {v.reuse && <ReuseLine v={v} fill={fill} />}
       {by("ask_back").map((q) => (
@@ -298,8 +314,9 @@ function Decisions({ v, questions, fill, escalateNotes }: {
   );
 }
 
-function RecCard({ card, sid, fill }: { card: RecommendationCard; sid: string; fill: (t: string) => void }) {
+function RecCard({ card, sid, fill, replyEmpty }: { card: RecommendationCard; sid: string; fill: (t: string) => void; replyEmpty: boolean }) {
   const { me } = useApp();
+  const glow = useGlow("send-rec") && replyEmpty;
   const L = useLabels();
   const decrypted = card.version === "full_mechanism";
   const frozen = useFrozen();
@@ -318,7 +335,7 @@ function RecCard({ card, sid, fill }: { card: RecommendationCard; sid: string; f
         </div>
       ))}
       <div className="row flex-wrap">
-        <button type="button" className="btn btn-plain" onClick={() => fill(card.sections.map((s) => s.text).join(""))}>填进发给客户</button>
+        <button type="button" className={`btn btn-plain ${glow ? "glow" : ""}`} onClick={() => fill(card.sections.map((s) => s.text).join(""))}>填进发给客户</button>
         {!decrypted && !frozen && <Act kind="quiet" label="申请解密" done="已申请解密，等研发审批" run={() => api.requestDecrypt(sid, me)} />}
         {decrypted && <span className="text-[12px] text-ink-2">研发审定的机理说明，由你转交客户</span>}
       </div>
@@ -333,12 +350,13 @@ function EscalateCard({ q, v, notes }: { q: Question; v: SessionView; notes: Age
   const [note, setNote] = useState(v.escalate_note);
   useEffect(() => setNote(v.escalate_note), [v.escalate_note]);
   const ready = q.prepared_at != null;
+  const glow = useGlow("sign:escalate_need");
   const sign = async () => {
     if (note !== v.escalate_note) await api.escalateNote(v.session_id, note, me);
     await api.escalate(v.session_id, me);
   };
   return (
-    <Group title={<span className="text-attn-ink">建议转产品经理 Agent</span>} aside={<Score q={q} />}>
+    <Group className={glow ? "guide-scope" : ""} title={<span className="text-attn-ink">建议转产品经理 Agent</span>} aside={<Score q={q} />}>
       <div className="row attn-edge !items-start !py-3">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           {q.evidence.map((e, i) => <p key={i} className="text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}</p>)}
@@ -395,12 +413,15 @@ function MarketEval({ q }: { q: Question }) {
   const L = useLabels();
   const [note, setNote] = useState("");
   const req = q.refs.requirement_id;
+  const glow = useGlow("sign:market_eval");
+  const scripted = useGuideArg("sign:market_eval");   // 回放部署：台词里的客户评价原因
   return (
-    <Group title={<span className="text-attn-ink">客户评价</span>} aside={<Score q={q} />}>
+    <Group className={glow ? "guide-scope" : ""} title={<span className="text-attn-ink">客户评价</span>} aside={<Score q={q} />}>
       <div className="row attn-edge !items-start !py-3">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <p className="text-[14px]">{L.scrub(q.title)}</p>
           <Field value={note} onChange={setNote} placeholder="原因（客户怎么说）" />
+          {scripted && note !== scripted && <div><button type="button" className="chip glow" onClick={() => setNote(scripted)}>演示自动填入</button></div>}
           <div className="flex flex-wrap gap-2">
             <Act label="通过" run={() => api.marketEval(req, "pass", note, me)} />
             <Act kind="plain" label="不通过" run={() => api.marketEval(req, "fail", note, me)} />

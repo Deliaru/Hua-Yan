@@ -2,6 +2,7 @@
 // 对话常驻底部、历史可折叠；对话里没有签字按钮，Agent 提议的生效动作只出现在工作面签字区。
 import { useState } from "react";
 import { api } from "../api";
+import { useGuideArg } from "./Guide";
 import { useApp, useData } from "../ctx";
 import type { AgentMessage } from "../types";
 import { ArrowUp, ChevronRight } from "./Icons";
@@ -40,6 +41,7 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const scripted = useGuideArg("chat");   // 回放部署：台词里人要对 Agent 说的话
   // 系统消息是派单记录（带内部编号）；带 target 的批注已挂在工作面上，历史里只留人与 Agent 的对话
   const history = (conv?.messages ?? []).filter((m) => m.role !== "system");
   const send = () => {
@@ -59,6 +61,7 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
         <div className="flex flex-col gap-5">{children}</div>
       </div>
       <div className="px-4 pb-4">
+        <AgentTip />
         <div className="dock overflow-hidden">
           <button type="button" onClick={() => setOpen(!open)} disabled={!history.length}
                   className="flex w-full items-center gap-2 px-3.5 pb-1 pt-2.5 text-left">
@@ -81,8 +84,11 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
                       onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                       placeholder={!agentOnline ? "Agent 离线" : external ? "如：把这句说得客气点" : "如：第 2 条加上不能影响色光"}
                       className="flex-1 resize-none bg-transparent text-[13px] leading-5 outline-none placeholder:text-ink-3" />
+            {scripted && text !== scripted && (
+              <button type="button" className="chip glow mb-0.5 shrink-0" onClick={() => setText(scripted)}>演示自动填入</button>
+            )}
             <button aria-label="发给 Agent" disabled={!agentOnline || busy || !text.trim()}
-                    className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-white transition-opacity disabled:opacity-15">
+                    className={`${scripted && text === scripted ? "glow" : ""} mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-white transition-opacity disabled:opacity-15`}>
               <ArrowUp />
             </button>
           </form>
@@ -91,6 +97,23 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
         </div>
       </div>
     </aside>
+  );
+}
+
+// 常驻的小提示：觉派单之外，Agent 也是随时可用的常规助手（看到的正好是本人能看的那一层）。不需要点。
+const CAN: Record<string, string> = {
+  sales: "查说明书和用法、帮你理解客户需求（已知什么、还缺什么）、起草追问话术和升级说明；够不着的知识会告诉你该找哪位研发。",
+  rd: "调取客户逐轮原话与需求单、检索案例 / 机理 / 实验记录、和你一起分析需求，逐条起草和修改化学语言。",
+};
+
+function AgentTip() {
+  const { role, meta } = useApp();
+  if (!CAN[role]) return null;
+  return (
+    <div className="agent-tip mb-2.5 rounded-[10px] px-3 py-2 text-[12px] leading-[18px] text-ink-2">
+      <p className="mb-0.5 font-semibold text-ink">你的 Agent 随时可用，不只等觉派单</p>
+      {CAN[role]}<span className="text-ink-3"> Agent 只起草，生效靠你签字。{meta.status.replay && "当前为演示模式，只能发送台词里的话（点「演示自动填入」）。"}</span>
+    </div>
   );
 }
 

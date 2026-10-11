@@ -16,6 +16,7 @@ export const Close = () => <svg {...base} width={12} height={12}><path d="m4 4 8
 // 侧栏导航（17px）
 const nav = { ...base, width: 17, height: 17, strokeWidth: 1.5 };
 export const NavDesk = () => <svg {...nav}><rect x="2" y="3" width="12" height="10" rx="2" /><path d="M2 6.5h12M6 6.5V13" /></svg>;
+export const NavStory = () => <svg {...nav}><rect x="1.5" y="2.5" width="13" height="9" rx="1.5" /><path d="m6.8 5.2 3 1.8-3 1.8z" /><path d="M5.5 14h5" /></svg>;
 export const NavArch = () => <svg {...nav}><rect x="1.5" y="2" width="5" height="4" rx="1" /><rect x="9.5" y="2" width="5" height="4" rx="1" /><rect x="5.5" y="10" width="5" height="4" rx="1" /><path d="M4 6v2h8V6M8 8v2" /></svg>;
 export const NavJue = () => <svg {...nav}><path d="M1.5 11h2.5l2-6 2.5 8 2-5h4" /></svg>;
 export const NavLayers = () => <svg {...nav}><path d="m8 2 6 3-6 3-6-3 6-3Z" /><path d="m2 8 6 3 6-3M2 11l6 3 6-3" /></svg>;

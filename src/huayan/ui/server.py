@@ -5,6 +5,7 @@ web/dist 存在时同时提供构建后的前端页面。"""
 import importlib.util
 import json
 import os
+import traceback
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,7 +26,7 @@ PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
 DIST = Path("web/dist")
 REPORTS = Path("docs/reports")
 MAINLINE = Path("demo/mainline.yaml")
-REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）；single_card 经门面按查看者读取
+REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week")   # 评测页只读这几份报告（WP-E）；300 张卡用于按「应升级」拆开；single_card 经门面按查看者读取
 
 T0 = datetime(2026, 10, 12, 9, 0, tzinfo=SHANGHAI)
 lock = RLock()                                    # 载入检查点时，同一线程会再次调用 Api.call。
@@ -79,9 +80,9 @@ def demo_actions():
 def next_line(app, p):
     session = next(s for s in app.sessions() if s.id == p["session"])
     actions = demo_actions()
-    aliases = [a["start"]["session"] for a in actions if "start" in a
-               and a["start"]["customer"] == session.customer_id and a["start"]["sales"] == session.sales_id]
-    matching = [s.id for s in app.sessions() if s.customer_id == session.customer_id and s.sales_id == session.sales_id]
+    # 台词按客户定位（不管是哪位业务员接待），试用者切错业务员也能取到下一句
+    aliases = [a["start"]["session"] for a in actions if "start" in a and a["start"]["customer"] == session.customer_id]
+    matching = [s.id for s in app.sessions() if s.customer_id == session.customer_id]
     index = matching.index(session.id)
     if index >= len(aliases):
         return {"text": None}
@@ -149,9 +150,10 @@ class Api:
 
     def __init__(self, app, config_path=CONFIG):
         self.app, self.config_path = app, config_path
+        self.writes = 0     # 本轮成功的写操作数；回放部署里按它对齐台词的下一步
 
     def checkpoints(self):
-        if Path(self.config_path).name != "app.demo.yaml":
+        if Path(self.config_path).name not in ("app.demo.yaml", "app.demo.replay.yaml"):
             return []
         return [a["checkpoint"] for a in demo_actions() if "checkpoint" in a]
 
@@ -162,6 +164,7 @@ class Api:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         config = yaml.safe_load(Path(self.config_path).read_text(encoding="utf-8"))
+        deployed_replay = bool(config.get("replay"))
         config["replay"] = True
         directory = Path(config["run_root"]) / "demo_v5"
         directory.mkdir(parents=True, exist_ok=True)
@@ -171,35 +174,58 @@ class Api:
         try:
             set_clock(SimClock(T0))
             loaded = HuayanApp.build(str(replay_config))
-            module.Mainline(Api(loaded, str(replay_config)), MAINLINE).run(name)
+            inner = Api(loaded, str(replay_config))
+            module.Mainline(inner, MAINLINE).run(name)
         except Exception:
             set_clock(previous_clock)
             if loaded is not None:
                 loaded.system1.close()
             raise
-        # 回放成功后才替换工作面，并把两个客户端一起切回现场。
-        loaded.config["replay"] = loaded.gateway.replay = loaded.system1.replay = False
+        # 回放成功后才替换工作面，并把两个客户端一起切回服务启动时的模式（演示部署保持回放）。
+        loaded.config["replay"] = loaded.gateway.replay = loaded.system1.replay = deployed_replay
         self.app.system1.close()
-        self.app = loaded
+        self.app, self.writes = loaded, inner.writes
         return {"run_id": loaded.run_id, "checkpoint": name}
+
+    def next_action(self):
+        """回放部署：台词里下一步人要做的事（按成功写操作数对齐）；现场模式不按台词走，返回空。"""
+        if not self.app.config["replay"]:
+            return None
+        actions = demo_actions()
+        writes = [a for a in actions if "expect" not in a and "checkpoint" not in a]
+        sessions = {a["start"]["session"]: a["start"] for a in actions if "start" in a}
+        script = yaml.safe_load(MAINLINE.read_text(encoding="utf-8"))
+        chapters = [step["title"] for step in script["steps"] for a in step["actions"] if "expect" not in a and "checkpoint" not in a]
+        done = self.writes >= len(writes)
+        return {"index": self.writes, "total": len(writes), "sessions": sessions,
+                "action": None if done else writes[self.writes], "chapter": None if done else chapters[self.writes]}
 
     def call(self, method, path, params):
         with lock:
             if method == "GET" and path == "/api/demo/checkpoints":
                 return self.checkpoints()
+            if method == "GET" and path == "/api/demo/next-action":
+                return self.next_action()
             if method == "POST" and path == "/api/demo/load":
                 return self.load_checkpoint(params["name"])
             if method == "POST" and path == "/api/reset":
                 set_clock(SimClock(T0))
-                self.app = HuayanApp.build(self.config_path)
+                self.app, self.writes = HuayanApp.build(self.config_path), 0
                 return {"run_id": self.app.run_id}
             route = {"GET": GET, "POST": POST}[method][path]
             if method == "POST":
                 clock = get_clock()
-                clock.advance_to(clock.now() + timedelta(minutes=1))
-            result = route(self.app, params)
+                before = clock.now()
+                clock.advance_to(before + timedelta(minutes=1))
+            try:
+                result = route(self.app, params)
+            except (PermissionDenied, ValueError, KeyError, StopIteration):
+                if method == "POST":            # 被门面拒绝的写操作不占业务时间：误点不会让回放台词的时刻错位
+                    set_clock(SimClock(before))
+                raise
             if method == "POST":
                 self.app.tick()
+                self.writes += 1
             return result
 
 
@@ -215,12 +241,18 @@ class Handler(SimpleHTTPRequestHandler):
             status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
-        except (ReplayMiss, AssertionError) as e:
+        except ReplayMiss:
+            status, body = 409, {"error": "当前为演示模式，未接入真实模型：这一步不在录制好的演示主线里（缓存未命中）。"
+                                          "请按导览操作；进度已乱时点右上角「重置进度」或「载入检查点」。"}
+        except AssertionError as e:
             status, body = 409, {"error": str(e)}
         except ValueError as e:
             status, body = 400, {"error": str(e)}
         except (KeyError, StopIteration) as e:
             status, body = 404, {"error": f"不存在：{e}"}
+        except Exception as e:                          # 模型服务、网络等意外错误原样报给界面，不断开连接
+            traceback.print_exc()
+            status, body = 500, {"error": f"服务出错：{type(e).__name__}: {e}"}
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")

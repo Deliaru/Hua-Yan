@@ -50,12 +50,47 @@ export function SideHead({ children, aside }: { children: React.ReactNode; aside
   return <div className="side-head"><span>{children}</span>{aside}</div>;
 }
 
+// 分级标识：L1 场景语言 / L2 产品需求语言 / L3 化学语言（颜色与架构总览的回流色带一致）
+export const LAYER_NAME = { 1: "场景语言", 2: "产品需求语言", 3: "化学语言" } as const;
+const LAYER_COLOR = { 1: "#2a9fd0", 2: "#5b7cfa", 3: "#9b4fe0" } as const;
+
+export function LayerChip({ layer }: { layer: 1 | 2 | 3 }) {
+  const c = LAYER_COLOR[layer];
+  return (
+    <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[11.5px] font-semibold"
+          style={{ color: c, background: `${c}17`, boxShadow: `inset 0 0 0 1px ${c}33` }}>
+      L{layer}<span className="font-normal">· {LAYER_NAME[layer]}</span>
+    </span>
+  );
+}
+
+export function LayerNote({ layer, children }: { layer: 1 | 2 | 3; children: React.ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 text-[12.5px] leading-5 text-ink-2">
+      <LayerChip layer={layer} /><span className="min-w-0">{children}</span>
+    </p>
+  );
+}
+
+// 回放部署的如实说明（状态菜单、架构总览、演示工作面共用）
+export const RECORDING_NOTE = "现有回放基于自部署 OneJev、gemini-3.8-flash-high 真实录制。如需真实在线试用，可自行部署并接入 Jev 与大模型网关，Jue-K 模型已在仓库中提供。";
+
+export function ReplayNote() {
+  const { meta } = useApp();
+  if (!meta.status.replay) return null;
+  return (
+    <p className="flex items-start gap-2 rounded-[10px] bg-fill px-3.5 py-2.5 text-[12.5px] leading-5 text-ink-2">
+      <span className="tag shrink-0">录制回放</span><span>{RECORDING_NOTE}</span>
+    </p>
+  );
+}
+
 // 「Agent 起草」：草稿未经人修改
 // Agent 离线时草稿由规则骨架生成，标「离线 · 规则生成」而不是「Agent 起草」（铁律 6：降级必须标注）
 export function AgentMark({ who = "Agent 起草" }: { who?: string }) {
-  const { agentOnline } = useApp();
+  const { agentOnline, meta } = useApp();
   if (!agentOnline) return <span className="tag tag-warn" title="Agent 离线，这段由规则骨架生成">离线 · 规则生成</span>;
-  return <span className="tag tag-agent">{who}</span>;
+  return <span className="tag tag-agent" title={meta.status.replay ? "录制回放：这段是录制时 Agent 的真实输出" : undefined}>{who}</span>;
 }
 
 // 觉的打分：模型打分显示概率与细条，规则打分显示「到点」（不冒充概率）
@@ -91,8 +126,8 @@ export function Disclosure({ label, children, initial = false }: { label: React.
 
 // 签字按钮：直接调门面原子方法；门面拒绝时把它给的原因显示在按钮旁，不在前端自己算可签条件。
 // done：成功后按钮换成这句话（用于签字后对象状态不在本人视图里的动作，如申请解密）
-export function Act({ label, run, kind = "primary", disabled, done }: {
-  label: string; run: () => Promise<unknown>; kind?: "primary" | "plain" | "quiet" | "chip"; disabled?: boolean; done?: string;
+export function Act({ label, run, kind = "primary", disabled, done, glow }: {
+  label: string; run: () => Promise<unknown>; kind?: "primary" | "plain" | "quiet" | "chip"; disabled?: boolean; done?: string; glow?: boolean;
 }) {
   const { refresh } = useApp();
   const [busy, setBusy] = useState(false);
@@ -106,7 +141,7 @@ export function Act({ label, run, kind = "primary", disabled, done }: {
   if (ok && done) return <span className="text-[12px] text-ink-2">{done}</span>;
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <button type="button" disabled={busy || disabled} onClick={go} className={kind === "chip" ? "chip" : `btn btn-${kind}`}>{busy ? "处理中……" : label}</button>
+      <button type="button" disabled={busy || disabled} onClick={go} className={`${kind === "chip" ? "chip" : `btn btn-${kind}`} ${glow ? "glow" : ""}`}>{busy ? "处理中……" : label}</button>
       {err && <span role="alert" className="text-[12px] text-danger">{err}</span>}
     </span>
   );

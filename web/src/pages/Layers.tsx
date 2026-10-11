@@ -222,7 +222,7 @@ export function Layers() {
       </Side>
       <div className="mx-auto flex max-w-[1280px] flex-col gap-7 px-8 pb-24 pt-7">
         {current ? <Compare key={current} id={current} />
-          : <EmptyState title="还没有研发确认的需求单" text="需求单经研发确认转译（L3）后，可以在这里三层并排对照。" />}
+          : <EmptyState title="还没有研发确认的需求单" text="需求单经研发确认化学要点（L3）后，可以在这里三层并排对照。" />}
       </div>
     </>
   );

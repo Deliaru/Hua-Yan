@@ -159,3 +159,13 @@ export interface JueTimeline {
 export interface AgentMessage { role: "principal" | "assistant" | "system"; text: string; at: string; pending_action_ids: string[]; target: string | null }
 export interface Conversation { id: string; principal: string; role: Role; session_id: string | null; messages: AgentMessage[] }
 export interface PendingAction { id: string; principal: string; tool: string; summary: string; status: string }
+
+// 回放部署的台词（demo/mainline.yaml 的一个动作，原样转发）：{ start | customer | send | chat | sign | edit | trial: {...} }
+export type ScriptAction = Record<string, Record<string, any>>;
+export interface NextAction {
+  index: number;
+  total: number;
+  sessions: Record<string, { session: string; customer: string; sales: string }>;
+  action: ScriptAction | null;
+  chapter: string | null;       // 这个动作所在的台词段标题，如「4 接单与 L3：……」
+}

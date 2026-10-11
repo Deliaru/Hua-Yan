@@ -1,11 +1,12 @@
-// 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list（架构总览、工作面、觉视图、三层对照、评测、知识与积分）。
+// 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list（架构总览、演示工作面、沉浸工作面、觉视图、三层对照、评测、知识与积分）。
+// 演示工作面是只读的讲解页；沉浸工作面是真实的工作面，导览带着走演示主线。
 // 没有产品经理页面：产品经理 Agent 的产出只在研发工作面、三层对照、觉视图上出现（REPLAN 3.2 第 5 条）。
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
 import type { Meta, Role, RunStatus } from "./types";
 import { Popover } from "./components/Controls";
-import { ChevronDown, Close, NavArch, NavDesk, NavEval, NavJue, NavLayers, NavLedger, Refresh } from "./components/Icons";
+import { ChevronDown, Close, NavArch, NavDesk, NavEval, NavJue, NavLayers, NavLedger, NavStory, Refresh } from "./components/Icons";
 import { Logo } from "./components/Logo";
 import { Sales } from "./pages/Sales";
 import { Rd } from "./pages/Rd";
@@ -15,11 +16,14 @@ import { Layers } from "./pages/Layers";
 import { Eval } from "./pages/Eval";
 import { Ledger } from "./pages/Ledger";
 import { Overview } from "./pages/Overview";
-import { Guide } from "./components/Guide";
+import { Story } from "./pages/Story";
+import { Guide, useGuide } from "./components/Guide";
+import { RECORDING_NOTE } from "./components/ui";
 
 const PAGES = [
   ["overview", "架构总览", NavArch],
-  ["desk", "工作面", NavDesk],
+  ["story", "演示工作面", NavStory],
+  ["desk", "沉浸工作面", NavDesk],
   ["jue", "觉视图", NavJue],
   ["layers", "三层对照", NavLayers],
   ["eval", "评测", NavEval],
@@ -39,11 +43,12 @@ export default function App() {
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, []);
-  const [me, setMe] = useState<string | null>(null);
+  const [me, setMe] = useState<string | null>(() => new URLSearchParams(location.search).get("as"));   // ?as=rd:R02 直接以某人身份打开
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [side, setSide] = useState<HTMLElement | null>(null);
+  const guide = useGuide();
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
   useEffect(() => { api.meta().then(setMeta, fail); }, []);
@@ -72,7 +77,8 @@ export default function App() {
           <StatusMenu s={meta.status} />
           <CheckpointMenu onLoad={(name) => restart(`正在载入检查点「${name}」……`, api.loadCheckpoint(name))} />
           <Popover align="right" trigger={(toggle) => (
-            <button onClick={toggle} className="flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill">
+            <button onClick={toggle} className={`flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill ${
+              page === "desk" && guide.who && guide.who !== actor.id ? "glow" : ""}`}>
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#8e8e93] text-[11px] font-semibold text-white">
                 {ROLE_NAME[actor.role][0]}
               </span>
@@ -84,14 +90,16 @@ export default function App() {
               <div key={r}>
                 <p className="px-2.5 pb-0.5 pt-1.5 text-[12px] text-ink-2">{ROLE_NAME[r]}</p>
                 {people.filter((a) => a.role === r).map((a) => (
-                  <button key={a.id} className="menu-item" onClick={() => { setMe(a.id); close(); }}>
+                  <button key={a.id} className={`menu-item ${a.id === guide.who && a.id !== actor.id ? "font-semibold text-accent" : ""}`} onClick={() => { setMe(a.id); close(); }}>
                     <span className="w-3">{a.id === actor.id ? "✓" : ""}</span><Name id={a.id} />
                   </button>
                 ))}
               </div>
             ))}
           </Popover>
-          <button className="icon-btn" title="新开一轮" onClick={() => restart("正在开启新一轮……", api.reset())}><Refresh /></button>
+          <button className="btn btn-plain gap-1.5" title="清空所有会话与需求单，从头开始"
+                  onClick={() => confirm("重置进度：清空所有客户会话、需求单和签字记录，从头开始。确定吗？") && restart("正在重置进度……", api.reset())}>
+            <Refresh />重置进度</button>
         </div>
       </header>
 
@@ -109,7 +117,8 @@ export default function App() {
       </aside>
 
       <main className="ml-[232px] pt-[52px]">
-        {page === "overview" && <Overview />}
+        {page === "overview" && <Overview toStory={() => { setPage("story"); window.scrollTo(0, 0); }} />}
+        {page === "story" && <Story toDesk={() => setPage("desk")} />}
         {page === "desk" && (actor.role === "sales" ? <Sales key={key} /> : actor.role === "rd" ? <Rd key={key} /> : <Supervisor key={key} />)}
         {page === "jue" && <JuePage key={key} />}
         {page === "layers" && <Layers key={meta.status.run_id} />}
@@ -131,43 +140,51 @@ function Name({ id }: { id: string }) {
   return <>{useLabels().name(id)}</>;
 }
 
-// 状态指示：常驻工具栏，一行写运行方式与降级项数，点开逐项看（铁律 6：降级可见，降级项标黄）
+// 状态指示：常驻工具栏，一行写运行方式，点开逐项看（铁律 6：降级可见，降级项标黄）
+// 回放时大模型与 OneJev 的输出来自录制缓存，逐项写「录制回放」，不写「在线」；觉（Jue-K）是本地推理，回放时也在实时运行
+
 function StatusMenu({ s }: { s: RunStatus }) {
-  const jev: Record<string, string> = { onejev: "Jev · OneJev", mock: "Jev · 桩", llm: "Jev · 大模型降级" };
-  const jue: Record<string, string> = { jue_k: "觉 · Jue-K", jue_proto: "觉 · 规则原型", onejev: "觉 · OneJev" };
-  const items: [string, boolean][] = [
-    ["数据 · 模拟", false],
-    ...(s.seeds_placeholder ? [["种子 · 占位", true] as [string, boolean]] : []),
-    [jev[s.system1_impl] ?? `Jev · ${s.system1_impl}`, s.system1_impl !== "onejev"],
-    [jue[s.realtime_model] ?? `觉 · ${s.realtime_model}`, s.realtime_model === "jue_proto"],
-    [s.extractor === "llm" ? "抽取 · 大模型" : "抽取 · 规则", s.extractor !== "llm"],
-    [s.gateway_mock ? "Agent · 离线" : "Agent · 在线", s.gateway_mock],
-    [s.replay ? "运行 · 回放" : "运行 · 现场", s.replay],
+  const R = "录制回放";
+  const jev: Record<string, string> = { onejev: "OneJev", mock: "桩", llm: "大模型降级" };
+  const jue: Record<string, string> = { jue_k: "Jue-K · 本地实时", jue_proto: "规则原型", onejev: "OneJev" };
+  // [项, 值, 种类]：ok 正常运行，warn 降级，replay 录制回放
+  type Kind = "ok" | "warn" | "replay";
+  const llm = (on: string): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${on} · ${R}`, "replay"] : [`${on} · 在线`, "ok"];
+  const items: [string, string, Kind][] = [
+    ["数据", "模拟", "ok"],
+    ...(s.seeds_placeholder ? [["种子", "占位", "warn"] as [string, string, Kind]] : []),
+    ["Agent", ...llm("大模型")],
+    ["抽取", ...(s.extractor === "llm" ? llm("大模型") : ["规则", "warn"] as [string, Kind])],
+    ["Jev", ...(s.system1_impl !== "onejev" ? [jev[s.system1_impl] ?? s.system1_impl, "warn"] as [string, Kind]
+      : s.replay ? [`OneJev · ${R}`, "replay"] as [string, Kind] : ["OneJev · 在线", "ok"] as [string, Kind])],
+    ["觉", jue[s.realtime_model] ?? s.realtime_model, s.realtime_model === "jue_proto" ? "warn" : "ok"],
   ];
-  const degraded = items.filter(([, w]) => w).length;
-  const mode = s.replay ? "记录回放" : s.gateway_mock ? "离线演示" : "现场运行";
+  const degraded = items.filter(([, , k]) => k === "warn").length;
+  const mode = s.replay ? "录制回放" : s.gateway_mock ? "离线演示" : "现场运行";
+  const sub = s.replay ? "非在线运行" : degraded ? `${degraded} 项降级` : "全部正常";
+  const TAG: Record<Kind, string> = { ok: "text-ink", warn: "tag tag-warn", replay: "tag" };
   return (
     <Popover align="right" trigger={(toggle) => (
       <button onClick={toggle} className="flex h-7 items-center gap-2 rounded-full px-2.5 text-[12px] hover:bg-fill">
-        <i className={`h-[7px] w-[7px] rounded-full ${degraded ? "bg-[#f5b400]" : "bg-[#30c25b]"}`} />
+        <i className={`h-[7px] w-[7px] rounded-full ${s.replay ? "bg-[#8e8e93]" : degraded ? "bg-[#f5b400]" : "bg-[#30c25b]"}`} />
         <span className="font-semibold">{mode}</span>
-        <span className={degraded ? "text-warn-ink" : "text-ink-2"}>{degraded ? `${degraded} 项降级` : "全部正常"}</span>
+        <span className="text-ink-2">{sub}</span>
         <span className="text-ink-3"><ChevronDown /></span>
       </button>
     )}>
       {() => (
-        <div className="w-[240px] p-1">
+        <div className="w-[300px] p-1">
           <p className="eyebrow px-2 pb-1.5 pt-1">运行状态</p>
-          {items.map(([t, warn]) => {
-            const [k, v] = t.includes(" · ") ? t.split(" · ") : [t, ""];
-            return (
-              <div key={t} className="flex items-center justify-between rounded-[6px] px-2 py-1 text-[13px]">
-                <span className="text-ink-2">{k}</span>
-                <span className={warn ? "tag tag-warn" : "text-ink"}>{v || (warn ? "是" : "✓")}</span>
-              </div>
-            );
-          })}
-          <p className="px-2 pt-1.5 text-[11px] leading-4 text-ink-3">黄色为降级运行，结果上同样标注来源。</p>
+          {items.map(([k, v, kind]) => (
+            <div key={k} className="flex items-center justify-between rounded-[6px] px-2 py-1 text-[13px]">
+              <span className="text-ink-2">{k}</span>
+              <span className={TAG[kind]}>{v}</span>
+            </div>
+          ))}
+          {s.replay && <p className="mx-2 mt-2 rounded-[8px] bg-fill px-2.5 py-2 text-[12px] leading-[18px] text-ink">{RECORDING_NOTE}</p>}
+          <p className="px-2 pt-1.5 text-[11px] leading-4 text-ink-3">
+            {s.replay ? "录制回放：Agent、抽取与 Jev 的输出是录制时的真实结果，只能按演示台词走；觉在本地实时计算。" : ""}
+            黄色为降级运行，结果上同样标注来源。</p>
         </div>
       )}
     </Popover>

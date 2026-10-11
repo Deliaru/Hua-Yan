@@ -1,6 +1,6 @@
 {
-  "run_id": "run-1a432a62f626",
-  "run_dir": "runs\\run-1a432a62f626",
+  "run_id": "run-1e92ea5b8d30",
+  "run_dir": "runs/run-1e92ea5b8d30",
   "script_sha256": "8b55963e453d29d06fbb661282c8de79aea46f01502d25e055d3d51423e9d2ba",
   "until": null,
   "events": [
@@ -1526,7 +1526,73 @@
       "actor": "pm:agent",
       "session_id": null,
       "payload": {
-        "query": "涤纶 浸染 手感 柔软",
+        "query": "锦纶 涤纶 气流染色 匀染",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:7",
+          "ku:sheet:HY-LV206",
+          "ku:sheet:HY-LV205",
+          "ku:usage:HY-LV206",
+          "ku:case:case:1"
+        ],
+        "n_blocked": 25,
+        "blocked_product_ids": [
+          "HY-LV206",
+          "HY-LV101",
+          "HY-LV206",
+          "HY-LV101",
+          "HY-LV205",
+          "HY-LV206",
+          "HY-FX350",
+          "HY-LV120",
+          "HY-LV205",
+          "HY-RP330",
+          "HY-FX350",
+          "HY-LV120",
+          "HY-RP330"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "气流染色 匀染",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:7",
+          "ku:sheet:HY-LV206",
+          "ku:sheet:HY-AC601",
+          "ku:sheet:HY-LV205",
+          "ku:usage:HY-LV206"
+        ],
+        "n_blocked": 17,
+        "blocked_product_ids": [
+          "HY-LV206",
+          "HY-LV206",
+          "HY-LV101",
+          "HY-LV120",
+          "HY-LV205",
+          "HY-RP330",
+          "HY-LV101",
+          "HY-LV120",
+          "HY-LV205",
+          "HY-LV206",
+          "HY-RP330"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "涤纶 浸染 手感粗糙 柔软",
         "intent": "product_question",
         "actor_level": 2,
         "hit_ku_ids": [
@@ -1553,7 +1619,7 @@
       "actor": "pm:agent",
       "session_id": null,
       "payload": {
-        "query": "涤纶 手感 柔软 浸染",
+        "query": "手感粗糙 涤纶 柔软",
         "intent": "product_question",
         "actor_level": 2,
         "hit_ku_ids": [
@@ -1627,31 +1693,6 @@
           "HY-OB701",
           "HY-PT801",
           "HY-RP330"
-        ]
-      }
-    },
-    {
-      "ts": "2026-10-12T09:26:00+08:00",
-      "kind": "retrieve",
-      "actor": "pm:agent",
-      "session_id": null,
-      "payload": {
-        "query": "柔软",
-        "intent": "product_question",
-        "actor_level": 2,
-        "hit_ku_ids": [
-          "ku:case:case:reuse_softness",
-          "ku:sheet:HY-SF501",
-          "ku:sheet:HY-SF520",
-          "ku:translation:tr:11",
-          "ku:usage:HY-SF501"
-        ],
-        "n_blocked": 9,
-        "blocked_product_ids": [
-          "HY-SF501",
-          "HY-SF520",
-          "HY-SF501",
-          "HY-SF520"
         ]
       }
     },
@@ -1746,8 +1787,8 @@
         "layer": 2,
         "index": -1,
         "field": "reuse.customer_note",
-        "before": "适用于涤纶浸染织物后整理，可改善手感发硬问题，赋予柔软手感。建议用量为 1–2 % o.w.f.，整理时加入，建议先做小样确认效果。",
-        "after": "适用于涤纶浸染织物后整理，可明显改善手感发硬问题，赋予柔软手感。建议用量为 1–2 % o.w.f.，整理时加入，建议先做小样确认效果。"
+        "before": "可改善涤纶布整理后的手感硬度，提升面料柔软度。适用于涤纶浸染工艺，建议用量 1–2 % o.w.f.，整理时加入，先做小样确认。",
+        "after": "可明显改善涤纶布整理后的手感硬度，提升面料柔软度。适用于涤纶浸染工艺，建议用量 1–2 % o.w.f.，整理时加入，先做小样确认。"
       }
     },
     {
@@ -1783,7 +1824,7 @@
       "payload": {
         "turn_id": "turn:sess:4:3",
         "speaker": "sales",
-        "text": "您好，这边研发给您匹配了现成产品【柔软剂 HY-SF520】。它适用于涤纶浸染织物的后整理，能明显改善手感偏硬的问题，让手感变得柔软。建议用量为 1–2% o.w.f.，整理时加入，建议您可以先做个小样看下效果。如果您需要样品测试，我可以为您安排寄送。"
+        "text": "您好，针对您涤纶布浸染整理后手感偏硬的问题，我们研发这边确认了现成产品「柔软剂 HY-SF520」，能明显改善面料硬度、提升柔软手感。该产品适用于浸染工艺，建议用量为 1–2 % o.w.f.，在整理时加入，建议您先安排做个小样测试看下效果。"
       }
     },
     {
