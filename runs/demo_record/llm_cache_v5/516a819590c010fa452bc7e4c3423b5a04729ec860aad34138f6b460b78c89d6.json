@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"draft_chem_need-1791719163041484282-1433","name":"draft_chem_need","arguments":{"req_id":"req:1"}}],"usage":{"input_tokens":6950,"output_tokens":22},"latency_ms":4935.015799994289,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

@@ -37,7 +37,7 @@ export function Rd() {
         ))}
         {!reqs.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">暂无需求单</p>}
       </Side>
-      <RdDesk question={question} reqId={reqId} />
+      <RdDesk key={`${me}:${reqId}`} question={question} reqId={reqId} />
     </>
   );
 }
@@ -46,6 +46,8 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
   const { me } = useApp();
   const view = useData(() => (reqId ? api.requirement(reqId, me) : Promise.resolve(null)), [reqId, me]);
   const conv = useConversation(null);
+  const [itemIndex, setItemIndex] = useState<number | null>(null);
+  const focus = itemIndex === null ? reqId : `${reqId}/chem/${itemIndex}`;
   const onThis = !!question && (!view || reqsOf(question).includes(view.requirement.id));
   return (
     <>
@@ -56,13 +58,17 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
             <>
               <ReqHead view={view} />
               <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
-              <RequirementSheet view={view} notes={conv?.messages ?? []} />
+              <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />
             </>
           ) : question ? <SignArea key={question.id} q={question} view={null} />
             : <EmptyState title="选一项待签的决策" text="收件箱里是觉提出、由你签字的决策；准备中的由产品经理 Agent 或你的 Agent 在起草。" />}
         </div>
       </div>
-      <AgentPanel title={view ? "这张单的来历" : "Agent 协作"} sessionId={null} focus={reqId}>
+      <AgentPanel title={view ? "这张单的来历" : "Agent 协作"} sessionId={null} focus={focus}>
+        {itemIndex !== null && <div className="text-[13px] text-ink-2">
+          正在协作：{view?.requirement.chem_lang[itemIndex]?.text}
+          <button className="ml-2 text-accent" onClick={() => setItemIndex(null)}>返回整张单</button>
+        </div>}
         {view && <ReqContext view={view} />}
       </AgentPanel>
     </>
@@ -197,7 +203,7 @@ function SheetNotes({ reqId, notes }: { reqId: string; notes: AgentMessage[] }) 
 }
 
 // ── 需求单正文：化学要点为主，每条右侧并排写来历（产品需求 ← 客户原话） ─────
-function RequirementSheet({ view, notes }: { view: RequirementView; notes: AgentMessage[] }) {
+function RequirementSheet({ view, notes, selectItem }: { view: RequirementView; notes: AgentMessage[]; selectItem: (index: number) => void }) {
   const L = useLabels();
   const req = view.requirement;
   const cited = Object.fromEntries(view.cited.map((c) => [c.ku_id, c]));
@@ -220,6 +226,7 @@ function RequirementSheet({ view, notes }: { view: RequirementView; notes: Agent
           </div>
           {points.map(({ it, i }, n) => (
             <Point key={i} n={n} index={i} item={it} view={view} cited={cited} l2={l2}
+                   select={() => selectItem(i)}
                    editable={req.status === "rd_accepted"} notes={notesFor(notes, `${req.id}/chem/${i}`)} />
           ))}
           {!points.length && <p className="px-5 py-4 text-[13px] text-ink-2">接单后由你的 Agent 起草化学要点。</p>}
@@ -238,9 +245,9 @@ function RequirementSheet({ view, notes }: { view: RequirementView; notes: Agent
   );
 }
 
-function Point({ n, index, item, view, cited, l2, editable, notes }: {
+function Point({ n, index, item, view, cited, l2, editable, notes, select }: {
   n: number; index: number; item: ReqItem; view: RequirementView; cited: Record<string, CitedKnowledge>; l2: ReqItem[];
-  editable: boolean; notes: AgentMessage[];
+  editable: boolean; notes: AgentMessage[]; select: () => void;
 }) {
   const { me } = useApp();
   const L = useLabels();
@@ -268,7 +275,8 @@ function Point({ n, index, item, view, cited, l2, editable, notes }: {
             {basis.map((c) => <KnowledgeChip key={c.ku_id} c={c} />)}
             {editable && !editing && <button type="button" className="link !text-[12px]" onClick={() => setEditing(true)}>修改</button>}
           </div>
-          <Notes notes={notes} />
+          <button className="mt-1 text-[12px] text-accent" onClick={select}>就此条与 Agent 协作</button>
+          <Notes notes={notes.filter((m) => m.role === "assistant")} />
         </div>
       </div>
       <div className="flex flex-col gap-1 border-l border-sep bg-[#fcfcfd] px-4 py-3.5 text-[12.5px] leading-[19px]">

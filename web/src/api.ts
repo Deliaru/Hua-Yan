@@ -5,11 +5,6 @@ import type {
   RequirementView, SessionSummary, SessionView, SheetDraft,
 } from "./types";
 
-// 种子与样例文本逐句带「（模拟）」前缀；全局已常驻「模拟数据」标识（铁律 7），显示时去掉逐句前缀。
-const clean = <T,>(x: T): T => (typeof x === "string" ? x.replace(/（模拟[^）]{0,6}）/g, "")
-  : Array.isArray(x) ? x.map(clean) : x && typeof x === "object"
-    ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, clean(v)])) : x) as T;
-
 async function call<T>(path: string, body?: object): Promise<T> {
   const r = await fetch(`/api/${path}`, body ? {
     method: "POST",
@@ -18,7 +13,8 @@ async function call<T>(path: string, body?: object): Promise<T> {
   } : undefined).catch(() => { throw new Error("连不上化言服务，请确认后端已启动"); });
   const data = await r.json();
   if (!r.ok) throw new Error(data.error ?? `接口返回 ${r.status}`);
-  return clean(data);
+  // 草稿会用于编辑和签字，保留原文，确保界面与台词录制提交同一份内容。
+  return data;
 }
 
 const q = (params: Record<string, string | null | undefined>) =>

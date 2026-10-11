@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791719184476998036-1435","name":"search_knowledge","arguments":{"kind":"translation","query":"低浴比 气流 分段加酸 缓释酸"}}],"usage":{"input_tokens":7343,"output_tokens":35},"latency_ms":7130.913500004681,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

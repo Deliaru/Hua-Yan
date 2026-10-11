@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791718922204480803-1402","name":"search_knowledge","arguments":{"query":"锦纶","kind":"translation"}}],"usage":{"input_tokens":4944,"output_tokens":23},"latency_ms":4310.212500000489,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

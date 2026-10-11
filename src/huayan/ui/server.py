@@ -2,15 +2,17 @@
 权限只在门面里执行；这里只做路由、序列化与错误映射。身份由界面的下拉框传入（演示无登录）。
 运行：uv run python -m huayan.ui.server（从仓库根目录）；开发时前端 `npm run dev` 经 Vite 代理 /api。
 web/dist 存在时同时提供构建后的前端页面。"""
+import importlib.util
 import json
 import os
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
+import yaml
 
 from huayan.app import HuayanApp
 from huayan.clock import SimClock, get_clock, set_clock
@@ -22,10 +24,11 @@ CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
 PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
 DIST = Path("web/dist")
 REPORTS = Path("docs/reports")
+MAINLINE = Path("demo/mainline.yaml")
 REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）；single_card 经门面按查看者读取
 
 T0 = datetime(2026, 10, 12, 9, 0, tzinfo=SHANGHAI)
-lock = Lock()                                     # 门面不是线程安全的，一次只处理一个请求
+lock = RLock()                                    # 载入检查点时，同一线程会再次调用 Api.call。
 
 
 def dump(x):
@@ -68,7 +71,28 @@ def report(app, p):
     return json.loads((REPORTS / name / "metrics.json").read_text(encoding="utf-8"))
 
 
+def demo_actions():
+    script = yaml.safe_load(MAINLINE.read_text(encoding="utf-8"))
+    return [action for step in script["steps"] for action in step["actions"]]
+
+
+def next_line(app, p):
+    session = next(s for s in app.sessions() if s.id == p["session"])
+    actions = demo_actions()
+    aliases = [a["start"]["session"] for a in actions if "start" in a
+               and a["start"]["customer"] == session.customer_id and a["start"]["sales"] == session.sales_id]
+    matching = [s.id for s in app.sessions() if s.customer_id == session.customer_id and s.sales_id == session.sales_id]
+    index = matching.index(session.id)
+    if index >= len(aliases):
+        return {"text": None}
+    lines = [a["customer"]["text"] for a in actions if "customer" in a and a["customer"]["session"] == aliases[index]]
+    # 按客户已发送的轮数定位；点击只取文本，不消耗下一句，允许改写后发送。
+    sent = sum(t.speaker == "customer" for t in session.turns)
+    return {"text": lines[sent] if sent < len(lines) else None}
+
+
 GET = {
+    "/api/demo/next": next_line,
     "/api/status": lambda app, p: app.status(),
     "/api/meta": meta,
     "/api/sessions": sessions,
@@ -124,8 +148,45 @@ class Api:
     def __init__(self, app, config_path=CONFIG):
         self.app, self.config_path = app, config_path
 
+    def checkpoints(self):
+        if Path(self.config_path).name != "app.demo.yaml":
+            return []
+        return [a["checkpoint"] for a in demo_actions() if "checkpoint" in a]
+
+    def load_checkpoint(self, name):
+        if name not in self.checkpoints():
+            raise ValueError("检查点不存在或未使用 app.demo.yaml 启动")
+        spec = importlib.util.spec_from_file_location("huayan_demo_mainline", "scripts/demo_mainline.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        config = yaml.safe_load(Path(self.config_path).read_text(encoding="utf-8"))
+        config["replay"] = True
+        directory = Path(config["run_root"]) / "demo_v5"
+        directory.mkdir(parents=True, exist_ok=True)
+        replay_config = directory / "checkpoint.yaml"
+        replay_config.write_text(yaml.safe_dump(config), encoding="utf-8")
+        previous_clock, loaded = get_clock(), None
+        try:
+            set_clock(SimClock(T0))
+            loaded = HuayanApp.build(str(replay_config))
+            module.Mainline(Api(loaded, str(replay_config)), MAINLINE).run(name)
+        except Exception:
+            set_clock(previous_clock)
+            if loaded is not None:
+                loaded.system1.close()
+            raise
+        # 回放成功后才替换工作面，并把两个客户端一起切回现场。
+        loaded.config["replay"] = loaded.gateway.replay = loaded.system1.replay = False
+        self.app.system1.close()
+        self.app = loaded
+        return {"run_id": loaded.run_id, "checkpoint": name}
+
     def call(self, method, path, params):
         with lock:
+            if method == "GET" and path == "/api/demo/checkpoints":
+                return self.checkpoints()
+            if method == "POST" and path == "/api/demo/load":
+                return self.load_checkpoint(params["name"])
             if method == "POST" and path == "/api/reset":
                 set_clock(SimClock(T0))
                 self.app = HuayanApp.build(self.config_path)
@@ -152,7 +213,7 @@ class Handler(SimpleHTTPRequestHandler):
             status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
-        except ReplayMiss as e:
+        except (ReplayMiss, AssertionError) as e:
             status, body = 409, {"error": str(e)}
         except ValueError as e:
             status, body = 400, {"error": str(e)}

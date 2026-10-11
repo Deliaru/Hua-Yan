@@ -4,7 +4,35 @@
 
 面向传化功能化学「市场—产品—研发」需求协同的多层 Agent 系统。参赛赛道：AI＋功能化学（自主深化「AI 化学家」推荐场景）。
 
-**当前状态：设计阶段，尚未开始开发。** 本文件将在演示版完成后按赛事要求重写（团队信息、业务场景、核心方案、技术实现、数据来源、外部依赖、运行方式、测试结果、当前限制）。
+**当前状态：v5 集成开发中（WP-I2），正式主线录制与界面验收尚未完成。** 完整交付说明由 WP-D2 整理。
+
+## 运行
+
+在仓库根目录执行，需 Python 3.11+、uv 与 Node.js：
+
+```bash
+uv sync
+npm --prefix web ci
+npm --prefix web run build
+uv run pytest
+uv run python -m huayan.ui.server
+```
+
+默认使用离线配置，界面地址为 `http://127.0.0.1:8766`。现场演示需在本机环境配置 `BACKUP_API_KEY`，按 `config/system1.yaml` 建立 OneJev 本地转发，并将 B 提供的模型放到 `models/jue_k/model.pkl`（不入库）。PowerShell 启动：
+
+```powershell
+$env:HUAYAN_CONFIG = "config/app.demo.yaml"
+uv run python -m huayan.ui.server
+```
+
+正式台词与界面共用业务入口；录制后才能严格回放或载入正式检查点：
+
+```bash
+uv run python scripts/demo_mainline.py --record
+uv run python scripts/demo_mainline.py --replay
+```
+
+缓存缺失直接报错，不转为现场调用。检查点、环境要求与验收范围见 [录制说明](runs/demo_record/README.md)。
 
 ## 文档
 

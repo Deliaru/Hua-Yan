@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"save_reply_draft-1791719049051594695-1424","name":"save_reply_draft","arguments":{"text":"想跟您确认一下，您目前染色时染浴的 pH 大概是在什么范围呢？这个参数对我们排查和制定方案挺关键的。"}}],"usage":{"input_tokens":1388,"output_tokens":51},"latency_ms":5847.791000000143,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"save_reply_draft-1791718832621233650-1389","name":"save_reply_draft","arguments":{"text":"您好，请问您这边染的是什么材质的面料？具体是用什么染缸（比如溢流缸还是气流缸）染的呢？"}}],"usage":{"input_tokens":1407,"output_tokens":50},"latency_ms":4649.626999998873,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

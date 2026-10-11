@@ -1,0 +1,1837 @@
+{
+  "run_id": "run-5cc33544feaa",
+  "run_dir": "runs\\run-5cc33544feaa",
+  "script_sha256": "8b55963e453d29d06fbb661282c8de79aea46f01502d25e055d3d51423e9d2ba",
+  "until": null,
+  "events": [
+    {
+      "ts": "2026-10-12T09:02:00+08:00",
+      "kind": "turn",
+      "actor": "customer:C01",
+      "session_id": "sess:1",
+      "payload": {
+        "turn_id": "turn:sess:1:1",
+        "speaker": "customer",
+        "text": "我们染完以后布面深一块浅一块，客户老投诉"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:02:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "color_unlevel",
+        "filled": {},
+        "extracted_by": "llm",
+        "conditions_changed": true,
+        "turn_id": "turn:sess:1:1"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:02:00+08:00",
+      "kind": "ask_hint",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "slots": [
+          "fiber",
+          "equipment"
+        ],
+        "p": {
+          "fiber": 0.8,
+          "equipment": 0.30357142857142855
+        },
+        "model": "jue_k"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:04:00+08:00",
+      "kind": "turn",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "turn_id": "turn:sess:1:2",
+        "speaker": "sales",
+        "text": "您好，请问您这边染的是什么材质的面料？具体是用什么染缸（比如溢流缸还是气流缸）染的呢？"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:04:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "color_unlevel",
+        "filled": {},
+        "extracted_by": "llm",
+        "conditions_changed": false,
+        "turn_id": "turn:sess:1:2"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:04:00+08:00",
+      "kind": "ask_hint",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "slots": [
+          "fiber",
+          "equipment"
+        ],
+        "p": {
+          "fiber": 0.7352941176470589,
+          "equipment": 0.30357142857142855
+        },
+        "model": "jue_k"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:05:00+08:00",
+      "kind": "turn",
+      "actor": "customer:C01",
+      "session_id": "sess:1",
+      "payload": {
+        "turn_id": "turn:sess:1:3",
+        "speaker": "customer",
+        "text": "锦氨弹力布，气流缸，浴比很低。上次你们推荐的那个匀染剂用了，回修了三次"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:05:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "color_unlevel",
+        "filled": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "extracted_by": "llm",
+        "conditions_changed": true,
+        "turn_id": "turn:sess:1:3"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:05:00+08:00",
+      "kind": "ask_hint",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "slots": [],
+        "p": {},
+        "model": "jue_k"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:05:00+08:00",
+      "kind": "match",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "phenomenon": "color_unlevel",
+        "known": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "customer_id": "customer:C01",
+        "candidate_ids": [],
+        "p_choice": {},
+        "p_none": 1.0,
+        "scored_by": "rule"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:05:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:1",
+        "family": "escalate_need",
+        "object_id": "session:sess:1",
+        "template_id": "escalate_need"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:05:00+08:00",
+      "kind": "question_prepared",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:1",
+        "family": "escalate_need",
+        "by": "sales:S01"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "escalate",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:1",
+        "requirement_id": "req:1",
+        "phenomenon": "color_unlevel",
+        "known": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "customer_id": "customer:C01",
+        "p_none": 1.0
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "requirement_created",
+      "actor": "sales:S01",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "question_id": "q:1",
+        "phenomenon": "color_unlevel",
+        "session_ids": [
+          "sess:1",
+          "sess:2"
+        ],
+        "assigned_rd": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "question_resolved",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:1",
+        "family": "escalate_need",
+        "object_id": "session:sess:1",
+        "template_id": "escalate_need",
+        "action": "sign",
+        "by": "sales:S01"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:2",
+        "family": "reuse_product",
+        "object_id": "requirement:req:1",
+        "template_id": "reuse_product"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "锦纶 氨纶 气流 匀染",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:7",
+          "ku:sheet:HY-LV205",
+          "ku:translation:tr:3",
+          "ku:case:case:2",
+          "ku:sheet:HY-AY901"
+        ],
+        "n_blocked": 20,
+        "blocked_product_ids": [
+          "HY-LV205",
+          "HY-FX350",
+          "HY-LV101",
+          "HY-LV120",
+          "HY-LV205",
+          "HY-FX350",
+          "HY-LV101",
+          "HY-LV120"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "布面深一块浅一块 气流",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:7",
+          "ku:case:case:1",
+          "ku:translation:tr:1",
+          "ku:case:case:3",
+          "ku:case:case:5"
+        ],
+        "n_blocked": 4,
+        "blocked_product_ids": [
+          "HY-CH310",
+          "HY-RP330"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "reuse_proposed",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "product_id": null,
+        "ku_refs": []
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "question_resolved",
+      "actor": "pm:agent",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:2",
+        "family": "reuse_product",
+        "object_id": "requirement:req:1",
+        "template_id": "reuse_product",
+        "action": "answered",
+        "by": "pm:agent"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:3",
+        "family": "accept_requirement",
+        "object_id": "requirement:req:1",
+        "template_id": "accept_requirement"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "锦纶",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:2",
+          "ku:case:case:7",
+          "ku:sheet:HY-AY901",
+          "ku:sheet:HY-FX350",
+          "ku:sheet:HY-LV205"
+        ],
+        "n_blocked": 7,
+        "blocked_product_ids": [
+          "HY-FX350",
+          "HY-FX350",
+          "HY-LV205"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "气流染色机",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:7",
+          "ku:sheet:HY-AC601",
+          "ku:sheet:HY-LV205",
+          "ku:case:case:5",
+          "ku:case:case:1"
+        ],
+        "n_blocked": 5,
+        "blocked_product_ids": [
+          "HY-RP330",
+          "HY-RP330"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "requirement_edited",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "layer": 2,
+        "index": 4,
+        "before": {
+          "text": "条件：锦纶氨纶",
+          "slot": "fiber",
+          "quote_refs": [
+            "turn:sess:1:3"
+          ],
+          "ku_refs": [],
+          "edited_by": null
+        },
+        "after": {
+          "text": "条件：锦纶氨纶（未转译，需研发 R02 补充）",
+          "slot": "fiber",
+          "quote_refs": [
+            "turn:sess:1:3"
+          ],
+          "ku_refs": [],
+          "edited_by": null
+        }
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "requirement_edited",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "layer": 2,
+        "index": 5,
+        "before": {
+          "text": "条件：气流染色机",
+          "slot": "equipment",
+          "quote_refs": [
+            "turn:sess:1:3"
+          ],
+          "ku_refs": [],
+          "edited_by": null
+        },
+        "after": {
+          "text": "条件：气流染色机（未转译，需研发 R02 补充）",
+          "slot": "equipment",
+          "quote_refs": [
+            "turn:sess:1:3"
+          ],
+          "ku_refs": [],
+          "edited_by": null
+        }
+      }
+    },
+    {
+      "ts": "2026-10-12T09:06:00+08:00",
+      "kind": "question_prepared",
+      "actor": "pm:agent",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:3",
+        "family": "accept_requirement",
+        "by": "pm:agent"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:08:00+08:00",
+      "kind": "turn",
+      "actor": "customer:C02",
+      "session_id": "sess:2",
+      "payload": {
+        "turn_id": "turn:sess:2:1",
+        "speaker": "customer",
+        "text": "锦氨布在气流机里染，颜色不匀，回修了好几次"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:08:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S01",
+      "session_id": "sess:2",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "color_unlevel",
+        "filled": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "extracted_by": "llm",
+        "conditions_changed": true,
+        "turn_id": "turn:sess:2:1"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:08:00+08:00",
+      "kind": "ask_hint",
+      "actor": "sales:S01",
+      "session_id": "sess:2",
+      "payload": {
+        "slots": [],
+        "p": {},
+        "model": "jue_k"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:08:00+08:00",
+      "kind": "match",
+      "actor": "sales:S01",
+      "session_id": "sess:2",
+      "payload": {
+        "phenomenon": "color_unlevel",
+        "known": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "customer_id": "customer:C02",
+        "candidate_ids": [],
+        "p_choice": {},
+        "p_none": 1.0,
+        "scored_by": "rule"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:08:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:4",
+        "family": "escalate_need",
+        "object_id": "session:sess:2",
+        "template_id": "escalate_need"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:08:00+08:00",
+      "kind": "question_prepared",
+      "actor": "sales:S01",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:4",
+        "family": "escalate_need",
+        "by": "sales:S01"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "escalate",
+      "actor": "sales:S01",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:4",
+        "requirement_id": "req:2",
+        "phenomenon": "color_unlevel",
+        "known": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "customer_id": "customer:C02",
+        "p_none": 1.0
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "requirement_created",
+      "actor": "sales:S01",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:2",
+        "question_id": "q:4",
+        "phenomenon": "color_unlevel",
+        "session_ids": [
+          "sess:2"
+        ],
+        "assigned_rd": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "question_resolved",
+      "actor": "sales:S01",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:4",
+        "family": "escalate_need",
+        "object_id": "session:sess:2",
+        "template_id": "escalate_need",
+        "action": "sign",
+        "by": "sales:S01"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:5",
+        "family": "reuse_product",
+        "object_id": "requirement:req:2",
+        "template_id": "reuse_product"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "锦纶氨纶 气流染色机 色花",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:sheet:HY-LV205",
+          "ku:case:case:7",
+          "ku:sheet:HY-AC601",
+          "ku:sheet:HY-FX350",
+          "ku:case:case:1"
+        ],
+        "n_blocked": 16,
+        "blocked_product_ids": [
+          "HY-FX350",
+          "HY-RP330",
+          "HY-FX350",
+          "HY-LV205",
+          "HY-RP330"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "锦纶氨纶 气流染色机 色花",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:sheet:HY-LV205",
+          "ku:case:case:7",
+          "ku:sheet:HY-AC601",
+          "ku:sheet:HY-FX350",
+          "ku:case:case:1"
+        ],
+        "n_blocked": 16,
+        "blocked_product_ids": [
+          "HY-FX350",
+          "HY-RP330",
+          "HY-FX350",
+          "HY-LV205",
+          "HY-RP330"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "reuse_proposed",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:2",
+        "product_id": null,
+        "ku_refs": []
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "question_resolved",
+      "actor": "pm:agent",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:5",
+        "family": "reuse_product",
+        "object_id": "requirement:req:2",
+        "template_id": "reuse_product",
+        "action": "answered",
+        "by": "pm:agent"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:6",
+        "family": "accept_requirement",
+        "object_id": "requirement:req:2",
+        "template_id": "accept_requirement"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": null,
+      "payload": {
+        "question_id": "q:7",
+        "family": "opportunity",
+        "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+        "template_id": "opportunity"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "question_prepared",
+      "actor": "pm:agent",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:6",
+        "family": "accept_requirement",
+        "by": "pm:agent"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "merge_proposed",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "question_id": "q:7",
+        "target": "req:1",
+        "members": [
+          "req:2"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:09:00+08:00",
+      "kind": "question_prepared",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "question_id": "q:7",
+        "family": "opportunity",
+        "by": "pm:agent"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:10:00+08:00",
+      "kind": "question_resolved",
+      "actor": "rd:R02",
+      "session_id": "sess:2",
+      "payload": {
+        "question_id": "q:6",
+        "family": "accept_requirement",
+        "object_id": "requirement:req:2",
+        "template_id": "accept_requirement",
+        "action": "answered",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:10:00+08:00",
+      "kind": "requirement_edited",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "layer": 2,
+        "index": -1,
+        "before": {
+          "product_lang": [
+            {
+              "text": "客户反映『深一块浅一块』→ 需要匀染类助剂，改善上染均匀性",
+              "slot": null,
+              "quote_refs": [
+                "turn:sess:1:1"
+              ],
+              "ku_refs": [
+                "ku:translation:tr:1",
+                "ku:case:case:1",
+                "ku:case:case:2",
+                "ku:case:case:7"
+              ],
+              "edited_by": null
+            },
+            {
+              "text": "客户反映『气流』→ 需要在低浴比条件下仍能保持匀染效果的助剂",
+              "slot": null,
+              "quote_refs": [
+                "turn:sess:1:3"
+              ],
+              "ku_refs": [
+                "ku:translation:tr:2"
+              ],
+              "edited_by": null
+            },
+            {
+              "text": "客户反映『弹力』→ 弹力面料（含氨纶），需要兼顾锦纶匀染与氨纶保护",
+              "slot": null,
+              "quote_refs": [
+                "turn:sess:1:3"
+              ],
+              "ku_refs": [
+                "ku:translation:tr:3"
+              ],
+              "edited_by": null
+            },
+            {
+              "text": "客户反映『回修』→ 需要一次成功率高、减少回修的匀染方案",
+              "slot": null,
+              "quote_refs": [
+                "turn:sess:1:3"
+              ],
+              "ku_refs": [
+                "ku:translation:tr:4"
+              ],
+              "edited_by": null
+            },
+            {
+              "text": "条件：锦纶氨纶（未转译，需研发 R02 补充）",
+              "slot": "fiber",
+              "quote_refs": [
+                "turn:sess:1:3"
+              ],
+              "ku_refs": [],
+              "edited_by": null
+            },
+            {
+              "text": "条件：气流染色机（未转译，需研发 R02 补充）",
+              "slot": "equipment",
+              "quote_refs": [
+                "turn:sess:1:3"
+              ],
+              "ku_refs": [],
+              "edited_by": null
+            }
+          ],
+          "direction": "需要匀染类助剂，改善上染均匀性（锦纶氨纶、气流染色机）"
+        },
+        "after": {
+          "product_lang": [],
+          "direction": ""
+        }
+      }
+    },
+    {
+      "ts": "2026-10-12T09:10:00+08:00",
+      "kind": "requirements_merged",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "question_id": "q:7",
+        "target": "req:1",
+        "members": [
+          "req:2"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:10:00+08:00",
+      "kind": "question_resolved",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "question_id": "q:7",
+        "family": "opportunity",
+        "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
+        "template_id": "opportunity",
+        "action": "sign",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:10:00+08:00",
+      "kind": "question_prepared",
+      "actor": "pm:agent",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:3",
+        "family": "accept_requirement",
+        "by": "pm:agent"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:11:00+08:00",
+      "kind": "requirement_accepted",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "phenomenon": "color_unlevel",
+        "known": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机",
+          "bath_ph": "弱酸性"
+        },
+        "ku_refs": [
+          "ku:case:case:1",
+          "ku:case:case:2",
+          "ku:case:case:7",
+          "ku:translation:tr:1",
+          "ku:translation:tr:2",
+          "ku:translation:tr:3",
+          "ku:translation:tr:4"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:11:00+08:00",
+      "kind": "question_resolved",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:3",
+        "family": "accept_requirement",
+        "object_id": "requirement:req:1",
+        "template_id": "accept_requirement",
+        "action": "accept",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:11:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:8",
+        "family": "ask_back",
+        "object_id": "slot:req:1/bath_ph",
+        "template_id": "ask_back"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:11:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:9",
+        "family": "confirm_translation",
+        "object_id": "requirement:req:1",
+        "template_id": "confirm_translation"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:11:00+08:00",
+      "kind": "retrieve",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "query": "锦纶 气流 匀染",
+        "intent": "product_question",
+        "actor_level": 3,
+        "hit_ku_ids": [
+          "ku:case:case:7",
+          "ku:case:case:2",
+          "ku:mechanism:HY-LV205",
+          "ku:sheet:HY-LV205",
+          "ku:translation:tr:2"
+        ],
+        "n_blocked": 0,
+        "blocked_product_ids": []
+      }
+    },
+    {
+      "ts": "2026-10-12T09:11:00+08:00",
+      "kind": "question_prepared",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:9",
+        "family": "confirm_translation",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:12:00+08:00",
+      "kind": "turn",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "turn_id": "turn:sess:1:4",
+        "speaker": "sales",
+        "text": "想跟您确认一下，您目前染色时染浴的 pH 大概是在什么范围呢？这个参数对我们排查和制定方案挺关键的。"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:12:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "color_unlevel",
+        "filled": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "extracted_by": "llm",
+        "conditions_changed": false,
+        "turn_id": "turn:sess:1:4"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:13:00+08:00",
+      "kind": "turn",
+      "actor": "customer:C01",
+      "session_id": "sess:1",
+      "payload": {
+        "turn_id": "turn:sess:1:5",
+        "speaker": "customer",
+        "text": "加点醋酸调的，pH五左右"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:13:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "color_unlevel",
+        "filled": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机",
+          "bath_ph": "弱酸性"
+        },
+        "extracted_by": "llm",
+        "conditions_changed": true,
+        "turn_id": "turn:sess:1:5"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:13:00+08:00",
+      "kind": "question_resolved",
+      "actor": "customer:C01",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:8",
+        "family": "ask_back",
+        "object_id": "slot:req:1/bath_ph",
+        "template_id": "ask_back",
+        "action": "answered",
+        "by": "customer:C01"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:13:00+08:00",
+      "kind": "question_prepared",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:9",
+        "family": "confirm_translation",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:14:00+08:00",
+      "kind": "requirement_edited",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "layer": 3,
+        "index": 2,
+        "before": {
+          "text": "『低浴比』→ （模拟）低浴比下染液交换快、局部染料浓度高，需随升温缓释酸，使染浴 pH 由中性逐步降至弱酸性，控制酸性染料初染速率",
+          "slot": null,
+          "quote_refs": [
+            "turn:sess:1:3",
+            "turn:sess:2:1"
+          ],
+          "ku_refs": [
+            "ku:translation:tr:18"
+          ],
+          "edited_by": null
+        },
+        "after": {
+          "text": "『低浴比』→ （模拟）低浴比下染液交换快、局部染料浓度高，需随升温缓释酸，使染浴 pH 由中性逐步降至弱酸性，控制酸性染料初染速率；气流缸里要随升温分段加酸，别一次加足",
+          "slot": null,
+          "quote_refs": [
+            "turn:sess:1:3",
+            "turn:sess:2:1"
+          ],
+          "ku_refs": [
+            "ku:translation:tr:18"
+          ],
+          "edited_by": "rd:R02"
+        }
+      }
+    },
+    {
+      "ts": "2026-10-12T09:14:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:10",
+        "family": "contribution",
+        "object_id": "requirement:req:1",
+        "template_id": "contribution"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:14:00+08:00",
+      "kind": "retrieve",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "query": "低浴比 气流 分段加酸 缓释酸",
+        "intent": "product_question",
+        "actor_level": 3,
+        "hit_ku_ids": [
+          "ku:translation:tr:18",
+          "ku:case:case:7",
+          "ku:translation:tr:2",
+          "ku:translation:tr:23",
+          "ku:translation:tr:50"
+        ],
+        "n_blocked": 0,
+        "blocked_product_ids": []
+      }
+    },
+    {
+      "ts": "2026-10-12T09:14:00+08:00",
+      "kind": "question_prepared",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:10",
+        "family": "contribution",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:15:00+08:00",
+      "kind": "requirement_translated",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "ku_refs": [
+          "ku:translation:tr:17",
+          "ku:translation:tr:18",
+          "ku:translation:tr:19",
+          "ku:translation:tr:21",
+          "ku:translation:tr:22",
+          "ku:translation:tr:23",
+          "ku:translation:tr:24",
+          "ku:translation:tr:26",
+          "ku:translation:tr:50"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:15:00+08:00",
+      "kind": "question_resolved",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:9",
+        "family": "confirm_translation",
+        "object_id": "requirement:req:1",
+        "template_id": "confirm_translation",
+        "action": "sign",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:16:00+08:00",
+      "kind": "knowledge_contributed",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "ku_id": "ku:translation:req:1:2:18",
+        "owner": "rd:R02",
+        "requirement_id": "req:1"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:16:00+08:00",
+      "kind": "question_resolved",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:10",
+        "family": "contribution",
+        "object_id": "requirement:req:1",
+        "template_id": "contribution",
+        "action": "sign",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:17:00+08:00",
+      "kind": "trial",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "trial_id": "trial:1",
+        "product_id": "HY-LV206",
+        "conditions": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机",
+          "bath_ph": "弱酸性"
+        },
+        "result": "pass",
+        "cause": "none"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:17:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:11",
+        "family": "market_eval",
+        "object_id": "requirement:req:1",
+        "template_id": "market_eval"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:17:00+08:00",
+      "kind": "question_prepared",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:11",
+        "family": "market_eval",
+        "by": "sales:S01"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:18:00+08:00",
+      "kind": "market_eval",
+      "actor": "sales:S01",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "trial_id": "trial:1",
+        "result": "pass"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:18:00+08:00",
+      "kind": "question_resolved",
+      "actor": "sales:S01",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:11",
+        "family": "market_eval",
+        "object_id": "requirement:req:1",
+        "template_id": "market_eval",
+        "action": "sign",
+        "by": "sales:S01"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:18:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:12",
+        "family": "seal_points",
+        "object_id": "requirement:req:1",
+        "template_id": "seal_points"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:18:00+08:00",
+      "kind": "question_prepared",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:12",
+        "family": "seal_points",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:19:00+08:00",
+      "kind": "points_set",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:1",
+        "n_sealed": 4
+      }
+    },
+    {
+      "ts": "2026-10-12T09:19:00+08:00",
+      "kind": "question_resolved",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:12",
+        "family": "seal_points",
+        "object_id": "requirement:req:1",
+        "template_id": "seal_points",
+        "action": "sign",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:19:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:13",
+        "family": "release",
+        "object_id": "requirement:req:1",
+        "template_id": "release"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:19:00+08:00",
+      "kind": "question_prepared",
+      "actor": "pm:agent",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:13",
+        "family": "release",
+        "by": "pm:agent"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:20:00+08:00",
+      "kind": "product_released",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "product_id": "HY-LV206",
+        "requirement_id": "req:1",
+        "phenomenon": "color_unlevel",
+        "applicable": {
+          "fiber": [
+            "锦纶氨纶"
+          ],
+          "equipment": [
+            "气流染色机"
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-10-12T09:20:00+08:00",
+      "kind": "question_resolved",
+      "actor": "rd:R02",
+      "session_id": "sess:1",
+      "payload": {
+        "question_id": "q:13",
+        "family": "release",
+        "object_id": "requirement:req:1",
+        "template_id": "release",
+        "action": "sign",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:22:00+08:00",
+      "kind": "turn",
+      "actor": "customer:C03",
+      "session_id": "sess:3",
+      "payload": {
+        "turn_id": "turn:sess:3:1",
+        "speaker": "customer",
+        "text": "锦氨布在气流缸里染，布面深一块浅一块"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:22:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S02",
+      "session_id": "sess:3",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "color_unlevel",
+        "filled": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "extracted_by": "llm",
+        "conditions_changed": true,
+        "turn_id": "turn:sess:3:1"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:22:00+08:00",
+      "kind": "ask_hint",
+      "actor": "sales:S02",
+      "session_id": "sess:3",
+      "payload": {
+        "slots": [],
+        "p": {},
+        "model": "jue_k"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:22:00+08:00",
+      "kind": "match",
+      "actor": "sales:S02",
+      "session_id": "sess:3",
+      "payload": {
+        "phenomenon": "color_unlevel",
+        "known": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "customer_id": "customer:C03",
+        "candidate_ids": [
+          "HY-LV206"
+        ],
+        "p_choice": {
+          "HY-LV206": 0.970779
+        },
+        "p_none": 0.029221,
+        "scored_by": "onejev"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:22:00+08:00",
+      "kind": "recommend",
+      "actor": "sales:S02",
+      "session_id": "sess:3",
+      "payload": {
+        "product_id": "HY-LV206",
+        "version": "product",
+        "p_choice": 0.970779,
+        "candidate_ids": [
+          "HY-LV206"
+        ],
+        "phenomenon": "color_unlevel",
+        "known": {
+          "fiber": "锦纶氨纶",
+          "equipment": "气流染色机"
+        },
+        "customer_id": "customer:C03"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:24:00+08:00",
+      "kind": "turn",
+      "actor": "customer:C04",
+      "session_id": "sess:4",
+      "payload": {
+        "turn_id": "turn:sess:4:1",
+        "speaker": "customer",
+        "text": "涤纶布整理完摸起来硬邦邦的"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:24:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "harsh_hand",
+        "filled": {
+          "fiber": "涤纶"
+        },
+        "extracted_by": "llm",
+        "conditions_changed": true,
+        "turn_id": "turn:sess:4:1"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:24:00+08:00",
+      "kind": "ask_hint",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "slots": [
+          "process"
+        ],
+        "p": {
+          "process": 0.7352941176470589
+        },
+        "model": "jue_k"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:25:00+08:00",
+      "kind": "turn",
+      "actor": "customer:C04",
+      "session_id": "sess:4",
+      "payload": {
+        "turn_id": "turn:sess:4:2",
+        "speaker": "customer",
+        "text": "浸染的"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:25:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "harsh_hand",
+        "filled": {
+          "fiber": "涤纶",
+          "process": "浸染"
+        },
+        "extracted_by": "llm",
+        "conditions_changed": true,
+        "turn_id": "turn:sess:4:2"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:25:00+08:00",
+      "kind": "ask_hint",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "slots": [],
+        "p": {},
+        "model": "jue_k"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:25:00+08:00",
+      "kind": "match",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "phenomenon": "harsh_hand",
+        "known": {
+          "fiber": "涤纶",
+          "process": "浸染"
+        },
+        "customer_id": "customer:C04",
+        "candidate_ids": [],
+        "p_choice": {},
+        "p_none": 1.0,
+        "scored_by": "rule"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:25:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:4",
+      "payload": {
+        "question_id": "q:14",
+        "family": "escalate_need",
+        "object_id": "session:sess:4",
+        "template_id": "escalate_need"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:25:00+08:00",
+      "kind": "question_prepared",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "question_id": "q:14",
+        "family": "escalate_need",
+        "by": "sales:S02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "escalate",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "question_id": "q:14",
+        "requirement_id": "req:3",
+        "phenomenon": "harsh_hand",
+        "known": {
+          "fiber": "涤纶",
+          "process": "浸染"
+        },
+        "customer_id": "customer:C04",
+        "p_none": 1.0
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "requirement_created",
+      "actor": "sales:S02",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:3",
+        "question_id": "q:14",
+        "phenomenon": "harsh_hand",
+        "session_ids": [
+          "sess:4"
+        ],
+        "assigned_rd": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "question_resolved",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "question_id": "q:14",
+        "family": "escalate_need",
+        "object_id": "session:sess:4",
+        "template_id": "escalate_need",
+        "action": "sign",
+        "by": "sales:S02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "question_published",
+      "actor": "jue_k",
+      "session_id": "sess:4",
+      "payload": {
+        "question_id": "q:15",
+        "family": "reuse_product",
+        "object_id": "requirement:req:3",
+        "template_id": "reuse_product"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "涤纶 浸染 硬 手感",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:reuse_softness",
+          "ku:case:case:1",
+          "ku:sheet:HY-AY901",
+          "ku:sheet:HY-LV101",
+          "ku:sheet:HY-LV120"
+        ],
+        "n_blocked": 6,
+        "blocked_product_ids": [
+          "HY-LV101",
+          "HY-LV101"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "硬 手感 粗糙 涤纶",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:reuse_softness",
+          "ku:case:case:1",
+          "ku:sheet:HY-AY901",
+          "ku:sheet:HY-LV101",
+          "ku:sheet:HY-RC320"
+        ],
+        "n_blocked": 6,
+        "blocked_product_ids": [
+          "HY-LV101",
+          "HY-LV101"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "HY-SF520",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:reuse_softness",
+          "ku:sheet:HY-SF520",
+          "ku:usage:HY-SF520",
+          "ku:usage:HY-SF501",
+          "ku:sheet:HY-SF501"
+        ],
+        "n_blocked": 35,
+        "blocked_product_ids": [
+          "HY-SF520",
+          "HY-SF520",
+          "HY-SF501",
+          "HY-SF501",
+          "HY-LV120",
+          "HY-LV205",
+          "HY-LV206",
+          "HY-RC320",
+          "HY-LV120",
+          "HY-LV205",
+          "HY-LV206",
+          "HY-RC320",
+          "HY-LV206",
+          "HY-AC601",
+          "HY-AS951",
+          "HY-AY901",
+          "HY-CH310",
+          "HY-DS410",
+          "HY-FX301",
+          "HY-FX350",
+          "HY-LV101",
+          "HY-OB701",
+          "HY-PT801",
+          "HY-RP330",
+          "HY-AC601",
+          "HY-AS951",
+          "HY-AY901",
+          "HY-CH310",
+          "HY-DS410",
+          "HY-FX301",
+          "HY-FX350",
+          "HY-LV101",
+          "HY-OB701",
+          "HY-PT801",
+          "HY-RP330"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "retrieve",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "query": "HY-SF520",
+        "intent": "product_question",
+        "actor_level": 2,
+        "hit_ku_ids": [
+          "ku:case:case:reuse_softness",
+          "ku:sheet:HY-SF520",
+          "ku:usage:HY-SF520",
+          "ku:usage:HY-SF501",
+          "ku:sheet:HY-SF501"
+        ],
+        "n_blocked": 35,
+        "blocked_product_ids": [
+          "HY-SF520",
+          "HY-SF520",
+          "HY-SF501",
+          "HY-SF501",
+          "HY-LV120",
+          "HY-LV205",
+          "HY-LV206",
+          "HY-RC320",
+          "HY-LV120",
+          "HY-LV205",
+          "HY-LV206",
+          "HY-RC320",
+          "HY-LV206",
+          "HY-AC601",
+          "HY-AS951",
+          "HY-AY901",
+          "HY-CH310",
+          "HY-DS410",
+          "HY-FX301",
+          "HY-FX350",
+          "HY-LV101",
+          "HY-OB701",
+          "HY-PT801",
+          "HY-RP330",
+          "HY-AC601",
+          "HY-AS951",
+          "HY-AY901",
+          "HY-CH310",
+          "HY-DS410",
+          "HY-FX301",
+          "HY-FX350",
+          "HY-LV101",
+          "HY-OB701",
+          "HY-PT801",
+          "HY-RP330"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "reuse_proposed",
+      "actor": "pm:agent",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:3",
+        "product_id": "HY-SF520",
+        "ku_refs": [
+          "ku:case:case:reuse_softness"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-12T09:26:00+08:00",
+      "kind": "question_prepared",
+      "actor": "pm:agent",
+      "session_id": "sess:4",
+      "payload": {
+        "question_id": "q:15",
+        "family": "reuse_product",
+        "by": "pm:agent"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:27:00+08:00",
+      "kind": "requirement_edited",
+      "actor": "rd:R02",
+      "session_id": null,
+      "payload": {
+        "requirement_id": "req:3",
+        "layer": 2,
+        "index": -1,
+        "field": "reuse.customer_note",
+        "before": "适用于改善涤纶浸染后整理手感发硬问题，赋予织物柔软手感；建议先做小样确认效果，整理时推荐用量 1–2 % o.w.f.。",
+        "after": "适用于明显改善涤纶浸染后整理手感发硬问题，赋予织物柔软手感；建议先做小样确认效果，整理时推荐用量 1–2 % o.w.f.。"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:28:00+08:00",
+      "kind": "reuse_adopted",
+      "actor": "rd:R02",
+      "session_id": "sess:4",
+      "payload": {
+        "requirement_id": "req:3",
+        "product_id": "HY-SF520",
+        "session_id": "sess:4"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:28:00+08:00",
+      "kind": "question_resolved",
+      "actor": "rd:R02",
+      "session_id": "sess:4",
+      "payload": {
+        "question_id": "q:15",
+        "family": "reuse_product",
+        "object_id": "requirement:req:3",
+        "template_id": "reuse_product",
+        "action": "sign",
+        "by": "rd:R02"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:30:00+08:00",
+      "kind": "turn",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "turn_id": "turn:sess:4:3",
+        "speaker": "sales",
+        "text": "您好，研发这边确认了现成推荐产品：柔软剂 HY-SF520。这款产品适用于改善涤纶浸染后手感发硬的情况，整理时推荐用量为 1–2 % o.w.f.，建议您可以先做个小样测试看下效果。方便的话我们可以先给您安排寄样试用？"
+      }
+    },
+    {
+      "ts": "2026-10-12T09:30:00+08:00",
+      "kind": "extraction",
+      "actor": "sales:S02",
+      "session_id": "sess:4",
+      "payload": {
+        "intent": "need",
+        "phenomenon": "harsh_hand",
+        "filled": {
+          "fiber": "涤纶",
+          "process": "浸染"
+        },
+        "extracted_by": "llm",
+        "conditions_changed": false,
+        "turn_id": "turn:sess:4:3"
+      }
+    }
+  ]
+}

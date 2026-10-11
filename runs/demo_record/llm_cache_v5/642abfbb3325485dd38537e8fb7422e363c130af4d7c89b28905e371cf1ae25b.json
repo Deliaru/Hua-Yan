@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791718926972870033-1403","name":"search_knowledge","arguments":{"query":"气流染色机","kind":"translation"}}],"usage":{"input_tokens":5191,"output_tokens":25},"latency_ms":4750.251899997238,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

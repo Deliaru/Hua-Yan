@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791719067193000924-1427","name":"search_knowledge","arguments":{"kind":"translation","query":"锦纶 气流 匀染"}}],"usage":{"input_tokens":6478,"output_tokens":29},"latency_ms":5238.086399993335,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

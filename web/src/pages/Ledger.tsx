@@ -4,10 +4,6 @@ import { api } from "../api";
 import { useApp, useData, useLabels } from "../ctx";
 import { Empty, Group, PageHead } from "../components/ui";
 
-// 看不到原文的知识，接口给的标题是「研发 <归属人 id> 的转化知识」占位；归属已在左侧显示，这里只说原文不可见
-const titleOf = (title: string, scrub: (t: string) => string) =>
-  /^研发 \S+ 的转化知识$/.test(title) ? "转化知识 · 原文不可见" : scrub(title);
-
 export function Ledger() {
   const { me } = useApp();
   const L = useLabels();
@@ -22,7 +18,7 @@ export function Ledger() {
         {mine.map((s) => (
           <div key={s.ku_id} className="row">
             <span className="tag w-7 justify-center">L{s.level}</span>
-            <span className="min-w-0 flex-1 truncate text-[14px]">{titleOf(s.title, L.scrub)}</span>
+            <span className="min-w-0 flex-1 truncate text-[14px]">{s.title}</span>
             <span className="num shrink-0 text-[13px] text-ink-2">被引用 {s.n_cited} 次 · {s.points} 分</span>
           </div>
         ))}
@@ -33,7 +29,7 @@ export function Ledger() {
           <div key={s.ku_id} className="row">
             <span className="w-28 shrink-0 truncate text-[13px] text-ink-2">{L.name(s.owner)}</span>
             <span className="tag w-7 justify-center">L{s.level}</span>
-            <span className="min-w-0 flex-1 truncate text-[14px]">{titleOf(s.title, L.scrub)}</span>
+            <span className="min-w-0 flex-1 truncate text-[14px]">{s.title}</span>
             <span className="num shrink-0 text-[13px] text-ink-2">被引用 {s.n_cited} 次 · {s.points} 分</span>
           </div>
         ))}

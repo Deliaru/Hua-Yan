@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"match_translations-1791718917884307890-1401","name":"match_translations","arguments":{"phenomenon":"color_unlevel","text":"锦氨弹力布 气流缸 低浴比"}}],"usage":{"input_tokens":4367,"output_tokens":38},"latency_ms":6710.027099994477,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}
