@@ -5,7 +5,7 @@ import { api } from "../api";
 import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { AgentMessage, AskHint, Question, RecommendationCard, SessionSummary, SessionView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
-import { useGlow } from "../components/Guide";
+import { useGlow, useGuideArg } from "../components/Guide";
 import { Popover } from "../components/Controls";
 import { Plus } from "../components/Icons";
 import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead } from "../components/ui";
@@ -15,6 +15,7 @@ function SalesSidebar({ mine, current, choose }: { mine: SessionSummary[]; curre
   const L = useLabels();
   const start = (customer: string) => api.startSession(customer, me).then((s) => { choose(s.id); refresh(); }, fail);
   const glow = useGlow("new-session");
+  const pickCustomer = useGuideArg("new-session");
   return (
     <>
       <SideHead aside={
@@ -23,7 +24,7 @@ function SalesSidebar({ mine, current, choose }: { mine: SessionSummary[]; curre
             <>
               <p className="px-2.5 pb-1 pt-0.5 text-[12px] text-ink-2">新建客户会话</p>
               {meta.actors.filter((a) => a.role === "customer").map((c) => (
-                <button key={c.id} className="menu-item" onClick={() => { start(c.id); close(); }}>{L.name(c.id)}</button>
+                <button key={c.id} className={`menu-item ${c.id === pickCustomer ? "glow font-semibold" : ""}`} onClick={() => { start(c.id); close(); }}>{L.name(c.id)}</button>
               ))}
             </>
           )}
@@ -169,8 +170,8 @@ function Composer({ v, reply, setReply, replyNotes }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fromAgent = !!v.reply_draft && reply === v.reply_draft;
-  const ask = useGlow("reply"), rec = useGlow("send-rec");
-  const glow = ask || rec;
+  const ask = useGlow("reply"), rec = useGlow("send-rec"), sendNow = useGlow("send");
+  const glow = ask || rec || sendNow;
   const pick = ask && !reply.trim();   // 导览：先挑追问提词（或让 Agent 起草），有了话再「发出」
   const send = () => {
     if (!reply.trim() || busy) return;
@@ -406,12 +407,14 @@ function MarketEval({ q }: { q: Question }) {
   const [note, setNote] = useState("");
   const req = q.refs.requirement_id;
   const glow = useGlow("sign:market_eval");
+  const scripted = useGuideArg("sign:market_eval");   // 回放部署：台词里的客户评价原因
   return (
     <Group className={glow ? "guide-scope" : ""} title={<span className="text-attn-ink">客户评价</span>} aside={<Score q={q} />}>
       <div className="row attn-edge !items-start !py-3">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <p className="text-[14px]">{L.scrub(q.title)}</p>
           <Field value={note} onChange={setNote} placeholder="原因（客户怎么说）" />
+          {scripted && note !== scripted && <div><button type="button" className="chip glow" onClick={() => setNote(scripted)}>演示自动填入</button></div>}
           <div className="flex flex-wrap gap-2">
             <Act label="通过" run={() => api.marketEval(req, "pass", note, me)} />
             <Act kind="plain" label="不通过" run={() => api.marketEval(req, "fail", note, me)} />

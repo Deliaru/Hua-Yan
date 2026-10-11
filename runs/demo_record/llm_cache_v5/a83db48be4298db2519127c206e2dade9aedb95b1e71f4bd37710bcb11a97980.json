@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"leak_check-1791726731440910777-1557","name":"leak_check","arguments":{"req_id":"req:1"}}],"usage":{"input_tokens":8037,"output_tokens":20},"latency_ms":12908.56812299171,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

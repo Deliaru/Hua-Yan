@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
 import { useApp, useData, useLabels } from "../ctx";
-import type { Question, RequirementView, SessionSummary, SessionView } from "../types";
+import type { NextAction, Question, RequirementView, SessionSummary, SessionView } from "../types";
 import { STEPS } from "../pages/Overview";
 import { ChevronDown } from "./Icons";
 
@@ -31,13 +31,14 @@ const DO: Record<string, [number, string]> = {
   leak_risk: [8, "觉发现有人反复检索同一产品的机理和配方，可能在拼凑保密知识；主管判断是否冻结其高层级检索权限"],
 };
 
-// 导览指向的按钮：sign:<family> 签字区的主按钮；reply 追问提词与「发出」；customer「演示自动填入」与「录入」；
-// new-session 新建客户会话；trial 试样通过。只在轮到当前身份时高亮。
-type Target = { who: string | null; target: string | null };
-let current: Target = { who: null, target: null };
+// 导览指向的按钮：sign:<family> 签字区的主按钮；reply 追问提词与「发出」；send「发出」；send-rec 填进发给客户；
+// customer「演示自动填入」与「录入」；new-session 新建客户会话；trial 试样通过；回放部署另有 chat / edit / reuse-note。
+// arg 是台词要填的内容（客户 id、对 Agent 说的话、要补的文字），由对应输入处的「演示自动填入」使用。只在轮到当前身份时高亮。
+type Target = { who: string | null; target: string | null; arg: string | null };
+let current: Target = { who: null, target: null, arg: null };
 const subs = new Set<() => void>();
 function publish(t: Target) {
-  if (t.who === current.who && t.target === current.target) return;
+  if (t.who === current.who && t.target === current.target && t.arg === current.arg) return;
   current = t;
   subs.forEach((f) => f());
 }
@@ -49,8 +50,19 @@ export function useGlow(target: string): boolean {
   const g = useGuide();
   return g.who === me && g.target === target;
 }
+// 轮到当前身份做 target 时，台词要填的内容
+export function useGuideArg(target: string): string | null {
+  const g = useGuide();
+  return useGlow(target) ? g.arg : null;
+}
 
-type Plan = { step: number; who: string | null; todo: string; raised: string | null; target: string | null };
+type Plan = { step: number; who: string | null; todo: string; raised: string | null; target: string | null; arg?: string | null };
+
+// 台词里签字动作 → 决策 family（与 scripts/demo_mainline.py 的 FAMILIES 一致）
+const SIGN_FAMILY: Record<string, string> = {
+  escalate: "escalate_need", "reuse/adopt": "reuse_product", merge: "opportunity", accept: "accept_requirement",
+  confirm: "confirm_translation", contribute: "contribution", "market-eval": "market_eval", points: "seal_points", release: "release",
+};
 
 export function Guide() {
   const { meta, me, version, switchTo } = useApp();
@@ -76,14 +88,18 @@ export function Guide() {
     const view = last ? await api.requirement(last.id, rd) : null;
     const s = sessions[sessions.length - 1];
     const session = s ? await api.session(s.id, s.sales_id) : null;
-    return { sessions, reqs, view, session, open: [...open.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)) };
+    const script = meta.status.replay ? await api.nextAction() : null;
+    return { sessions, reqs, view, session, script, open: [...open.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)) };
   }, [me, version]);
   const customers = meta.actors.filter((a) => a.role === "customer").map((a) => a.id);
-  const plan = state && derive(state, sales, rd, customers, L);
+  // 回放部署按台词引导（偏离台词会缓存未命中）；现场按系统状态推断
+  const plan = state && (state.script ? fromScript(state.script, state.view?.requirement.assigned_rd ?? rd, L)
+    : derive(state, sales, rd, customers, L));
   const key = plan ? `${plan.step}|${plan.who}|${plan.target}|${plan.raised}` : "";
   useEffect(() => { if (key) setOpen(true); }, [key]);   // 走到新的一步自动展开
-  useEffect(() => publish({ who: plan?.who ?? null, target: plan?.target ?? null }), [plan?.who, plan?.target]);
-  useEffect(() => () => publish({ who: null, target: null }), []);
+  useEffect(() => publish({ who: plan?.who ?? null, target: plan?.target ?? null, arg: plan?.arg ?? null }),
+            [plan?.who, plan?.target, plan?.arg]);
+  useEffect(() => () => publish({ who: null, target: null, arg: null }), []);
   if (!plan) return null;
   const { step, who, todo, raised } = plan;
   const mine = who === me;
@@ -136,7 +152,46 @@ export function Guide() {
   );
 }
 
-type GuideState = { sessions: SessionSummary[]; view: RequirementView | null; session: SessionView | null; open: Question[] };
+type GuideState = {
+  sessions: SessionSummary[]; view: RequirementView | null; session: SessionView | null; script: NextAction | null; open: Question[];
+};
+
+// 回放部署：下一步就是台词里的下一个动作；要填的文字给出原文并由「演示自动填入」填好，保证与录制一致
+function fromScript(n: NextAction, trialBy: string, L: ReturnType<typeof useLabels>): Plan {
+  const no = `台词 ${Math.min(n.index + 1, n.total)}/${n.total}`;
+  if (!n.action) return { step: 9, who: null, target: null, raised: null,
+    todo: "录制好的演示主线与支线已全部走完。可以点右上角「载入检查点」回到某一步，或「重置进度」从头再来" };
+  const [kind, b] = Object.entries(n.action)[0];
+  const salesOf = (alias: string) => n.sessions[alias].sales;
+  switch (kind) {
+    case "start":
+      return { step: 0, who: b.sales, target: "new-session", arg: b.customer, raised: no,
+        todo: `点左侧「客户会话」右边的 ＋，选「${L.name(b.customer)}」，开始一段新的客户会话` };
+    case "customer":
+      return { step: 1, who: salesOf(b.session), target: "customer", raised: no,
+        todo: `演示者扮客户：点沟通记录底部的「演示自动填入」，再点「录入」。客户说：「${b.text}」` };
+    case "send":
+      return { step: 1, who: salesOf(b.session), target: "send", raised: no,
+        todo: "业务员的 Agent 已把要回的话填进底部「发给客户」；看一遍，点「发出」" };
+    case "chat":
+      return { step: 1, who: b.actor, target: "chat", arg: b.text, raised: no,
+        todo: `人说意图、Agent 起草：在右下「与 Agent 协作」点「演示自动填入」再发送，对 Agent 说：「${b.text}」` };
+    case "sign": {
+      const family = SIGN_FAMILY[b.action];
+      return { step: DO[family][0], who: b.actor, target: `sign:${family}`, arg: b.args.note ?? null, todo: DO[family][1],
+        raised: `${no} · 觉提出「${L.family(family)}」，已准备好，等 ${L.name(b.actor)} 签字` };
+    }
+    case "edit":
+      return b.path === "req-item"
+        ? { step: 6, who: b.actor, target: "edit", arg: JSON.stringify(b.args), raised: no,
+            todo: `研发亲自改一条：在「化学要点 · L3」里找到含「${b.args.contains}」的那条，点「演示自动填入」（会在末尾补上「${b.args.append}」），再点「保存」` }
+        : { step: 3, who: b.actor, target: "reuse-note", arg: JSON.stringify(b.args.replace), raised: no,
+            todo: `研发改给客户的说明：点「演示自动填入」把「${b.args.replace[0]}」改成「${b.args.replace[1]}」，点「保存修改」` };
+    default:   // trial
+      return { step: 7, who: trialBy, target: "trial", raised: no,
+        todo: "研发去实验室做试样。演示里用需求单上的「试样通过」按钮代替实验室系统回传结果" };
+  }
+}
 
 // 现在该做的事与要按的按钮，全部由会话、需求单状态与问题总线推断
 function derive(state: GuideState, sales: string, rd: string, customers: string[], L: ReturnType<typeof useLabels>): Plan {

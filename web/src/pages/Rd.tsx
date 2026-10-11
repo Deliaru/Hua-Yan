@@ -6,7 +6,7 @@ import { ACTION, REQ_STATUS, Side, hhmm, useApp, useData, useLabels } from "../c
 import type { AgentMessage, CitedKnowledge, LeakHit, Question, ReqItem, RequirementView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
-import { useGlow } from "../components/Guide";
+import { useGlow, useGuideArg } from "../components/Guide";
 import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead } from "../components/ui";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
@@ -256,6 +256,10 @@ function Point({ n, index, item, view, cited, l2, editable, notes, select }: {
   const L = useLabels();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
+  // 回放部署：台词要求在含 contains 的条目末尾补上 append
+  const scriptArg = useGuideArg("edit");
+  const scripted = scriptArg ? JSON.parse(scriptArg) as { contains: string; append: string } : null;
+  const mine = scripted && item.text.includes(scripted.contains) ? item.text + scripted.append : null;
   const { term, body } = splitArrow(item.text);
   const basis = item.ku_refs.map((r) => cited[r]).filter(Boolean);
   const from = l2.find((p) => p.quote_refs.some((q) => item.quote_refs.includes(q)));
@@ -268,7 +272,7 @@ function Point({ n, index, item, view, cited, l2, editable, notes, select }: {
             <div className="flex flex-col gap-1.5">
               <Field value={text} onChange={setText} rows={3} label={`第 ${n + 1} 条`} />
               <span className="flex gap-2">
-                <Act label="保存" run={() => api.editItem(view.requirement.id, index, { ...item, text }, me).then(() => setEditing(false))} />
+                <Act label="保存" glow={!!mine && text === mine} run={() => api.editItem(view.requirement.id, index, { ...item, text }, me).then(() => setEditing(false))} />
                 <button type="button" className="btn btn-quiet" onClick={() => { setText(item.text); setEditing(false); }}>取消</button>
               </span>
             </div>
@@ -277,6 +281,9 @@ function Point({ n, index, item, view, cited, l2, editable, notes, select }: {
             {item.edited_by == null ? <AgentMark /> : <span>{L.name(item.edited_by)} 修改</span>}
             {basis.map((c) => <KnowledgeChip key={c.ku_id} c={c} />)}
             {editable && !editing && <button type="button" className="link !text-[12px]" onClick={() => setEditing(true)}>修改</button>}
+            {editable && mine && text !== mine && (
+              <button type="button" className="chip glow" onClick={() => { setText(mine); setEditing(true); }}>演示自动填入</button>
+            )}
           </div>
           <button className="mt-1 text-[12px] text-accent" onClick={select}>就此条与 Agent 协作</button>
           <Notes notes={notes.filter((m) => m.role === "assistant")} />
@@ -449,6 +456,8 @@ function ReuseReview({ q, view, dismiss }: { q: Question; view: RequirementView;
   const r = req.reuse!;
   const [note, setNote] = useState(r.customer_note);
   useEffect(() => setNote(r.customer_note), [r.customer_note]);
+  const scriptArg = useGuideArg("reuse-note");   // 回放部署：台词要求把说明里的一个词换掉
+  const scripted = scriptArg ? r.customer_note.replace(...(JSON.parse(scriptArg) as [string, string])) : null;
   const [reason, setReason] = useState("");
   const cases = view.cited.filter((c) => r.ku_refs.includes(c.ku_id));
   return (
@@ -464,7 +473,8 @@ function ReuseReview({ q, view, dismiss }: { q: Question; view: RequirementView;
           <p className="flex items-center gap-2">{note === r.customer_note && <AgentMark who="产品经理 Agent 起草" />}
             <span className="text-[12px] text-ink-2">保存时做泄露自查，命中则门面拒绝并给出句序号</span></p>
           <Field value={note} onChange={setNote} rows={3} label="给客户的说明" />
-          {note !== r.customer_note && <div><Act kind="plain" label="保存修改" run={() => api.reuseNote(req.id, note, me)} /></div>}
+          {scripted && note !== scripted && <div><button type="button" className="chip glow" onClick={() => setNote(scripted)}>演示自动填入</button></div>}
+          {note !== r.customer_note && <div><Act kind="plain" label="保存修改" glow={note === scripted} run={() => api.reuseNote(req.id, note, me)} /></div>}
         </div>
       </div>
       <div className="row !items-start">

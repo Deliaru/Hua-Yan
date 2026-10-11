@@ -62,7 +62,7 @@ function DistortionBlock() {
              + `（只问 ${a.habit_slots.map(L.slot).join("、")}；现象说笼统 ${a.vague_prob}、漏槽位 ${a.drop_prob}、记错 ${a.swap_prob}），企业数据到位后替换。`}>
       <Table head={["指标", ...groups]}
              rows={Object.entries(d.labels).map(([k, label]) => [label, ...groups.map((g) => fmt(k, d.metrics[g][k]))])} />
-      <Figure src="/reports/distortion/distortion.png" alt="失真对照" />
+      <Figure src="reports/distortion/distortion.png" alt="失真对照" />
     </Group>
   );
 }
@@ -81,8 +81,8 @@ function JueKBlock() {
       <Table head={[`定时发现（${s.weeks.length} 个测试周，真实链路事件）`, "注入命中", "困难负样本误报"]}
              rows={([["Jue-K", s.jue_k], ["原型规则", s.jue_proto_rule]] as const).map(([n, d]) =>
                [n, `${d.hits} / ${d.positives}`, `${d.hard_false_alarms} / ${d.hard_negatives}`])} />
-      <Figure src="/reports/jue_k/reliability.png" alt="可靠性图" />
-      <Figure src="/reports/jue_k/ask_curve.png" alt="追问操作点" />
+      <Figure src="reports/jue_k/reliability.png" alt="可靠性图" />
+      <Figure src="reports/jue_k/ask_curve.png" alt="追问操作点" />
     </Group>
   );
 }
@@ -107,8 +107,8 @@ function WeekBlock() {
                return [`${DISCOVERER[d] ?? d} · ${p === "handle" ? "处置" : "不处置"}`, c.found_at?.slice(5, 16).replace("T", " ") ?? "—",
                        c.escalations_after, c.l1_hits_after, c.all_escalations];
              })} />
-      <Figure src="/reports/week/week_detection.png" alt="发现时间线" />
-      <Figure src="/reports/week/week_escalations.png" alt="按天升级次数" />
+      <Figure src="reports/week/week_detection.png" alt="发现时间线" />
+      <Figure src="reports/week/week_escalations.png" alt="按天升级次数" />
     </Group>
   );
 }

@@ -2,11 +2,12 @@
 // 身份由界面选择后作为 viewer / by 传入，裁剪与可签条件都在门面里；门面拒绝时原样显示它返回的 error。
 import type {
   Conversation, ContributionStat, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
-  RequirementView, SessionSummary, SessionView, SheetDraft,
+  RequirementView, SessionSummary, SessionView, SheetDraft, NextAction,
 } from "./types";
 
+// 相对路径：页面可部署在子路径下（如 /huayan-demo/）
 async function call<T>(path: string, body?: object): Promise<T> {
-  const r = await fetch(`/api/${path}`, body ? {
+  const r = await fetch(`api/${path}`, body ? {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -79,6 +80,8 @@ export const api = {
 
   // 演示（WP-I2）：「下一句」只填进「客户说」输入框，由人发出；检查点只在服务以演示配置启动时可用
   nextLine: (session: string) => call<{ text: string | null }>(`demo/next?${q({ session })}`),
+  // 回放部署：台词里下一步人要做的事；现场模式返回 null
+  nextAction: () => call<NextAction | null>("demo/next-action"),
   checkpoints: () => call<string[]>("demo/checkpoints"),
   loadCheckpoint: (name: string) => call("demo/load", { name }),
 };

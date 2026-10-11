@@ -2,6 +2,7 @@
 // 对话常驻底部、历史可折叠；对话里没有签字按钮，Agent 提议的生效动作只出现在工作面签字区。
 import { useState } from "react";
 import { api } from "../api";
+import { useGuideArg } from "./Guide";
 import { useApp, useData } from "../ctx";
 import type { AgentMessage } from "../types";
 import { ArrowUp, ChevronRight } from "./Icons";
@@ -40,6 +41,7 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const scripted = useGuideArg("chat");   // 回放部署：台词里人要对 Agent 说的话
   // 系统消息是派单记录（带内部编号）；带 target 的批注已挂在工作面上，历史里只留人与 Agent 的对话
   const history = (conv?.messages ?? []).filter((m) => m.role !== "system");
   const send = () => {
@@ -81,8 +83,11 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
                       onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                       placeholder={!agentOnline ? "Agent 离线" : external ? "如：把这句说得客气点" : "如：第 2 条加上不能影响色光"}
                       className="flex-1 resize-none bg-transparent text-[13px] leading-5 outline-none placeholder:text-ink-3" />
+            {scripted && text !== scripted && (
+              <button type="button" className="chip glow mb-0.5 shrink-0" onClick={() => setText(scripted)}>演示自动填入</button>
+            )}
             <button aria-label="发给 Agent" disabled={!agentOnline || busy || !text.trim()}
-                    className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-white transition-opacity disabled:opacity-15">
+                    className={`${scripted && text === scripted ? "glow" : ""} mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-white transition-opacity disabled:opacity-15`}>
               <ArrowUp />
             </button>
           </form>
