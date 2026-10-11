@@ -13,6 +13,7 @@ from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionStat, Dec
     RequirementView, Resolution, RunStatus, Session, SessionView, SheetDraft, Trial)
 from huayan.domain import consistent, load_seeds
 from huayan.escalation import flow
+from huayan.escalation.translate import leak_hits
 from huayan.events import EventLog
 from huayan.gateway import build_gateway
 from huayan.jev import Jev
@@ -121,6 +122,11 @@ class HuayanApp:
         if speaker not in ("customer", "sales") or not text.strip():
             raise ValueError("需要有效发言角色与非空文本")
         current = _find(self._sessions, session_id, "会话")
+        if speaker == "sales":
+            sealed = [item for req in self._requirements.values() for item in req.sealed]
+            hits = leak_hits(text, sealed, [], self.kb)
+            if hits:
+                raise ValueError([hit.model_dump() for hit in hits])
         previous = current.need
         asks = [q for q in self.bus.list(family="ask_back") if q.refs["session_id"] == session_id]
         session = handle_turn(current, speaker, text, self, answering=bool(asks))

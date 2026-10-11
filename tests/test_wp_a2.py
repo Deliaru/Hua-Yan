@@ -17,6 +17,7 @@ def test_l1_recommend_and_escalate(tmp_path, monkeypatch):
     config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"))
     path = tmp_path / "app.yaml"
     path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    _check_sales_send_interception(HuayanApp.build(str(path)))
     app = HuayanApp.build(str(path))
     session = app.start_session("customer:C01", "sales:S01")
     session = app.add_turn(session.id, "customer", "染完布面深一块浅一块")
@@ -253,6 +254,57 @@ def test_l1_recommend_and_escalate(tmp_path, monkeypatch):
     released = app.release_product(updated.id, "pm:P01")
     assert not released.mechanism and not released.formula
     assert app.kb.get("ku:formula:T-206", app.actors["rd:R02"]).text
+
+
+def _check_sales_send_interception(app):
+    """只验证发送边界；手工既有封存记录不替代升级、封存签字流程验收。"""
+    session = app.start_session("customer:C01", "sales:S01")
+    other = app.start_session("customer:C02", "sales:S01")
+    secrets = ["（模拟）先投甲料再降温静置十分钟", "（模拟）乙料按七比三分段混合"]
+    for n, (secret, status) in enumerate(zip(secrets, ("rd_confirmed", "released")), 1):
+        req = Requirement(id=f"req:send:{n}", question_id=f"q:send:{n}", session_ids=[other.id],
+            phenomenon="color_unlevel", known_slots={}, assigned_rd="rd:R01", status=status,
+            sealed=[secret], created_at=get_clock().now())
+        app._requirements[req.id] = req
+        app._save_requirement(req)
+
+    def snapshot():
+        return (
+            [s.model_dump() for s in app.sessions()],
+            [r.model_dump() for r in app._requirements.values()],
+            [e.model_dump() for e in app.events.query()],
+            [q.model_dump() for q in app.bus.list(status=None)],
+            [r.model_dump() for r in app.audit.list()],
+            [e.model_dump() for e in app.ledger.list()],
+            {p.relative_to(app.run_dir).as_posix(): p.read_bytes()
+             for p in app.run_dir.rglob("*") if p.is_file()},
+        )
+
+    # 即使本会话没有需求单，也检查其他会话及已发布单的封存项。
+    # 拒绝必须先于 turn/extraction、落盘、觉评估、审计、积分等任何写入。
+    l3_term = next(t.chem_term for t in app.seeds.translations if t.level == 3)
+    for text, expected in (
+        (f"请先试样。{secrets[0]}", [{"index": 1, "source": "sealed"}]),
+        (secrets[1], [{"index": 0, "source": "sealed"}]),
+        (l3_term, [{"index": 0, "source": "l3_term"}]),
+        (f"{secrets[0]}；{l3_term}",
+         [{"index": 0, "source": "sealed"}, {"index": 1, "source": "l3_term"}]),
+    ):
+        before = snapshot()
+        with pytest.raises(ValueError) as error:
+            app.add_turn(session.id, "sales", text)
+        assert error.value.args == (expected,)  # 不含命中正文、知识或需求单标识。
+        assert snapshot() == before
+
+    # 客户原话是材料，不能按业务员对外发送规则丢弃。
+    customer = app.add_turn(session.id, "customer", secrets[0])
+    assert customer.turns[-1].text == secrets[0] and customer.turns[-1].n == 1
+    safe = app.add_turn(session.id, "sales", "请先做小样确认用量。")
+    assert safe.turns[-1].speaker == "sales" and safe.turns[-1].n == 2
+    saved = json.loads((app.run_dir / "sessions/sess_1.json").read_text(encoding="utf-8"))
+    assert saved["turns"][-1]["text"] == safe.turns[-1].text
+    assert len(app.events.query(kinds=["turn"])) == 2
+    assert not app.bus.list(status=None)  # 拦截不生成研发问题。
 
 
 def _check_l1_match_without_automatic_escalation(app):
