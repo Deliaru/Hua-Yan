@@ -2,7 +2,7 @@
 // 左边是这一步工作面上的画面（摘自录制运行的原文与概率），右边讲这一步的业务价值与创新；最后是未来展望。
 // 只读、不调用接口，不改变共享的演示进度；想亲手操作去「沉浸工作面」。数字出处见各章「数据」，与 docs/PITCH.md 一致。
 import { useEffect, useState } from "react";
-import { LayerChip } from "../components/ui";
+import { LayerChip, ReplayNote } from "../components/ui";
 
 type Layer = 0 | 1 | 2 | 3;
 interface Chapter {
@@ -316,6 +316,7 @@ function Future() {
       <p className="text-center text-[15px] font-semibold leading-6">
         今天的 Agent 等着人给任务；化言让企业里「该处理什么」由一个可训练的发现层持续提出，<br />交给 Agent 起草、人来决定。它不替代人做决定，它让每一个该有人决定的时刻都不被错过。
       </p>
+      <ReplayNote />
     </div>
   );
 }

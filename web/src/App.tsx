@@ -18,6 +18,7 @@ import { Ledger } from "./pages/Ledger";
 import { Overview } from "./pages/Overview";
 import { Story } from "./pages/Story";
 import { Guide, useGuide } from "./components/Guide";
+import { RECORDING_NOTE } from "./components/ui";
 
 const PAGES = [
   ["overview", "架构总览", NavArch],
@@ -139,43 +140,51 @@ function Name({ id }: { id: string }) {
   return <>{useLabels().name(id)}</>;
 }
 
-// 状态指示：常驻工具栏，一行写运行方式与降级项数，点开逐项看（铁律 6：降级可见，降级项标黄）
+// 状态指示：常驻工具栏，一行写运行方式，点开逐项看（铁律 6：降级可见，降级项标黄）
+// 回放时大模型与 OneJev 的输出来自录制缓存，逐项写「录制回放」，不写「在线」；觉（Jue-K）是本地推理，回放时也在实时运行
+
 function StatusMenu({ s }: { s: RunStatus }) {
-  const jev: Record<string, string> = { onejev: "Jev · OneJev", mock: "Jev · 桩", llm: "Jev · 大模型降级" };
-  const jue: Record<string, string> = { jue_k: "觉 · Jue-K", jue_proto: "觉 · 规则原型", onejev: "觉 · OneJev" };
-  const items: [string, boolean][] = [
-    ["数据 · 模拟", false],
-    ...(s.seeds_placeholder ? [["种子 · 占位", true] as [string, boolean]] : []),
-    [jev[s.system1_impl] ?? `Jev · ${s.system1_impl}`, s.system1_impl !== "onejev"],
-    [jue[s.realtime_model] ?? `觉 · ${s.realtime_model}`, s.realtime_model === "jue_proto"],
-    [s.extractor === "llm" ? "抽取 · 大模型" : "抽取 · 规则", s.extractor !== "llm"],
-    [s.gateway_mock ? "Agent · 离线" : "Agent · 在线", s.gateway_mock],
-    [s.replay ? "运行 · 回放" : "运行 · 现场", s.replay],
+  const R = "录制回放";
+  const jev: Record<string, string> = { onejev: "OneJev", mock: "桩", llm: "大模型降级" };
+  const jue: Record<string, string> = { jue_k: "Jue-K · 本地实时", jue_proto: "规则原型", onejev: "OneJev" };
+  // [项, 值, 种类]：ok 正常运行，warn 降级，replay 录制回放
+  type Kind = "ok" | "warn" | "replay";
+  const llm = (on: string): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${on} · ${R}`, "replay"] : [`${on} · 在线`, "ok"];
+  const items: [string, string, Kind][] = [
+    ["数据", "模拟", "ok"],
+    ...(s.seeds_placeholder ? [["种子", "占位", "warn"] as [string, string, Kind]] : []),
+    ["Agent", ...llm("大模型")],
+    ["抽取", ...(s.extractor === "llm" ? llm("大模型") : ["规则", "warn"] as [string, Kind])],
+    ["Jev", ...(s.system1_impl !== "onejev" ? [jev[s.system1_impl] ?? s.system1_impl, "warn"] as [string, Kind]
+      : s.replay ? [`OneJev · ${R}`, "replay"] as [string, Kind] : ["OneJev · 在线", "ok"] as [string, Kind])],
+    ["觉", jue[s.realtime_model] ?? s.realtime_model, s.realtime_model === "jue_proto" ? "warn" : "ok"],
   ];
-  const degraded = items.filter(([, w]) => w).length;
-  const mode = s.replay ? "记录回放" : s.gateway_mock ? "离线演示" : "现场运行";
+  const degraded = items.filter(([, , k]) => k === "warn").length;
+  const mode = s.replay ? "录制回放" : s.gateway_mock ? "离线演示" : "现场运行";
+  const sub = s.replay ? "非在线运行" : degraded ? `${degraded} 项降级` : "全部正常";
+  const TAG: Record<Kind, string> = { ok: "text-ink", warn: "tag tag-warn", replay: "tag" };
   return (
     <Popover align="right" trigger={(toggle) => (
       <button onClick={toggle} className="flex h-7 items-center gap-2 rounded-full px-2.5 text-[12px] hover:bg-fill">
-        <i className={`h-[7px] w-[7px] rounded-full ${degraded ? "bg-[#f5b400]" : "bg-[#30c25b]"}`} />
+        <i className={`h-[7px] w-[7px] rounded-full ${s.replay ? "bg-[#8e8e93]" : degraded ? "bg-[#f5b400]" : "bg-[#30c25b]"}`} />
         <span className="font-semibold">{mode}</span>
-        <span className={degraded ? "text-warn-ink" : "text-ink-2"}>{degraded ? `${degraded} 项降级` : "全部正常"}</span>
+        <span className="text-ink-2">{sub}</span>
         <span className="text-ink-3"><ChevronDown /></span>
       </button>
     )}>
       {() => (
-        <div className="w-[240px] p-1">
+        <div className="w-[300px] p-1">
           <p className="eyebrow px-2 pb-1.5 pt-1">运行状态</p>
-          {items.map(([t, warn]) => {
-            const [k, v] = t.includes(" · ") ? t.split(" · ") : [t, ""];
-            return (
-              <div key={t} className="flex items-center justify-between rounded-[6px] px-2 py-1 text-[13px]">
-                <span className="text-ink-2">{k}</span>
-                <span className={warn ? "tag tag-warn" : "text-ink"}>{v || (warn ? "是" : "✓")}</span>
-              </div>
-            );
-          })}
-          <p className="px-2 pt-1.5 text-[11px] leading-4 text-ink-3">黄色为降级运行，结果上同样标注来源。</p>
+          {items.map(([k, v, kind]) => (
+            <div key={k} className="flex items-center justify-between rounded-[6px] px-2 py-1 text-[13px]">
+              <span className="text-ink-2">{k}</span>
+              <span className={TAG[kind]}>{v}</span>
+            </div>
+          ))}
+          {s.replay && <p className="mx-2 mt-2 rounded-[8px] bg-fill px-2.5 py-2 text-[12px] leading-[18px] text-ink">{RECORDING_NOTE}</p>}
+          <p className="px-2 pt-1.5 text-[11px] leading-4 text-ink-3">
+            {s.replay ? "录制回放：Agent、抽取与 Jev 的输出是录制时的真实结果，只能按演示台词走；觉在本地实时计算。" : ""}
+            黄色为降级运行，结果上同样标注来源。</p>
         </div>
       )}
     </Popover>

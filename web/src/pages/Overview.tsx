@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useData } from "../ctx";
-import { Group, PageHead } from "../components/ui";
+import { Group, PageHead, ReplayNote } from "../components/ui";
 
 const X = [250, 432, 614, 796, 978, 1160];
 const Y = { 1: 164, 2: 296, 3: 428 } as const;
@@ -72,6 +72,7 @@ export function Overview() {
     <div className="mx-auto flex max-w-[1240px] flex-col gap-8 px-8 pb-16 pt-7">
       <PageHead title="架构总览"
                 subtitle="化言把一条会失真的传话链，变成逐层转译、每句可回查、由觉推动、人来签字的协同流程。" />
+      <ReplayNote />
       <FlowDiagram />
       <Innovations />
       <Efficiency />
