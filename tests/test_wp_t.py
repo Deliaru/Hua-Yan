@@ -64,6 +64,16 @@ def test_layers_cite_own_knowledge_and_keep_quotes(mini_seeds, sim_clock):
     assert actual_hypothesis == "参考 T-205 的机理：（模拟机理）与染料竞争染座，均匀上染"
     assert [h.model_dump() for h in leak_hits("与染料竞争染座，均匀上染", [], [actual_hypothesis], kb)] == [
         {"index": 0, "source": "hypothesis"}]
+    # 来源后括号中可能就是业务正文；仅移除明确的模拟标签，不能删掉整段括号。
+    for body in ("（与染料竞争染座，均匀上染）", "(与染料竞争染座，均匀上染)",
+                 "（模拟机理）（与染料竞争染座，均匀上染）"):
+        parenthesized_hypothesis = f"参考 T-205 的机理：{body}"
+        assert [h.model_dump() for h in leak_hits("与染料竞争染座，均匀上染", [], [parenthesized_hypothesis], kb)] == [
+            {"index": 0, "source": "hypothesis"}]
+    # 非规则前缀的假设正文可以包含多个正常冒号，不能被截成最后一段。
+    full_hypothesis = "假设：与染料竞争染座，均匀上染。验证建议：先做小样确认。"
+    assert [h.model_dump() for h in leak_hits("与染料竞争染座，均匀上染", [], [full_hypothesis], kb)] == [
+        {"index": 0, "source": "hypothesis"}]
 
     # 反向包装：不含 L3 转化对照译文与任何机理文字
     sheet = package_sheet(req)

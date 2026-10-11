@@ -30,10 +30,13 @@ def _term(ku: KnowledgeUnit) -> str:
 
 
 def _hypothesis_body(value: str) -> str:
-    """去掉研发假设的来源说明与标签，只保留可能流向说明书的实质正文。"""
-    body = re.split(r"[:：]", value, maxsplit=1)[-1].strip()
-    body = re.sub(r"^(?:[（(][^）)]*[）)]\s*)+", "", body).strip()
-    return body or value.strip()
+    """只去掉规则骨架写入的来源前缀，保留假设正文中的正常冒号。"""
+    body = value.strip()
+    source = re.match(r"^参考\s+\S+\s+的机理\s*[:：]\s*(.*)$", body)
+    if source:
+        body = source.group(1).strip()
+        body = re.sub(r"^(?:(?:（模拟机理）|\(模拟机理\))\s*)+", "", body).strip()
+    return body
 
 
 def leak_hits(text: str, sealed: list[str], hypotheses: list[str], kb: KnowledgeBase) -> list[LeakHit]:
