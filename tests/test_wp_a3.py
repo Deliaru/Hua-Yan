@@ -99,3 +99,10 @@ def test_translation_release_and_ownership(tmp_path):
     assert case_text not in sales_view.model_dump_json()
     assert len([e for e in app.ledger.list("pm:P01") if e.ref == reuse_req.id and e.reason == "cited"]) == 1
     assert not any(e.payload["requirement_id"] == reuse_req.id for e in app.events.query(["requirement_accepted"]))
+    sent = app.add_turn(reuse_session.id, "sales", note)
+    assert sent.status == "recommended" and sent.recommendation == adopted.recommendation
+    assert app.view_session(reuse_session.id, "sales:S01").card.note == sales_view.card.note
+    repeated = app.add_turn(reuse_session.id, "customer", "对，涤纶布手感发硬")
+    assert repeated.recommendation == adopted.recommendation
+    changed = app.add_turn(reuse_session.id, "customer", "说错了，是锦纶氨纶，手感发硬")
+    assert changed.recommendation is None and changed.status == "open"

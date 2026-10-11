@@ -72,7 +72,8 @@ def handle_turn(session, speaker, text, deps, answering=False):
     matching = not answering and session.status not in ("escalated", "closed")
     if conditions_changed and matching:
         session.recommendation, session.status = None, "open"
-    if (result.intent == "need" or conditions_changed) and matching:
+    # 已有推荐在需求条件未变时继续有效，普通发言不能用 L1 匹配覆盖研发审定的复用结果。
+    if (conditions_changed or (result.intent == "need" and session.status != "recommended")) and matching:
         session.hints = deps.ask_hints(session.need)
         deps.events.append("ask_hint", session.sales_id, {"slots": [h.slot for h in session.hints],
             "p": {h.slot: h.p_need for h in session.hints}, "model": deps.jue_realtime.name}, session_id=session.id)
