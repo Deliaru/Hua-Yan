@@ -169,3 +169,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .glow:not(:disabled), .guide-scope .btn-primary:not(:disabled) { animation: none; box-shadow: 0 0 0 2px rgba(10, 108, 223, .7); }
 }
+
+/* 处理过程：进行中的小圆环 */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { display: inline-block; width: 11px; height: 11px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid rgba(10, 108, 223, .25); border-top-color: var(--color-accent); animation: spin .8s linear infinite; }

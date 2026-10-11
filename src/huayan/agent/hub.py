@@ -45,7 +45,9 @@ class AgentHub:
         if self.app.config["gateway_mock"]:
             conv.messages.append(AgentMessage(role="system", text=OFFLINE, at=get_clock().now(), target=ctx.focus))
         else:
+            self.app.emit("agent_start", actor=ctx.principal.id, conversation_id=conv.id)
             conv.messages += run_turn(conv, ctx, self, self.app.gateway)
+            self.app.emit("agent_end", actor=ctx.principal.id, conversation_id=conv.id, index=len(conv.messages) - 1)
         self._save(conv)
         return conv.model_copy(deep=True)
 
@@ -144,6 +146,7 @@ class AgentHub:
                     self._save(conv)
                     out.append(conv.model_copy(deep=True))
                 elif q.owner_role != "supervisor":   # 主管没有 Agent：拼凑风险无需准备，直接待签（REPLAN 4.3 主人为「—」）
+                    self.app.emit("dispatch", actor=q.owner_id, family=q.family)
                     out.append(self.notify(q.owner_id, text, session_id))
                     if out[-1].messages[-1].text == OUT_OF_STEPS:
                         exhausted.add(q.id)
@@ -189,6 +192,8 @@ class AgentHub:
 
     def record_step(self, step: AgentStep) -> None:
         self._steps.append(step)
+        self.app.emit("step", actor=step.principal, step=step.step, tool=step.tool, blocked=bool(step.blocked),
+                      pending=bool(step.pending_action_id), ok=not step.result_summary.startswith('{"ok":false'))
         _append(self.app.run_dir / "agent_trace.jsonl", step.model_dump_json())
 
     def _log_pending(self, action: PendingAction) -> None:

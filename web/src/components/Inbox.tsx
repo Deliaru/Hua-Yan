@@ -18,8 +18,9 @@ export function ownerText(q: Question, me: string, name: (id: string) => string)
   return `${who}${/[A-Za-z]$/.test(who) ? " " : ""}${PREPARING[q.family] ?? "正在准备"}`;
 }
 
-export function InboxSidebar({ selected, select, reqs }: {
-  selected: string | null; select: (q: Question) => void; reqs: RequirementSummary[];
+// guided：导览要签、但当前没打开的那一项，呼吸高亮
+export function InboxSidebar({ selected, guided, select, reqs }: {
+  selected: string | null; guided?: string | null; select: (q: Question) => void; reqs: RequirementSummary[];
 }) {
   const { me } = useApp();
   const L = useLabels();
@@ -32,7 +33,7 @@ export function InboxSidebar({ selected, select, reqs }: {
     <>
       <SideHead aside={!!ready.length && <span className="num text-attn-ink">{ready.length}</span>}>待签</SideHead>
       {ready.map((q) => (
-        <button key={q.id} onClick={() => select(q)} className={`side-row ${q.id === selected ? "on" : ""}`}>
+        <button key={q.id} onClick={() => select(q)} className={`side-row ${q.id === selected ? "on" : ""} ${q.id === guided ? "glow" : ""}`}>
           <div className="flex items-center gap-1.5">
             <span className="tag tag-attn">{L.family(q.family)}</span>
             <span className="ml-auto"><Score q={q} /></span>
