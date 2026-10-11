@@ -58,7 +58,7 @@ def make_week(seeds: Seeds, start: datetime, days: int,
     fixed = {s: project.applicable[s][0] for s in phen.required_slots}
     opp_theme = theme_id(phen.id, fixed, seeds)
     group = rng.sample(customers, min(4, len(customers)))
-    visits = sorted((session(phen, {**sample_slots(phen, seeds, rng), **fixed}, c, rng.randrange(4)), c)
+    visits = sorted((session(phen, sample_slots(phen, seeds, rng, fixed), c, rng.randrange(4)), c)
                     for c in group + [rng.choice(group)])
     earliest = next(t for k, (t, _) in enumerate(visits) if len({c for _, c in visits[:k + 1]}) >= 2)
     inject("opportunity", opp_theme, [t for t, _ in visits], earliest, close(3))
