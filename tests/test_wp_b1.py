@@ -47,6 +47,7 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
                        "customer_id": f"customer:C0{i - 6}"}, session_id=f"sess:{i}", ts=t0 + timedelta(hours=5 * i))
 
     bus = QuestionBus(events)
+    templates_all = {t.family: t for t in load_templates(TEMPLATES).values()}
     model = JueProto(TEMPLATES, system1, "scheduled", meter)
     at = t0 + timedelta(days=2)
     published = scan(events, at, model, mini_seeds, mini_seeds.products, load_templates(TEMPLATES), bus, 0.5)
@@ -69,6 +70,11 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
         "p_none": 0.8, "scored_by": "mock"}, session_id=session.id, ts=t0)
     attrs = session_state(session, session_events, t0).objects["session:sess:20"].attrs
     assert attrs["top_is_none"] and not attrs["escalated"]
+    # 升级后现成产品被采用、会话变为 recommended：仍算已升级，escalate_need 不再到点
+    session_events.append("escalate", "sales:S01", {"requirement_id": "req:20"}, session_id=session.id, ts=t0)
+    session.status = "recommended"
+    attrs = session_state(session, session_events, t0).objects["session:sess:20"].attrs
+    assert attrs["escalated"] and not evaluate(templates_all["escalate_need"].precondition, attrs, boolean=True)
 
     # 模板目录：15 个 family；基线三个目录也能加载
     templates = load_templates(TEMPLATES)

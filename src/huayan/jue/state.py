@@ -26,8 +26,9 @@ def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: d
 
 
 def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
-    """p_none、p_top、n_candidates 取本会话最近一次 match 事件。"""
-    relevant = [e for e in events.query(["match", "decrypt_request"]) if e.session_id == sess.id]
+    """p_none、p_top、n_candidates 取本会话最近一次 match 事件。
+    escalated 取 escalate 事件（业务员签字升级是历史事实）：现成产品被采用后会话变为 recommended，不能因此再次到点升级。"""
+    relevant = [e for e in events.query(["match", "decrypt_request", "escalate"]) if e.session_id == sess.id]
     match = next((e.payload for e in reversed(relevant) if e.kind == "match"), None)
     p_none = match["p_none"] if match is not None else 0.0
     p_top = max(match["p_choice"].values(), default=0.0) if match is not None else 0.0
@@ -40,7 +41,7 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
         "matched": match is not None, "p_none": p_none, "p_top": p_top,
         "n_candidates": len(match["candidate_ids"]) if match is not None else 0,
         "top_is_none": match is not None and p_none >= p_top,
-        "recommended": sess.status == "recommended", "escalated": sess.status == "escalated",
+        "recommended": sess.status == "recommended", "escalated": any(e.kind == "escalate" for e in relevant),
         "chem_savvy": need.profile.chem_savvy, "asked_mechanism": need.profile.asked_mechanism,
         "decrypt_requested": any(e.kind == "decrypt_request" for e in relevant),
     })
