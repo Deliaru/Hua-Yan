@@ -15,7 +15,7 @@ class AgentHub:
         self._conversations: dict[str, Conversation] = {}
         self._pending: dict[str, PendingAction] = {}
         self._steps: list[AgentStep] = []
-        self._dispatched: set[str] = set()
+        self._dispatched: set[tuple[str, int]] = set()
 
     # ---- 对话 ----
 
@@ -111,20 +111,60 @@ class AgentHub:
     # ---- 派单 ----
 
     def dispatch(self) -> list[Conversation]:
-        """同一次派单里同一个人（同一会话）的新问题合成一条通知，助手一轮看全再处理。"""
-        batches: dict[tuple[str, str | None], list] = {}
-        for q in self.app.bus.list(status="open"):
-            if q.id in self._dispatched or q.owner_role not in ("sales", "pm", "rd"):
-                continue
-            owner = q.owner_id or min(a.id for a in self.app.actors.values() if a.role == q.owner_role)
-            batches.setdefault((owner, q.refs.get("session_id") if q.owner_role == "sales" else None), []).append(q)
+        """只派觉已提出的问题；准备被撤回后，同一问题可再次起草。"""
         out = []
-        for (owner, session_id), questions in batches.items():
-            lines = [f"{q.id}（{q.family}）：{q.title}。证据：{'；'.join(e.summary for e in q.evidence) or '无'}"
-                     for q in questions]
-            out.append(self.notify(owner, f"新问题 {len(questions)} 个：\n" + "\n".join(lines), session_id))
-            self._dispatched.update(q.id for q in questions)   # 通知成功后才算派过；失败的下次 dispatch 再派
+        while True:
+            rounds = {}
+            for event in self.app.events.query(["question_prepared"]):
+                qid = event.payload["question_id"]
+                rounds[qid] = rounds.get(qid, 0) + 1
+            pending = [q for q in self.app.bus.list() if q.prepared_at is None
+                       and (q.owner_role in ("sales", "pm", "rd")
+                            or (self.app.config["gateway_mock"] and q.owner_role == "supervisor"))
+                       and (q.id, rounds.get(q.id, 0)) not in self._dispatched]
+            if not pending:
+                break
+            for q in pending:
+                if q.status != "open" or q.prepared_at is not None:
+                    continue
+                session_id = q.refs.get("session_id") if q.owner_role == "sales" else None
+                text = (f"{q.id}（{q.family}）：{q.title}。引用：{q.refs}。"
+                        f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。请为此问题准备草稿，不签字。")
+                if self.app.config["gateway_mock"]:
+                    text += "\n" + self._prepare_offline(q)
+                    ctx = ToolContext(self.app, self.app.actors[q.owner_id],
+                                      f"conv:{q.owner_id}:{session_id or 'inbox'}", session_id)
+                    conv = self._conversation(ctx)
+                    conv.messages.append(AgentMessage(role="system", text=text, at=get_clock().now(), target=q.object_id))
+                    self._save(conv)
+                    out.append(conv.model_copy(deep=True))
+                else:
+                    out.append(self.notify(q.owner_id, text, session_id))
+                if q.status == "open" and q.signer_role is not None:
+                    self.app.mark_prepared(q.id, q.owner_id)
+                self._dispatched.add((q.id, rounds.get(q.id, 0)))
         return out
+
+    def _prepare_offline(self, q) -> str:
+        """WP-C 指定的离线骨架；只起草，签字仍由人调用门面。"""
+        if q.family == "accept_requirement":
+            self.app.draft_requirement(q.refs["requirement_id"], q.owner_id)
+        elif q.family == "confirm_translation":
+            self.app.translate_requirement(q.refs["requirement_id"], q.owner_id)
+        elif q.family == "release":
+            self.app.package_sheet(q.refs["requirement_id"], q.owner_id)
+        elif q.family == "reuse_product":
+            self.app.save_reuse_proposal(q.refs["requirement_id"], None, [], "",
+                                         "离线模式：未检索现成产品", q.owner_id)
+        elif q.family == "opportunity":
+            reqs = [self.app.requirement_view(rid, q.owner_id).requirement
+                    for rid in q.refs["requirement_ids"].split(",")]
+            reqs.sort(key=lambda req: req.created_at)
+            self.app.save_merge_proposal(q.id, reqs[0].id, [req.id for req in reqs[1:]],
+                                         "离线模式：按主题规则合并，未经产品经理 Agent 判断", q.owner_id)
+        else:
+            return "离线，无草稿。" if q.signer_role is not None else "离线，仅提示，不标记准备完成。"
+        return "离线模式：已由规则骨架起草，未经角色 Agent 判断。"
 
     # ---- 查询 ----
 

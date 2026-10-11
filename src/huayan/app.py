@@ -603,7 +603,7 @@ class HuayanApp:
                                               self.kb, actor, get_clock().now())
         edited = [i for i in req.product_lang if i.edited_by]
         items = edited + [i for i in draft.product_lang
-                          if not any((i.slot and i.slot == old.slot) or set(i.quote_refs) & set(old.quote_refs)
+                          if not any((i.slot == old.slot if i.slot or old.slot else set(i.quote_refs) & set(old.quote_refs))
                                      for old in edited)]
         for item in items:
             self._validate_item(req, item, actor)
@@ -650,9 +650,13 @@ class HuayanApp:
         from huayan.escalation import translate
         draft = translate.draft_chem_need(req.model_copy(deep=True),
             [self._sessions[sid].model_copy(deep=True) for sid in req.session_ids], self.kb, actor, get_clock().now())
-        for item in draft.chem_lang:
+        edited = [item for item in req.chem_lang if item.edited_by]
+        items = edited + [item for item in draft.chem_lang
+                          if not any((item.slot == old.slot if item.slot or old.slot else set(item.quote_refs) & set(old.quote_refs))
+                                     for old in edited)]
+        for item in items:
             self._validate_item(req, item, actor)
-        req.chem_lang, req.hypotheses, req.chem_drafted_by = draft.chem_lang, draft.hypotheses, by
+        req.chem_lang, req.hypotheses, req.chem_drafted_by = items, draft.hypotheses, by
         self._save_requirement(req)
         self._after(req_ids=[req_id])
         return self.requirement_view(req_id, by).requirement
