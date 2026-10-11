@@ -2,11 +2,13 @@
 
 > 跨模块的数据格式与接口契约。**冻结后只能由人修改**。代码实现在 `src/huayan/contracts/`，必须与本文件一致。
 > 下列代码是规格（Python / pydantic v2 风格），字段名、类型、枚举值必须一致；函数签名必须一致，内部实现自由。
-> 版本：v5.1｜2026-10-11
+> 版本：v5.2｜2026-10-11
 >
-> **v5.1 追加（现成产品复用，REPLAN D17）**：升级建单后觉先提出 `reuse_product`，产品经理 Agent 用 L2 知识查现成产品，业务员签字采用后需求单 `status="reused"`、研发不介入。新增 `ReuseProposal` 与 `Requirement.reuse`；requirement 属性 `reuse_checked`、`reuse_pending`、`reuse_declined`；事件 `reuse_proposed`、`reuse_adopted`、`reuse_declined`；门面 `save_reuse_proposal`、`adopt_reuse`、`decline_reuse`；工具 `propose_reuse`。
+> **v5.2 追加（同类需求合并与 Agent 协作焦点，REPLAN D19、D21；`WP-0v5.md` C14）**：每次升级仍各建一张单；觉的机会汇聚到点后派给产品经理 Agent 判断几张单是否同一件事并起草合并，研发签字合并。`Requirement` 增加 `merged` 状态与 `merged_into`、`merge_from`、`merge_note`；事件 `merge_proposed`、`requirements_merged`；门面 `save_merge_proposal`、`merge_requirements`；工具 `propose_merge`；`opportunity` 的 `refs` 增加 `requirement_ids`、`assigned_rd`，签字人为研发；`AgentHub.chat` 增加 `focus`。
 >
-> **v5 变更（觉是全过程的决策点发现器；产品经理由 Agent 担任；工作面 + 副驾，按钮即签字；依据 `workpackages/REPLAN-v5.md` 与 `workpackages/WP-0v5.md`）**：觉的对象增加 `session`、`requirement`，`Family` / `QFamily` 改为由模板目录校验的字符串，模板增加 `kind`、`signer_role`，`ScoredDecision` 逐条标 `scored_by`；问题增加签字人、准备完成时间、模板 id，处置动作改为 sign / accept / return 等，总线增加 `set_prepared`；需求单可以是空单，`pm_confirmed` 改为 `rd_accepted`（立项 ≡ 研发接单），增加指定研发、封存项、两栏与提炼草稿、退回理由，`ReqItem.edited_by`，试样增加客户评价，新增 `LeakHit` 与 `leak_hits`；会话增加回复与升级说明草稿；事件增加 `match` 等 8 种、删除 `requirement_confirmed`；Jev 不再升级；新增身份 `pm:agent`，积分只给人；`DecryptGrant.text`；删除路由配置；门面删除 `confirm_requirement` 与内部流程推进，新增升级、接单 / 退回、客户评价、草稿、`mark_prepared`、`questions`、`jue_timeline` 等原子方法与写后评估；`AgentMessage.target`，`pm:agent` 无生效工具，派单只派总线上的问题，删除「确认后派单」。
+> **v5.1 追加（现成产品复用，REPLAN D17）**：升级建单后觉先提出 `reuse_product`，产品经理 Agent 用 L2 知识查现成产品，业务员签字采用后需求单 `status="reused"`、研发不介入。新增 `ReuseProposal` 与 `Requirement.reuse`；requirement 属性 `reuse_checked`、`reuse_pending`、`reuse_declined`；事件 `reuse_proposed`、`reuse_adopted`、`reuse_declined`；门面 `save_reuse_proposal`、`adopt_reuse`、`decline_reuse`；工具 `propose_reuse`；业务员视图 `ReuseView`（`SessionView.reuse`），觉视图的业务员裁剪含 `reuse_product`。
+>
+> **v5 变更（觉是全过程的决策点发现器；产品经理由 Agent 担任；工作面 + Agent 协作，按钮即签字；依据 `workpackages/REPLAN-v5.md` 与 `workpackages/WP-0v5.md`）**：觉的对象增加 `session`、`requirement`，`Family` / `QFamily` 改为由模板目录校验的字符串，模板增加 `kind`、`signer_role`，`ScoredDecision` 逐条标 `scored_by`；问题增加签字人、准备完成时间、模板 id，处置动作改为 sign / accept / return 等，总线增加 `set_prepared`；需求单可以是空单，`pm_confirmed` 改为 `rd_accepted`（立项 ≡ 研发接单），增加指定研发、封存项、两栏与提炼草稿、退回理由，`ReqItem.edited_by`，试样增加客户评价，新增 `LeakHit` 与 `leak_hits`；会话增加回复与升级说明草稿；事件增加 `match` 等 8 种、删除 `requirement_confirmed`；Jev 不再升级；新增身份 `pm:agent`，积分只给人；`DecryptGrant.text`；删除路由配置；门面删除 `confirm_requirement` 与内部流程推进，新增升级、接单 / 退回、客户评价、草稿、`mark_prepared`、`questions`、`jue_timeline` 等原子方法与写后评估；`AgentMessage.target`，`pm:agent` 无生效工具，派单只派总线上的问题，删除「确认后派单」。
 >
 > **v4 变更（觉回到「发现需要决策的情况，并给出校准概率」）**：Jue-K 从「只做追问」扩为**一个模型覆盖全部决策类型**，实时与定时都可以替换原型；新增决策类型 `ask_back`（需求单在 L2/L3 起草时发现缺一个会改变转译的信息，派回原业务员向客户回问），slot 对象增加 `layer`、`trans_splits`，新增 `requirement_state`；模板增加 `urgency` 表达式，`ScoredDecision.urgency`、`Question.urgency` 照填；新增 `JueRecord` 与 `jue_samples.jsonl`（每次觉调用的完整状态与输出，数据引擎）；`Discoverer` 增加 `jue_k`；`QFamily` 增加 `ask_back`，处置增加 `answered`，路由 `ask_back → sales`；配置增加 `scheduled_model`，`RunStatus` 增加同名字段；Jue-K 训练数据改为 `data/jue_k/samples.csv`，`features.build(obj, family)`；门面 `tick` / `add_turn` 增加回问的发布与回填；助手 `notify` 增加 `session_id`，业务员助手增加 `list_my_questions`。
 >
@@ -412,8 +414,8 @@ class Session(BaseModel):
     replies: list[AssistantReply] = []
     recommendation: Recommendation | None = None
     status: Literal["open", "recommended", "escalated", "closed"] = "open"
-    reply_draft: str = ""                     # v5：副驾起草的回复，预填进「发给客户」输入框；发出后清空
-    escalate_note: str = ""                   # v5：副驾起草的升级说明；业务员签字时写入需求单
+    reply_draft: str = ""                     # v5：Agent 起草的回复，预填进「发给客户」输入框；发出后清空
+    escalate_note: str = ""                   # v5：Agent 起草的升级说明；业务员签字时写入需求单
 ```
 
 ---
@@ -604,7 +606,7 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState: ..
 
 对象属性只放计数与状态，不放文本；文本类信号在构建时用规则匹配算成计数（铁律 3）。
 
-定时窗口：机会汇聚、知识冲突 7 天，泄露风险 48 小时（`config/app.yaml` 可改）。v5：`theme.n_escalations` 统计的是 `escalate` 事件，即业务员签字后的升级。
+定时窗口：机会汇聚、知识冲突 7 天，泄露风险 48 小时（`config/app.yaml` 可改）。v5：`theme.n_escalations` 统计的是 `escalate` 事件，即业务员签字后的升级；v5.2：所在需求单后来被 `reuse_adopted` 的升级不计入，`requirements_merged` 与立项一样计为该主题的「已处理」时刻。
 
 Jue-K 的特征来自以上全部对象类型的属性（`features.build(obj, family)`，缺失的属性记 0）。
 
@@ -631,7 +633,7 @@ class JueTemplate(BaseModel):
     urgency: str | None = None                # 数值表达式，截断到 [0,1]；为空时 1.0。紧急度是规则，不学习
 ```
 
-模板即**决策目录**，见 `config/templates/`，每个 family 一个文件。v4 已有：`ask_slot`（前置条件含 `attrs.layer == 1`）、`ask_back`（含 `attrs.layer >= 2`、未填、未答不清楚、`attrs.trans_splits >= 2`）、`opportunity`、`knowledge_conflict`、`leak_risk`；v5 新增 `escalate_need`、`reuse_product`（v5.1，主人 pm、签字人 sales；`accept_requirement` 的前置条件含 `attrs.reuse_checked and not attrs.reuse_pending`）、`accept_requirement`、`distortion`、`confirm_translation`、`contribution`、`market_eval`、`seal_points`、`seal_leak`、`release`（前置条件、主人、签字人见 `workpackages/REPLAN-v5.md` 第 4.3 节，均先用规则打分）。
+模板即**决策目录**，见 `config/templates/`，每个 family 一个文件。v4 已有：`ask_slot`（前置条件含 `attrs.layer == 1`）、`ask_back`（含 `attrs.layer >= 2`、未填、未答不清楚、`attrs.trans_splits >= 2`）、`opportunity`、`knowledge_conflict`、`leak_risk`；v5 新增 `escalate_need`、`reuse_product`（v5.1，主人 pm、签字人 sales；`accept_requirement` 的前置条件含 `attrs.reuse_checked and not attrs.reuse_pending`）、`accept_requirement`、`distortion`、`confirm_translation`、`contribution`、`market_eval`、`seal_points`、`seal_leak`、`release`（前置条件、主人、签字人见 `workpackages/REPLAN-v5.md` 第 4.3 节，均先用规则打分）。v5.2：`opportunity` 的 `decision_label` 为「同类需求是否合并立项」，签字人 rd，`refs` 含 `requirement_ids`（逗号分隔）与 `assigned_rd`。
 
 表达式求值器 `huayan.jue.expr` 复制自 JUE `discovery/expr.py`，只保留 `attrs.x`。基线（B1、B2、规则告警）也写成模板，放在 `config/baselines/<name>/`，由同一个原型在规则模式下运行。
 
@@ -689,6 +691,8 @@ def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], 
 | pm | 任意 | `pm:agent` |
 | rd | requirement / slot（layer 2/3） | `req.assigned_rd` |
 | rd | knowledge | 产品归属研发 |
+| rd | theme（v5.2，机会汇聚） | `refs.assigned_rd`（候选需求单中最早一张的研发） |
+| pm（仅 `distortion`，layer 3） | requirement | `req.assigned_rd`（第 3 层的失真由研发的 Agent 准备） |
 | supervisor | 任意 | id 最小的主管 |
 
 ```python
@@ -724,7 +728,7 @@ class Evidence(BaseModel):
 class Resolution(BaseModel):
     action: Literal["sign", "accept", "return", "answered", "update_sheet", "freeze_access",
                     "approve_decrypt", "reject_decrypt", "dismiss"]
-    # v5：sign = 签字人在工作面签字（升级、确认转译、沉淀、客户评价、封存 / 放出、发布）；
+    # v5：sign = 签字人在工作面签字（升级、确认转译、沉淀、客户评价、封存 / 放出、发布；v5.2：机会汇聚的合并）；
     # accept / return = 研发接单 / 退回（accept 同时关闭关联的 opportunity）；
     # answered = 回问已由客户回答，或异常类问题的前置条件不再成立；删除 draft_requirement、approve_project（立项 ≡ 接单）
     by: str
@@ -782,10 +786,10 @@ L1 场景需求卡（NeedState：槽位＋原话）
   → 业务员签字升级：门面建空需求单（指定研发 assigned_rd）
   → 现成产品复用（v5.1）：产品经理 Agent 用 L2 知识查现成产品 → 业务员签字采用则推荐给客户、需求单关闭（reused）；否则继续
   → L2 产品需求语言（规则骨架 → 产品经理 Agent 用 L2 知识检索、逐条修改）→ 研发接单（= 立项）或写理由退回
-  → L3 化学语言需求单（规则骨架 → 研发副驾用 L3 转化对照与机理起草 → 研发修改、确认）
-  → 沉淀（研发副驾提炼 → 研发签字）
+  → L3 化学语言需求单（规则骨架 → 研发 Agent 用 L3 转化对照与机理起草 → 研发修改、确认）
+  → 沉淀（研发 Agent 提炼 → 研发签字）
   → 试样（模拟 ELN）→ 客户评价（业务员签字）
-  → 封存 / 放出（研发副驾起草两栏 → 研发签字）：对外要点是 L3 内容流向下层的唯一出口，封存项只对 L3 可见
+  → 封存 / 放出（研发 Agent 起草两栏 → 研发签字）：对外要点是 L3 内容流向下层的唯一出口，封存项只对 L3 可见
   → 反向包装：L1 说明书（产品经理 Agent，只用产品需求＋对外要点）→ 研发审定发布 → 回到 L1
 每一步都由觉提出（第 ⑤ 节），主人准备，签字人签字。
 ```
@@ -796,13 +800,13 @@ class ReqItem(BaseModel):
     slot: str | None = None
     quote_refs: list[str] = []                # turn id，可回查客户原话
     ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
-    edited_by: str | None = None              # v5：最后一次由人修改的 actor id；None = 骨架或副驾起草（界面标「副驾起草」）
+    edited_by: str | None = None              # v5：最后一次由人修改的 actor id；None = 骨架或 Agent 起草（界面标「Agent 起草」）
 
 class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理 Agent 编辑）
     direction: str                            # 产品方向，如「低浴比条件下的锦纶氨纶匀染助剂」
     product_lang: list[ReqItem]
 
-class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发副驾编辑）
+class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发 Agent 编辑）
     chem_lang: list[ReqItem]
     hypotheses: list[str] = []                # 研发方向假设
 
@@ -826,7 +830,7 @@ class PointsDraft(BaseModel):                 # v5：封存 / 放出两栏草稿
     sealed: list[str]                         # 拟封存的窗户纸
     self_check: list[LeakHit] = []            # 对 public 的泄露自查结果
 
-class ContributionDraft(BaseModel):           # v5：副驾提炼的可沉淀转化知识（只对 L3 可见）
+class ContributionDraft(BaseModel):           # v5：Agent 提炼的可沉淀转化知识（只对 L3 可见）
     item_index: int
     scene_phrase: str
     chem_term: str
@@ -841,12 +845,15 @@ class Requirement(BaseModel):
     assigned_rd: str                          # v5：接单与签字的研发；建单时取该现象 L3 转化对照条数最多的研发（并列取 id 最小）
     escalate_note: str = ""                   # v5：业务员签字时的升级说明（L2/L3 可见）
     reuse: ReuseProposal | None = None        # v5.1：现成产品建议；None = 还没查
+    merged_into: str | None = None            # v5.2：被并入的单指向主单
+    merge_from: list[str] = []                # v5.2：产品经理 Agent 起草的合并建议，拟并入本单的需求单 id（研发签字前是草稿）
+    merge_note: str = ""                      # v5.2：判断依据——几位客户说的是不是同一件事（L2/L3 可见）
     direction: str = ""                       # v5：空单时为空
     product_lang: list[ReqItem] = []          # L2/L3 可见；v5：空单时为空
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
     hypotheses: list[str] = []                # 研发方向假设（v5：只对 L3 可见）；泄密匹配的来源之一
-    status: Literal["draft", "reused", "rd_accepted", "rd_confirmed", "released", "rejected"]
-    # v5：pm_confirmed → rd_accepted；v5.1：reused = 业务员采用了现成产品，需求单关闭
+    status: Literal["draft", "reused", "merged", "rd_accepted", "rd_confirmed", "released", "rejected"]
+    # v5：pm_confirmed → rd_accepted；v5.1：reused = 业务员采用了现成产品，需求单关闭；v5.2：merged = 已并入另一张单
     drafted_by: str = "pm:agent"              # v5：L2 草稿的起草者
     chem_drafted_by: str | None = None        # L3 草稿的委托人（研发 actor id）
     rd_accepted_by: str | None = None         # v5：研发接单（= 立项），原 pm_confirmed_by
@@ -937,7 +944,7 @@ def release_product(req: Requirement, product: Product, kb, ledger, events, by: 
     # → 写 product_released 事件 → req.status = "released"；v5：by 必须是 req.assigned_rd
 ```
 
-演示中新产品取自种子里 `status="project"` 的产品（`confirm_translation` 时由门面关联到 `req.product_id`，机理与配方要点来自它），模拟「研发在 ELN 中完成开发」；L1 说明书与用法来自 `req.sheet`（反向包装，产品经理 Agent 起草，研发副驾可改写泄密句），**研发审定后发布**（v5）。窗户纸默认本单封存并沉淀为研发自己的 L3 知识，研发可在沉淀处拒签（D15）。
+演示中新产品取自种子里 `status="project"` 的产品（`confirm_translation` 时由门面关联到 `req.product_id`，机理与配方要点来自它），模拟「研发在 ELN 中完成开发」；L1 说明书与用法来自 `req.sheet`（反向包装，产品经理 Agent 起草，研发 Agent 可改写泄密句），**研发审定后发布**（v5）。窗户纸默认本单封存并沉淀为研发自己的 L3 知识，研发可在沉淀处拒签（D15）。
 
 ---
 
@@ -948,7 +955,7 @@ EventKind = Literal["turn", "extraction", "ask_hint", "match", "recommend", "esc
                     "decrypt_request", "decrypt_approve", "question_published", "question_prepared",
                     "question_resolved", "requirement_created", "requirement_accepted", "requirement_returned",
                     "requirement_edited", "requirement_translated", "knowledge_contributed", "trial", "market_eval",
-                    "points_set", "reuse_proposed", "reuse_adopted", "reuse_declined", "product_released", "sheet_updated",
+                    "points_set", "reuse_proposed", "reuse_adopted", "reuse_declined", "merge_proposed", "requirements_merged", "product_released", "sheet_updated",
                     "access_frozen", "human_decision",
                     "agent_action_proposed", "agent_action_decided"]
 # v5：删除 requirement_confirmed
@@ -996,6 +1003,8 @@ class EventLog:
 | `reuse_proposed`（v5.1） | `requirement_id, product_id, ku_refs`（product_id 为空 = 已查无现成产品） |
 | `reuse_adopted`（v5.1） | `requirement_id, product_id, session_id` |
 | `reuse_declined`（v5.1） | `requirement_id, product_id, reason` |
+| `merge_proposed`（v5.2） | `question_id, target, members`（members 为空 = 判断不是同一件事） |
+| `requirements_merged`（v5.2） | `question_id, target, members` |
 | `product_released` | `product_id, requirement_id, phenomenon, applicable` |
 | `sheet_updated` | `product_id, slot, values` |
 | `access_frozen` | `actor_id` |
@@ -1161,6 +1170,16 @@ points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
 界面**只**通过它访问系统；按身份裁剪在门面内完成，界面不做权限判断。
 
 ```python
+class ReuseView(BaseModel):                   # v5.1：业务员看到的现成产品建议（不含案例原文）
+    requirement_id: str
+    product_id: str | None                    # None = 已查，无现成产品
+    product_name: str = ""
+    usage: str = ""                           # 产品的 L1 用法
+    customer_note: str = ""                   # 产品经理 Agent 起草的面向客户的说明
+    basis: list[str] = []                     # 归属标签，如「产品经理 P01 · 历史案例 · L2」
+    status: Literal["pending", "adopted", "declined", "none"]
+
+
 class SessionView(BaseModel):
     session_id: str
     viewer: str
@@ -1175,6 +1194,7 @@ class SessionView(BaseModel):
     requirement: Requirement | None = None    # 只对 L2/L3 返回
     reply_draft: str = ""                     # v5
     escalate_note: str = ""                   # v5
+    reuse: ReuseView | None = None            # v5.1：会话所升级需求单上的现成产品建议
 
 class RunStatus(BaseModel):
     run_id: str
@@ -1210,7 +1230,7 @@ class TimelineNode(BaseModel):                # v5：一个被提出的问题的
 class JueTimeline(BaseModel):                 # v5：觉视图
     target_id: str                            # sess:<n> 或 req:<n>；需求单线程含其全部会话
     viewer: str
-    points: list[TimelinePoint]               # 按查看者裁剪：业务员只含 escalate_need、market_eval、ask_back 与本会话的 ask_slot
+    points: list[TimelinePoint]               # 按查看者裁剪：业务员只含 escalate_need、reuse_product（v5.1）、market_eval、ask_back 与本会话的 ask_slot
     nodes: list[TimelineNode]
     n_judgments: int                          # 觉的判断次数（JueRecord 条数）
     n_llm_calls: int                          # 计量中 caller 以 "jue" 开头的大模型调用数（应为 0，取自计量，不写死）
@@ -1247,6 +1267,14 @@ class HuayanApp:
         # 所引 L2 知识记 cited；status="reused"；resolve reuse_product(sign)；写 reuse_adopted
     def decline_reuse(self, req_id: str, reason: str, by: str) -> Requirement: ...
         # v5.1：业务员；写 declined_reason，resolve(return)，写 reuse_declined；觉随后提出 accept_requirement
+    def save_merge_proposal(self, question_id: str, target_req_id: str, member_ids: list[str], note: str,
+                            by: str) -> Requirement: ...
+        # v5.2：pm:agent，草稿；target 与 members 必须在 opportunity 的 requirement_ids 里；写 merge_from、merge_note、merge_proposed；
+        # 判断不是同一件事时 target 填最早一张、members 为空
+    def merge_requirements(self, question_id: str, by: str) -> Requirement: ...
+        # v5.2：主单的 assigned_rd 签字；merge_from 为空抛 ValueError；被并入单的会话追加到主单，被并入单 status="merged"、
+        # merged_into=主单，其 open 问题 resolve(answered)；resolve opportunity(sign)；清空主单 L2 草稿（product_lang、direction），
+        # 主单待签问题 set_prepared(None)，产品经理 Agent 按全部会话重新起草；写 requirements_merged
     def draft_requirement(self, req_id: str, by: str) -> Requirement: ...
         # v5：by 必须是 pm:agent；对空单（draft）写入 L2 规则骨架
     def accept_requirement(self, req_id: str, by: str) -> Requirement: ...
@@ -1270,11 +1298,11 @@ class HuayanApp:
                                by: str) -> KnowledgeUnit: ...
     def set_public_points(self, req_id: str, text: str, sealed: list[str], by: str) -> Requirement: ...
         # v5：assigned_rd 签字「封存 / 放出」；需客户评价通过；写 public_points 与 sealed，写 points_set
-    def save_reply_draft(self, session_id: str, text: str, by: str) -> Session: ...          # v5：业务员（副驾）
-    def save_escalate_note(self, session_id: str, text: str, by: str) -> Session: ...        # v5：业务员（副驾）
+    def save_reply_draft(self, session_id: str, text: str, by: str) -> Session: ...          # v5：业务员（Agent）
+    def save_escalate_note(self, session_id: str, text: str, by: str) -> Session: ...        # v5：业务员（Agent）
     def save_points_draft(self, req_id: str, public: str, sealed: list[str], by: str) -> Requirement: ...
-        # v5：assigned_rd（副驾）；自动填 self_check = leak_hits(public, sealed, hypotheses, kb)
-    def save_contribution_draft(self, req_id: str, draft: ContributionDraft, by: str) -> Requirement: ...   # v5：assigned_rd（副驾）
+        # v5：assigned_rd（Agent）；自动填 self_check = leak_hits(public, sealed, hypotheses, kb)
+    def save_contribution_draft(self, req_id: str, draft: ContributionDraft, by: str) -> Requirement: ...   # v5：assigned_rd（Agent）
     def record_market_eval(self, req_id: str, result: Literal["pass", "fail"], note: str, by: str) -> Trial: ...
         # v5：需求单首个会话的业务员签字；写到最近一次通过的试样上；写 market_eval
     def leak_check(self, req_id: str, viewer_id: str) -> list[LeakHit]: ...
@@ -1285,7 +1313,7 @@ class HuayanApp:
     def package_sheet(self, req_id: str, by: str) -> SheetDraft: ...
         # v5：by 为 pm:agent（草稿，不是生效动作）；translate.package_sheet(req)，结果写入 req.sheet
     def save_sheet(self, req_id: str, sheet: SheetDraft, by: str) -> Requirement: ...
-        # v5：pm:agent 修改说明书草稿，或 assigned_rd（研发副驾改写泄密句）
+        # v5：pm:agent 修改说明书草稿，或 assigned_rd（研发 Agent 改写泄密句）
     def release_product(self, req_id: str, by: str) -> Product: ...
         # v5：by = assigned_rd；可签条件：说明书与用法 leak_hits 为空；
         # 以 req.product_id 的种子产品为底，sheet / usage 用 req.sheet，调用 flow.release_product
@@ -1323,13 +1351,13 @@ class HuayanApp:
 
 ---
 
-## ⑭ 副驾与产品经理 Agent（`huayan.agent`，WP-L；v5 改）
+## ⑭ 角色 Agent 与产品经理 Agent（`huayan.agent`，WP-L；v5 改）
 
-v5：业务员、研发各有一个**副驾**，产品经理由**产品经理 Agent**（`pm:agent`）担任。三者都是 **Agent Loop + 原子工具**：觉的问题派给主人后，Agent 查会话、检索、起草，把草稿写进领域对象（需求单、会话的草稿字段）；人在工作面上看、改、按按钮签字。私聊用于开放式请求与查询。
+v5：业务员、研发各有一个**协作 Agent**，产品经理由**产品经理 Agent**（`pm:agent`）担任。三者都是 **Agent Loop + 原子工具**：觉的问题派给主人后，Agent 查会话、检索、起草，把草稿写进领域对象（需求单、会话的草稿字段）；人在工作面上看、改、按按钮签字。私聊用于开放式请求与查询。
 
 - 助手**没有自己的身份和权限**，借用委托人的权限：工具在代码里绑定委托人，模型看不到也改不了；
 - `read` / `draft` 工具自动执行，草稿未生效；
-- `effect` 工具**只能提议**，且只用于私聊：Loop 创建 `PendingAction`，对话里出现确认卡，**委托人点确认后才执行**；助手没有、也不能有「确认」工具。工作面上的签字按钮直接调门面原子方法，不经过 `PendingAction`；
+- `effect` 工具**只能提议**，且只用于对话里的提议：Loop 创建 `PendingAction`，确认卡出现在工作面签字区，**委托人点确认后才执行**；助手没有、也不能有「确认」工具。工作面上的签字按钮直接调门面原子方法，不经过 `PendingAction`；
 - **没有委托人的 Agent 没有生效工具**：`pm:agent` 只有 read / draft 工具；
 - 觉不是助手，不调用大模型；它提出的问题经总线派给主人准备。
 
@@ -1392,13 +1420,14 @@ class Conversation(BaseModel):
 # huayan.agent（WP-L）
 class AgentHub:                               # HuayanApp.agents
     def __init__(self, app: "HuayanApp"): ...
-    def chat(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation: ...
+    def chat(self, actor_id: str, text: str, session_id: str | None = None, focus: str | None = None) -> Conversation: ...
+        # v5.2：focus = 委托人此刻在工作面上打开的对象（sess:<n> / req:<n>），写进 Agent 的系统提示词
         # 委托人说一句话 → 跑一轮 Loop → 返回整段对话；业务员必须带 session_id
     def notify(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation: ...
         # 派单：写一条 system 消息到该人的 inbox 对话（带 session_id 时写到该会话的对话）并跑一轮 Loop（助手主动处理，如起草）
     def dispatch(self) -> list[Conversation]: ...
         # v5：只把总线上 open、prepared_at 为空、尚未派过的问题 notify 给主人（owner_id）；主人是 pm:agent 时跑产品经理 Agent 的 Loop，
-        # 是业务员 / 研发时跑其副驾的 Loop；有签字人的问题在 Loop 结束后调用 app.mark_prepared；
+        # 是业务员 / 研发时跑其 Agent 的 Loop；有签字人的问题在 Loop 结束后调用 app.mark_prepared；
         # 提示类（signer_role 为空）照旧派送，sales 的 ask_back 按 refs["session_id"] 派到该会话的对话
     def approve(self, action_id: str, by: str) -> PendingAction: ...
         # by 必须是 principal，否则 PermissionDenied；执行该工具，结果写回对话，写 agent_action_decided；v5：不再派下一棒
@@ -1432,29 +1461,30 @@ class AgentHub:                               # HuayanApp.agents
 | `get_need_card()` | read | sales | `app.view_session(session, principal)` |
 | `save_reply_draft(text)` | draft | sales | `app.save_reply_draft`（v5） |
 | `save_escalate_note(text)` | draft | sales | `app.save_escalate_note`（v5） |
-| `request_decrypt()` | effect | sales | `app.request_decrypt(session, principal)`（私聊提议） |
+| `request_decrypt()` | effect | sales | `app.request_decrypt(session, principal)`（对话提议） |
 | `list_my_questions()` | read | sales pm rd | `app.bus.list(owner_role=角色)`，只留 owner_id 为空或为本人的 |
 | `get_session(session_id)` | read | pm rd | `app.view_session(session_id, principal)` |
 | `match_translations(text)` | read | pm rd | `translate.match_translations` |
 | `find_products(phenomenon, slots)` | read | pm rd | `domain.match_candidates(phenomenon, slots, kb.products())` |
 | `propose_reuse(req_id, product_id, ku_refs, customer_note, note)` | draft | pm | `app.save_reuse_proposal`（v5.1） |
+| `propose_merge(question_id, target_req_id, member_ids, note)` | draft | pm | `app.save_merge_proposal`（v5.2） |
 | `draft_product_need(req_id)` | draft | pm | `app.draft_requirement`（v5 改参数） |
 | `get_requirement(req_id)` | read | pm rd | `app.requirement_view` |
 | `edit_item(req_id, index, text, quote_refs, ku_refs)` | draft | pm rd | `app.edit_req_item` |
 | `remove_item(req_id, index)` | draft | pm rd | `app.remove_req_item` |
 | `set_direction(req_id, text)` | draft | pm | `app.set_direction` |
 | `package_sheet(req_id)` | draft | pm | `app.package_sheet` |
-| `edit_sheet(req_id, sheet, usage)` | draft | pm rd | `app.save_sheet`（v5：研发副驾改写泄密句） |
+| `edit_sheet(req_id, sheet, usage)` | draft | pm rd | `app.save_sheet`（v5：研发 Agent 改写泄密句） |
 | `leak_check(req_id)` | read | pm rd | `app.leak_check`（v5；只得到句序号与类别） |
 | `draft_chem_need(req_id)` | draft | rd | `app.translate_requirement` |
 | `save_points_draft(req_id, public, sealed)` | draft | rd | `app.save_points_draft`（v5） |
 | `save_contribution_draft(req_id, index, scene_phrase, chem_term, note)` | draft | rd | `app.save_contribution_draft`（v5） |
-| `confirm_translation(req_id)` | effect | rd | `app.confirm_translation`（私聊提议） |
-| `contribute_translation(req_id, index, scene_phrase, chem_term)` | effect | rd | `app.contribute_translation`（私聊提议） |
-| `set_public_points(req_id, text, sealed)` | effect | rd | `app.set_public_points`（私聊提议） |
-| `decide_decrypt(question_id, approve)` | effect | rd | `app.decide_decrypt`（私聊提议） |
+| `confirm_translation(req_id)` | effect | rd | `app.confirm_translation`（对话提议） |
+| `contribute_translation(req_id, index, scene_phrase, chem_term)` | effect | rd | `app.contribute_translation`（对话提议） |
+| `set_public_points(req_id, text, sealed)` | effect | rd | `app.set_public_points`（对话提议） |
+| `decide_decrypt(question_id, approve)` | effect | rd | `app.decide_decrypt`（对话提议） |
 
-v5 删除：`record_customer_turn`、`record_sales_turn`、`recommend_now`（客户原话不经过副驾，发言与推荐在工作面上）；`confirm_requirement`、`dismiss_question`、`release_product`（`pm:agent` 没有生效工具）；`record_trial`（试样来自模拟 ELN）。
+v5 删除：`record_customer_turn`、`record_sales_turn`、`recommend_now`（客户原话不经过 Agent，发言与推荐在工作面上）；`confirm_requirement`、`dismiss_question`、`release_product`（`pm:agent` 没有生效工具）；`record_trial`（试样来自模拟 ELN）。
 | `my_contributions()` | read | pm rd | `app.contributions(principal)` |
 
 **v5 删除「确认后派单」**：下一步由觉的写后评估提出（AGENTS.md 铁律 14）。

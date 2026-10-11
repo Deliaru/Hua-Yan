@@ -12,7 +12,7 @@ class ReqItem(BaseModel):
     slot: str | None = None
     quote_refs: list[str] = []                # turn id，可回查客户原话
     ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
-    edited_by: str | None = None              # 最后一次由人修改的 actor id；None = 骨架或副驾起草
+    edited_by: str | None = None              # 最后一次由人修改的 actor id；None = 骨架或 Agent 起草
 
 
 class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理 Agent 编辑）
@@ -20,7 +20,7 @@ class PMDraft(BaseModel):                     # L2：场景语言 → 产品需�
     product_lang: list[ReqItem]
 
 
-class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发副驾编辑）
+class RDDraft(BaseModel):                     # L3：产品需求 → 化学语言（规则骨架，研发 Agent 编辑）
     chem_lang: list[ReqItem]
     hypotheses: list[str] = []                # 研发方向假设
 
@@ -49,7 +49,7 @@ class PointsDraft(BaseModel):                 # 封存 / 放出两栏草稿（�
     self_check: list[LeakHit] = []            # 对 public 的泄露自查结果
 
 
-class ContributionDraft(BaseModel):           # 副驾提炼的可沉淀转化知识（只对 L3 可见）
+class ContributionDraft(BaseModel):           # Agent 提炼的可沉淀转化知识（只对 L3 可见）
     item_index: int
     scene_phrase: str
     chem_term: str
@@ -65,11 +65,15 @@ class Requirement(BaseModel):
     assigned_rd: str                          # 接单与签字的研发：建单时取该现象 L3 转化对照条数最多的研发（并列取 id 最小）
     escalate_note: str = ""                   # 业务员签字时的升级说明（L2/L3 可见）
     reuse: ReuseProposal | None = None        # v5.1：现成产品建议；None = 还没查
+    merged_into: str | None = None            # v5.2：被并入的单指向主单
+    merge_from: list[str] = []                # v5.2：产品经理 Agent 起草的合并建议，拟并入本单的需求单 id（研发签字前是草稿）
+    merge_note: str = ""                      # v5.2：判断依据——几位客户说的是不是同一件事（L2/L3 可见）
     direction: str = ""                       # 空单时为空
     product_lang: list[ReqItem] = []          # L2/L3 可见；空单时为空
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
     hypotheses: list[str] = []                # 研发方向假设（只对 L3 可见）；泄密匹配的来源之一
-    status: Literal["draft", "reused", "rd_accepted", "rd_confirmed", "released", "rejected"]   # reused：业务员采用现成产品
+    status: Literal["draft", "reused", "merged", "rd_accepted", "rd_confirmed", "released", "rejected"]
+    # reused：业务员采用现成产品；merged（v5.2）：已并入另一张单
     drafted_by: str = "pm:agent"              # L2 草稿的起草者
     chem_drafted_by: str | None = None        # L3 草稿的委托人（研发 actor id）
     rd_accepted_by: str | None = None         # 研发接单（= 立项）

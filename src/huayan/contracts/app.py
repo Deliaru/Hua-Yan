@@ -1,12 +1,24 @@
 """契约 ⑫：门面返回给界面的视图（HuayanApp 在 huayan.app）。"""
 from __future__ import annotations
 
+from typing import Literal
+
 from ._base import BaseModel, datetime
 from .escalation import Requirement
 from .jue import Family
 from .knowledge import RecommendationCard
 from .seeds import Level
 from .session import AskHint, AssistantReply, SlotFill, Turn
+
+
+class ReuseView(BaseModel):                   # v5.1：业务员看到的现成产品建议（不含案例原文）
+    requirement_id: str
+    product_id: str | None                    # None = 已查，无现成产品
+    product_name: str = ""
+    usage: str = ""                           # 产品的 L1 用法
+    customer_note: str = ""                   # 产品经理 Agent 起草的面向客户的说明
+    basis: list[str] = []                     # 归属标签，如「产品经理 P01 · 历史案例 · L2」
+    status: Literal["pending", "adopted", "declined", "none"]
 
 
 class SessionView(BaseModel):
@@ -23,6 +35,7 @@ class SessionView(BaseModel):
     requirement: Requirement | None = None    # 只对 L2/L3 返回
     reply_draft: str = ""
     escalate_note: str = ""
+    reuse: ReuseView | None = None            # v5.1：会话所升级需求单上的现成产品建议
 
 
 class RunStatus(BaseModel):

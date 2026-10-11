@@ -9,7 +9,7 @@ from .seeds import Role
 ToolKind = Literal["read", "draft", "effect"]
 # read：只读，按委托人权限过滤，自动执行
 # draft：写草稿（未生效），自动执行
-# effect：让结果生效；只用于私聊里副驾的提议，挂起为 PendingAction，委托人确认后才执行。
+# effect：让结果生效；只用于对话里 Agent 的提议，挂起为 PendingAction，委托人确认后才执行。
 #         工作面上的签字按钮直接调门面，不经过 PendingAction；没有委托人的 Agent（pm:agent）没有 effect 工具
 
 

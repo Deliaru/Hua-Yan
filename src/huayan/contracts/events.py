@@ -9,7 +9,7 @@ EventKind = Literal["turn", "extraction", "ask_hint", "match", "recommend", "esc
                     "decrypt_request", "decrypt_approve", "question_published", "question_prepared",
                     "question_resolved", "requirement_created", "requirement_accepted", "requirement_returned",
                     "requirement_edited", "requirement_translated", "knowledge_contributed", "trial", "market_eval",
-                    "points_set", "reuse_proposed", "reuse_adopted", "reuse_declined", "product_released", "sheet_updated", "access_frozen", "human_decision",
+                    "points_set", "reuse_proposed", "reuse_adopted", "reuse_declined", "merge_proposed", "requirements_merged", "product_released", "sheet_updated", "access_frozen", "human_decision",
                     "agent_action_proposed", "agent_action_decided"]
 
 

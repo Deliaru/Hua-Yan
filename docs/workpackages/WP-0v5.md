@@ -178,7 +178,7 @@ class ReqItem(BaseModel):
     slot: str | None = None
     quote_refs: list[str] = []
     ku_refs: list[str] = []
-    edited_by: str | None = None              # 新：最后一次由人修改的 actor id；None = 骨架或副驾起草（界面标「副驾起草」）
+    edited_by: str | None = None              # 新：最后一次由人修改的 actor id；None = 骨架或 Agent 起草（界面标「Agent 起草」）
 
 class LeakHit(BaseModel):                     # 新：泄密匹配结果，只给句序号与类别，不含命中内容
     index: int                                # 按「。；！？\n」切句后的序号，从 0 开始
@@ -189,7 +189,7 @@ class PointsDraft(BaseModel):                 # 新：封存 / 放出两栏草�
     sealed: list[str]                         # 拟封存的窗户纸
     self_check: list[LeakHit] = []            # 对 public 的泄露自查结果
 
-class ContributionDraft(BaseModel):           # 新：副驾提炼的可沉淀转化知识（只对 L3 可见）
+class ContributionDraft(BaseModel):           # 新：Agent 提炼的可沉淀转化知识（只对 L3 可见）
     item_index: int
     scene_phrase: str
     chem_term: str
@@ -244,15 +244,15 @@ def leak_hits(text: str, sealed: list[str], hypotheses: list[str], kb: Knowledge
 
 不变量（测试不增加，改在 `test_wp_t`）：`package_sheet` 的输出不含 L3 内容；L2 视图里没有 `sealed`。
 
-**7.2 流程**正文改为：升级（业务员签字，建空单）→ 产品经理 Agent 起草 L2 → 研发接单 / 退回 → 研发副驾起草 L3、研发确认 → 沉淀（副驾提炼、研发签字）→ 试样（模拟 ELN）→ 客户评价（业务员签字）→ 封存 / 放出（副驾两栏、研发签字）→ 产品经理 Agent 包装说明书 → 研发审定发布。`release_product` 的 `by` 必须是 `assigned_rd`。
+**7.2 流程**正文改为：升级（业务员签字，建空单）→ 产品经理 Agent 起草 L2 → 研发接单 / 退回 → 研发 Agent 起草 L3、研发确认 → 沉淀（Agent 提炼、研发签字）→ 试样（模拟 ELN）→ 客户评价（业务员签字）→ 封存 / 放出（Agent 两栏、研发签字）→ 产品经理 Agent 包装说明书 → 研发审定发布。`release_product` 的 `by` 必须是 `assigned_rd`。
 
 ## C4　③ 会话（`contracts/session.py`）
 
 ```python
 class Session(BaseModel):
     # …原有字段不变…
-    reply_draft: str = ""                     # 新：副驾起草的回复，界面预填进「发给客户」输入框；发出后清空
-    escalate_note: str = ""                   # 新：副驾起草的升级说明；签字时写入需求单
+    reply_draft: str = ""                     # 新：Agent 起草的回复，界面预填进「发给客户」输入框；发出后清空
+    escalate_note: str = ""                   # 新：Agent 起草的升级说明；签字时写入需求单
 ```
 
 `Recommendation.escalated_question_id` 改义为「业务员签字升级时关闭的 escalate_need 问题」。
@@ -323,7 +323,7 @@ class DecryptGrant(BaseModel):
 | `confirm_translation(req_id, by)` | `by` 必须是 `assigned_rd`；只给所引 L3 知识记 cited |
 | `set_public_points(req_id, text, sealed, by)` | 加 `sealed`；需客户评价通过；写 `points_set` |
 | `package_sheet(req_id, by)` | `by` 为 `pm:agent`（草稿，不是生效动作） |
-| `save_sheet(req_id, sheet, by)` | `by` 为 `pm:agent` 或 `assigned_rd`（研发副驾改写泄密句） |
+| `save_sheet(req_id, sheet, by)` | `by` 为 `pm:agent` 或 `assigned_rd`（研发 Agent 改写泄密句） |
 | `release_product(req_id, by)` | `by` 必须是 `assigned_rd`；可签条件：说明书与用法 `leak_hits` 为空 |
 | `record_trial(trial)` | 来自模拟 ELN，不写 `human_decision` |
 | `decide_decrypt(question_id, by, approve, text="")` | 加 `text`（第二档） |
@@ -342,11 +342,11 @@ def return_requirement(self, req_id: str, reason: str, by: str) -> Requirement: 
     # assigned_rd；reason 过 leak_hits（只查 l3_term），命中抛 ValueError；追加 return_notes；resolve(return)；状态仍为 draft
 def record_market_eval(self, req_id: str, result: Literal["pass", "fail"], note: str, by: str) -> Trial: ...
     # 需求单首个会话的业务员；写到最近一次通过的试样上
-def save_reply_draft(self, session_id: str, text: str, by: str) -> Session: ...          # 业务员（副驾）
-def save_escalate_note(self, session_id: str, text: str, by: str) -> Session: ...        # 业务员（副驾）
+def save_reply_draft(self, session_id: str, text: str, by: str) -> Session: ...          # 业务员（Agent）
+def save_escalate_note(self, session_id: str, text: str, by: str) -> Session: ...        # 业务员（Agent）
 def save_points_draft(self, req_id: str, public: str, sealed: list[str], by: str) -> Requirement: ...
-    # assigned_rd（副驾）；自动填 self_check = leak_hits(public, sealed, hypotheses, kb)
-def save_contribution_draft(self, req_id: str, draft: ContributionDraft, by: str) -> Requirement: ...   # assigned_rd（副驾）
+    # assigned_rd（Agent）；自动填 self_check = leak_hits(public, sealed, hypotheses, kb)
+def save_contribution_draft(self, req_id: str, draft: ContributionDraft, by: str) -> Requirement: ...   # assigned_rd（Agent）
 def leak_check(self, req_id: str, viewer_id: str) -> list[LeakHit]: ...
     # 说明书与用法的命中；L2 查看者也可调用（只得到序号与类别）
 def mark_prepared(self, question_id: str, by: str) -> Question: ...
@@ -394,7 +394,7 @@ class JueTimeline(BaseModel):
 
 `SessionView` 增加 `reply_draft: str = ""`、`escalate_note: str = ""`；`RunStatus` 不变。
 
-## C11　⑭ 副驾与产品经理 Agent（`contracts/agent.py`）
+## C11　⑭ 角色 Agent 与产品经理 Agent（`contracts/agent.py`）
 
 ```python
 class AgentMessage(BaseModel):
@@ -405,10 +405,10 @@ class AgentMessage(BaseModel):
     target: str | None = None                 # 新：批注挂的位置，如 "req:3/chem/2"、"sess:5/reply"；None = 普通消息
 ```
 
-`Conversation.principal` 可为 `pm:agent`（role = pm）。`PendingAction` 只用于私聊里副驾的提议；工作面上的签字按钮直接调门面，不经过 `PendingAction`。
+`Conversation.principal` 可为 `pm:agent`（role = pm）。`PendingAction` 只用于对话里 Agent 的提议；工作面上的签字按钮直接调门面，不经过 `PendingAction`。
 
 **AgentHub 改动**
-- `dispatch()`：只把总线上 open、`prepared_at` 为空、尚未派过的问题 notify 给主人（`owner_id`）；主人是 `pm:agent` 时跑产品经理 Agent 的 Loop，是业务员 / 研发时跑其副驾的 Loop；Loop 结束后调用 `app.mark_prepared`。提示类（`signer_role` 为空）问题照旧派送（回问派到会话对话）。
+- `dispatch()`：只把总线上 open、`prepared_at` 为空、尚未派过的问题 notify 给主人（`owner_id`）；主人是 `pm:agent` 时跑产品经理 Agent 的 Loop，是业务员 / 研发时跑其 Agent 的 Loop；Loop 结束后调用 `app.mark_prepared`。提示类（`signer_role` 为空）问题照旧派送（回问派到会话对话）。
 - 删除 `approve` 中的「确认后派单」与整张派单表：下一步由觉的写后评估提出。
 - `gateway_mock` 为 true（离线）时，hub 对主人调用对应的规则骨架（`draft_requirement` / `translate_requirement` / `package_sheet`），再 `mark_prepared`；没有骨架的（升级说明、封存两栏、提炼）用录制缓存或标注「离线，无草稿」。
 
@@ -416,7 +416,7 @@ class AgentMessage(BaseModel):
 
 | 工具 | 类别 | 角色 | 变化 |
 |---|---|---|---|
-| `record_customer_turn` / `record_sales_turn` / `recommend_now` | — | — | **删除**：客户原话不经过副驾，发言与推荐在工作面上 |
+| `record_customer_turn` / `record_sales_turn` / `recommend_now` | — | — | **删除**：客户原话不经过 Agent，发言与推荐在工作面上 |
 | `save_reply_draft(text)` | draft | sales | 新 |
 | `save_escalate_note(text)` | draft | sales | 新 |
 | `draft_product_need(req_id)` | draft | pm | 改参数 |
@@ -426,8 +426,8 @@ class AgentMessage(BaseModel):
 | `save_points_draft(req_id, public, sealed)` | draft | rd | 新 |
 | `save_contribution_draft(req_id, index, scene_phrase, chem_term, note)` | draft | rd | 新 |
 | `record_trial` | — | rd | **删除**：试样来自模拟 ELN |
-| `confirm_translation` / `contribute_translation` / `set_public_points(req_id, text, sealed)` / `decide_decrypt` | effect | rd | 保留，仅私聊提议用 |
-| `request_decrypt` | effect | sales | 保留，仅私聊提议用 |
+| `confirm_translation` / `contribute_translation` / `set_public_points(req_id, text, sealed)` / `decide_decrypt` | effect | rd | 保留，仅对话提议用 |
+| `request_decrypt` | effect | sales | 保留，仅对话提议用 |
 
 不变量（`test_wp_l`，不增加测试）：`pm:agent` 的工具集合中没有 `effect` 工具；它的 `search_knowledge` / `get_knowledge` / `get_requirement` 拿不到 L3 原文、`sealed` 与 `points_draft`；`effect` 工具在 `approve` 之前不改状态；非委托人 `approve` 抛 `PermissionDenied`。
 
@@ -456,12 +456,39 @@ class Requirement(BaseModel):
 - ⑧ 事件：`reuse_proposed`（`requirement_id, product_id, ku_refs`）、`reuse_adopted`（`requirement_id, product_id, session_id`）、`reuse_declined`（`requirement_id, product_id, reason`）。
 - ⑫ 门面：`save_reuse_proposal(req_id, product_id, ku_refs, customer_note, note, by)`（`pm:agent`，草稿）；`adopt_reuse(req_id, by)`（首个会话的业务员签字：按 Jev 披露版本给会话生成推荐卡，客户说明附在卡上，`customer_note` 过 `leak_hits`，所引 L2 知识记 cited，`status="reused"`，resolve `reuse_product`(sign)）；`decline_reuse(req_id, reason, by)`（业务员，resolve(return)，觉随后提出 `accept_requirement`）。业务员视图里的 `reuse` 只给产品（L1）、`customer_note` 与归属。
 - ⑭ 工具：`propose_reuse(req_id, product_id, ku_refs, customer_note, note)`，draft，pm。
+- ⑫ 视图（补漏）：`ReuseView(requirement_id, product_id, product_name, usage, customer_note, basis, status)`，`SessionView.reuse: ReuseView | None`；`basis` 是归属标签，不含案例原文；`JueTimeline` 对业务员的裁剪增加 `reuse_product`。
 - 决策目录：新增 `reuse_product`（推进类，对象 requirement，主人 pm，签字人 sales）；`accept_requirement` 前置条件补 `attrs.reuse_checked and not attrs.reuse_pending and attrs.status == "draft"`。
+
+## C14　v5.2：同类需求合并（D19）、Agent 协作焦点（D21）——已签字，已应用到契约 v5.2
+
+```python
+# ⑦ escalation.py
+class Requirement(BaseModel):
+    # …
+    status: Literal["draft", "reused", "merged", "rd_accepted", "rd_confirmed", "released", "rejected"]   # 增加 merged
+    merged_into: str | None = None            # 被并入的单指向主单
+    merge_from: list[str] = []                # 产品经理 Agent 起草的合并建议：拟并入本单的需求单 id（研发签字前是草稿）
+    merge_note: str = ""                      # 判断依据：几位客户说的是不是同一件事（L2 语言，L2/L3 可见）
+```
+
+- ⑤ 模板 `opportunity`：`decision_label` 改为「同类需求是否合并立项」，`signer_role: rd`；`refs` 增加 `requirement_ids`（逗号分隔，该主题 `draft`、已查过复用且无待签建议的单）与 `assigned_rd`（其中最早一张的研发）；C1 解析表增加一行「rd | theme → `refs.assigned_rd`」。
+- ⑥ `opportunity` 的处置：研发合并 `sign`；研发直接接了其中一张单 `accept`；「现在不需要」`dismiss`。
+- ⑧ 事件：`merge_proposed`（`question_id, target, members`；members 为空 = 判断不是同一件事）、`requirements_merged`（`question_id, target, members`）。
+- ⑫ 门面：
+  - `save_merge_proposal(question_id, target_req_id, member_ids, note, by)`：`pm:agent`，草稿；`target` 与 `members` 必须在问题的 `requirement_ids` 里；写 `merge_from`、`merge_note`。
+  - `merge_requirements(question_id, by)`：主单的 `assigned_rd` 签字；`merge_from` 为空抛 `ValueError`；被并入单的会话追加到主单 `session_ids`，被并入单 `status="merged"`、`merged_into=主单`，其 open 问题 `resolve(answered, note="已并入 req:n")`；`resolve(opportunity, sign)`；**清空主单的 L2 草稿**（`product_lang`、`direction`，写 `requirement_edited`），主单待签问题 `set_prepared(None)`，产品经理 Agent 按合并后的全部会话重新起草（`draft_requirement` 照旧只对空单起草）。
+  - `requirement_view` 的 `merge_from`、`merge_note` 对 L2/L3 可见。
+  - 判断不是同一件事时：`target_req_id` 填 `requirement_ids` 中最早一张，`member_ids` 为空，`merge_note` 写理由。
+  - 合并之后：`merged` 的单不再构建觉的状态；觉视图的需求单线程包含 `merged_into` 指向本单的单；`view_session` 取会话所在的未合并单。
+  - 主题：`requirements_merged` 事件计为该主题「已处理」的时刻（与立项同样处理），合并后机会汇聚不会再次到点。
+- ⑭ 工具：`propose_merge(question_id, target_req_id, member_ids, note)`，draft，pm。
+- ⑭ `AgentHub.chat(actor_id, text, session_id=None, focus=None)`：`focus` 为委托人此刻在工作面上打开的对象（`sess:<n>` / `req:<n>`），写进 Agent 的系统提示词；Agent 据此理解「第 2 条」「这句话」指什么。
+- 不改：每次升级仍各建一张单（REPLAN 4.2 原文）；立项 ≡ 研发接单（D11）。
 
 ## 待人确认的几处取舍
 
 1. **`Family` 用带格式约束的字符串**（C1）：代价是类型检查不再能发现拼错的 family，由模板加载时校验兜住。
 2. **`ScoredDecision.scored_by` 逐条**（C1）：同一次觉的输出里会同时有 Jue-K 和规则打分，界面按条显示；不加这个字段就只能整批标一个来源，觉视图会标错。
-3. **草稿放进领域对象**（C3、C4）而不是单独的草稿表：字段多了几个，但工作面直接读对象就能就地显示，符合 D2「副驾把草稿写进工作对象」。
+3. **草稿放进领域对象**（C3、C4）而不是单独的草稿表：字段多了几个，但工作面直接读对象就能就地显示，符合 D2「Agent 把草稿写进工作对象」。
 4. **发送拦截查全部需求单的封存项**（C10）：不知道这句回复对应哪张单，只能全查；封存项少，代价可忽略。
 5. 本差异**不改**：`Version`、披露上限、知识库接口、Jev 三个问题、网关与计量、种子格式（除 actors 一行）。

@@ -110,5 +110,5 @@ class Session(BaseModel):
     replies: list[AssistantReply] = []
     recommendation: Recommendation | None = None
     status: Literal["open", "recommended", "escalated", "closed"] = "open"
-    reply_draft: str = ""                     # 副驾起草的回复，预填进「发给客户」输入框；发出后清空
-    escalate_note: str = ""                   # 副驾起草的升级说明；业务员签字时写入需求单
+    reply_draft: str = ""                     # Agent 起草的回复，预填进「发给客户」输入框；发出后清空
+    escalate_note: str = ""                   # Agent 起草的升级说明；业务员签字时写入需求单
