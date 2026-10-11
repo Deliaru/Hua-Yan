@@ -12,15 +12,15 @@
     "swap_prob": 0.1
   },
   "jue": {
-    "model": "jue_proto",
+    "model": "jue_k",
     "jue_k_dir": "models/jue_k",
-    "ask_threshold": 0.5,
-    "back_threshold": 0.5,
+    "ask_threshold": 0.15,
+    "back_threshold": 0.15,
     "max_rounds": 8,
     "max_backs": 2
   },
   "calls": {
-    "jue": 193,
+    "jue": 169,
     "llm": 0,
     "s1": 0
   },
@@ -46,24 +46,24 @@
       "returned": 1.0
     },
     "G3 化言（不含回问）": {
-      "completeness": 0.8186813186813187,
+      "completeness": 0.6868131868131868,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 1.2166666666666666,
+      "asks": 0.8166666666666667,
       "backs": 0.0,
       "backs_useful": null,
       "traceable": 1.0,
-      "returned": 0.5166666666666667
+      "returned": 0.7666666666666667
     },
     "G3 化言": {
-      "completeness": 0.8516483516483516,
+      "completeness": 0.7692307692307693,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 1.2166666666666666,
-      "backs": 0.75,
-      "backs_useful": 0.35555555555555557,
+      "asks": 0.8166666666666667,
+      "backs": 0.7833333333333333,
+      "backs_useful": 0.3404255319148936,
       "traceable": 1.0,
-      "returned": 0.4166666666666667
+      "returned": 0.5666666666666667
     }
   },
   "labels": {

@@ -13,10 +13,13 @@ TURNS = 6
 WRONG, MISS = 0.10, 0.05      # 抽取噪声：填错（同槽位另一个取值，低置信度）、漏填
 
 
-def ask_label(need: NeedState, card: NeedCard, slot: str, products: list[Product]) -> int:
-    """追问：补上真实值（或把填错的改成真实值）后，最终推荐是否由错变对（含正确判为应升级）。客户说不清的槽位为 0。"""
+def ask_label(need: NeedState, card: NeedCard, slot: str, products: list[Product], required: list[str]) -> int:
+    """追问：补上真实值（或把填错的改成真实值）后，最终推荐是否由错变对（含正确判为应升级）；
+    或该需求应升级、而这是研发的必问信息（不问研发会退回）。客户说不清的槽位为 0。"""
     if _no_gain(need, card, slot):
         return 0
+    if card.truth_product is None and slot in required:
+        return 1
     known = need.known()
     right = lambda k: correct_product(card.phenomenon, k, products) == card.truth_product
     return int(not right(known) and right({**known, slot: card.slots[slot]}))
@@ -86,7 +89,8 @@ def trajectory(card: NeedCard, seeds: Seeds, kb, model: QuestionModel, rng: rand
     rows = []
     for turn in range(1, TURNS + 1):
         state = realtime_state(need, seeds, products, start + timedelta(minutes=turn))
-        rows += _rows(model, state, lambda o: ask_label(need, card, o.attrs["slot"], products), card.id)
+        rows += _rows(model, state, lambda o: ask_label(need, card, o.attrs["slot"], products, phen.required_slots),
+                      card.id)
         for slot in _sales_asks(need, phen, seeds, rng):
             need.asked[slot] = need.asked.get(slot, 0) + 1
             answer(need, card, slot, seeds, rng, turn + 1)
