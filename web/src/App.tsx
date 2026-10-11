@@ -176,6 +176,7 @@ function StatusMenu({ s, m, onMode }: { s: RunStatus; m: RunMode; onMode: () => 
   const sub = s.replay ? "非在线运行" : degraded ? `${degraded} 项降级` : byok ? "真实运行" : "全部正常";
   const TAG: Record<Kind, string> = { ok: "text-ink", warn: "tag tag-warn", replay: "tag" };
   return (
+    <>
     <Popover align="right" trigger={(toggle) => (
       <button onClick={toggle} className="flex h-7 items-center gap-2 rounded-full px-2.5 text-[12px] hover:bg-fill">
         <i className={`h-[7px] w-[7px] rounded-full ${s.replay ? "bg-[#8e8e93]" : degraded ? "bg-[#f5b400]" : "bg-[#30c25b]"}`} />
@@ -203,6 +204,12 @@ function StatusMenu({ s, m, onMode }: { s: RunStatus; m: RunMode; onMode: () => 
         </div>
       )}
     </Popover>
+    {/* 回放时常驻的入口：评委一眼能看到在哪里接入真实模型、切到在线运行 */}
+    {m.kind === "replay" && (
+      <button onClick={onMode} title="用你自己的大模型（与可选的 OneJev）密钥在线真实运行；只影响你这个浏览器"
+              className="btn btn-plain !text-accent">接入真实模型</button>
+    )}
+    </>
   );
 }
 

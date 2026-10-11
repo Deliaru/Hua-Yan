@@ -81,9 +81,30 @@ export function Overview({ toStory }: { toStory: () => void }) {
           <p className="text-[15px] text-ink-2">让 AI 不只提供答案，更让企业有能力持续发现问题、协同决策、积累经验。</p>
           <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]" onClick={toStory}>进入演示流程，进一步理解架构及其价值 →</button>
         </div>
+        <Status />
       </section>
       <Efficiency />
       <ReplayNote />
+    </div>
+  );
+}
+
+// ── 演示入口下方：这个 Demo 现在是什么、还没接什么、最终嵌到哪里 ─────────
+const STATUS: [string, React.ReactNode][] = [
+  ["当前 Demo", "当前 Demo 基于模拟业务数据，已通过真实模型调用验证核心业务闭环，完整展示了从客户需求理解、分层转译、决策发现到研发协同、知识沉淀与回流的全过程。"],
+  ["外部系统", "企业真实 RAG 知识库、ELN 等外部系统尚未接入，但现有架构保留了相应的集成扩展点，并提供接入路径与代码接口。"],
+  ["长期目标", "化言的长期目标并非替代企业现有业务系统，而是嵌入钉钉、飞书等企业协作平台，让「觉」的主动决策发现、Agent 协作与人工审批自然融入企业日常业务流程。"],
+];
+
+function Status() {
+  return (
+    <div className="mx-auto mt-4 grid w-full max-w-[1080px] grid-cols-3 gap-6">
+      {STATUS.map(([label, text]) => (
+        <div key={label} className="border-t border-sep pt-3">
+          <p className="text-[13px] font-semibold text-ink">{label}</p>
+          <p className="mt-1.5 text-[14px] leading-[23px] text-ink-2">{text}</p>
+        </div>
+      ))}
     </div>
   );
 }
