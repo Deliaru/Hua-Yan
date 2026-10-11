@@ -42,3 +42,14 @@ items:
     formula: "（模拟配方）缓冲型匀染剂复配。"
     owner: rd:R01
     status: project
+
+  - id: HY-SF520
+    name: 柔软剂 HY-SF520（模拟）
+    category: 柔软剂
+    solves: [harsh_hand]
+    applicable: {fiber: [棉]}
+    sheet: "（模拟）用于棉织物柔软整理，改善手感发硬。"
+    usage: "（模拟）1–2 % o.w.f.，整理时加入，先做小样。"
+    mechanism: "（模拟）表面成膜减少纤维间摩擦。"
+    formula: "（模拟）改性聚硅氧烷分散体系。"
+    owner: rd:R01

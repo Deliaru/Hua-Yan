@@ -57,3 +57,11 @@ items:
     scene_text: "（模拟）客户做锦氨面料拼色，用了点分散的，染完氨纶那部分被沾上颜色。"
     pm_translation: "（模拟）分散染料沾污氨纶组分，现有防沾色产品只针对棉和涤棉。需要一种优先吸附在氨纶上的阻沾组分，需研发评估。"
     owner: pm:P01
+
+  - id: case:reuse_softness
+    phenomenon: harsh_hand
+    slots: {fiber: 涤纶}
+    product_id: HY-SF520
+    scene_text: "（模拟）涤纶布整理后手感发硬，P01 的历史小样曾使用 HY-SF520 改善；说明书尚未列入涤纶。"
+    pm_translation: "（模拟）既有小样显示该柔软整理方案可改善涤纶手感，建议研发审定后在客户工艺下试样确认。"
+    owner: pm:P01

@@ -124,7 +124,9 @@ def get_need_card(ctx: ToolContext, args: NoArgs) -> ToolResult:
     return ToolResult(data={"status": v.status, "slots": [{"slot": f.slot, "value": f.value, "quote": f.quote} for f in v.slots],
                             "ask_hints": [h.ask_text for h in v.hints], "escalation_question_id": v.escalation_question_id,
                             "reply_draft": v.reply_draft, "escalate_note": v.escalate_note,
+                            "reuse": v.reuse and v.reuse.model_dump(),
                             "card": v.card and {"product_id": v.card.product_id, "version": v.card.version,
+                                                "note": v.card.note,
                                                 "sections": [f"{s.title}：{s.text}" for s in v.card.sections]}})
 
 

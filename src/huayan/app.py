@@ -9,8 +9,8 @@ from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
 from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
-    Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, ReqItem, Requirement,
-    RequirementView, Resolution, ReuseProposal, RunStatus, Session, SessionView, SheetDraft, Trial)
+    Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
+    RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial)
 from huayan.domain import consistent, load_seeds
 from huayan.escalation import flow
 from huayan.escalation.translate import leak_hits
@@ -244,13 +244,29 @@ class HuayanApp:
             if level == 1:
                 record_disclosure(card, self)
         req = next((r for r in reversed(list(self._requirements.values()))
-                    if session_id in r.session_ids and r.status != "rejected"), None) if level > 1 else None
-        if req is not None:
-            req = self.requirement_view(req.id, viewer_id).requirement
+                    if session_id in r.session_ids and r.status not in {"rejected", "merged"}), None)
+        reuse = None
+        if req and req.reuse and req.session_ids[0] == session_id:
+            proposal = req.reuse
+            adopted = req.status == "reused"
+            if card and adopted and card.product_id == proposal.product_id:
+                card.note = "；".join(filter(None, [card.note, f"研发 {req.assigned_rd} 审定：{proposal.customer_note}"]))
+            if viewer_id == session.sales_id:
+                product = self.kb.product(proposal.product_id) if proposal.product_id else None
+                reuse = ReuseView(requirement_id=req.id, product_id=proposal.product_id,
+                    product_name=product.name if product else "",
+                    status="adopted" if adopted else "declined" if proposal.declined_reason else "pending" if product else "none")
+                if adopted:
+                    reuse.usage, reuse.customer_note = product.usage, proposal.customer_note
+                    for ref in dict.fromkeys(proposal.ku_refs):
+                        unit = self.kb._units[ref]
+                        label = "历史案例" if unit.kind == "case" else "转化知识"
+                        reuse.basis.append(f"{self.actors[unit.owner].name}（{unit.owner}） · {label} · L{unit.level}")
+        req = self.requirement_view(req.id, viewer_id).requirement if req and level > 1 else None
         return SessionView(session_id=session_id, viewer=viewer_id, viewer_level=level, turns=session.turns,
             slots=list(session.need.slots.values()), hints=session.hints, replies=session.replies,
             card=card, status=session.status, escalation_question_id=rec.escalated_question_id if rec else None,
-            requirement=req,
+            requirement=req, reuse=reuse,
             reply_draft=session.reply_draft if viewer_id == session.sales_id else "",
             escalate_note=session.escalate_note if viewer_id == session.sales_id or level > 1 else ""
             ).model_copy(deep=True)
@@ -425,6 +441,40 @@ class HuayanApp:
         self._save_requirement(req)
         self._after(req_ids=[req_id])
         return self.requirement_view(req_id, by).requirement
+
+    def adopt_reuse(self, req_id, by):
+        req, actor = self._requirement(req_id, by, {"rd"}, {"draft"})
+        if req.reuse is None or req.reuse.product_id is None or req.reuse.declined_reason:
+            raise ValueError("没有待审定的现成产品建议")
+        proposal = req.reuse
+        hits = leak_hits(proposal.customer_note, req.sealed, req.hypotheses, self.kb)
+        if hits:
+            raise ValueError([hit.model_dump() for hit in hits])
+        units = [self.kb.get(ref, actor) for ref in sorted(set(proposal.ku_refs))]
+        session = self._sessions[req.session_ids[0]]
+        at = get_clock().now()
+        state = requirement_state(req, session.need, self.seeds, self.kb, at, self.events)
+        question = self._decision("reuse_product", "adopt_reuse", state.objects[f"requirement:{req_id}"], by)
+        viewer = self.actors[session.sales_id]
+        maximum = cap(viewer, session.customer_id, proposal.product_id, self.grants)
+        disclosure = self.jev.disclose(session.need, proposal.product_id, maximum)
+        card = render(proposal.product_id, disclosure.choice, viewer, self.kb, session_id=session.id,
+                      customer_id=session.customer_id, grants=self.grants)
+        session.recommendation = Recommendation(product_id=proposal.product_id, candidates=[], match=None,
+            disclose=disclosure, version=disclosure.choice, at=at)
+        session.status, req.status = "recommended", "reused"
+        for unit in units:
+            if unit.level == 2 and unit.owner not in {"pm:agent", "jue"} and not self.ledger.has(unit.owner, unit.id, req.id):
+                self.ledger.add(LedgerEntry(ts=at, owner=unit.owner, ku_id=unit.id, ref=req.id,
+                    points=self.config["points"]["cited"], reason="cited"))
+        record_disclosure(card, self)
+        self.events.append("reuse_adopted", by, {"requirement_id": req_id,
+            "product_id": proposal.product_id, "session_id": session.id}, session_id=session.id)
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
+        self._save_requirement(req)
+        self._after([session.id], [req_id])
+        return session.model_copy(deep=True)
 
     def decline_reuse(self, req_id, reason, by):
         req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
