@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"save_reply_draft-1791720496346315087-1460","name":"save_reply_draft","arguments":{"text":"请问具体是什么面料材质的布？染色用的是哪种染缸（比如溢流缸还是气流缸）呢？"}}],"usage":{"input_tokens":1384,"output_tokens":46},"latency_ms":4934.367399997427,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

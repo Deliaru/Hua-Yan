@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"save_reply_draft-1791720664129816196-1492","name":"save_reply_draft","arguments":{"text":"方便问一下，您染色时的染浴 pH 大概控制在多少呢？研发同事评估工艺时需要参考这个参数。"}}],"usage":{"input_tokens":1951,"output_tokens":44},"latency_ms":3426.2853000036557,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

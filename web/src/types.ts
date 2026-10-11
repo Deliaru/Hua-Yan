@@ -126,7 +126,7 @@ export interface Requirement {
   product_id: string | null;
   created_at: string;
 }
-export interface RequirementSummary { id: string; status: ReqStatus; phenomenon: string }
+export interface RequirementSummary { id: string; status: ReqStatus; phenomenon: string; customer_ids: string[] }
 export interface CitedKnowledge { ku_id: string; owner: string; level: number; title: string; text: string | null; n_cited: number }
 export interface RequirementView { viewer: string; viewer_level: number; requirement: Requirement; quotes: Record<string, string>; cited: CitedKnowledge[] }
 export interface ContributionStat { owner: string; ku_id: string; level: number; title: string; n_cited: number; points: number; used_by: string[] }

@@ -30,6 +30,7 @@ export const api = {
   session: (id: string, viewer: string) => call<SessionView | { view: SessionView }>(`session?${q({ id, viewer })}`).then((d) => ("view" in d ? d.view : d)),
   questions: (viewer: string) => call<Question[]>(`questions?${q({ viewer })}`),
   requirements: (viewer: string) => call<RequirementSummary[]>(`requirements?${q({ viewer })}`),
+  frozen: (actor: string) => call<{ frozen: boolean }>(`frozen?${q({ actor })}`),
   requirement: (id: string, viewer: string) => call<RequirementView>(`requirement?${q({ id, viewer })}`),
   leak: (id: string, viewer: string) => call<LeakHit[]>(`leak?${q({ id, viewer })}`),
   timeline: (target: string, viewer: string) => call<JueTimeline>(`timeline?${q({ target_id: target, viewer })}`),

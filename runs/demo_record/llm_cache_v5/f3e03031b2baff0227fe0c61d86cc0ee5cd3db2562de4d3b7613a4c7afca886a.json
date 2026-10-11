@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791720822010428123-1518","name":"search_knowledge","arguments":{"kind":"usage","query":"HY-SF520"}}],"usage":{"input_tokens":6850,"output_tokens":27},"latency_ms":8725.240400002804,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

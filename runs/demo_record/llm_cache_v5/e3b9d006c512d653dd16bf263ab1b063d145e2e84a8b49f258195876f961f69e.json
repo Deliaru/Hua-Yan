@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791720733898550200-1501","name":"search_knowledge","arguments":{"query":"分段加酸 气流 低浴比","kind":"translation"}}],"usage":{"input_tokens":7208,"output_tokens":31},"latency_ms":4964.988699997775,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

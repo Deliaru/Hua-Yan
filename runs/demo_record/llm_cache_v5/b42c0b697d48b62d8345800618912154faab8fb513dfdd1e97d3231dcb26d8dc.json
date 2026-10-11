@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"get_need_card-1791720518506051294-1461","name":"get_need_card","arguments":{}}],"usage":{"input_tokens":1221,"output_tokens":12},"latency_ms":3635.9242999969865,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

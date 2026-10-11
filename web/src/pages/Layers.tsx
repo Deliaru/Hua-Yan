@@ -216,7 +216,7 @@ export function Layers() {
       {list.length ? list.map((r) => (
         <button key={r.id} onClick={() => choose(r.id)} className={`side-row ${r.id === current ? "on" : ""}`}>
           <p className="text-[13px] font-semibold">{L.phen(r.phenomenon)}</p>
-          <p className="text-[12px] text-ink-2">{REQ_STATUS[r.status]}</p>
+          <p className="truncate text-[12px] text-ink-2">{[r.customer_ids.map(L.name).join("、"), REQ_STATUS[r.status]].filter(Boolean).join(" · ")}</p>
         </button>
       )) : <p className="px-[18px] py-1 text-[13px] text-ink-3">暂无</p>}
       </Side>
