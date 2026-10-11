@@ -410,9 +410,12 @@ class HuayanApp:
         if self.kb.is_frozen(viewer.id):
             raise PermissionDenied("高层级访问已冻结")
         req = _find(self._requirements, req_id, "需求单").model_copy(deep=True)
-        # 契约允许 L2 看化学需求条目，但机理假设与所引知识原文仅对 L3 开放。
+        # L2 可看转译条目；研发内部假设、封存项及两类草稿只对 L3 开放。
         if level_of(viewer) < 3:
             req.hypotheses = []
+            req.sealed = []
+            req.points_draft = None
+            req.contribution_drafts = []
         refs = sorted({ref for item in req.product_lang + req.chem_lang for ref in item.ku_refs})
         cited = []
         for ref in refs:
@@ -426,6 +429,16 @@ class HuayanApp:
         quotes = {t.id: t.text for sid in req.session_ids for t in self._sessions[sid].turns if t.id in quote_refs}
         return RequirementView(viewer=viewer_id, viewer_level=level_of(viewer), requirement=req,
                                quotes=quotes, cited=cited)
+
+    def leak_check(self, req_id, viewer_id):
+        viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})
+        if self.kb.is_frozen(viewer.id):
+            raise PermissionDenied("高层级访问已冻结")
+        req = _find(self._requirements, req_id, "需求单")
+        if req.sheet is None:
+            return []
+        # 用完整内部来源检查，返回值仅含句序号与类别；用法接续说明书编号。
+        return leak_hits(f"{req.sheet.sheet}\n{req.sheet.usage}", req.sealed, req.hypotheses, self.kb)
 
     def record_trial(self, trial: Trial):
         actor = self._actor(trial.rd, {"rd"})
