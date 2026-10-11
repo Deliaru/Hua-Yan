@@ -29,9 +29,17 @@ def _term(ku: KnowledgeUnit) -> str:
     return ku.text.split(" → ", 1)[1]           # 转化对照知识的 text 为「原文 → 译文」
 
 
+def _hypothesis_body(value: str) -> str:
+    """去掉研发假设的来源说明与标签，只保留可能流向说明书的实质正文。"""
+    body = re.split(r"[:：]", value, maxsplit=1)[-1].strip()
+    body = re.sub(r"^(?:[（(][^）)]*[）)]\s*)+", "", body).strip()
+    return body or value.strip()
+
+
 def leak_hits(text: str, sealed: list[str], hypotheses: list[str], kb: KnowledgeBase) -> list[LeakHit]:
     """按非空句编号，只返回句序号与来源类别；同句同类去重，不返回保密原文。"""
-    sources = (("sealed", sealed), ("l3_term", kb._l3_translation_terms()), ("hypothesis", hypotheses))
+    sources = (("sealed", sealed), ("l3_term", kb._l3_translation_terms()),
+               ("hypothesis", [_hypothesis_body(value) for value in hypotheses]))
     phrases = [(source, [p.strip() for value in values for p in re.split(r"[。；！？\n]+", value) if p.strip()])
                for source, values in sources]
     sentences = [s.strip() for s in re.split(r"[。；！？\n]+", text) if s.strip()]

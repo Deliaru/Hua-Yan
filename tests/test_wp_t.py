@@ -60,6 +60,10 @@ def test_layers_cite_own_knowledge_and_keep_quotes(mini_seeds, sim_clock):
     l3_owners = {units[r].owner for i in rd.chem_lang for r in i.ku_refs if units[r].level == 3}
     assert {"rd:R01", "rd:R02"} <= l3_owners
     assert all(i.quote_refs for i in rd.chem_lang)
+    actual_hypothesis = next(h for h in rd.hypotheses if "T-205" in h)
+    assert actual_hypothesis == "参考 T-205 的机理：（模拟机理）与染料竞争染座，均匀上染"
+    assert [h.model_dump() for h in leak_hits("与染料竞争染座，均匀上染", [], [actual_hypothesis], kb)] == [
+        {"index": 0, "source": "hypothesis"}]
 
     # 反向包装：不含 L3 转化对照译文与任何机理文字
     sheet = package_sheet(req)
