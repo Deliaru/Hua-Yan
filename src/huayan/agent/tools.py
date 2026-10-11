@@ -43,7 +43,8 @@ def _items(items: list[ReqItem]) -> list[dict]:
 def _req(req) -> dict:
     return {"req_id": req.id, "status": req.status, "phenomenon": req.phenomenon, "known_slots": req.known_slots,
             "direction": req.direction, "product_lang": _items(req.product_lang), "chem_lang": _items(req.chem_lang),
-            "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id}
+            "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id,
+            "sealed": req.sealed, "points_draft": req.points_draft and req.points_draft.model_dump()}
 
 
 class NoArgs(BaseModel):
@@ -184,9 +185,9 @@ def my_contributions(ctx: ToolContext, args: NoArgs) -> ToolResult:
 
 # ---- 需求单草稿（产品经理改 L2，研发改 L3；层的规则在门面） ----
 
-@tool("draft_product_need", "draft", ["pm"], "为一个升级 / 机会问题起草 L2 产品需求单（规则骨架，之后可逐条修改）", QuestionId)
-def draft_product_need(ctx: ToolContext, args: QuestionId) -> ToolResult:
-    return ToolResult(data=_req(ctx.app.draft_requirement(args.question_id, ctx.principal.id)))
+@tool("draft_product_need", "draft", ["pm"], "为已有需求单起草 L2 产品需求（规则骨架，之后可逐条修改）", ReqId)
+def draft_product_need(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.draft_requirement(args.req_id, ctx.principal.id)))
 
 
 LANG = {"pm": "product_lang", "rd": "chem_lang"}         # 编辑哪一层由门面按角色决定，这里只用来读原条目
@@ -254,11 +255,6 @@ def edit_sheet(ctx: ToolContext, args: SheetArgs) -> ToolResult:
 
 # ---- 生效动作（只挂起为确认卡，委托人确认后才执行） ----
 
-@tool("confirm_requirement", "effect", ["pm"], "提议确认 L2 产品需求单并交研发", ReqId, "确认需求单 {req_id} 的产品需求，并交研发转译")
-def confirm_requirement(ctx: ToolContext, args: ReqId) -> ToolResult:
-    return ToolResult(data=_req(ctx.app.confirm_requirement(args.req_id, ctx.principal.id)))
-
-
 class DismissArgs(BaseModel):
     question_id: str
     note: str = ""
@@ -299,12 +295,24 @@ def contribute_translation(ctx: ToolContext, args: ContributeArgs) -> ToolResult
 class PointsArgs(BaseModel):
     req_id: str
     text: str
+    sealed: list[str]
+
+
+class PointsDraftArgs(BaseModel):
+    req_id: str
+    public: str
+    sealed: list[str]
+
+
+@tool("save_points_draft", "draft", ["rd"], "起草封存／放出两栏，返回泄密自查结果；草稿不生效", PointsDraftArgs)
+def save_points_draft(ctx: ToolContext, args: PointsDraftArgs) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.save_points_draft(args.req_id, args.public, args.sealed, ctx.principal.id)))
 
 
 @tool("set_public_points", "effect", ["rd"], "提议确认可以对外的要点（L3 内容流向下层的唯一出口，不写机理与配方）", PointsArgs,
-      "确认需求单 {req_id} 的对外要点：{text}")
+      "签字封存／放出需求单 {req_id} 的两栏内容")
 def set_public_points(ctx: ToolContext, args: PointsArgs) -> ToolResult:
-    return ToolResult(data=_req(ctx.app.set_public_points(args.req_id, args.text, ctx.principal.id)))
+    return ToolResult(data=_req(ctx.app.set_public_points(args.req_id, args.text, args.sealed, ctx.principal.id)))
 
 
 class TrialArgs(BaseModel):

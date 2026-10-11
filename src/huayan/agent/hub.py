@@ -1,6 +1,4 @@
 """契约 ⑭：AgentHub。管理每个人的助手对话、确认卡（PendingAction）、派单与执行轨迹；HuayanApp.agents。"""
-from collections import Counter
-
 from huayan.clock import get_clock
 from huayan.contracts import AgentMessage, AgentStep, Conversation, PendingAction, ToolResult
 from huayan.knowledge import PermissionDenied
@@ -85,8 +83,6 @@ class AgentHub:
         action.result = _run(fn, ToolContext(self.app, self.app.actors[by], conv.id, conv.session_id), spec.params, action.args)
         outcome = "已执行" if action.result.ok else f"执行失败：{action.result.error}"
         self._close(action, conv, f"{by} 已确认：{action.summary}。{outcome}")
-        if action.result.ok:
-            self._hand_over(action, action.result.data)
         return action.model_copy(deep=True)
 
     def reject(self, action_id: str, by: str, note: str = "") -> PendingAction:
@@ -109,26 +105,6 @@ class AgentHub:
         self._log_pending(action)
         self.app.events.append("agent_action_decided", action.principal, {"action_id": action.id, "tool": action.tool,
                                "principal": action.principal, "status": action.status}, session_id=conv.session_id)
-
-    def _hand_over(self, action: PendingAction, data: dict) -> None:
-        """确认后派单（契约 ⑭，写死）。"""
-        name = self.app.actors[action.principal].name
-        if action.tool == "confirm_requirement":
-            self.notify(self._translator(data["phenomenon"]),
-                        f"{name} 已确认需求单 {data['req_id']} 的产品需求（现象 {data['phenomenon']}），请起草化学语言需求单。")
-        elif action.tool == "set_public_points":
-            req = self.app.requirement_view(data["req_id"], action.principal).requirement
-            self.notify(req.pm_confirmed_by, f"{name} 已确认需求单 {req.id} 的对外要点，请生成 L1 说明书并发布。")
-        elif action.tool == "request_decrypt":
-            self._dispatched.add(data["question_id"])
-            self.notify(data["owner_id"], f"{name} 为客户申请了解密（问题 {data['question_id']}），请审批。")
-
-    def _translator(self, phenomenon: str) -> str:
-        """该现象 L3 转化对照条数最多的研发，并列取 id 最小。"""
-        reader = next(a for a in self.app.actors.values() if a.role == "rd")
-        counts = Counter(u.owner for u in self.app.kb.list(reader, kinds=["translation"], phenomenon=phenomenon)
-                         if u.level == 3)
-        return min(counts, key=lambda owner: (-counts[owner], owner))
 
     # ---- 派单 ----
 

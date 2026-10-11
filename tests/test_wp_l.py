@@ -46,9 +46,13 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     assert [(h.index, h.source) for h in app.leak_check(req.id, "pm:agent")] == [
         (1, "sealed"), (2, "l3_term"), (3, "hypothesis")]
 
-    # 生效类工具只挂起确认卡，确认前不改状态；非委托人不能确认（委托人确认后生效由 WP-C 删除 _hand_over 后补回）
+    # 两栏草稿自查不生效；签字提议确认前不改状态，非委托人不能确认。
     rd = hub.context("rd:R01")
-    proposed = hub.call_tool(rd, "set_public_points", {"req_id": req.id, "text": "（模拟）低浴比下匀染好"})
+    draft = hub.call_tool(rd, "save_points_draft", {"req_id": req.id, "public": req.sealed[0], "sealed": req.sealed})
+    assert draft.ok and draft.data["points_draft"]["self_check"] == [{"index": 0, "source": "sealed"}]
+    assert not req.public_points and not app.events.query(["points_set"])
+    proposed = hub.call_tool(rd, "set_public_points", {
+        "req_id": req.id, "text": "（模拟）低浴比下匀染好", "sealed": req.sealed})
     assert proposed.pending_action_id and not req.public_points
     with pytest.raises(PermissionDenied):
         hub.approve(proposed.pending_action_id, "rd:R02")
