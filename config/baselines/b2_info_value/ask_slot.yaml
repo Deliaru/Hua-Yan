@@ -1,5 +1,6 @@
 id: b2_info_value
 family: ask_slot
+kind: advance
 object_type: slot
 decision_label: 是否追问该信息
 # 信息价值：只要问了可能改变候选集就问，不看先验

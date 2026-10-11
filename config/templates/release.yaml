@@ -1,0 +1,12 @@
+id: release
+family: release
+kind: advance
+object_type: requirement
+decision_label: 能不能发布
+# 说明书由主人在准备阶段起草，不作为发现此决策的前置条件。
+precondition: "attrs.points_set and not attrs.released"
+rule_score: "1"
+worth_prompt: "需求单 {object} 已由研发签字确定对外要点，产品尚未发布。是否请产品经理 Agent 包装说明书与用法，交研发审定发布？"
+title: "{object}：能不能发布？"
+owner_role: pm
+signer_role: rd

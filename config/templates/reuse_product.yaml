@@ -1,0 +1,11 @@
+id: reuse_product
+family: reuse_product
+kind: advance
+object_type: requirement
+decision_label: 是否有现成产品可用
+precondition: "attrs.status == 'draft' and not attrs.reuse_checked"
+rule_score: "1"
+worth_prompt: "需求单 {object} 尚未查过现成产品。是否请产品经理 Agent 根据历史案例和转化知识查找可用产品，找到后交研发审定？"
+title: "{object}：是否有现成产品可用？"
+owner_role: pm
+signer_role: rd

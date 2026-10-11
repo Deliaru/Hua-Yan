@@ -1,0 +1,11 @@
+id: seal_points
+family: seal_points
+kind: advance
+object_type: requirement
+decision_label: 哪些内容封存、哪些可以对外放出
+precondition: "attrs.market_eval == 'pass' and not attrs.points_set"
+rule_score: "1"
+worth_prompt: "需求单 {object} 的客户评价已通过，研发尚未签字确定对外要点。是否请研发 Agent 准备封存内容和对外要点，由研发审定？"
+title: "{object}：哪些内容封存、哪些可以对外放出？"
+owner_role: rd
+signer_role: rd

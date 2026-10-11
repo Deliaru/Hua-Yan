@@ -1,0 +1,11 @@
+id: market_eval
+family: market_eval
+kind: advance
+object_type: requirement
+decision_label: 客户对试样效果是否满意
+precondition: "attrs.trial_passed and attrs.market_eval == 'none'"
+rule_score: "1"
+worth_prompt: "需求单 {object} 的试样已通过，尚未记录客户评价。是否请业务员收集并录入客户对试样效果的评价？"
+title: "{object}：客户对试样效果是否满意？"
+owner_role: sales
+signer_role: sales

@@ -1,5 +1,6 @@
 id: rule_alert_leak_risk
 family: leak_risk
+kind: anomaly
 object_type: actor
 decision_label: 是否冻结权限
 # 常见告警：被拦截 ≥ 3 次
@@ -7,3 +8,4 @@ precondition: "not attrs.frozen and attrs.n_blocked >= 3"
 worth_prompt: "{object} 被拦截 {attrs.n_blocked} 次，是否冻结权限？"
 title: "{object} 被拦截 {attrs.n_blocked} 次，是否冻结权限？"
 owner_role: supervisor
+signer_role: supervisor

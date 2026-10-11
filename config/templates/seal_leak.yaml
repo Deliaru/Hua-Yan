@@ -1,0 +1,11 @@
+id: seal_leak
+family: seal_leak
+kind: anomaly
+object_type: requirement
+decision_label: 对外说明是否需要去除保密内容
+precondition: "attrs.n_leak_hits >= 1"
+rule_score: "1"
+worth_prompt: "需求单 {object} 的说明书或用法命中了封存内容、研发转化知识或本单方向假设。是否请研发 Agent 改写相关句子，由研发审定？"
+title: "{object}：对外说明是否需要去除保密内容？"
+owner_role: rd
+signer_role: rd

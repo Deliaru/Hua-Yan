@@ -1,0 +1,11 @@
+id: contribution
+family: contribution
+kind: advance
+object_type: requirement
+decision_label: 是否沉淀研发修改的转化知识
+precondition: "attrs.n_edited_uncovered >= 1"
+rule_score: "1"
+worth_prompt: "需求单 {object} 中有研发修改的条目尚未被已有转化知识覆盖。是否请研发 Agent 提炼可复用的转化知识，由研发审定沉淀？"
+title: "{object}：是否沉淀研发修改的转化知识？"
+owner_role: rd
+signer_role: rd

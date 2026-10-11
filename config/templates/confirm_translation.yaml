@@ -1,0 +1,11 @@
+id: confirm_translation
+family: confirm_translation
+kind: advance
+object_type: requirement
+decision_label: 转译可以确认了吗
+precondition: "attrs.status == 'rd_accepted'"
+rule_score: "1"
+worth_prompt: "需求单 {object} 已由研发接单，化学语言转译尚未确认。是否请研发 Agent 准备化学语言条目与方向假设，交研发确认？"
+title: "{object}：转译可以确认了吗？"
+owner_role: rd
+signer_role: rd

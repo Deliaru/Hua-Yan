@@ -1,0 +1,11 @@
+id: accept_requirement
+family: accept_requirement
+kind: advance
+object_type: requirement
+decision_label: 研发是否接单
+precondition: "attrs.status == 'draft' and attrs.reuse_checked and not attrs.reuse_pending"
+rule_score: "1"
+worth_prompt: "需求单 {object} 已查过现成产品，没有待审定的复用建议，尚未接单。是否请产品经理 Agent 准备产品需求，交研发判断是否接单立项？"
+title: "{object}：研发是否接单？"
+owner_role: pm
+signer_role: rd

@@ -1,5 +1,6 @@
 id: b1_required
 family: ask_slot
+kind: advance
 object_type: slot
 decision_label: 是否追问该信息
 # 必问清单：种子①中该现象必问、且还没问清就问

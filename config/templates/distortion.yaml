@@ -1,0 +1,13 @@
+id: distortion
+family: distortion
+kind: anomaly
+object_type: requirement
+decision_label: 转译是否遗漏约束或缺少原话依据
+# 空单以及刚接单、尚未起草化学条目的需求单不触发。
+precondition: "((attrs.layer == 2 and attrs.n_product_items >= 1) or (attrs.layer == 3 and attrs.n_chem_items >= 1)) and (attrs.n_unmapped_constraints >= 1 or attrs.n_unquoted_items >= 1)"
+rule_score: "1"
+worth_prompt: "需求单 {object} 的本层转译已有条目，但存在未承接的上层约束，或有条目缺少客户原话依据。是否需要本层起草者补齐，交研发审定？"
+title: "{object}：转译是否遗漏约束或缺少原话依据？"
+# 发布层在化学语言层将主人解析为研发，签字人始终为研发。
+owner_role: pm
+signer_role: rd

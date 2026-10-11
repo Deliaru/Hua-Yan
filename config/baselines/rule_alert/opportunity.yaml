@@ -1,5 +1,6 @@
 id: rule_alert_opportunity
 family: opportunity
+kind: advance
 object_type: theme
 decision_label: 是否立项
 # 常见告警：同一需求主题升级 ≥ 3 次
@@ -7,4 +8,5 @@ precondition: "attrs.n_escalations >= 3"
 worth_prompt: "{object} 升级 {attrs.n_escalations} 次，是否立项？"
 title: "{object} 升级 {attrs.n_escalations} 次，是否立项？"
 owner_role: pm
+signer_role: rd
 bounty_points: 10
