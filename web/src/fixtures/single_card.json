@@ -30,14 +30,14 @@
           "text": "客户投诉说发花，有什么办法吗？"
         },
         "p_need": {
-          "fiber": 0.745,
-          "equipment": 0.5499999999999999
+          "fiber": 0.8,
+          "equipment": 0.30357142857142855
         },
         "scored_by": {
-          "fiber": "rule",
-          "equipment": "rule"
+          "fiber": "jue_k",
+          "equipment": "jue_k"
         },
-        "threshold": 0.5,
+        "threshold": 0.15,
         "asked": "fiber",
         "ask_text": "请问是什么面料？什么成分的布？"
       },
@@ -48,41 +48,41 @@
         },
         "p_need": {
           "fiber": null,
-          "equipment": null
+          "equipment": 0.10119047619047619
         },
         "scored_by": {
-          "fiber": "rule",
-          "equipment": "rule"
+          "fiber": "jue_k",
+          "equipment": "jue_k"
         },
-        "threshold": 0.5,
+        "threshold": 0.15,
         "asked": null,
         "ask_text": null
       }
     ],
     "back_asks": [
       {
-        "slot": "equipment",
-        "p_need": 0.7,
-        "scored_by": "rule",
-        "threshold": 0.5,
-        "ask_text": "用的是什么染色设备？溢流还是气流？",
-        "answer": "气流机。",
-        "changed": true
+        "slot": "bath_ph",
+        "p_need": 0.9130434782608695,
+        "scored_by": "jue_k",
+        "threshold": 0.15,
+        "ask_text": "染浴 pH 大概控制在多少？",
+        "answer": "不调pH。",
+        "changed": false
       },
       {
-        "slot": "bath_ph",
-        "p_need": 0.7,
-        "scored_by": "rule",
-        "threshold": 0.5,
-        "ask_text": "染浴 pH 大概控制在多少？",
-        "answer": "基本不加酸碱。",
-        "changed": false
+        "slot": "equipment",
+        "p_need": 0.75,
+        "scored_by": "jue_k",
+        "threshold": 0.15,
+        "ask_text": "用的是什么染色设备？溢流还是气流？",
+        "answer": "风缸。",
+        "changed": true
       }
     ],
     "chem_lang": [
       {
         "text": "『气流染色机』→ （模拟）气流染色机浴比约 1:3–1:5、布速高，需要低泡、耐剪切、在少量水中仍能起效的组分",
-        "quote": "气流机。",
+        "quote": "风缸。",
         "owner": "rd:R02"
       },
       {
@@ -97,7 +97,12 @@
       },
       {
         "text": "条件：中性",
-        "quote": "基本不加酸碱。",
+        "quote": "不调pH。",
+        "owner": null
+      },
+      {
+        "text": "条件：气流染色机",
+        "quote": "风缸。",
         "owner": null
       }
     ],
@@ -128,14 +133,14 @@
       "returned": 1.0
     },
     "G3 化言": {
-      "completeness": 0.8516483516483516,
+      "completeness": 0.7692307692307693,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 1.2166666666666666,
-      "backs": 0.75,
-      "backs_useful": 0.35555555555555557,
+      "asks": 0.8166666666666667,
+      "backs": 0.7833333333333333,
+      "backs_useful": 0.3404255319148936,
       "traceable": 1.0,
-      "returned": 0.4166666666666667
+      "returned": 0.5666666666666667
     },
     "n_cards": 60,
     "selection": {
