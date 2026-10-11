@@ -1,40 +1,26 @@
-// 业务员工作台（L1）：和业务员助手对话；离线时直接录入客户与业务员发言，走规则抽取、觉与 Mock Jev。
-import { useState } from "react";
+// 业务员工作面（L1）：中间是沟通记录（紧凑时间轴，末尾录入客户的话）与场景需求卡，底部「发给客户」操作坞，都不经过 Agent；
+// 右侧是觉的决策（推荐还是升级、现成产品、回问、客户评价）与「与 Agent 协作」。
+import { useEffect, useState } from "react";
 import { api } from "../api";
-import { useApp, useData, useLabels } from "../ctx";
-import type { SessionDetail } from "../types";
-import { EmptyState, Group, PageHead, PendingGroup, QuestionRow, RecGroup, Shell, SideHead } from "../components/Cards";
-import { Popover, Segmented } from "../components/Controls";
-import { AgentConversation, AgentDock, Bubble, Dock, type Suggestion } from "../components/Dock";
-import { Lock, Plus } from "../components/Icons";
+import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
+import type { AgentMessage, AskHint, Question, RecommendationCard, SessionSummary, SessionView } from "../types";
+import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
+import { Popover } from "../components/Controls";
+import { Plus } from "../components/Icons";
+import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead } from "../components/ui";
 
-const SESSION_STATUS: Record<string, string> = { open: "进行中", recommended: "已推荐", escalated: "已升级" };
-
-export function Sales() {
-  const { meta, me, live, refresh, fail } = useApp();
+function SalesSidebar({ mine, current, choose }: { mine: SessionSummary[]; current: string | null; choose: (id: string) => void }) {
+  const { meta, me, refresh, fail } = useApp();
   const L = useLabels();
-  const customers = meta.actors.filter((a) => a.role === "customer");
-  const [chosen, choose] = useState<string | null>(null);
-  const [speaker, setSpeaker] = useState<"customer" | "sales">("customer");
-  const all = useData(() => api.sessions(), []);
-  const mine = (all ?? []).filter((s) => s.sales_id === me).reverse();
-  const current = mine.find((s) => s.id === chosen) ?? mine[0] ?? null;
-  const sid = current?.id ?? null;
-  const detail = useData(() => (sid ? api.session(sid, me) : Promise.resolve(null)), [sid, me]);
-
-  const start = (customer: string) => api.startSession(customer, me).then((s) => {
-    choose(s.id);
-    refresh();
-  }, fail);
-
-  const sidebar = (
+  const start = (customer: string) => api.startSession(customer, me).then((s) => { choose(s.id); refresh(); }, fail);
+  return (
     <>
       <SideHead aside={
         <Popover trigger={(toggle) => <button onClick={toggle} className="icon-btn !h-6 !w-6" title="新建客户会话"><Plus /></button>}>
           {(close) => (
             <>
               <p className="px-2.5 pb-1 pt-0.5 text-[12px] text-ink-2">新建客户会话</p>
-              {customers.map((c) => (
+              {meta.actors.filter((a) => a.role === "customer").map((c) => (
                 <button key={c.id} className="menu-item" onClick={() => { start(c.id); close(); }}>{L.name(c.id)}</button>
               ))}
             </>
@@ -42,108 +28,375 @@ export function Sales() {
         </Popover>
       }>客户会话</SideHead>
       {mine.map((s) => (
-        <button key={s.id} onClick={() => choose(s.id)} title={s.id} className={`side-row ${s.id === sid ? "on" : ""}`}>
+        <button key={s.id} onClick={() => choose(s.id)} className={`side-row ${s.id === current ? "on" : ""}`}>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-[13px] font-semibold">{L.name(s.customer_id)}</span>
-            <span className={`shrink-0 text-[12px] text-ink-2`}>
-              {SESSION_STATUS[s.status] ?? s.status}</span>
+            <span className="truncate text-[13px] font-semibold">{s.customer_id ? L.name(s.customer_id) : "样例客户"}</span>
+            <span className="shrink-0 text-[12px] text-ink-2">{SESSION_STATUS[s.status] ?? s.status}</span>
           </div>
           <p className="truncate text-[12px] text-ink-2">{s.phenomenon ? L.phen(s.phenomenon) : "尚未识别现象"}</p>
         </button>
       ))}
       {!mine.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">点 ＋ 新建一个客户会话</p>}
-      {!!detail?.ask_back.length && (
-        <>
-          <SideHead>回问</SideHead>
-          {detail.ask_back.map((q) => <QuestionRow key={q.id} q={q} />)}
-        </>
-      )}
     </>
-  );
-
-  // 觉的追问提示放在输入框上方，点一下填进输入框（业务员来问）
-  const suggestions: Suggestion[] = (detail?.view.hints ?? []).map((h) => ({ key: h.slot, label: h.label, text: h.ask_text, p: h.p_need }));
-
-  return (
-    <Shell sidebar={sidebar}>
-      <PendingGroup />
-      {current && detail ? <SessionBody d={detail} customer={L.name(current.customer_id)} /> : (
-        <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始。客户只需描述宏观现象，系统负责追问、整理与推荐。" />
-      )}
-      {sid && (live ? <AgentDock key={sid} sessionId={sid} suggestions={suggestions} /> : (
-        <Dock
-          placeholder={speaker === "customer" ? "输入客户的话……" : "输入业务员的话……"}
-          key={sid} onSend={(t) => api.addTurn(sid, speaker, t).then(refresh)}
-          suggestions={suggestions}
-          onPick={() => setSpeaker("sales")}
-          accessory={<Segmented value={speaker} onChange={setSpeaker} items={[["customer", "客户"], ["sales", "业务员"]] as const} />}
-        />
-      ))}
-    </Shell>
   );
 }
 
-function SessionBody({ d, customer }: { d: SessionDetail; customer: string }) {
-  const { live } = useApp();
-  const L = useLabels();
-  const v = d.view;
-  const replies = (turnId: string) => v.replies.filter((r) => r.turn_id === turnId);
+export function useMySessions() {
+  const { me } = useApp();
+  const all = useData(() => api.sessions(), []);
+  return (all ?? []).filter((s) => s.sales_id === me).reverse();
+}
+
+export function Sales() {
+  const { me } = useApp();
+  const [chosen, choose] = useState<string | null>(null);
+  const mine = useMySessions();
+  const current = mine.find((s) => s.id === chosen) ?? mine[0] ?? null;
+  const sid = current?.id ?? null;
+  const view = useData(() => (sid ? api.session(sid, me) : Promise.resolve(null)), [sid, me]);
+  const questions = useData(() => api.questions(me), [me]);
+  const mineQs = (questions ?? []).filter((q) => !q.refs.session_id || q.refs.session_id === sid);
   return (
     <>
-      <PageHead title={customer} subtitle={`${L.phen(d.phenomenon)} · ${SESSION_STATUS[v.status] ?? v.status}`} />
+      <Side><SalesSidebar mine={mine} current={sid} choose={choose} /></Side>
+      {current && view ? <SessionDesk key={sid} summary={current} v={view} questions={mineQs} />
+        : <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始。演示者扮客户，直接在工作面上录入客户的话。" />}
+    </>
+  );
+}
 
-      {live ? <AgentConversation sessionId={v.session_id} /> : (
-        <section className="flex flex-col gap-1.5">
-          {!v.turns.length && <p className="text-[13px] text-ink-2">还没有发言。客户只说宏观现象即可，比如「染完以后布面深一块浅一块」。</p>}
-          {v.turns.map((t, i) => {
-            const changed = i === 0 || v.turns[i - 1].speaker !== t.speaker || replies(v.turns[i - 1].id).length > 0;
-            return (
-              <div key={t.id} className="flex flex-col gap-1.5">
-                <Bubble who={changed ? (t.speaker === "customer" ? "客户" : "业务员") : undefined} mine={t.speaker === "sales"}>{t.text}</Bubble>
-                {replies(t.id).map((r, j) => (
-                  <Bubble key={j} who="知识助手">
-                    {r.text}
-                    {r.blocked && (
-                      <span className="tag tag-danger ml-2 gap-1 align-[1px]"><Lock />研发保密 · 已拦截</span>
-                    )}
-                  </Bubble>
-                ))}
-              </div>
-            );
-          })}
-        </section>
-      )}
+const need = (h: AskHint) => (h.scored_by === "rule" ? "到点" : `${Math.round(h.p_need * 100)}%`);
 
-      <Group title="场景需求卡" foot="每一项都绑定客户原话；客户说不清的如实标注。">
-        <div className="row">
-          <span className="w-20 shrink-0 text-[13px] text-ink-2">现象</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold">{L.phen(d.phenomenon)}</p>
-            {d.phenomenon_quote && <p className="text-[12px] text-ink-3">「{d.phenomenon_quote}」</p>}
+function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: SessionView; questions: Question[] }) {
+  const L = useLabels();
+  const conv = useConversation(v.session_id);
+  // 「发给客户」预填 Agent 的回复草稿；草稿更新时覆盖
+  const [reply, setReply] = useState(v.reply_draft);
+  useEffect(() => setReply(v.reply_draft), [v.reply_draft]);
+  const [lit, setLit] = useState<string | null>(null); // 点槽位：时间轴里对应的那句原话高亮
+  return (
+    <>
+      <div className="mr-[372px] pb-[260px]">
+        <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pt-7">
+          <PageHead title={summary.customer_id ? L.name(summary.customer_id) : "样例客户"}
+                    subtitle={`${summary.phenomenon ? L.phen(summary.phenomenon) : "尚未识别现象"} · ${SESSION_STATUS[v.status] ?? v.status}`} />
+          <PendingActions />
+          <div className="grid grid-cols-[minmax(280px,5fr)_minmax(320px,6fr)] items-start gap-5">
+            <Timeline v={v} lit={lit} />
+            <NeedCard v={v} phenomenon={summary.phenomenon} lit={lit} setLit={setLit} />
           </div>
         </div>
-        {v.slots.map((s) => (
-          <div key={s.slot} className="row">
-            <span className="w-20 shrink-0 text-[13px] text-ink-2">{L.slot(s.slot)}</span>
-            <div className="min-w-0 flex-1">
-              <p className={`text-[14px] ${s.value ? "font-semibold" : "text-ink-3"}`}>{s.value ?? "客户不清楚"}</p>
-              <p className="text-[12px] text-ink-3">「{s.quote}」</p>
-            </div>
-          </div>
-        ))}
-      </Group>
+      </div>
+      <Composer v={v} reply={reply} setReply={setReply} replyNotes={notesFor(conv?.messages, `${v.session_id}/reply`)} />
+      <AgentPanel title="觉的决策" sessionId={v.session_id} focus={v.session_id} external>
+        {v.card || v.reuse || questions.length
+          ? <Decisions v={v} questions={questions} fill={setReply} escalateNotes={notesFor(conv?.messages, `${v.session_id}/escalate`)} />
+          : <p className="text-[13px] leading-5 text-ink-3">此刻没有需要你签字的决策。觉每听一句都会再看一遍：该推荐、该升级、该回问时出现在这里。</p>}
+      </AgentPanel>
+    </>
+  );
+}
 
-      {v.card ? <RecGroup card={v.card} /> : v.status === "escalated" && (
-        <Group title="处理">
-          <div className="row">
-            <p className="flex-1 text-[14px]">没有适用的现有产品，已转给产品经理处理。</p>
-            <span className="tag">已升级</span>
+// 沟通记录：紧凑时间轴；末尾一行「客户说」由演示者录入（不经过 Agent）
+function Timeline({ v, lit }: { v: SessionView; lit: string | null }) {
+  const { refresh } = useApp();
+  const [said, setSaid] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = (p: Promise<unknown>, done?: () => void) => {
+    setBusy(true);
+    setErr(null);
+    p.then(() => done?.(), (e) => setErr(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
+  };
+  const submit = () => said.trim() && run(api.addTurn(v.session_id, "customer", said.trim()), () => { setSaid(""); refresh(); });
+  const replies = (turnId: string) => v.replies.filter((r) => r.turn_id === turnId);
+  return (
+    <section>
+      <div className="group-title">沟通记录</div>
+      <div className="group">
+        {!v.turns.length && <p className="px-4 py-5 text-[13px] leading-5 text-ink-2">还没有发言。客户只说宏观现象即可，比如「染完以后布面深一块浅一块」。</p>}
+        <ol className="flex flex-col py-1">
+          {v.turns.map((t) => {
+            const sales = t.speaker === "sales";
+            const on = lit === t.id;
+            return (
+              <li key={t.id} className={`anim-rise flex gap-3 px-4 py-2 transition-colors ${on ? "bg-[rgba(10,108,223,.07)]" : ""}`}>
+                <span className="num w-9 shrink-0 pt-[2px] text-[11px] text-ink-3">{hhmm(t.ts)}</span>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-[11px] font-semibold ${sales ? "text-accent" : "text-ink-2"}`}>{sales ? "业务员" : "客户"}</p>
+                  <p className={`text-[14px] leading-[21px] ${on ? "font-semibold" : ""}`}>{t.text}</p>
+                  {replies(t.id).map((r, j) => (
+                    <p key={j} className="mt-1 text-[12px] leading-[18px] text-ink-2">知识助手：{r.text}
+                      {r.blocked && <span className="tag tag-danger ml-1.5">研发保密 · 已拦截</span>}</p>
+                  ))}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="flex items-center gap-2 border-t border-sep bg-[#fafafb] py-2 pl-4 pr-2.5">
+          <span className="w-9 shrink-0 text-[11px] font-semibold text-ink-2">客户</span>
+          <input value={said} onChange={(e) => setSaid(e.target.value)} aria-label="客户说" disabled={busy}
+                 placeholder="客户说……（演示者录入）" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-3" />
+          <button type="button" className="chip" disabled={busy}
+                  onClick={() => run(api.nextLine(v.session_id).then((r) => { if (r.text) setSaid(r.text); }))}>下一句</button>
+          <button className="btn btn-plain !h-[26px] !px-2.5" disabled={busy || !said.trim()}>录入</button>
+        </form>
+        {err && <p role="alert" className="px-4 pb-2 text-[12px] text-danger">{err}</p>}
+      </div>
+    </section>
+  );
+}
+
+// 发给客户：唯一的对外通道。Agent 草稿预填，觉的追问提词挂在上方；门面拦截时原因写在下方、不发出。
+function Composer({ v, reply, setReply, replyNotes }: {
+  v: SessionView; reply: string; setReply: (t: string) => void; replyNotes: AgentMessage[];
+}) {
+  const { me, agentOnline, refresh } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fromAgent = !!v.reply_draft && reply === v.reply_draft;
+  const send = () => {
+    if (!reply.trim() || busy) return;
+    setBusy(true);
+    setErr(null);
+    api.addTurn(v.session_id, "sales", reply.trim()).then(() => { setReply(""); refresh(); },
+      (e) => setErr(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
+  };
+  return (
+    <div className="pointer-events-none fixed bottom-0 left-[232px] right-[372px] z-10 bg-gradient-to-t from-bg from-60% to-transparent pt-12">
+      <div className="pointer-events-auto mx-auto max-w-[1000px] px-8 pb-5">
+        {!!v.hints.length && (
+          <div className="mb-2.5 flex flex-wrap items-center gap-2">
+            <span className="eyebrow mr-1">觉建议追问</span>
+            {v.hints.map((h) => (
+              <button key={h.slot} type="button" onClick={() => setReply(h.ask_text)}
+                      className="anim-rise flex h-[30px] items-center gap-2 rounded-full bg-attn-bg pl-3 pr-2.5 text-[13px] shadow-[0_0_0_.5px_rgba(176,80,10,.28)] transition-colors hover:bg-[#fff0d9]">
+                <span className="font-semibold text-attn-ink">{h.label}</span>
+                <span>{h.ask_text}</span>
+                <span className="num text-[11px] text-attn-ink">{need(h)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <form className="dock" onSubmit={(e) => { e.preventDefault(); send(); }}>
+          <div className="flex items-center gap-2 px-4 pt-2.5">
+            <span className="text-[12px] font-semibold">发给客户</span>
+            {fromAgent && <AgentMark />}
+            {!reply && !agentOnline && <span className="text-[12px] text-ink-3">Agent 离线，无草稿</span>}
+            <span className="ml-auto flex gap-1.5">
+              <Act kind="chip" label="帮我回一句" disabled={!agentOnline} run={() => api.chat(me, "帮我回一句", v.session_id, v.session_id)} />
+              <Act kind="chip" label="直接推荐" run={() => api.recommend(v.session_id)} />
+            </span>
+          </div>
+          <textarea value={reply} rows={2} aria-label="发给客户" onChange={(e) => setReply(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
+                    placeholder="写给客户的话，或点上方的追问提词"
+                    className="block w-full resize-none bg-transparent px-4 py-1.5 text-[14px] leading-[22px] outline-none placeholder:text-ink-3" />
+          <div className="flex items-center gap-3 pb-2.5 pl-4 pr-3">
+            <div className="min-w-0 flex-1">
+              {err ? <p role="alert" className="text-[12px] text-danger">{err}，未发出</p> : <Notes notes={replyNotes} />}
+            </div>
+            <span className="kbd">Ctrl ↵</span>
+            <button className="btn btn-primary" disabled={!reply.trim() || busy}>{busy ? "发送中……" : "发出"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// 场景需求卡：业务员工作面的主角。每一格绑定客户原话，点一下在左边时间轴里高亮那句；觉建议追问的槽位显示为待问。
+function NeedCard({ v, phenomenon, lit, setLit }: {
+  v: SessionView; phenomenon: string | null; lit: string | null; setLit: (t: string | null) => void;
+}) {
+  const L = useLabels();
+  const asking = v.hints.filter((h) => !v.slots.some((s) => s.slot === h.slot && s.value));
+  const cell = "border-b border-r border-sep px-5 py-3.5 text-left [&:nth-child(2n)]:border-r-0";
+  return (
+    <section>
+      <div className="group-title flex items-baseline justify-between">
+        <span>场景需求卡</span><span className="font-normal text-ink-3">每一格绑定客户原话</span>
+      </div>
+      <div className="group">
+        <div className="relative overflow-hidden border-b border-sep px-5 py-4">
+          <i className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-[#7ee0ff] via-[#5b7cfa] to-[#b25cf0]" />
+          <p className="eyebrow">现象</p>
+          <p className={`mt-1 text-[20px] font-semibold leading-7 ${phenomenon ? "" : "text-ink-3"}`}>{phenomenon ? L.phen(phenomenon) : "等客户描述"}</p>
+          <p className="mt-0.5 text-[12px] text-ink-2">已确认 {v.slots.filter((s) => s.value).length} 项{asking.length ? ` · 待问 ${asking.length} 项` : ""}</p>
+        </div>
+        <div className="grid grid-cols-2">
+          {v.slots.map((s) => {
+            const on = lit === s.turn_id;
+            return (
+              <button key={s.slot} type="button" onClick={() => setLit(on ? null : s.turn_id)}
+                      className={`anim-rise transition-colors ${cell} ${on ? "bg-[rgba(10,108,223,.06)]" : "hover:bg-[rgba(0,0,0,.02)]"}`}>
+                <p className="eyebrow">{L.slot(s.slot)}</p>
+                <p className={`mt-0.5 text-[16px] font-semibold leading-6 ${s.value ? "" : "text-ink-3"}`}>{s.value ?? "客户不清楚"}</p>
+                <p className={`mt-1 truncate text-[12px] ${on ? "text-accent" : "text-ink-2"}`}>「{s.quote}」</p>
+              </button>
+            );
+          })}
+          {asking.map((h) => (
+            <div key={h.slot} className={cell}>
+              <p className="eyebrow">{h.label}</p>
+              <p className="mt-0.5 text-[16px] leading-6 text-ink-3">待问</p>
+              <p className="mt-1 text-[12px] text-attn-ink">觉建议追问 · {need(h)}</p>
+            </div>
+          ))}
+        </div>
+        {!v.slots.length && !asking.length && <p className="px-5 py-4 text-[13px] text-ink-2">还没有识别出条件；客户每说一句，这里逐格长出来。</p>}
+      </div>
+    </section>
+  );
+}
+
+function Decisions({ v, questions, fill, escalateNotes }: {
+  v: SessionView; questions: Question[]; fill: (t: string) => void; escalateNotes: AgentMessage[];
+}) {
+  const L = useLabels();
+  const by = (f: string) => questions.filter((q) => q.family === f);
+  const handled = new Set(["escalate_need", "ask_back", "market_eval"]);
+  return (
+    <>
+      {v.card && v.reuse?.status !== "adopted" && <RecCard card={v.card} sid={v.session_id} fill={fill} />}
+      {by("escalate_need").map((q) => <EscalateCard key={q.id} q={q} v={v} notes={escalateNotes} />)}
+      {v.reuse && <ReuseLine v={v} fill={fill} />}
+      {by("ask_back").map((q) => (
+        <Group key={q.id} title={<span className="text-attn-ink">回问 · 研发需要知道</span>} foot="只给槽位与话术；点一下填进「发给客户」。">
+          <button type="button" onClick={() => fill(q.evidence[0]?.quote || L.scrub(q.title))} className="row row-btn attn-edge !items-start">
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-semibold">{L.scrub(q.title)}</p>
+              {q.evidence.map((e, i) => <p key={i} className="text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}{e.quote && `：${e.quote}`}</p>)}
+            </div>
+            <Score q={q} />
+          </button>
+        </Group>
+      ))}
+      {by("market_eval").map((q) => <MarketEval key={q.id} q={q} />)}
+      {questions.filter((q) => !handled.has(q.family)).map((q) => (
+        <Group key={q.id} title={L.family(q.family)}>
+          <div className="row !items-start">
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px]">{L.scrub(q.title)}</p>
+              {q.evidence.map((e, i) => <p key={i} className="text-[12px] text-ink-2">{L.scrub(e.summary)}</p>)}
+            </div>
+            <Score q={q} />
           </div>
         </Group>
-      )}
-      {!!d.ask_back_history.length && <Group title="回问记录" foot="客户回答后，回问从待办移入这里；补充信息已回填需求单。">
-        {d.ask_back_history.map((q) => <QuestionRow key={q.id} q={q} />)}</Group>}
-      {!live && <Group title="派单与确认记录" foot="角色助手离线，起草与确认由脚本执行。"><div className="p-4"><AgentConversation sessionId={v.session_id} /></div></Group>}
+      ))}
     </>
+  );
+}
+
+function RecCard({ card, sid, fill }: { card: RecommendationCard; sid: string; fill: (t: string) => void }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const decrypted = card.version === "full_mechanism";
+  return (
+    <Group title="推荐" foot={card.note ? L.scrub(card.note) : undefined}>
+      <div className="row">
+        <p className="flex-1 text-[16px] font-semibold">{L.product(card.product_id)}</p>
+        <span className="tag">{L.version(card.version)}</span>
+      </div>
+      {card.sections.map((s) => (
+        <div key={s.ku_id} className="row !items-start">
+          <div className="min-w-0">
+            <p className="text-[12px] text-ink-2">{s.title}</p>
+            <p className="text-[14px] leading-[21px]">{s.text}</p>
+          </div>
+        </div>
+      ))}
+      <div className="row flex-wrap">
+        <button type="button" className="btn btn-plain" onClick={() => fill(card.sections.map((s) => s.text).join(""))}>填进发给客户</button>
+        {!decrypted && <Act kind="quiet" label="申请解密" run={() => api.requestDecrypt(sid, me)} />}
+        {decrypted && <span className="text-[12px] text-ink-2">研发审定的机理说明，由你转交客户</span>}
+      </div>
+    </Group>
+  );
+}
+
+// 推荐还是升级：觉提出、业务员签字（D8）。升级说明可直接改。
+function EscalateCard({ q, v, notes }: { q: Question; v: SessionView; notes: AgentMessage[] }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const [note, setNote] = useState(v.escalate_note);
+  useEffect(() => setNote(v.escalate_note), [v.escalate_note]);
+  const ready = q.prepared_at != null;
+  const sign = async () => {
+    if (note !== v.escalate_note) await api.escalateNote(v.session_id, note, me);
+    await api.escalate(v.session_id, me);
+  };
+  return (
+    <Group title={<span className="text-attn-ink">建议转产品经理 Agent</span>} aside={<Score q={q} />}>
+      <div className="row attn-edge !items-start !py-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          {q.evidence.map((e, i) => <p key={i} className="text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}</p>)}
+          {ready ? (
+            <>
+              <p className="flex items-center gap-2 text-[12px] text-ink-2">升级说明 {note === v.escalate_note && note && <AgentMark />}</p>
+              <Field value={note} onChange={setNote} rows={3} label="升级说明" />
+              <Notes notes={notes} />
+              <div className="flex flex-wrap gap-2">
+                <Act label="转产品经理 Agent" run={sign} />
+                <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />
+              </div>
+            </>
+          ) : <p className="text-[13px] text-ink-2">Agent 正在起草升级说明</p>}
+        </div>
+      </div>
+    </Group>
+  );
+}
+
+// 现成产品建议（D17、D22）：业务员不签字，研发审定后转来
+function ReuseLine({ v, fill }: { v: SessionView; fill: (t: string) => void }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const r = v.reuse!;
+  const name = r.product_name.replace("（模拟）", "");
+  if (r.status === "pending") return <p className="text-[13px] text-ink-2">产品经理 Agent 找到现成产品（{name}），研发审定中</p>;
+  if (r.status === "declined") return <p className="text-[13px] text-ink-2">研发未采用现成产品，已转接单</p>;
+  if (r.status === "none") return <p className="text-[13px] text-ink-2">产品经理 Agent 已查，无现成产品，已转研发</p>;
+  const approver = v.card?.note.match(/研发 \S+ 审定/)?.[0];
+  return (
+    <Group title="现成产品" foot={`依据：${r.basis.join("；")}`}>
+      <div className="row">
+        <p className="flex-1 text-[16px] font-semibold">{name}</p>
+        {approver && <span className="tag">{L.scrub(approver)}</span>}
+      </div>
+      {r.usage && <div className="row !items-start"><span className="w-10 shrink-0 text-[13px] text-ink-2">用法</span><span className="text-[14px]">{r.usage}</span></div>}
+      <div className="row !items-start">
+        <span className="w-10 shrink-0 text-[13px] text-ink-2">说明</span>
+        <span className="text-[14px] leading-[21px]">{r.customer_note}</span>
+      </div>
+      <div className="row flex-wrap">
+        <button type="button" className="btn btn-plain" onClick={() => fill(r.customer_note)}>填进发给客户</button>
+        <Act kind="quiet" label="申请解密" run={() => api.requestDecrypt(v.session_id, me)} />
+      </div>
+    </Group>
+  );
+}
+
+// 客户评价（Q12）：业务员签字录入
+function MarketEval({ q }: { q: Question }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const [note, setNote] = useState("");
+  const req = q.refs.requirement_id;
+  return (
+    <Group title={<span className="text-attn-ink">客户评价</span>} aside={<Score q={q} />}>
+      <div className="row attn-edge !items-start !py-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <p className="text-[14px]">{L.scrub(q.title)}</p>
+          <Field value={note} onChange={setNote} placeholder="原因（客户怎么说）" />
+          <div className="flex flex-wrap gap-2">
+            <Act label="通过" run={() => api.marketEval(req, "pass", note, me)} />
+            <Act kind="plain" label="不通过" run={() => api.marketEval(req, "fail", note, me)} />
+            <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />
+          </div>
+        </div>
+      </div>
+    </Group>
   );
 }

@@ -1,8 +1,9 @@
 // 评测页（WP-E）：展示 docs/reports/ 下失真对照、Jue-K、业务周三份报告的关键数字与图，每块写明数据来源。
 // 数字只读各报告的 metrics.json，图为同目录的 png；结论与限制以各报告 README.md 为准。
 import { api } from "../api";
-import { useData } from "../ctx";
-import { Group, PageHead, Shell, SideHead, pct } from "../components/Cards";
+import { FAMILY, Side, pct, useData } from "../ctx";
+import { Group, PageHead, SideHead } from "../components/ui";
+import { SingleCard } from "./SingleCard";
 
 type Num = number | null;
 interface Distortion {
@@ -25,9 +26,6 @@ interface Week {
 
 const RATE = new Set(["completeness", "slot_error", "mistranslation", "traceable", "returned", "backs_useful"]);
 const DISCOVERER: Record<string, string> = { jue_proto: "觉原型", jue_k: "Jue-K", rule_alert: "规则告警（升级 ≥ 3 次）" };
-const FAMILY: Record<string, string> = {
-  ask_slot: "追问", ask_back: "回问", opportunity: "机会汇聚", knowledge_conflict: "知识冲突", leak_risk: "泄露风险",
-};
 const fmt = (k: string, v: Num) => (v == null ? "—" : RATE.has(k) ? pct(v) : v.toFixed(2));
 
 function Figure({ src, alt }: { src: string; alt: string }) {
@@ -116,16 +114,20 @@ function WeekBlock() {
 
 export function Eval() {
   return (
-    <Shell sidebar={<>
-      <SideHead>评测</SideHead>
-      <p className="px-[18px] text-[12px] leading-[18px] text-ink-2">
-        三份报告全部基于模拟数据。数字取自各报告的 metrics.json，结论与限制以各报告 README.md 为准。
-      </p>
-    </>}>
-      <PageHead title="评测" subtitle="失真可度量 · 觉的校准 · 真实链路上的发现与处置" />
-      <DistortionBlock />
-      <JueKBlock />
-      <WeekBlock />
-    </Shell>
+    <>
+      <Side>
+        <SideHead>评测</SideHead>
+        <p className="px-[18px] text-[12px] leading-[18px] text-ink-2">
+          全部基于模拟数据。数字取自各报告的 metrics.json，结论与限制以各报告 README.md 为准。
+        </p>
+      </Side>
+      <div className="mx-auto flex max-w-[960px] flex-col gap-7 px-8 pb-24 pt-7">
+        <PageHead title="评测" subtitle="单卡对照 · 失真可度量 · 觉的校准 · 真实链路上的发现与处置" />
+        <SingleCard />
+        <DistortionBlock />
+        <JueKBlock />
+        <WeekBlock />
+      </div>
+    </>
   );
 }

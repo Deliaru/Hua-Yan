@@ -2,10 +2,11 @@
 // 点一句客户原话，三列里引用它的条目一起高亮：看得出一句原话如何逐层变成化学语言。下方为贡献看板与失真对照关键数字。
 import { useState } from "react";
 import { api } from "../api";
-import { useApp, useData, useLabels } from "../ctx";
-import type { ContributionStat, RecommendationCard, ReqItem, RequirementView, SessionDetail } from "../types";
-import { EmptyState, Group, PageHead, REQ_STATUS, SideHead, Shell, pct } from "../components/Cards";
-import { NoRequirement } from "./Pm";
+import { REQ_STATUS, Side, pct, useData, useLabels } from "../ctx";
+import type { ContributionStat, RecommendationCard, ReqItem, RequirementView, SessionView } from "../types";
+import { EmptyState, Group, PageHead, SideHead } from "../components/ui";
+
+const L2_VIEWER = "pm:agent";                    // L2 列按产品经理 Agent 的权限读取（契约 ① Q8）
 
 type Focus = { focus: string | null; setFocus: (t: string | null) => void };
 
@@ -34,11 +35,10 @@ function Quote({ id, text, f }: { id: string; text: string; f: Focus }) {
 }
 
 // L1：每段会话的客户原话（可点）与绑定在原话上的槽位
-function L1Session({ detail, f }: { detail: SessionDetail; f: Focus }) {
+function L1Session({ v, title, f }: { v: SessionView; title: string; f: Focus }) {
   const L = useLabels();
-  const v = detail.view;
   return (
-    <Group title={`${v.session_id} · ${L.phen(detail.phenomenon)}`}>
+    <Group title={title}>
       {v.turns.filter((t) => t.speaker === "customer").map((t) => {
         const slots = v.slots.filter((s) => s.turn_id === t.id);
         return (
@@ -81,9 +81,9 @@ function Items({ view, field, f, showText }: { view: RequirementView; field: "pr
   const req = view.requirement;
   const cited = Object.fromEntries(view.cited.map((c) => [c.ku_id, c]));
   const [drafted, confirmed] = field === "product_lang"
-    ? [req.drafted_by, req.pm_confirmed_by] : [req.chem_drafted_by, req.rd_confirmed_by];
+    ? [req.drafted_by, req.rd_accepted_by] : [req.chem_drafted_by, req.rd_confirmed_by];
   return (
-    <Group foot={`起草 ${L.name(drafted)} · 确认 ${L.name(confirmed)}`}>
+    <Group foot={`起草 ${L.name(drafted)} · ${field === "product_lang" ? "接单" : "确认"} ${L.name(confirmed)}`}>
       {req[field].map((item: ReqItem, i) => (
         <div key={i} className={`row !items-start !py-2.5 ${f.focus && item.quote_refs.includes(f.focus) ? "bg-[rgba(255,149,0,.12)]" : ""}`}>
           <span className="num w-4 shrink-0 pt-px text-[12px] text-ink-3">{i + 1}</span>
@@ -149,12 +149,13 @@ function DistortionLine() {
   );
 }
 
-function Compare({ id, pm }: { id: string; pm: string }) {
+function Compare({ id }: { id: string }) {
+  const pm = L2_VIEWER;
   const L = useLabels();
   const [focus, setFocus] = useState<string | null>(null);
   const f = { focus, setFocus };
   const l2 = useData(() => api.requirement(id, pm), [id, pm]);
-  const rd = l2?.requirement.rd_confirmed_by ?? null;
+  const rd = l2?.requirement.assigned_rd ?? null;
   const l3 = useData(() => (rd ? api.requirement(id, rd) : Promise.resolve(null)), [id, rd]);
   const summaries = useData(() => api.sessions(), []);
   const req = l2?.requirement;
@@ -166,7 +167,7 @@ function Compare({ id, pm }: { id: string; pm: string }) {
     if (!req?.product_id || !summaries || !rd) return null;
     for (const s of summaries.filter((x) => x.status === "recommended").reverse()) {
       const d = await api.session(s.id, s.sales_id);
-      if (d.view.card?.product_id === req.product_id) return { l1: d.view.card, l3: (await api.session(s.id, rd)).view.card! };
+      if (d.card?.product_id === req.product_id) return { l1: d.card, l3: (await api.session(s.id, rd)).card! };
     }
     return null;
   }, [req?.id, req?.product_id, summaries?.length, rd]);
@@ -175,15 +176,16 @@ function Compare({ id, pm }: { id: string; pm: string }) {
   return (
     <>
       <PageHead title={`三层对照 · ${L.phen(req.phenomenon)}`}
-                subtitle={`${req.id} · ${REQ_STATUS[req.status]}${req.product_id ? ` · 关联产品 ${L.product(req.product_id)}` : ""} · 点一句客户原话，三列中引用它的条目一起高亮`} />
+                subtitle={`${REQ_STATUS[req.status]}${req.product_id ? ` · 关联产品 ${L.product(req.product_id)}` : ""} · 点一句客户原话，三列中引用它的条目一起高亮`} />
       <div className="flex items-start gap-5">
         <Column level={1} who={[...new Set(req.session_ids.map(sales))].map(L.name).join("、")}>
-          {own?.map((d) => <L1Session key={d.view.session_id} detail={d} f={f} />)}
+          {own?.map((v, i) => <L1Session key={v.session_id} v={v} f={f}
+                                         title={`客户 ${i + 1} · ${L.phen(req.phenomenon)}`} />)}
           {hit && <Card title="发布后 L1 拿到的产品卡" card={hit.l1} />}
         </Column>
         <Column level={2} who={L.name(pm)}>
           <Items view={l2} field="product_lang" f={f} showText={false} />
-          <p className="px-1 text-[12px] leading-[18px] text-ink-2">所引 L3 知识只显示归属人，原文不可见；化学假设不对产品经理开放。</p>
+          <p className="px-1 text-[12px] leading-[18px] text-ink-2">所引 L3 知识只显示归属人，原文不可见；化学假设与封存项不对产品经理 Agent 开放。</p>
         </Column>
         <Column level={3} who={L.name(rd)}>
           <Items view={l3} field="chem_lang" f={f} showText />
@@ -202,24 +204,26 @@ function Compare({ id, pm }: { id: string; pm: string }) {
 }
 
 export function Layers() {
-  const { me } = useApp();                       // App 在本页把 me 设为产品经理
   const L = useLabels();
   const [chosen, choose] = useState<string | null>(null);
-  const reqs = useData(() => api.requirements(me), [me]);
+  const reqs = useData(() => api.requirements(L2_VIEWER), []);
   const list = (reqs ?? []).filter((r) => r.status === "rd_confirmed" || r.status === "released").reverse();
   const current = list.find((r) => r.id === chosen)?.id ?? list[0]?.id ?? null;
   return (
-    <Shell wide sidebar={<>
+    <>
+      <Side>
       <SideHead>研发已确认的需求单</SideHead>
       {list.length ? list.map((r) => (
-        <button key={r.id} onClick={() => choose(r.id)} className={`side-row ${r.id === current ? "on" : ""}`} title={r.id}>
+        <button key={r.id} onClick={() => choose(r.id)} className={`side-row ${r.id === current ? "on" : ""}`}>
           <p className="text-[13px] font-semibold">{L.phen(r.phenomenon)}</p>
-          <p className="text-[12px] text-ink-2">{r.id} · {REQ_STATUS[r.status]}</p>
+          <p className="text-[12px] text-ink-2">{REQ_STATUS[r.status]}</p>
         </button>
       )) : <p className="px-[18px] py-1 text-[13px] text-ink-3">暂无</p>}
-    </>}>
-      {current ? <Compare key={current} id={current} pm={me} />
-        : (reqs?.length ? <EmptyState title="还没有研发确认的需求单" text="需求单经研发确认（L3）后，可以在这里三层并排对照。" /> : <NoRequirement />)}
-    </Shell>
+      </Side>
+      <div className="mx-auto flex max-w-[1280px] flex-col gap-7 px-8 pb-24 pt-7">
+        {current ? <Compare key={current} id={current} />
+          : <EmptyState title="还没有研发确认的需求单" text="需求单经研发确认转译（L3）后，可以在这里三层并排对照。" />}
+      </div>
+    </>
   );
 }
