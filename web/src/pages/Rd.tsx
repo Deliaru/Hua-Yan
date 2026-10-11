@@ -7,7 +7,7 @@ import type { AgentMessage, CitedKnowledge, LeakHit, Question, ReqItem, Requirem
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
 import { ChevronRight } from "../components/Icons";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
-import { useGlow, useGuideArg } from "../components/Guide";
+import { useGlow, useGuide, useGuideArg } from "../components/Guide";
 import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip } from "../components/ui";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
@@ -21,14 +21,19 @@ export function Rd() {
   const reqs = (useData(() => api.requirements(me), [me]) ?? []).slice().reverse();
   const [qid, setQid] = useState<string | null>(null);
   const [chosenReq, setChosenReq] = useState<string | null>(null);
+  // 导览要你签的那项决策：没手动选过就直接打开它；导览换到新的一项时，回到它
+  const g = useGuide();
+  const guided = g.who === me ? ready.find((q) => `sign:${q.family}` === g.target) ?? null : null;
+  useEffect(() => { if (guided) { setQid(null); setChosenReq(null); } }, [guided?.id]);
   const question = all.find((q) => q.id === qid)
-    ?? (chosenReq ? ready.find((q) => reqsOf(q).includes(chosenReq)) ?? null : ready[0] ?? null);
+    ?? (chosenReq ? ready.find((q) => reqsOf(q).includes(chosenReq)) ?? null : guided ?? ready[0] ?? null);
   // 不挂在需求单上的决策（解密申请、知识冲突、拼凑风险）只显示签字区
   const reqId = question ? reqsOf(question)[0] ?? null : chosenReq ?? (reqs.find((r) => r.status !== "merged") ?? reqs[0])?.id ?? null;
   return (
     <>
       <Side>
-        <InboxSidebar selected={qid ? question?.id ?? null : null} reqs={reqs} select={(q) => { setQid(q.id); setChosenReq(null); }} />
+        <InboxSidebar selected={qid || (guided && question?.id === guided.id) ? question?.id ?? null : null} guided={guided && guided.id !== question?.id ? guided.id : null}
+                      reqs={reqs} select={(q) => { setQid(q.id); setChosenReq(null); }} />
         <SideHead>需求单</SideHead>
         {reqs.map((r) => (
           <button key={r.id} onClick={() => { setChosenReq(r.id); setQid(null); }}
@@ -553,7 +558,7 @@ function ContributionReview({ view, dismiss }: { view: RequirementView; dismiss:
             <p className="text-[14px]">「{d.scene_phrase}」→ {d.chem_term} <AgentMark /></p>
             {d.note && <p className="text-[12px] leading-[18px] text-ink-2">{d.note}</p>}
           </div>
-          <Act kind="plain" label="沉淀为我的知识" run={() => api.contribute(req.id, d.item_index, d.scene_phrase, d.chem_term, me)} />
+          <Act label="沉淀为我的知识" run={() => api.contribute(req.id, d.item_index, d.scene_phrase, d.chem_term, me)} />
         </div>
       ))}
       {!req.contribution_drafts.length && <div className="row text-[13px] text-ink-2">Agent 没有提炼出可沉淀的条目</div>}

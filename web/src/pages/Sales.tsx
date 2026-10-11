@@ -65,11 +65,15 @@ export function Sales() {
   const mine = useMySessions();
   // 导览指向的会话（轮到本人时）：没手动选过就直接打开它，选过别的就在侧栏高亮它
   const g = useGuide();
-  const guided = g.who === me && g.customer ? mine.find((s) => s.customer_id === g.customer)?.id ?? null : null;
+  const questions = useData(() => api.questions(me), [me]);
+  // 签字类台词（如客户评价）只写了需求单：按要签的那项决策挂在哪段会话来定位
+  const signAt = (questions ?? []).find((q) => `sign:${q.family}` === g.target && q.refs.session_id)?.refs.session_id;
+  const guided = g.who !== me ? null : (g.customer ? mine.find((s) => s.customer_id === g.customer)?.id : undefined)
+    ?? mine.find((s) => s.id === signAt)?.id ?? null;
+  useEffect(() => { if (guided) choose(null); }, [guided]);   // 导览换到另一段会话时，回到导览指的那段
   const current = mine.find((s) => s.id === chosen) ?? mine.find((s) => s.id === guided) ?? mine[0] ?? null;
   const sid = current?.id ?? null;
   const view = useData(() => (sid ? api.session(sid, me) : Promise.resolve(null)), [sid, me]);
-  const questions = useData(() => api.questions(me), [me]);
   const mineQs = (questions ?? []).filter((q) => !q.refs.session_id || q.refs.session_id === sid);
   return (
     <>

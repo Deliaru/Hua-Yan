@@ -192,7 +192,7 @@ function scriptPlan(kind: string, b: Record<string, any>, no: string, salesOf: (
         todo: `人说意图、Agent 起草：在右下「与 Agent 协作」点「演示自动填入」再发送，对 Agent 说：「${b.text}」` };
     case "sign": {
       const family = SIGN_FAMILY[b.action];
-      return { step: DO[family][0], who: b.actor, target: `sign:${family}`, arg: b.args.note ?? null, todo: DO[family][1],
+      return { step: DO[family][0], who: b.actor, target: `sign:${family}`, arg: b.args.note ?? null, todo: `${where(b.actor, family, L)}${DO[family][1]}`,
         raised: `${no} · 觉提出「${L.family(family)}」，已准备好，等 ${L.name(b.actor)} 签字` };
     }
     case "edit":
@@ -225,6 +225,7 @@ function derive(state: GuideState, sales: string, rd: string, customers: string[
   if (ready) {
     [step, todo] = DO[ready.family];
     who = ready.signer_id ?? ready.owner_id;
+    todo = `${where(who!, ready.family, L)}${todo}`;
     raised = `觉提出「${L.family(ready.family)}」· 已准备好，等 ${L.name(who!)} 签字`;
     target = `sign:${ready.family}`;
   } else if (preparing && preparing.signer_role == null && preparing.owner_id) {
@@ -265,6 +266,11 @@ function derive(state: GuideState, sales: string, rd: string, customers: string[
     [step, who, todo, target] = [0, sales, `点左侧「客户会话」右边的 ＋，选「${nextCustomer}」开始。客户只会描述现象，比如「染完布面深一块浅一块」`, "new-session"];
   }
   return { step, who, todo, raised, target };
+}
+
+// 去哪里签：研发、主管在左侧收件箱「待签」里点开这一项；业务员在右侧「觉提出的决策」里
+function where(who: string, family: string, L: ReturnType<typeof useLabels>) {
+  return who.startsWith("sales:") ? "在右侧「觉提出的决策」里签字。" : `在左侧「待签」里点「${L.family(family)}」。`;
 }
 
 function Dot({ i, step }: { i: number; step: number }) {

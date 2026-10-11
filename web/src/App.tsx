@@ -76,8 +76,9 @@ export default function App() {
       <header className="bar fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-3 border-b border-sep px-4">
         <div className="w-[200px]"><Logo /></div>
         <ActivityMenu />
-        {page === "desk" && <div className="absolute left-1/2 -translate-x-1/2"><Guide /></div>}
-        <div className="ml-auto flex items-center gap-1.5">
+        {/* 导览占中间的剩余空间居中：两侧再宽也不会叠上 */}
+        <div className="flex min-w-0 flex-1 justify-center">{page === "desk" && <Guide />}</div>
+        <div className="flex items-center gap-1.5">
           <StatusMenu s={meta.status} m={meta.mode} onMode={() => setModeOpen(true)} />
           <CheckpointMenu onLoad={(name) => restart(`正在载入检查点「${name}」……`, api.loadCheckpoint(name))} />
           <Popover align="right" trigger={(toggle) => (
