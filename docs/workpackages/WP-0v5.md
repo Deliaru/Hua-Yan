@@ -485,6 +485,23 @@ class Requirement(BaseModel):
 - ⑭ `AgentHub.chat(actor_id, text, session_id=None, focus=None)`：`focus` 为委托人此刻在工作面上打开的对象（`sess:<n>` / `req:<n>`），写进 Agent 的系统提示词；Agent 据此理解「第 2 条」「这句话」指什么。
 - 不改：每次升级仍各建一张单（REPLAN 4.2 原文）；立项 ≡ 研发接单（D11）。
 
+## C15　v5.3：现成产品建议由研发审定——已签字，已应用到契约 v5.3
+
+来源：复审第 4 点。`customer_note` 由产品经理 Agent 读 L2 历史案例写成，是唯一一段从 L2 直接流到 L1 的文本；`leak_hits` 只查封存项、L3 与方向假设，挡不住 L2 原文。规则或模板都应付不了长期使用中的各种说法，因此改为**升级给 L3 研发审定**：研发能看到全部依据，审过的文字才转给业务员。
+
+- 决策目录：`reuse_product` 的 `signer_role` 由 `sales` 改为 `rd`（`req.assigned_rd`，沿用 C1 解析表「rd | requirement」一行，不加新行）；主人仍是 `pm`，前置条件不变。
+- ⑫ 门面：
+  - `save_reuse_proposal`：不变（`pm:agent`，草稿；`customer_note` 先过 `leak_hits`）。
+  - 新增 `update_reuse_note(req_id, text, by)`：草稿修改，`by` 为 `assigned_rd` 或 `pm:agent`；过 `leak_hits`；写 `requirement_edited`。
+  - `adopt_reuse(req_id, by)`：签字人改为 `assigned_rd`；其余不变（再过一次 `leak_hits`、按 Jev 披露版本生成推荐卡写入需求单首个会话、`customer_note` 附在卡上并标「研发 X 审定」、所引 L2 记 cited、`status="reused"`、`resolve(sign)`、写 `reuse_adopted`）。bounty 给研发。
+  - `decline_reuse(req_id, reason, by)`：签字人改为 `assigned_rd`；觉随后提出 `accept_requirement`（同一位研发）。
+  - `view_session` 的 `SessionView.reuse`：`pending` 时**只给状态与产品名**（「产品经理 Agent 找到现成产品，研发审定中」），`customer_note` 与 `basis` 置空；`adopted` 后才给 `customer_note`、用法与归属标签。业务员不签字，拿到后用「发给客户」转述（照常过发送拦截）。
+  - `requirement_view` 对 L3 查看者给完整的 `reuse`（产品、`ku_refs` 可展开原文、`customer_note`、`note`）；L2 照旧。
+- ⑭ 工具：新增 `edit_reuse_note(req_id, text)`，draft，rd（研发 Agent 按研发的话改写客户说明）、pm（产品经理 Agent 被退回后改写）；一个工具调 `update_reuse_note`。
+- 注释：`ReuseProposal.customer_note` 改为「面向客户的一句说明（研发审定后对 L1 可见；保存与审定时过 leak_hits）」；`declined_reason` 改为「研发不采用的理由」；`Requirement.status` 中 `reused` 改为「研发审定采用了现成产品，需求单关闭」；`JueTimeline` 对业务员的裁剪里 `reuse_product` 保留（业务员能看到这一步发生过，看不到证据）。
+- 跟着改的文档：REPLAN D17 与 3.3 / 3.4 两张表、3.7 支线（解说改为「研发只审一句话，不立项」）、4.3 表签字人；VISION 第 5 节第 3 条；ARCHITECTURE 流程图「业务员签字采用」与 7.x；WP-C（门面、提示词、`test_wp_a3` 复用支线改为「研发审定 → 会话拿到推荐卡；审定前业务员视图没有 `customer_note`」）；WP-J（模板签字人；模拟周里复用由模拟研发审定）；WP-U2（业务员侧改为灰色「研发审定中」+ 审定后的说明卡与「填进发给客户」；研发签字区加「现成产品审定」：产品、依据原文、可改的客户说明、自查结果，「通过并转给业务员」/「不采用」）。
+- 不改：每次升级先查复用（D17）；cited 记分时点；`reuse_product` 的主人与前置条件；`accept_requirement` 的前置条件。
+
 ## 待人确认的几处取舍
 
 1. **`Family` 用带格式约束的字符串**（C1）：代价是类型检查不再能发现拼错的 family，由模板加载时校验兜住。

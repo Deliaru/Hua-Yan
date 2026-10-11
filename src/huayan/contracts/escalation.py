@@ -33,9 +33,9 @@ class SheetDraft(BaseModel):                  # 反向包装：产品需求＋�
 class ReuseProposal(BaseModel):               # 产品经理 Agent 查 L2 知识后的现成产品建议（v5.1）
     product_id: str | None                    # None = 已查，无现成产品
     ku_refs: list[str] = []                   # 依据的 L2 知识（案例、L2 转化对照）；采用时给归属人记 cited
-    customer_note: str = ""                   # 面向客户的一句说明（L1 可见，发出前过 leak_hits）
+    customer_note: str = ""                   # 面向客户的一句说明（v5.3：研发审定后才对 L1 可见；保存与审定时过 leak_hits）
     note: str = ""                            # 给业务员的依据说明，只写归属，不写案例原文
-    declined_reason: str = ""                 # 业务员不采用的理由
+    declined_reason: str = ""                 # 研发不采用的理由（v5.3：审定人由业务员改为研发）
 
 
 class LeakHit(BaseModel):                     # 泄密匹配结果，只给句序号与类别，不含命中内容
@@ -73,7 +73,7 @@ class Requirement(BaseModel):
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
     hypotheses: list[str] = []                # 研发方向假设（只对 L3 可见）；泄密匹配的来源之一
     status: Literal["draft", "reused", "merged", "rd_accepted", "rd_confirmed", "released", "rejected"]
-    # reused：业务员采用现成产品；merged（v5.2）：已并入另一张单
+    # reused：研发审定采用现成产品（v5.3）；merged（v5.2）：已并入另一张单
     drafted_by: str = "pm:agent"              # L2 草稿的起草者
     chem_drafted_by: str | None = None        # L3 草稿的委托人（研发 actor id）
     rd_accepted_by: str | None = None         # 研发接单（= 立项）

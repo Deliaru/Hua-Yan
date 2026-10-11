@@ -1,7 +1,7 @@
 # WP-J 觉：决策目录、会话与需求单对象、统一循环里的发现
 
 > 负责：B｜时段：T+4～16（第 1 步 T+4～8 先交付，门面联调依赖它）｜分支：`dev/b`
-> 依据：`REPLAN-v5.md` 第 4 节（D4、D5、D8、D9、D17～D20）、契约 v5.1 第 ⑤ ⑥ ⑧ ⑨ 节、`WP-0v5.md` C1、C2、C5、C12、C13
+> 依据：`REPLAN-v5.md` 第 4 节（D4、D5、D8、D9、D17～D20、D22）、契约 v5.1 第 ⑤ ⑥ ⑧ ⑨ 节、`WP-0v5.md` C1、C2、C5、C12、C13
 
 ## 目标
 
@@ -11,7 +11,7 @@
 
 ## 依赖
 
-- 契约 v5.2（已在 main；机会汇聚的合并见 `WP-0v5.md` C14）。
+- 契约 v5.3（已在 main；机会汇聚的合并见 `WP-0v5.md` C14，现成产品由研发审定见 C15）。
 - WP-C 第 1 步的 `leak_hits`（`escalation/translate.py`）：A 单独提交、尽早合入 main；合入前 `n_leak_hits` 先按 0 构建，**不另写一份匹配逻辑**。
 - 第 3、4 步（重跑模拟业务周、重训 Jue-K）依赖 WP-C 的门面合入。
 
@@ -42,7 +42,7 @@
 | 文件 | kind | 对象 | 前置条件（建议写法，属性名以契约 5.2 为准） | owner | signer |
 |---|---|---|---|---|---|
 | `escalate_need` | advance | session | `attrs.phenomenon_known and attrs.top_is_none and not attrs.escalated` | sales | sales |
-| `reuse_product` | advance | requirement | `attrs.status == "draft" and not attrs.reuse_checked` | pm | sales |
+| `reuse_product` | advance | requirement | `attrs.status == "draft" and not attrs.reuse_checked` | pm | rd（C15） |
 | `accept_requirement` | advance | requirement | `attrs.status == "draft" and attrs.reuse_checked and not attrs.reuse_pending` | pm | rd |
 | `distortion` | anomaly | requirement | `((attrs.layer == 2 and attrs.n_product_items >= 1) or (attrs.layer == 3 and attrs.n_chem_items >= 1)) and (attrs.n_unmapped_constraints >= 1 or attrs.n_unquoted_items >= 1)`（空单、刚接单还没有条目时不到点） | pm（layer 2）/ rd（layer 3）见下 | rd |
 | `confirm_translation` | advance | requirement | `attrs.status == "rd_accepted"` | rd | rd |
@@ -90,6 +90,7 @@
 
 - 模拟周照常走真实链路；推进类问题由「模拟人」在问题进入待签后签字，模拟退回率为 0；模拟周不产生 `human_decision`：
   - 业务员：`escalate_need` 即签；`market_eval` 录「通过」；
+  - 研发：`reuse_product` 进入待签（只有现场产品经理 Agent 找到产品时才会有）即审定采用；离线路径一律「无现成产品」，模拟周里不出现；
   - **研发只接机会汇聚指向的需求单**：`accept_requirement` 在没有 `opportunity` 指向该单时不签（保持待签）——否则首次升级就被接单，`open_project` 一直为真，机会汇聚永远不到点；机会汇聚进入待签后，模拟研发签字合并（合并建议由 hub 离线路径起草），再接主单；
   - 接单后：`confirm_translation` 即签 → 1 个业务日后由模拟 ELN 录入试样通过（沿用现有 `record_trial`）→ `market_eval` → `seal_points`（模拟对外要点）→ `release` 即签；
   - **定时三类的处置顺序**：问题进入待签时先查注入清单（`sim/`、`eval/` 可读，铁律 5）——在清单里的按上面签（机会汇聚签合并、知识冲突更新适用表、拼凑冻结），不在清单里的一律 `dismiss`；「同一客户反复升级」这类困难负样本不在清单里，因此不会被签合并。`dismiss` 给目录飞轮统计提供被忽略率。

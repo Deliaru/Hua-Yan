@@ -16,7 +16,7 @@ class ReuseView(BaseModel):                   # v5.1：业务员看到的现成�
     product_id: str | None                    # None = 已查，无现成产品
     product_name: str = ""
     usage: str = ""                           # 产品的 L1 用法
-    customer_note: str = ""                   # 产品经理 Agent 起草的面向客户的说明
+    customer_note: str = ""                   # 研发审定后的面向客户的说明（v5.3：pending 时为空，basis 也为空）
     basis: list[str] = []                     # 归属标签，如「产品经理 P01 · 历史案例 · L2」
     status: Literal["pending", "adopted", "declined", "none"]
 
