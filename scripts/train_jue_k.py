@@ -1,6 +1,7 @@
 """训练 Jue-K：一个 HistGradientBoostingClassifier（五类样本混在一起）+ 按 family 在验证集上拟合 isotonic 校准。
 做法参照 JUE-r2 qmodel/v0/train.py（梯度提升 + 验证集 isotonic），数据与特征为本项目重写。
-D20：每类在验证集的同一组合上与模板规则分比较，AUC 更高且 Brier 更低才算赢；只保存赢了的类的校准器，
+D20：每类在测试集（不参与训练与校准）的同一组合上与模板规则分比较，AUC 更高且 Brier 更低才算赢；
+验证集同时用于拟合校准层，样本又少，不用来判胜负（回问在验证集上 0.60、测试集上 0.50）。只保存赢了的类的校准器，
 JueK 对没有校准器的类回落规则打分（huayan.jue.jue_k）。比较结果写进 metrics.json 与模型卡。
 
 uv run python scripts/train_jue_k.py [--samples data/jue_k/samples.csv --out models/jue_k]
@@ -66,26 +67,30 @@ def main():
     feats = features(df)
     columns = sorted({k for f, s in zip(feats, df.split) if s == "train" for k in f})
     x, y = np.asarray(vectorize(feats, columns)), df.label.to_numpy()
-    train, val = (df.split == "train").to_numpy(), (df.split == "val").to_numpy()
+    train, val, test = (df.split == "train").to_numpy(), (df.split == "val").to_numpy(), (df.split == "test").to_numpy()
 
     classifier = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.1, random_state=0).fit(x[train], y[train])
     raw = classifier.predict_proba(x)[:, 1]
     calibrators, summary = {}, {}
     for family in sorted(df.family.unique()):
         fam = (df.family == family).to_numpy()
-        v = fam & val
+        v, t, h = fam & val, fam & test, fam & (df.split == "heldout").to_numpy()
         calibrator = IsotonicRegression(y_min=0, y_max=1, out_of_bounds="clip").fit(raw[v], y[v])
         cal = calibrator.predict(raw[v])
-        auc, rule_auc = _auc(y[v], raw[v]), _auc(y[v], rule[v])
-        brier, rule_brier = float(brier_score_loss(y[v], cal)), float(brier_score_loss(y[v], rule[v]))
+        auc, rule_auc = _auc(y[t], raw[t]), _auc(y[t], rule[t])
+        brier, rule_brier = (float(brier_score_loss(y[t], calibrator.predict(raw[t]))),
+                             float(brier_score_loss(y[t], rule[t])))
         wins = auc is not None and rule_auc is not None and auc > rule_auc and brier < rule_brier
         if wins:
             calibrators[family] = calibrator
         summary[family] = {
             "n": {s: int((fam & (df.split == s).to_numpy()).sum()) for s in ("train", "val", "test", "heldout")},
             "positives": {s: int(y[fam & (df.split == s).to_numpy()].sum()) for s in ("train", "val", "test", "heldout")},
-            "val_auc": auc, "val_brier_raw": float(brier_score_loss(y[v], raw[v])), "val_brier_calibrated": brier,
-            "val_rule_auc": rule_auc, "val_rule_brier": rule_brier, "scored_by": "jue_k" if wins else "rule"}
+            "val_auc": _auc(y[v], raw[v]), "val_brier_raw": float(brier_score_loss(y[v], raw[v])),
+            "val_brier_calibrated": float(brier_score_loss(y[v], cal)),
+            "test_auc": auc, "test_rule_auc": rule_auc, "test_brier": brier, "test_rule_brier": rule_brier,
+            "heldout_auc": _auc(y[h], raw[h]) if h.any() else None, "heldout_rule_auc": _auc(y[h], rule[h]) if h.any() else None,
+            "scored_by": "jue_k" if wins else "rule"}
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -98,9 +103,10 @@ def main():
                                                  ensure_ascii=False, indent=2), encoding="utf-8")
     (out / "model_card.md").write_text(model_card(summary, len(columns)), encoding="utf-8")
     for family, s in summary.items():
-        print(f"{family:20s} train {s['n']['train']:5d}（正例 {s['positives']['train']:4d}）  val AUC {s['val_auc'] or float('nan'):.3f}"
-              f" / 规则 {s['val_rule_auc'] or float('nan'):.3f}  Brier 校准 {s['val_brier_calibrated']:.3f} / 规则 {s['val_rule_brier']:.3f}"
-              f"  → {s['scored_by']}")
+        nan = float("nan")
+        print(f"{family:20s} train {s['n']['train']:5d}（正例 {s['positives']['train']:4d}）  test AUC {s['test_auc'] or nan:.3f}"
+              f" / 规则 {s['test_rule_auc'] or nan:.3f}  Brier {s['test_brier']:.3f} / 规则 {s['test_rule_brier']:.3f}"
+              f"  heldout AUC {s['heldout_auc'] or nan:.3f} / 规则 {s['heldout_rule_auc'] or nan:.3f}  → {s['scored_by']}")
     print(f"产物写入 {out}（特征 {len(columns)} 个）")
 
 
@@ -109,8 +115,9 @@ def model_card(summary: dict, n_features: int) -> str:
                      f"| {s['positives']['train']} / {s['positives']['val']} / {s['positives']['test']} / {s['positives']['heldout']} |"
                      for f, s in summary.items())
     num = lambda x: "—" if x is None else f"{x:.3f}"
-    choice = "\n".join(f"| `{f}` | {num(s['val_auc'])} | {num(s['val_rule_auc'])} | {num(s['val_brier_calibrated'])} "
-                       f"| {num(s['val_rule_brier'])} | {'Jue-K' if s['scored_by'] == 'jue_k' else '规则（回落）'} |"
+    choice = "\n".join(f"| `{f}` | {num(s['test_auc'])} | {num(s['test_rule_auc'])} | {num(s['test_brier'])} "
+                       f"| {num(s['test_rule_brier'])} | {num(s['heldout_auc'])} / {num(s['heldout_rule_auc'])} "
+                       f"| {'Jue-K' if s['scored_by'] == 'jue_k' else '规则（回落）'} |"
                        for f, s in summary.items())
     return f"""# Jue-K v5 模型卡
 
@@ -132,11 +139,11 @@ def model_card(summary: dict, n_features: int) -> str:
 - 回问样本另补了 3,000 张应升级的卡（只取回问样本）；种子 `tr:50`～`tr:57` 是为回问补的挂在槽位取值上的 L3 转化对照。
 
 ## 打分来源（D20：新模型赢的用模型，输的回落规则）
-验证集上同一组合比较：Jue-K 的 AUC（校准前）高于规则分、且校准后 Brier 低于规则分才算赢。只保存赢了的类的校准器；
+测试集上同一组合比较：Jue-K 的 AUC（校准前）高于规则分、且校准后 Brier 低于规则分才算赢（heldout 为未见现象，只列出不判胜负）。只保存赢了的类的校准器；
 `JueK` 对没有校准器的类用模板 `rule_score` 打分，逐条标 `scored_by: rule`。规则分不是校准概率，Brier 对它偏严，如实列出。
 
-| 决策 | Jue-K AUC | 规则 AUC | Jue-K Brier | 规则 Brier | 最终 |
-|---|---|---|---|---|---|
+| 决策 | Jue-K AUC | 规则 AUC | Jue-K Brier | 规则 Brier | 未见现象 AUC（Jue-K / 规则） | 最终 |
+|---|---|---|---|---|---|---|
 {choice}
 
 ## 适用范围
