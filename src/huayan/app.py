@@ -409,6 +409,42 @@ class HuayanApp:
             self.scan()
         return self.requirement_view(req_id, by).requirement
 
+    def update_reuse_note(self, req_id, text, by):
+        req, actor = self._requirement(req_id, by, {"pm", "rd"}, {"draft"})
+        if actor.role == "pm" and by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 或接单研发可以改写复用说明")
+        if req.reuse is None or req.reuse.product_id is None:
+            raise ValueError("需要先起草现成产品建议")
+        hits = leak_hits(text, req.sealed, req.hypotheses, self.kb)
+        if hits:
+            raise ValueError([hit.model_dump() for hit in hits])
+        before = req.reuse.customer_note
+        req.reuse.customer_note = text
+        self.events.append("requirement_edited", by, {"requirement_id": req_id, "layer": 2,
+            "index": -1, "field": "reuse.customer_note", "before": before, "after": text})
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
+    def decline_reuse(self, req_id, reason, by):
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
+        if req.reuse is None or req.reuse.product_id is None or req.reuse.declined_reason:
+            raise ValueError("没有待审定的现成产品建议")
+        if not reason.strip():
+            raise ValueError("请填写不采用的理由")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("reuse_product", "decline_reuse", state.objects[f"requirement:{req_id}"], by)
+        req.reuse.declined_reason = reason
+        self.events.append("reuse_declined", by, {"requirement_id": req_id,
+            "product_id": req.reuse.product_id, "reason": reason})
+        if question:
+            self._settle(question.id, Resolution(action="return", by=by, note=reason))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        self.scan()
+        return self.requirement_view(req_id, by).requirement
+
     def record_market_eval(self, req_id, result, note, by):
         req, _ = self._requirement(req_id, by, {"sales"}, {"rd_confirmed"})
         self._sales_session(req.session_ids[0], by)

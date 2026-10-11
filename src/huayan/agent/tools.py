@@ -46,6 +46,7 @@ def _req(req) -> dict:
             "direction": req.direction, "product_lang": _items(req.product_lang), "chem_lang": _items(req.chem_lang),
             "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id,
             "sheet": req.sheet and req.sheet.model_dump(), "return_notes": req.return_notes,
+            "reuse": req.reuse and req.reuse.model_dump(),
             "sealed": req.sealed, "points_draft": req.points_draft and req.points_draft.model_dump(),
             "contribution_drafts": [d.model_dump() for d in req.contribution_drafts]}
 
@@ -188,6 +189,21 @@ def my_contributions(ctx: ToolContext, args: NoArgs) -> ToolResult:
 
 # ---- 需求单草稿（产品经理改 L2，研发改 L3；层的规则在门面） ----
 
+class ReuseArgs(BaseModel):
+    req_id: str
+    product_id: str | None
+    ku_refs: list[str]
+    customer_note: str
+    note: str
+
+
+@tool("propose_reuse", "draft", ["pm"], "保存现成产品建议供研发审定；查无产品时 product_id 填 null，note 写检索结果", ReuseArgs)
+def propose_reuse(ctx: ToolContext, args: ReuseArgs) -> ToolResult:
+    req = ctx.app.save_reuse_proposal(args.req_id, args.product_id, args.ku_refs,
+                                     args.customer_note, args.note, ctx.principal.id)
+    return ToolResult(data=_req(req))
+
+
 @tool("draft_product_need", "draft", ["pm"], "为已有需求单起草 L2 产品需求（规则骨架，之后可逐条修改）", ReqId)
 def draft_product_need(ctx: ToolContext, args: ReqId) -> ToolResult:
     return ToolResult(data=_req(ctx.app.draft_requirement(args.req_id, ctx.principal.id)))
@@ -232,6 +248,11 @@ class DirectionArgs(BaseModel):
 @tool("set_direction", "draft", ["pm"], "修改需求单的产品方向（一句话）", DirectionArgs)
 def set_direction(ctx: ToolContext, args: DirectionArgs) -> ToolResult:
     return ToolResult(data=_req(ctx.app.set_direction(args.req_id, args.text, ctx.principal.id)))
+
+
+@tool("edit_reuse_note", "draft", ["pm", "rd"], "改写现成产品建议中给客户的说明；草稿经泄密检查，研发审定后才可对外", DirectionArgs)
+def edit_reuse_note(ctx: ToolContext, args: DirectionArgs) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.update_reuse_note(args.req_id, args.text, ctx.principal.id)))
 
 
 @tool("draft_chem_need", "draft", ["rd"], "为产品经理已确认的需求单起草 L3 化学语言条目与研发方向假设（规则骨架）", ReqId)
