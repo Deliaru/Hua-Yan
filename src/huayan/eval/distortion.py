@@ -114,10 +114,12 @@ def run_distortion(cards: list[NeedCard], seeds: Seeds, cfg: dict, rng: random.R
         session = d.session()
         q = Question(id=f"q:{card.id}", family="escalate_need", title="升级", object_id=session.id, owner_role="pm",
                      scored_by="human", discoverer="human", dedup_key=f"escalate_need:{session.id}", created_at=now)
-        pm_draft = draft_product_need(q, [session], kb, pm, now)
         req = Requirement(id=f"req:{card.id}", question_id=q.id, session_ids=[session.id],
-                          phenomenon=d.need.phenomenon, known_slots=d.need.known(), direction=pm_draft.direction,
-                          product_lang=pm_draft.product_lang, status="pm_confirmed", drafted_by=pm.id, created_at=now)
+                          phenomenon=d.need.phenomenon, known_slots=d.need.known(), assigned_rd=rd.id,
+                          status="draft", drafted_by=pm.id, created_at=now)
+        pm_draft = draft_product_need(req, [session], kb, pm, now)
+        req.direction, req.product_lang = pm_draft.direction, pm_draft.product_lang
+        req.status, req.rd_accepted_by = "rd_accepted", rd.id
         chem = draft_chem_need(req, [session], kb, rd, now).chem_lang
         score(GROUPS[2], req.phenomenon, req.known_slots, chem, asks)
         state = requirement_state(req, d.need, seeds, kb, now)

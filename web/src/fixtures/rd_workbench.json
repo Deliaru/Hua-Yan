@@ -1,0 +1,515 @@
+{
+  "simulated": true,
+  "scenarios": {
+    "reuse_pending": {
+      "label": "现成产品待研发审定",
+      "requirement": {
+        "viewer": "rd:R02",
+        "viewer_level": 3,
+        "requirement": {
+          "id": "req:fixture-reuse",
+          "question_id": "q:fixture:escalate_need:session:sess:fixture-reuse",
+          "session_ids": [
+            "sess:fixture-reuse"
+          ],
+          "phenomenon": "poor_fastness",
+          "known_slots": {
+            "fiber": "莱赛尔"
+          },
+          "assigned_rd": "rd:R02",
+          "escalate_note": "（模拟）客户反馈莱赛尔布水洗掉色，当前无直接推荐，请查历史案例。",
+          "reuse": {
+            "product_id": "HY-FX301",
+            "ku_refs": [
+              "ku:case:fixture-reuse"
+            ],
+            "customer_note": "（模拟）可试用此产品改善水洗掉色，先按推荐用量做小样确认。",
+            "note": "产品经理 P01 · 历史案例 · L2",
+            "declined_reason": ""
+          },
+          "merged_into": null,
+          "merge_from": [],
+          "merge_note": "",
+          "direction": "",
+          "product_lang": [],
+          "chem_lang": [],
+          "hypotheses": [],
+          "status": "draft",
+          "drafted_by": "pm:agent",
+          "chem_drafted_by": null,
+          "rd_accepted_by": null,
+          "rd_confirmed_by": null,
+          "return_notes": [],
+          "contribution_drafts": [],
+          "points_draft": null,
+          "public_points": "",
+          "sealed": [],
+          "sheet": null,
+          "product_id": null,
+          "created_at": "2026-10-11T09:04:00+08:00"
+        },
+        "quotes": {
+          "turn:sess:fixture-reuse:1": "（模拟）这批布洗了掉色。",
+          "turn:sess:fixture-reuse:3": "（模拟）莱赛尔布，希望水洗后不掉色。"
+        },
+        "cited": [
+          {
+            "ku_id": "ku:case:fixture-reuse",
+            "owner": "pm:P01",
+            "level": 2,
+            "title": "（模拟）莱赛尔固色历史案例",
+            "text": "（模拟案例原文）莱赛尔布水洗掉色，曾用 HY-FX301 做小样后改善。",
+            "n_cited": 0
+          }
+        ]
+      },
+      "questions": [
+        {
+          "id": "q:fixture:reuse_product:requirement:req:fixture-reuse",
+          "family": "reuse_product",
+          "title": "是否采用现成产品",
+          "object_id": "requirement:req:fixture-reuse",
+          "owner_role": "pm",
+          "owner_id": "pm:agent",
+          "signer_role": "rd",
+          "signer_id": "rd:R02",
+          "prepared_at": "2026-10-11T09:05:00+08:00",
+          "template_id": "reuse_product",
+          "status": "open",
+          "p_need": 1.0,
+          "urgency": null,
+          "scored_by": "rule",
+          "discoverer": "jue_proto",
+          "evidence": [
+            {
+              "summary": "（模拟）产品经理 Agent 已查到案例，等待研发审定。",
+              "event_ids": [],
+              "quote": ""
+            }
+          ],
+          "refs": {
+            "session_id": "sess:fixture-reuse",
+            "requirement_id": "req:fixture-reuse",
+            "assigned_rd": "rd:R02"
+          },
+          "bounty_points": 0,
+          "dedup_key": "reuse_product:requirement:req:fixture-reuse",
+          "created_at": "2026-10-11T09:04:00+08:00",
+          "resolved_at": null,
+          "resolution": null
+        }
+      ],
+      "leak": []
+    },
+    "preparing": {
+      "label": "产品经理 Agent 正在准备 L2",
+      "requirement": {
+        "viewer": "rd:R02",
+        "viewer_level": 3,
+        "requirement": {
+          "id": "req:fixture-main",
+          "question_id": "q:fixture:escalate_need:main",
+          "session_ids": [
+            "sess:fixture-main"
+          ],
+          "phenomenon": "color_unlevel",
+          "known_slots": {
+            "fiber": "锦纶氨纶",
+            "equipment": "气流染色机"
+          },
+          "assigned_rd": "rd:R02",
+          "escalate_note": "",
+          "reuse": {
+            "product_id": null,
+            "ku_refs": [],
+            "customer_note": "",
+            "note": "（模拟）已查，无现成产品。",
+            "declined_reason": ""
+          },
+          "merged_into": null,
+          "merge_from": [],
+          "merge_note": "",
+          "direction": "",
+          "product_lang": [],
+          "chem_lang": [],
+          "hypotheses": [],
+          "status": "draft",
+          "drafted_by": "pm:agent",
+          "chem_drafted_by": null,
+          "rd_accepted_by": null,
+          "rd_confirmed_by": null,
+          "return_notes": [],
+          "contribution_drafts": [],
+          "points_draft": null,
+          "public_points": "",
+          "sealed": [],
+          "sheet": null,
+          "product_id": null,
+          "created_at": "2026-10-11T09:04:00+08:00"
+        },
+        "quotes": {
+          "turn:sess:fixture-main:1": "（模拟）锦氨布在气流缸里染，深一块浅一块，不能影响色光。"
+        },
+        "cited": []
+      },
+      "questions": [
+        {
+          "id": "q:fixture:accept_requirement:requirement:req:fixture-main",
+          "family": "accept_requirement",
+          "title": "研发是否接单",
+          "object_id": "requirement:req:fixture-main",
+          "owner_role": "pm",
+          "owner_id": "pm:agent",
+          "signer_role": "rd",
+          "signer_id": "rd:R02",
+          "prepared_at": null,
+          "template_id": "accept_requirement",
+          "status": "open",
+          "p_need": 1.0,
+          "urgency": null,
+          "scored_by": "rule",
+          "discoverer": "jue_proto",
+          "evidence": [],
+          "refs": {
+            "session_id": "sess:fixture-main",
+            "requirement_id": "req:fixture-main",
+            "assigned_rd": "rd:R02"
+          },
+          "bounty_points": 0,
+          "dedup_key": "accept_requirement:requirement:req:fixture-main",
+          "created_at": "2026-10-11T09:05:00+08:00",
+          "resolved_at": null,
+          "resolution": null
+        }
+      ],
+      "leak": []
+    },
+    "points_ready": {
+      "label": "两栏草稿待签，需先改写自查命中句",
+      "requirement": {
+        "viewer": "rd:R02",
+        "viewer_level": 3,
+        "requirement": {
+          "id": "req:fixture-main",
+          "question_id": "q:fixture:escalate_need:main",
+          "session_ids": [
+            "sess:fixture-main"
+          ],
+          "phenomenon": "color_unlevel",
+          "known_slots": {
+            "fiber": "锦纶氨纶",
+            "equipment": "气流染色机"
+          },
+          "assigned_rd": "rd:R02",
+          "escalate_note": "",
+          "reuse": {
+            "product_id": null,
+            "ku_refs": [],
+            "customer_note": "",
+            "note": "（模拟）已查，无现成产品。",
+            "declined_reason": ""
+          },
+          "merged_into": null,
+          "merge_from": [],
+          "merge_note": "",
+          "direction": "（模拟）开发低浴比气流染色适用的匀染产品。",
+          "product_lang": [
+            {
+              "text": "（模拟）低浴比下改善匀染，且不能影响色光。",
+              "slot": null,
+              "quote_refs": [
+                "turn:sess:fixture-main:1"
+              ],
+              "ku_refs": [
+                "ku:translation:fixture-l2"
+              ],
+              "edited_by": null
+            }
+          ],
+          "chem_lang": [
+            {
+              "text": "（模拟）控制升温过程中的染浴酸度变化。",
+              "slot": null,
+              "quote_refs": [
+                "turn:sess:fixture-main:1"
+              ],
+              "ku_refs": [
+                "ku:translation:fixture-l3"
+              ],
+              "edited_by": "rd:R02"
+            }
+          ],
+          "hypotheses": [
+            "（模拟假设）缓释酸组分可控制升温过程中的酸度变化。"
+          ],
+          "status": "rd_confirmed",
+          "drafted_by": "pm:agent",
+          "chem_drafted_by": "rd:R02",
+          "rd_accepted_by": "rd:R02",
+          "rd_confirmed_by": "rd:R02",
+          "return_notes": [],
+          "contribution_drafts": [
+            {
+              "item_index": 0,
+              "scene_phrase": "（模拟）低浴比匀染",
+              "chem_term": "（模拟）控制升温过程中的酸度变化",
+              "note": "（模拟）已去掉客户特定条件，待研发审定是否沉淀。"
+            }
+          ],
+          "points_draft": {
+            "public": "（模拟）低浴比下改善匀染。缓释酸组分控制酸度变化。",
+            "sealed": [
+              "（模拟）缓释酸组分控制酸度变化"
+            ],
+            "self_check": [
+              {
+                "index": 1,
+                "source": "sealed"
+              }
+            ]
+          },
+          "public_points": "",
+          "sealed": [],
+          "sheet": null,
+          "product_id": "HY-LV206",
+          "created_at": "2026-10-11T09:04:00+08:00"
+        },
+        "quotes": {
+          "turn:sess:fixture-main:1": "（模拟）锦氨布在气流缸里染，深一块浅一块，不能影响色光。"
+        },
+        "cited": [
+          {
+            "ku_id": "ku:translation:fixture-l2",
+            "owner": "pm:P01",
+            "level": 2,
+            "title": "（模拟）低浴比匀染需求",
+            "text": "（模拟）低浴比下保持匀染且不影响色光。",
+            "n_cited": 1
+          },
+          {
+            "ku_id": "ku:translation:fixture-l3",
+            "owner": "rd:R02",
+            "level": 3,
+            "title": "（模拟）酸度控制转化对照",
+            "text": "（模拟）控制升温过程中的染浴酸度变化。",
+            "n_cited": 1
+          }
+        ]
+      },
+      "questions": [
+        {
+          "id": "q:fixture:seal_points:requirement:req:fixture-main",
+          "family": "seal_points",
+          "title": "审定封存与对外要点",
+          "object_id": "requirement:req:fixture-main",
+          "owner_role": "rd",
+          "owner_id": "rd:R02",
+          "signer_role": "rd",
+          "signer_id": "rd:R02",
+          "prepared_at": "2026-10-11T09:08:00+08:00",
+          "template_id": "seal_points",
+          "status": "open",
+          "p_need": 1.0,
+          "urgency": null,
+          "scored_by": "rule",
+          "discoverer": "jue_proto",
+          "evidence": [
+            {
+              "summary": "（模拟）客户评价通过，两栏草稿待核对，第 2 句需改写。",
+              "event_ids": [],
+              "quote": ""
+            }
+          ],
+          "refs": {
+            "session_id": "sess:fixture-main",
+            "requirement_id": "req:fixture-main",
+            "assigned_rd": "rd:R02"
+          },
+          "bounty_points": 0,
+          "dedup_key": "seal_points:requirement:req:fixture-main",
+          "created_at": "2026-10-11T09:07:00+08:00",
+          "resolved_at": null,
+          "resolution": null
+        }
+      ],
+      "leak": []
+    },
+    "sheet_leak": {
+      "label": "说明书泄密批注，研发 Agent 准备改写",
+      "requirement": {
+        "viewer": "rd:R02",
+        "viewer_level": 3,
+        "requirement": {
+          "id": "req:fixture-main",
+          "question_id": "q:fixture:escalate_need:main",
+          "session_ids": [
+            "sess:fixture-main"
+          ],
+          "phenomenon": "color_unlevel",
+          "known_slots": {
+            "fiber": "锦纶氨纶",
+            "equipment": "气流染色机"
+          },
+          "assigned_rd": "rd:R02",
+          "escalate_note": "",
+          "reuse": {
+            "product_id": null,
+            "ku_refs": [],
+            "customer_note": "",
+            "note": "（模拟）已查，无现成产品。",
+            "declined_reason": ""
+          },
+          "merged_into": null,
+          "merge_from": [],
+          "merge_note": "",
+          "direction": "（模拟）开发低浴比气流染色适用的匀染产品。",
+          "product_lang": [
+            {
+              "text": "（模拟）低浴比下改善匀染，且不能影响色光。",
+              "slot": null,
+              "quote_refs": [
+                "turn:sess:fixture-main:1"
+              ],
+              "ku_refs": [
+                "ku:translation:fixture-l2"
+              ],
+              "edited_by": null
+            }
+          ],
+          "chem_lang": [
+            {
+              "text": "（模拟）控制升温过程中的染浴酸度变化。",
+              "slot": null,
+              "quote_refs": [
+                "turn:sess:fixture-main:1"
+              ],
+              "ku_refs": [
+                "ku:translation:fixture-l3"
+              ],
+              "edited_by": "rd:R02"
+            }
+          ],
+          "hypotheses": [
+            "（模拟假设）缓释酸组分可控制升温过程中的酸度变化。"
+          ],
+          "status": "rd_confirmed",
+          "drafted_by": "pm:agent",
+          "chem_drafted_by": "rd:R02",
+          "rd_accepted_by": "rd:R02",
+          "rd_confirmed_by": "rd:R02",
+          "return_notes": [],
+          "contribution_drafts": [
+            {
+              "item_index": 0,
+              "scene_phrase": "（模拟）低浴比匀染",
+              "chem_term": "（模拟）控制升温过程中的酸度变化",
+              "note": "（模拟）已去掉客户特定条件，待研发审定是否沉淀。"
+            }
+          ],
+          "points_draft": null,
+          "public_points": "（模拟）低浴比下改善匀染。",
+          "sealed": [
+            "（模拟）缓释酸组分控制酸度变化"
+          ],
+          "sheet": {
+            "sheet": "（模拟）低浴比下改善匀染。缓释酸组分控制酸度变化。",
+            "usage": "（模拟）先做小样确认用量。"
+          },
+          "product_id": "HY-LV206",
+          "created_at": "2026-10-11T09:04:00+08:00"
+        },
+        "quotes": {
+          "turn:sess:fixture-main:1": "（模拟）锦氨布在气流缸里染，深一块浅一块，不能影响色光。"
+        },
+        "cited": [
+          {
+            "ku_id": "ku:translation:fixture-l2",
+            "owner": "pm:P01",
+            "level": 2,
+            "title": "（模拟）低浴比匀染需求",
+            "text": "（模拟）低浴比下保持匀染且不影响色光。",
+            "n_cited": 1
+          },
+          {
+            "ku_id": "ku:translation:fixture-l3",
+            "owner": "rd:R02",
+            "level": 3,
+            "title": "（模拟）酸度控制转化对照",
+            "text": "（模拟）控制升温过程中的染浴酸度变化。",
+            "n_cited": 1
+          }
+        ]
+      },
+      "questions": [
+        {
+          "id": "q:fixture:release:requirement:req:fixture-main",
+          "family": "release",
+          "title": "审定发布说明书",
+          "object_id": "requirement:req:fixture-main",
+          "owner_role": "pm",
+          "owner_id": "pm:agent",
+          "signer_role": "rd",
+          "signer_id": "rd:R02",
+          "prepared_at": "2026-10-11T09:08:00+08:00",
+          "template_id": "release",
+          "status": "open",
+          "p_need": 1.0,
+          "urgency": null,
+          "scored_by": "rule",
+          "discoverer": "jue_proto",
+          "evidence": [
+            {
+              "summary": "（模拟）说明书已准备，待研发审定；泄密检查命中，改写通过后才能发布。",
+              "event_ids": [],
+              "quote": ""
+            }
+          ],
+          "refs": {
+            "session_id": "sess:fixture-main",
+            "requirement_id": "req:fixture-main",
+            "assigned_rd": "rd:R02"
+          },
+          "bounty_points": 0,
+          "dedup_key": "release:requirement:req:fixture-main",
+          "created_at": "2026-10-11T09:08:00+08:00",
+          "resolved_at": null,
+          "resolution": null
+        },
+        {
+          "id": "q:fixture:seal_leak:requirement:req:fixture-main",
+          "family": "seal_leak",
+          "title": "说明书含封存内容，需改写",
+          "object_id": "requirement:req:fixture-main",
+          "owner_role": "rd",
+          "owner_id": "rd:R02",
+          "signer_role": "rd",
+          "signer_id": "rd:R02",
+          "prepared_at": null,
+          "template_id": "seal_leak",
+          "status": "open",
+          "p_need": 1.0,
+          "urgency": null,
+          "scored_by": "rule",
+          "discoverer": "jue_proto",
+          "evidence": [],
+          "refs": {
+            "session_id": "sess:fixture-main",
+            "requirement_id": "req:fixture-main",
+            "assigned_rd": "rd:R02"
+          },
+          "bounty_points": 0,
+          "dedup_key": "seal_leak:requirement:req:fixture-main",
+          "created_at": "2026-10-11T09:08:00+08:00",
+          "resolved_at": null,
+          "resolution": null
+        }
+      ],
+      "leak": [
+        {
+          "index": 1,
+          "source": "sealed"
+        }
+      ]
+    }
+  }
+}

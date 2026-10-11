@@ -1,0 +1,115 @@
+{
+  "target_id": "req:fixture-reuse",
+  "viewer": "rd:R02",
+  "points": [
+    {
+      "at": "2026-10-11T09:00:00+08:00",
+      "family": "ask_slot",
+      "object_id": "slot:sess:fixture-reuse/fiber",
+      "p_need": 0.82,
+      "threshold": 0.5,
+      "scored_by": "jue_k",
+      "raised": false
+    },
+    {
+      "at": "2026-10-11T09:00:00+08:00",
+      "family": "escalate_need",
+      "object_id": "session:sess:fixture-reuse",
+      "p_need": null,
+      "threshold": 0.5,
+      "scored_by": "rule",
+      "raised": false
+    },
+    {
+      "at": "2026-10-11T09:01:00+08:00",
+      "family": "ask_slot",
+      "object_id": "slot:sess:fixture-reuse/fiber",
+      "p_need": 0.91,
+      "threshold": 0.5,
+      "scored_by": "jue_k",
+      "raised": false
+    },
+    {
+      "at": "2026-10-11T09:02:00+08:00",
+      "family": "ask_slot",
+      "object_id": "slot:sess:fixture-reuse/fiber",
+      "p_need": null,
+      "threshold": 0.5,
+      "scored_by": "jue_k",
+      "raised": false
+    },
+    {
+      "at": "2026-10-11T09:02:00+08:00",
+      "family": "escalate_need",
+      "object_id": "session:sess:fixture-reuse",
+      "p_need": 1.0,
+      "threshold": 0.5,
+      "scored_by": "rule",
+      "raised": true
+    },
+    {
+      "at": "2026-10-11T09:04:00+08:00",
+      "family": "escalate_need",
+      "object_id": "session:sess:fixture-reuse",
+      "p_need": null,
+      "threshold": 0.5,
+      "scored_by": "rule",
+      "raised": false
+    },
+    {
+      "at": "2026-10-11T09:04:00+08:00",
+      "family": "reuse_product",
+      "object_id": "requirement:req:fixture-reuse",
+      "p_need": 1.0,
+      "threshold": 0.5,
+      "scored_by": "rule",
+      "raised": true
+    },
+    {
+      "at": "2026-10-11T09:05:00+08:00",
+      "family": "reuse_product",
+      "object_id": "requirement:req:fixture-reuse",
+      "p_need": null,
+      "threshold": 0.5,
+      "scored_by": "rule",
+      "raised": false
+    },
+    {
+      "at": "2026-10-11T09:06:00+08:00",
+      "family": "reuse_product",
+      "object_id": "requirement:req:fixture-reuse",
+      "p_need": null,
+      "threshold": 0.5,
+      "scored_by": "rule",
+      "raised": false
+    }
+  ],
+  "nodes": [
+    {
+      "question_id": "q:fixture:escalate_need:session:sess:fixture-reuse",
+      "family": "escalate_need",
+      "owner_id": "sales:S01",
+      "signer_id": "sales:S01",
+      "created_at": "2026-10-11T09:02:00+08:00",
+      "prepared_at": "2026-10-11T09:03:00+08:00",
+      "resolved_at": "2026-10-11T09:04:00+08:00",
+      "action": "sign",
+      "by": "sales:S01"
+    },
+    {
+      "question_id": "q:fixture:reuse_product:requirement:req:fixture-reuse",
+      "family": "reuse_product",
+      "owner_id": "pm:agent",
+      "signer_id": "rd:R02",
+      "created_at": "2026-10-11T09:04:00+08:00",
+      "prepared_at": "2026-10-11T09:05:00+08:00",
+      "resolved_at": "2026-10-11T09:06:00+08:00",
+      "action": "sign",
+      "by": "rd:R02"
+    }
+  ],
+  "n_judgments": 7,
+  "n_llm_calls": 0,
+  "n_questions": 2,
+  "n_signatures": 2
+}

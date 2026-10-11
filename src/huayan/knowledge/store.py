@@ -87,6 +87,11 @@ class KnowledgeBase:
                 if self._readable(actor, ku) and (kinds is None or ku.kind in kinds)
                 and (phenomenon is None or not ku.phenomenon_ids or phenomenon in ku.phenomenon_ids)]
 
+    def _l3_translation_terms(self) -> list[str]:
+        """内部泄密检查的词表；不作为用户检索接口，不受发送者阅读权限或冻结状态影响。"""
+        return [ku.text.split(" → ", 1)[1] for ku in self._units.values()
+                if ku.kind == "translation" and ku.level == 3]
+
     def _deny(self, actor, object_ids, reason, session_id=None):
         self.audit.append(AuditRecord(ts=get_clock().now(), actor=actor.id, action="deny",
             object_ids=object_ids, session_id=session_id, reason=reason))

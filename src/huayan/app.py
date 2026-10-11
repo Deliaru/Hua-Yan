@@ -274,11 +274,15 @@ class HuayanApp:
         for session in sessions[1:]:
             known = {key: value for key, value in known.items() if session.need.known().get(key) == value}
         from huayan.escalation import translate  # WP-T 提供；不另造转译实现。
-        draft = translate.draft_product_need(question, sessions, self.kb, actor, get_clock().now())
+        assigned_rd = min((a for a in self.actors.values() if a.role == "rd"), key=lambda a: (
+            -sum(t.level == 3 and t.owner == a.id and phenomenon in t.phenomenon_ids
+                 for t in self.seeds.translations), a.id)).id
         req = Requirement(id=f"req:{len(self._requirements) + 1}", question_id=question_id,
             session_ids=[s.id for s in sessions], phenomenon=phenomenon, known_slots=known,
-            direction=draft.direction, product_lang=draft.product_lang, status="draft", drafted_by=by,
+            assigned_rd=assigned_rd, status="draft", drafted_by=by,
             created_at=get_clock().now())
+        draft = translate.draft_product_need(req, sessions, self.kb, actor, get_clock().now())
+        req.direction, req.product_lang = draft.direction, draft.product_lang
         for item in req.product_lang:
             self._validate_item(req, item, actor)
         self._requirements[req.id] = req

@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from huayan.contracts import (Actor, KnowledgeHit, KnowledgeUnit, PMDraft, Question, RDDraft, ReqItem, Requirement,
+from huayan.contracts import (Actor, KnowledgeHit, KnowledgeUnit, LeakHit, PMDraft, RDDraft, ReqItem, Requirement,
                               Session, SheetDraft)
 
 if TYPE_CHECKING:
@@ -27,6 +27,27 @@ def _score(phrase: str, text: str) -> float:
 
 def _term(ku: KnowledgeUnit) -> str:
     return ku.text.split(" → ", 1)[1]           # 转化对照知识的 text 为「原文 → 译文」
+
+
+def _hypothesis_body(value: str) -> str:
+    """只去掉规则骨架写入的来源前缀，保留假设正文中的正常冒号。"""
+    body = value.strip()
+    source = re.match(r"^参考\s+\S+\s+的机理\s*[:：]\s*(.*)$", body)
+    if source:
+        body = source.group(1).strip()
+        body = re.sub(r"^(?:(?:（模拟机理）|\(模拟机理\))\s*)+", "", body).strip()
+    return body
+
+
+def leak_hits(text: str, sealed: list[str], hypotheses: list[str], kb: KnowledgeBase) -> list[LeakHit]:
+    """按非空句编号，只返回句序号与来源类别；同句同类去重，不返回保密原文。"""
+    sources = (("sealed", sealed), ("l3_term", kb._l3_translation_terms()),
+               ("hypothesis", [_hypothesis_body(value) for value in hypotheses]))
+    phrases = [(source, [p.strip() for value in values for p in re.split(r"[。；！？\n]+", value) if p.strip()])
+               for source, values in sources]
+    sentences = [s.strip() for s in re.split(r"[。；！？\n]+", text) if s.strip()]
+    return [LeakHit(index=index, source=source) for index, sentence in enumerate(sentences)
+            for source, terms in phrases if any(_score(term, sentence) >= MIN_OVERLAP for term in terms)]
 
 
 def match_translations(text: str, kb: KnowledgeBase, actor: Actor,
@@ -59,14 +80,6 @@ def _slot_items(known: dict[str, str], sessions: list[Session]) -> list[ReqItem]
             for slot, value in known.items()]
 
 
-def _known(sessions: list[Session]) -> dict[str, str]:
-    known = {}
-    for s in sessions:
-        for slot, value in s.need.known().items():
-            known.setdefault(slot, value)
-    return known
-
-
 def _residual(item: ReqItem, sessions: list[Session]) -> bool:
     """未命中的发言去掉槽位原话片段后还剩内容（如「交期必须三天内」），就作为未转译条目保留；只回答了槽位的由条件条目承载。"""
     turn = next(t for s in sessions for t in s.turns if t.id == item.quote_refs[0])
@@ -76,8 +89,8 @@ def _residual(item: ReqItem, sessions: list[Session]) -> bool:
     return len(re.sub(r"[\W_]", "", text)) >= 2
 
 
-def draft_product_need(q: Question, sessions: list[Session], kb: KnowledgeBase, pm: Actor, at: datetime) -> PMDraft:
-    phenomenon = sessions[0].need.phenomenon
+def draft_product_need(req: Requirement, sessions: list[Session], kb: KnowledgeBase, pm: Actor, at: datetime) -> PMDraft:
+    phenomenon = req.phenomenon
     sources = [ReqItem(text=t.text, quote_refs=[t.id]) for s in sessions for t in s.turns if t.speaker == "customer"]
     items = [i for i in _translate(sources, kb, pm, phenomenon, level=2) if i.ku_refs or _residual(i, sessions)]
     for i in items:
@@ -86,7 +99,7 @@ def draft_product_need(q: Question, sessions: list[Session], kb: KnowledgeBase, 
     first = next((i for i in items if i.ku_refs), None)
     if first:                                                         # 同现象的案例作为参考，挂在第一条命中条目上
         first.ku_refs += [ku.id for ku in kb.list(pm, kinds=["case"], phenomenon=phenomenon)]
-    known = _known(sessions)
+    known = req.known_slots
     top = max((i for i in items if i.ku_refs), key=lambda i: len(i.quote_refs), default=None)
     head = top.text.split("→ ", 1)[1] if top else "待产品经理确定方向"
     direction = head + ("（" + "、".join(known.values()) + "）" if known else "")
