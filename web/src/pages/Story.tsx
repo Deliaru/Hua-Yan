@@ -6,7 +6,9 @@ import { LayerChip } from "../components/ui";
 
 type Layer = 0 | 1 | 2 | 3;
 interface Chapter {
-  title: string; headline: string; layer: Layer; who: string; screen: React.ReactNode;
+  title: string; headline: string; layer: Layer;
+  who: string; screen: React.ReactNode;
+  ways: [string, string, string];          // 同一步的三种做法：传统 / 有 Agent 没有觉 / 化言
   happened: string; value: string[]; innovation: string[]; data: [string, string, string][];
 }
 
@@ -84,7 +86,7 @@ function Slots({ items }: { items: [string, string, string][] }) {
 // ── 章节：画面原文摘自录制运行 run-1e92ea5b8d30（模拟数据） ─────────────
 const CHAPTERS: Chapter[] = [
   {
-    title: "传话游戏", headline: "需求在传到研发手里的路上，就已经变形了", layer: 0, who: "今天的样子：没有化言",
+    title: "传话游戏", ways: ["业务员凭印象转述「客户要个匀染剂」；研发问不到面料、设备、pH，只能退回。到研发的需求 95% 要退回。", "大模型把客户开场白一次性翻成化学语言，翻得很专业，但客户没说的面料、设备翻不出来。退回仍是 95%。", "觉在对话中提示该追问什么，转译后发现缺口再回问；需求到研发时信息是齐的。退回降到 19.5%。"], headline: "需求在传到研发手里的路上，就已经变形了", layer: 0, who: "今天的样子：没有化言",
     screen: (
       <div className="flex flex-col gap-3">
         <Say from="customer">我们染完以后布面深一块浅一块，客户老投诉</Say>
@@ -102,7 +104,7 @@ const CHAPTERS: Chapter[] = [
     data: [["95%", "业务员转述后，到研发手里的需求要被退回", "300 张模拟卡中应升级的 41 张 · docs/reports/distortion_300/"], ["95%", "一次性翻译（不追问）同样需退回", "docs/reports/distortion_300/"]],
   },
   {
-    title: "追问", headline: "业务员不懂化学，也能趁客户还在时问到点上", layer: 1, who: "业务员小王的工作面 · 某印染厂 A",
+    title: "追问", ways: ["问不问、问什么全凭业务员的经验；客户挂了电话才发现没问面料。", "Agent 只在被叫到时回答。提示词写「缺信息就追问」，它不知道哪一项最关键：要么不问，要么一口气问一串。", "觉从处置结果里学过「哪项信息会改变推荐、哪项研发必问」，只提示面料（80%）和设备（30%），业务员一句话就问到。"], headline: "业务员不懂化学，也能趁客户还在时问到点上", layer: 1, who: "业务员小王的工作面 · 某印染厂 A",
     screen: (
       <>
         <Say from="customer">我们染完以后布面深一块浅一块，客户老投诉</Say>
@@ -122,7 +124,7 @@ const CHAPTERS: Chapter[] = [
     data: [["49% → 91%", "应升级需求的关键信息完整率", "docs/reports/distortion_300/"], ["1.32 vs 0.80", "应升级会话里 Jue-K 与规则的平均追问次数", "docs/reports/distortion_300/"], ["0.043 vs 0.297", "追问概率校准误差 ECE（Jue-K vs 规则）", "docs/reports/jue_k/"]],
   },
   {
-    title: "升级", headline: "L1 解决不了，就签字升级，客户原话完整地往下走", layer: 1, who: "业务员小王的工作面 · 某印染厂 A",
+    title: "升级", ways: ["「我回去问问」：口头转给研发，客户原话丢了，转述还变了味。", "升级后交给谁、下一步做什么写死在流程图里；流程图没画到的情况，单子就卡住。", "觉看到「都不合适」概率最高，提出「是否升级」；Agent 起草说明、业务员签字，客户原话随单往下走。"], headline: "L1 解决不了，就签字升级，客户原话完整地往下走", layer: 1, who: "业务员小王的工作面 · 某印染厂 A",
     screen: (
       <>
         <div className="rounded-[10px] bg-fill px-3 py-2 text-[13px] leading-5">
@@ -141,7 +143,7 @@ const CHAPTERS: Chapter[] = [
     data: [["15", "个决策模板驱动全链路（推进类 + 异常类）", "config/templates/"], ["50 / 20", "模拟业务周里觉提出的问题 / 人签字次数", "docs/reports/catalog_stats.md"]],
   },
   {
-    title: "机会汇聚", headline: "两位客户在说同一件事：零散的抱怨汇成一个立项机会", layer: 2, who: "产品经理 Agent（由觉派单，只有 L2 权限）",
+    title: "机会汇聚", ways: ["两位客户找了不同的业务员，研发收到两张互不相干的单；没人发现其实是同一件事。", "每个 Agent 只处理眼前这一单。「几位客户在说同一件事」不在任何人的任务里，也就没人去看。", "觉盯着全局：1 天内 2 次同类升级、又无产品可用，提出「是否合并立项」，研发一次签字。"], headline: "两位客户在说同一件事：零散的抱怨汇成一个立项机会", layer: 2, who: "产品经理 Agent（由觉派单，只有 L2 权限）",
     screen: (
       <>
         <div className="rounded-[10px] bg-fill px-3 py-2 text-[13px] leading-5">
@@ -161,7 +163,7 @@ const CHAPTERS: Chapter[] = [
     data: [["0.953 vs 0.854", "机会汇聚的区分度 AUC（Jue-K vs 规则）", "docs/reports/jue_k/"], ["0 / 4", "模拟业务周困难负样本误报（常见规则告警 2 / 4）", "docs/reports/week/"]],
   },
   {
-    title: "产品需求", headline: "研发拿到的每一句需求，都能回到客户原话和知识的主人", layer: 2, who: "研发刘工的需求单 · 产品需求（L2）",
+    title: "产品需求", ways: ["产品经理在市场和研发之间来回转述，每转一次走样一次；研发分不清哪句是客户说的。", "大模型直接写一份需求，看着专业，却说不出哪句来自客户原话、依据了谁的经验，研发没法核对。", "产品经理 Agent 用 L2 知识逐句转译，每句带原话和知识主人；研发接单即立项，被引用的知识给主人记分。"], headline: "研发拿到的每一句需求，都能回到客户原话和知识的主人", layer: 2, who: "研发刘工的需求单 · 产品需求（L2）",
     screen: (
       <>
         <Item term="深一块浅一块" text="需要匀染类助剂，改善上染均匀性" quote="我们染完以后布面深一块浅一块" owner="产品经理老周" />
@@ -177,7 +179,7 @@ const CHAPTERS: Chapter[] = [
     data: [["0% → 100%", "转译能回查到客户原话的比例（业务员转述 → 化言）", "docs/reports/distortion_300/"], ["7 分", "这条需求里产品经理老周的知识被引用记分", "runs/demo_record/（贡献账本：发现、引用、沉淀、试样、发布）"]],
   },
   {
-    title: "化学要点", headline: "研发需要的信息，趁客户还在就补上", layer: 3, who: "研发刘工的需求单 · 化学要点（L3）",
+    title: "化学要点", ways: ["研发看完单子发现缺 pH，退回业务员，业务员再约客户，一来一回好几天。", "Agent 按常见条件起草化学要点，不知道 pH 会改变结论；错误要到试样失败才暴露。", "觉发现「pH 的不同取值会改变引用的知识」，提出回问（91%）；业务员当场问到，答复自动回填需求单。"], headline: "研发需要的信息，趁客户还在就补上", layer: 3, who: "研发刘工的需求单 · 化学要点（L3）",
     screen: (
       <>
         <Item term="匀染" text="（模拟）对酸性染料有缓染作用、与染料竞争纤维染座的阴离子型组分" quote="布面深一块浅一块" owner="研发陈工" />
@@ -195,7 +197,7 @@ const CHAPTERS: Chapter[] = [
     data: [["0.713 vs 0.500", "回问的区分度 AUC（Jue-K vs 规则）", "docs/reports/jue_k/"], ["11.1% → 0%", "错译率（一次性翻译 → 化言）", "docs/reports/distortion/"]],
   },
   {
-    title: "沉淀", headline: "研发改过的一句经验，变成记在他名下的知识", layer: 3, who: "研发刘工的需求单 · 待你签字",
+    title: "沉淀", ways: ["研发的经验留在脑子里；就算写进知识库，也没人知道是谁的，被引用也没有回报。", "研发改完 Agent 的草稿就结束了，这次修改没人提炼，下次 Agent 还会犯同样的错。", "觉发现「研发改过、库里没有」的条目，提出沉淀；Agent 提炼、研发签字，知识记在研发名下，被引用就记分。"], headline: "研发改过的一句经验，变成记在他名下的知识", layer: 3, who: "研发刘工的需求单 · 待你签字",
     screen: (
       <>
         <Item term="低浴比" text="（模拟）低浴比下染液交换快、局部染料浓度高，需随升温缓释酸，使染浴 pH 由中性逐步降至弱酸性，控制酸性染料初染速率"
@@ -213,7 +215,7 @@ const CHAPTERS: Chapter[] = [
     data: [["37 分", "研发刘工因这条需求获得的积分", "runs/demo_record/（贡献账本：发现、引用、沉淀、试样、发布）"], ["5 分", "研发陈工的知识被引用记分", "runs/demo_record/"]],
   },
   {
-    title: "发布", headline: "窗户纸封存，对外只放研发审定过的要点", layer: 3, who: "研发刘工的需求单 · 发布审定",
+    title: "发布", ways: ["说明书由人从技术文档里摘写，容易把机理、配方带出去；或者干脆什么都不敢写。", "让大模型写说明书，在提示词里要求「不要泄密」；它看过机理，就挡不住它写进去。", "研发先定封存 / 放出，产品经理 Agent 根本拿不到封存项；觉再查对外文字有没有碰到封存内容，研发审定才发布。"], headline: "窗户纸封存，对外只放研发审定过的要点", layer: 3, who: "研发刘工的需求单 · 发布审定",
     screen: (
       <>
         <p className="flex flex-wrap gap-1.5"><span className="tag tag-accent">试样通过 · HY-LV206</span><span className="tag tag-accent">客户评价：小样确认，深浅一致</span></p>
@@ -237,7 +239,7 @@ const CHAPTERS: Chapter[] = [
     data: [["0", "L1 输出中的 L2 / L3 内容（由测试守住）", "tests/test_wp_a1.py、test_wp_t.py"], ["0.941 vs 0.500", "拼凑机密（换着角度套配方）的发现 AUC", "docs/reports/jue_k/"]],
   },
   {
-    title: "回流", headline: "下一位客户说同样的问题，业务员当场推荐新品", layer: 1, who: "业务员小李的工作面 · 某印染厂 C",
+    title: "回流", ways: ["新品发布了，一线业务员不知道；下一位客户说同样的问题，又升级一次。", "新品要有人手动录进知识库、配好检索，Agent 才推荐得出来。", "研发审定发布，新品即回到 L1 知识库；下一位客户一开口，业务员当场命中新品（97%）。"], headline: "下一位客户说同样的问题，业务员当场推荐新品", layer: 1, who: "业务员小李的工作面 · 某印染厂 C",
     screen: (
       <>
         <Say from="customer">锦氨布在气流缸里染，布面深一块浅一块</Say>
@@ -255,7 +257,7 @@ const CHAPTERS: Chapter[] = [
     data: [["97%", "新品在 L1 的匹配概率（OneJev）", "runs/demo_record/"], ["端到端", "升级 → 沉淀 → 发布 → 同类需求在 L1 命中新品", "tests/test_wp_a3.py"]],
   },
   {
-    title: "支线", headline: "说明书没写、案例里用过：能复用就不立项", layer: 2, who: "业务员小李 → 产品经理 Agent → 研发刘工",
+    title: "支线", ways: ["说明书没写涤纶就推荐不了，只能立项重做，一个研发周期。", "Agent 检索说明书查不到，就回答「暂无合适产品」。", "觉在升级后先提出「有没有现成产品」；产品经理 Agent 在历史案例里找到用过的产品，研发审定，几分钟回复客户。"], headline: "说明书没写、案例里用过：能复用就不立项", layer: 2, who: "业务员小李 → 产品经理 Agent → 研发刘工",
     screen: (
       <>
         <Say from="customer">涤纶布整理完摸起来硬邦邦的</Say>
@@ -314,6 +316,27 @@ function Future() {
       <p className="text-center text-[15px] font-semibold leading-6">
         今天的 Agent 等着人给任务；化言让企业里「该处理什么」由一个可训练的发现层持续提出，<br />交给 Agent 起草、人来决定。它不替代人做决定，它让每一个该有人决定的时刻都不被错过。
       </p>
+    </div>
+  );
+}
+
+// 同一步，三种做法：传统（没有化言）、常规 Agent 架构（有 Agent、没有觉）、化言。前两列压暗，化言一列是重点
+const WAYS = [
+  ["传统做法", "没有化言"],
+  ["有 Agent，没有觉", "常规 Agent 架构：任务靠人下指令，或流程图写死"],
+  ["化言", "觉提出 → Agent 准备 → 人签字"],
+] as const;
+
+function Ways({ c }: { c: Chapter }) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      {c.ways.map((text, n) => (
+        <div key={n} className={`rounded-[12px] px-4 py-3.5 ${n === 2 ? "bg-white shadow-[inset_0_0_0_1.5px_var(--color-accent),0_6px_16px_-10px_rgba(10,108,223,.4)]" : "bg-[rgba(118,118,128,.07)]"}`}>
+          <p className={`text-[14px] font-semibold ${n === 2 ? "text-accent" : "text-ink-2"}`}>{WAYS[n][0]}</p>
+          <p className="mb-2 text-[11.5px] text-ink-3">{WAYS[n][1]}</p>
+          <p className={`text-[13.5px] leading-[22px] ${n === 2 ? "text-ink" : "text-ink-2"}`}>{text}</p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -387,15 +410,19 @@ export function Story({ toDesk }: { toDesk: () => void }) {
               <h1 className="mt-2 text-[30px] font-semibold leading-[40px] tracking-[-0.01em]">{c.headline}</h1>
               <p className="mt-3 max-w-[720px] text-[15px] leading-[25px] text-ink-2">{c.happened}</p>
             </div>
-            <div className="w-[260px] pb-1 text-right">
-              <p className="num text-[40px] font-semibold leading-[46px] tracking-[-0.02em] text-accent">{hero}</p>
+            <div className="w-[300px] pb-1 text-right">
+              <p className={`num whitespace-nowrap font-semibold tracking-[-0.02em] text-accent ${hero.length > 9 ? "text-[32px] leading-[40px]" : "text-[40px] leading-[46px]"}`}>{hero}</p>
               <p className="mt-1 text-[13px] leading-5 text-ink-2">{heroLabel}</p>
               <p className="mt-0.5 text-[11px] text-ink-3">{heroSrc}</p>
             </div>
           </div>
+          <div className="mt-8">
+            <p className="mb-2 text-[12px] font-semibold text-ink-3">同一步，三种做法</p>
+            <Ways c={c} />
+          </div>
           <div className="mt-9 grid grid-cols-[minmax(0,7fr)_minmax(0,5fr)] items-start gap-12">
             <div>
-              <p className="mb-2 text-[12px] font-semibold text-ink-3">工作面上的样子</p>
+              <p className="mb-2 text-[12px] font-semibold text-ink-3">{i === 0 ? "工作面上的样子（今天）" : "化言工作面上的样子（真实录制）"}</p>
               <Screen who={c.who}>{c.screen}</Screen>
             </div>
             <Why c={c} />
