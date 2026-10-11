@@ -44,7 +44,7 @@ def _req(req) -> dict:
     return {"req_id": req.id, "status": req.status, "phenomenon": req.phenomenon, "known_slots": req.known_slots,
             "direction": req.direction, "product_lang": _items(req.product_lang), "chem_lang": _items(req.chem_lang),
             "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id,
-            "sheet": req.sheet and req.sheet.model_dump(),
+            "sheet": req.sheet and req.sheet.model_dump(), "return_notes": req.return_notes,
             "sealed": req.sealed, "points_draft": req.points_draft and req.points_draft.model_dump(),
             "contribution_drafts": [d.model_dump() for d in req.contribution_drafts]}
 

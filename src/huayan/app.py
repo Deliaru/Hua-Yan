@@ -367,6 +367,23 @@ class HuayanApp:
         self._after(req_ids=[req.id])
         return self.requirement_view(req.id, by).requirement
 
+    def return_requirement(self, req_id, reason, by):
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
+        if not reason.strip():
+            raise ValueError("请填写退回理由")
+        if leak_hits(reason, [], [], self.kb):
+            raise ValueError("退回理由含研发术语，请改写为产品需求说明")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("accept_requirement", "return_requirement", state.objects[f"requirement:{req_id}"], by)
+        req.return_notes.append(reason)
+        self.events.append("requirement_returned", by, {"requirement_id": req_id, "reason": reason})
+        if question:
+            self._settle(question.id, Resolution(action="return", by=by, note=reason))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
     def save_reuse_proposal(self, req_id, product_id, ku_refs, customer_note, note, by):
         req, actor = self._requirement(req_id, by, {"pm"}, {"draft"})
         if by != "pm:agent":

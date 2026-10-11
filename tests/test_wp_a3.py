@@ -27,6 +27,12 @@ def test_translation_release_and_ownership(tmp_path):
         app.edit_req_item(req.id, -1, ReqItem(text="伪造引用", quote_refs=["turn:missing"]), "pm:agent")
     with pytest.raises(ValueError):
         app.edit_req_item(req.id, -1, ReqItem(text="越权引用", ku_refs=["ku:translation:tr:4"]), "pm:agent")
+    l3_term = next(t.chem_term for t in app.seeds.translations if t.level == 3)
+    with pytest.raises(ValueError, match="研发术语"):
+        app.return_requirement(req.id, l3_term, rd)
+    returned = app.return_requirement(req.id, "请突出客户的无APEO要求", rd)
+    assert returned.status == "draft" and returned.return_notes == ["请突出客户的无APEO要求"]
+    app.draft_requirement(req.id, "pm:agent")
     app.accept_requirement(req.id, rd)
     req = app.translate_requirement(req.id, rd)
     first = req.chem_lang[0]
