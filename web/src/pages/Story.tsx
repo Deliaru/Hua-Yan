@@ -2,33 +2,16 @@
 // 左边是这一步工作面上的画面（摘自录制运行的原文与概率），右边讲这一步的业务价值与创新；最后是未来展望。
 // 只读、不调用接口，不改变共享的演示进度；想亲手操作去「沉浸工作面」。数字出处见各章「数据」，与 docs/PITCH.md 一致。
 import { useEffect, useState } from "react";
-import { PageHead } from "../components/ui";
+import { LayerChip } from "../components/ui";
 
 type Layer = 0 | 1 | 2 | 3;
 interface Chapter {
-  title: string; layer: Layer; who: string; screen: React.ReactNode;
+  title: string; headline: string; layer: Layer; who: string; screen: React.ReactNode;
   happened: string; value: string[]; innovation: string[]; data: [string, string, string][];
 }
 
 // ── 画面上的小部件（只为讲解，样式沿用工作面） ─────────────────────
-const LAYERS = [
-  [1, "L1 · 场景语言", "客户 · 业务员", "只看得到说明书和用法"],
-  [2, "L2 · 产品需求语言", "产品经理 Agent", "研发知识只见归属"],
-  [3, "L3 · 化学语言", "研发", "全部可见，封存项只本层"],
-] as const;
-
-function LayerRail({ on }: { on: Layer }) {
-  return (
-    <div className="grid grid-cols-3 gap-1.5">
-      {LAYERS.map(([l, name, who, see]) => (
-        <div key={l} className={`rounded-[8px] px-2.5 py-1.5 transition-colors ${on === l ? "bg-accent text-white" : "bg-fill text-ink-3"}`}>
-          <p className="text-[11.5px] font-semibold">{name}</p>
-          <p className={`text-[10.5px] ${on === l ? "text-white/80" : ""}`}>{who} · {see}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
+const LAYER_WHO = { 1: "客户与业务员", 2: "产品经理 Agent", 3: "研发" } as const;
 
 function Screen({ who, children }: { who: string; children: React.ReactNode }) {
   return (
@@ -101,7 +84,7 @@ function Slots({ items }: { items: [string, string, string][] }) {
 // ── 章节：画面原文摘自录制运行 run-1e92ea5b8d30（模拟数据） ─────────────
 const CHAPTERS: Chapter[] = [
   {
-    title: "传话游戏", layer: 0, who: "今天的样子：没有化言",
+    title: "传话游戏", headline: "需求在传到研发手里的路上，就已经变形了", layer: 0, who: "今天的样子：没有化言",
     screen: (
       <div className="flex flex-col gap-3">
         <Say from="customer">我们染完以后布面深一块浅一块，客户老投诉</Say>
@@ -116,10 +99,10 @@ const CHAPTERS: Chapter[] = [
     happened: "客户只会描述现象，业务员凭自己的理解转述一遍，研发拿到的是走样的需求，只能退回或按走样的需求做无用功。",
     value: ["翻译得再准、检索得再全，也补不回客户没说的信息、业务员丢掉的信息、研发不肯交出来的知识。", "化言要修的是这条会失真的需求传递链，而不是做一个更懂化学的问答机器人。"],
     innovation: ["先造尺子：用只说现象、被问到才透露的模拟客户，把「传话游戏」变成可度量的任务。"],
-    data: [["95%", "业务员转述后，真正到研发的需求需退回的比例", "300 张模拟卡中应升级的 41 张"], ["95%", "一次性翻译（不追问）同样需退回", "同上"]],
+    data: [["95%", "业务员转述后，到研发手里的需求要被退回", "300 张模拟卡中应升级的 41 张 · docs/reports/distortion_300/"], ["95%", "一次性翻译（不追问）同样需退回", "docs/reports/distortion_300/"]],
   },
   {
-    title: "追问", layer: 1, who: "业务员小王的工作面 · 某印染厂 A",
+    title: "追问", headline: "业务员不懂化学，也能趁客户还在时问到点上", layer: 1, who: "业务员小王的工作面 · 某印染厂 A",
     screen: (
       <>
         <Say from="customer">我们染完以后布面深一块浅一块，客户老投诉</Say>
@@ -136,10 +119,10 @@ const CHAPTERS: Chapter[] = [
     happened: "客户只说了现象。觉看着对话，提示业务员此刻该问面料和设备；业务员用一句话吩咐自己的 Agent，Agent 起草追问，业务员确认后发出。",
     value: ["业务员不用懂化学也能问到点上，研发要的信息在客户还在时就问到了。", "Agent 还能随时帮业务员查说明书和用法、理解需求、起草话术；够不着的知识会告诉他「研发陈工懂这个」。"],
     innovation: ["问什么是学出来的：觉的追问标签同时包含「问了推荐就对」和「这单多半要升级、这是研发必问的信息」。", "概率经过校准，阈值按「漏问与多问的代价」来定，不靠提示词里写「缺信息就追问」。"],
-    data: [["49% → 91%", "应升级需求的关键信息完整率", "docs/reports/distortion_300/"], ["1.32 vs 0.80", "应升级会话里 Jue-K 与规则的平均追问次数", "同上"], ["0.043 vs 0.297", "追问概率校准误差 ECE（Jue-K vs 规则）", "docs/reports/jue_k/"]],
+    data: [["49% → 91%", "应升级需求的关键信息完整率", "docs/reports/distortion_300/"], ["1.32 vs 0.80", "应升级会话里 Jue-K 与规则的平均追问次数", "docs/reports/distortion_300/"], ["0.043 vs 0.297", "追问概率校准误差 ECE（Jue-K vs 规则）", "docs/reports/jue_k/"]],
   },
   {
-    title: "升级", layer: 1, who: "业务员小王的工作面 · 某印染厂 A",
+    title: "升级", headline: "L1 解决不了，就签字升级，客户原话完整地往下走", layer: 1, who: "业务员小王的工作面 · 某印染厂 A",
     screen: (
       <>
         <div className="rounded-[10px] bg-fill px-3 py-2 text-[13px] leading-5">
@@ -158,7 +141,7 @@ const CHAPTERS: Chapter[] = [
     data: [["15", "个决策模板驱动全链路（推进类 + 异常类）", "config/templates/"], ["50 / 20", "模拟业务周里觉提出的问题 / 人签字次数", "docs/reports/catalog_stats.md"]],
   },
   {
-    title: "先查现成、汇聚机会", layer: 2, who: "产品经理 Agent（由觉派单，只有 L2 权限）",
+    title: "机会汇聚", headline: "两位客户在说同一件事：零散的抱怨汇成一个立项机会", layer: 2, who: "产品经理 Agent（由觉派单，只有 L2 权限）",
     screen: (
       <>
         <div className="rounded-[10px] bg-fill px-3 py-2 text-[13px] leading-5">
@@ -178,7 +161,7 @@ const CHAPTERS: Chapter[] = [
     data: [["0.953 vs 0.854", "机会汇聚的区分度 AUC（Jue-K vs 规则）", "docs/reports/jue_k/"], ["0 / 4", "模拟业务周困难负样本误报（常见规则告警 2 / 4）", "docs/reports/week/"]],
   },
   {
-    title: "L2：产品需求 · 接单", layer: 2, who: "研发刘工的需求单 · 产品需求（L2）",
+    title: "产品需求", headline: "研发拿到的每一句需求，都能回到客户原话和知识的主人", layer: 2, who: "研发刘工的需求单 · 产品需求（L2）",
     screen: (
       <>
         <Item term="深一块浅一块" text="需要匀染类助剂，改善上染均匀性" quote="我们染完以后布面深一块浅一块" owner="产品经理老周" />
@@ -191,10 +174,10 @@ const CHAPTERS: Chapter[] = [
     happened: "产品经理 Agent 把场景语言转成产品需求语言，每一句都标着客户原话和依据了谁的转化知识。研发接单就是立项，这是 L2 的生效点。",
     value: ["研发拿到的不是一句「要个匀染剂」，而是逐句可回查的产品需求。", "过去产品经理积累的转述经验仍记在本人名下，被引用照常记分。"],
     innovation: ["三层编译：场景语言 → 产品需求语言 → 化学语言，每层只用本层能看的知识；分级既是权限边界，也是转译边界。", "像编译器的 source map：每一行都能回到客户原话的那一句、知识的那一位主人。"],
-    data: [["7 分", "这条需求里产品经理老周的知识被引用记分", "runs/demo_record/（录制运行的贡献账本）"]],
+    data: [["0% → 100%", "转译能回查到客户原话的比例（业务员转述 → 化言）", "docs/reports/distortion_300/"], ["7 分", "这条需求里产品经理老周的知识被引用记分", "runs/demo_record/（贡献账本：发现、引用、沉淀、试样、发布）"]],
   },
   {
-    title: "L3：化学要点 · 回问", layer: 3, who: "研发刘工的需求单 · 化学要点（L3）",
+    title: "化学要点", headline: "研发需要的信息，趁客户还在就补上", layer: 3, who: "研发刘工的需求单 · 化学要点（L3）",
     screen: (
       <>
         <Item term="匀染" text="（模拟）对酸性染料有缓染作用、与染料竞争纤维染座的阴离子型组分" quote="布面深一块浅一块" owner="研发陈工" />
@@ -212,7 +195,7 @@ const CHAPTERS: Chapter[] = [
     data: [["0.713 vs 0.500", "回问的区分度 AUC（Jue-K vs 规则）", "docs/reports/jue_k/"], ["11.1% → 0%", "错译率（一次性翻译 → 化言）", "docs/reports/distortion/"]],
   },
   {
-    title: "研发修改 · 确认 · 沉淀", layer: 3, who: "研发刘工的需求单 · 待你签字",
+    title: "沉淀", headline: "研发改过的一句经验，变成记在他名下的知识", layer: 3, who: "研发刘工的需求单 · 待你签字",
     screen: (
       <>
         <Item term="低浴比" text="（模拟）低浴比下染液交换快、局部染料浓度高，需随升温缓释酸，使染浴 pH 由中性逐步降至弱酸性，控制酸性染料初染速率"
@@ -227,10 +210,10 @@ const CHAPTERS: Chapter[] = [
     happened: "研发在 Agent 起草的化学要点上补了一句经验，确认后，Agent 把这句修改提炼成一条新知识，研发审定后记在自己名下。",
     value: ["「窗户纸」第一次被写下来，而且写下来的人有回报。", "知识库不需要先治理：研发在真实需求里改过的转译，就是被校正过的标准知识。"],
     innovation: ["修改即沉淀、引用即版税：知识有主人，被引用、试样成功、产品发布都记在主人名下。", "这是对「权责不对等」这个组织问题的机制解：交出知识换来的是回报，不是被无偿取用。"],
-    data: [["37 分", "这一条需求走完后研发刘工获得的积分（发现、引用、沉淀、试样、发布）", "runs/demo_record/（录制运行的贡献账本）"], ["5 分", "研发陈工的知识被引用记分", "同上"]],
+    data: [["37 分", "研发刘工因这条需求获得的积分", "runs/demo_record/（贡献账本：发现、引用、沉淀、试样、发布）"], ["5 分", "研发陈工的知识被引用记分", "runs/demo_record/"]],
   },
   {
-    title: "试样 · 封存放出 · 发布", layer: 3, who: "研发刘工的需求单 · 发布审定",
+    title: "发布", headline: "窗户纸封存，对外只放研发审定过的要点", layer: 3, who: "研发刘工的需求单 · 发布审定",
     screen: (
       <>
         <p className="flex flex-wrap gap-1.5"><span className="tag tag-accent">试样通过 · HY-LV206</span><span className="tag tag-accent">客户评价：小样确认，深浅一致</span></p>
@@ -254,7 +237,7 @@ const CHAPTERS: Chapter[] = [
     data: [["0", "L1 输出中的 L2 / L3 内容（由测试守住）", "tests/test_wp_a1.py、test_wp_t.py"], ["0.941 vs 0.500", "拼凑机密（换着角度套配方）的发现 AUC", "docs/reports/jue_k/"]],
   },
   {
-    title: "回流：下一位客户", layer: 1, who: "业务员小李的工作面 · 某印染厂 C",
+    title: "回流", headline: "下一位客户说同样的问题，业务员当场推荐新品", layer: 1, who: "业务员小李的工作面 · 某印染厂 C",
     screen: (
       <>
         <Say from="customer">锦氨布在气流缸里染，布面深一块浅一块</Say>
@@ -272,7 +255,7 @@ const CHAPTERS: Chapter[] = [
     data: [["97%", "新品在 L1 的匹配概率（OneJev）", "runs/demo_record/"], ["端到端", "升级 → 沉淀 → 发布 → 同类需求在 L1 命中新品", "tests/test_wp_a3.py"]],
   },
   {
-    title: "支线：说明书没写，案例里用过", layer: 2, who: "业务员小李 → 产品经理 Agent → 研发刘工",
+    title: "支线", headline: "说明书没写、案例里用过：能复用就不立项", layer: 2, who: "业务员小李 → 产品经理 Agent → 研发刘工",
     screen: (
       <>
         <Say from="customer">涤纶布整理完摸起来硬邦邦的</Say>
@@ -304,15 +287,16 @@ function Future() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h2 className="text-[17px] font-semibold leading-6">未来展望</h2>
-        <p className="mt-0.5 text-[13px] text-ink-2">当前 Demo 是架构与业务流程演示：网页工作面就是将来钉钉卡片和页面里的内容。下面是接入路径与代码接缝，不是已完成的功能。</p>
+        <p className="text-[13px] text-ink-3">展望</p>
+        <h1 className="mt-2 text-[30px] font-semibold leading-[40px] tracking-[-0.01em]">嵌进企业现有系统，一套发现层管住更多「该有人决定」的时刻</h1>
+        <p className="mt-3 max-w-[760px] text-[15px] leading-[25px] text-ink-2">当前 Demo 是架构与业务流程演示：网页工作面就是将来钉钉卡片和页面里的内容。下面是接入路径与代码接缝，不是已完成的功能。</p>
       </div>
       <div className="grid grid-cols-3 gap-4">
         {FUTURE.map(([k, title, text]) => (
-          <div key={k} className="group flex flex-col gap-1 px-4 py-3.5">
+          <div key={k} className="group flex flex-col gap-0.5 px-5 py-4">
             <span className="eyebrow">{k}</span>
-            <p className="text-[14.5px] font-semibold">{title}</p>
-            <p className="text-[12.5px] leading-[19px] text-ink-2">{text}</p>
+            <p className="text-[16px] font-semibold">{title}</p>
+            <p className="mt-1 text-[13.5px] leading-[22px] text-ink-2">{text}</p>
           </div>
         ))}
       </div>
@@ -334,30 +318,29 @@ function Future() {
   );
 }
 
-function Value({ c }: { c: Chapter }) {
+// 右栏：为什么重要。正文朴素排版，不加框；颜色只留给关键数字
+function Why({ c }: { c: Chapter }) {
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="eyebrow mb-1">这一步发生了什么</p>
-        <p className="text-[14px] leading-[22px]">{c.happened}</p>
-      </div>
-      <div className="group px-4 py-3">
-        <p className="eyebrow mb-1.5">业务价值</p>
-        <ul className="flex list-disc flex-col gap-1 pl-4 text-[13px] leading-5">{c.value.map((v) => <li key={v}>{v}</li>)}</ul>
-      </div>
-      <div className="group px-4 py-3">
-        <p className="eyebrow mb-1.5 !text-accent">创新点</p>
-        <ul className="flex list-disc flex-col gap-1 pl-4 text-[13px] leading-5">{c.innovation.map((v) => <li key={v}>{v}</li>)}</ul>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {c.data.map(([num, label, src]) => (
-          <div key={label} className="rounded-[10px] bg-[rgba(10,108,223,.06)] px-3 py-2.5">
-            <p className="num text-[19px] font-semibold leading-6 text-accent">{num}</p>
-            <p className="mt-0.5 text-[12px] leading-[17px]">{label}</p>
-            <p className="mt-1 text-[10.5px] leading-[14px] text-ink-3">{src}</p>
-          </div>
-        ))}
-      </div>
+    <div className="flex flex-col gap-6 pt-1">
+      <section>
+        <h3 className="mb-2 text-[14px] font-semibold">业务价值</h3>
+        <ul className="flex flex-col gap-2 text-[14px] leading-[22px] text-[#3a3a3c]">{c.value.map((v) => <li key={v}>{v}</li>)}</ul>
+      </section>
+      <section>
+        <h3 className="mb-2 text-[14px] font-semibold">创新在哪</h3>
+        <ul className="flex flex-col gap-2 text-[14px] leading-[22px] text-[#3a3a3c]">{c.innovation.map((v) => <li key={v}>{v}</li>)}</ul>
+      </section>
+      {c.data.length > 1 && (
+        <section className="border-t border-sep pt-4">
+          <h3 className="mb-2 text-[12px] font-semibold text-ink-3">其他数据</h3>
+          {c.data.slice(1).map(([num, label, src]) => (
+            <p key={label} className="flex items-baseline gap-3 py-1 text-[13px]">
+              <span className="num w-[108px] shrink-0 font-semibold">{num}</span>
+              <span className="text-ink-2">{label}<span className="ml-1.5 text-[11px] text-ink-3">{src}</span></span>
+            </p>
+          ))}
+        </section>
+      )}
     </div>
   );
 }
@@ -375,34 +358,54 @@ export function Story({ toDesk }: { toDesk: () => void }) {
     return () => removeEventListener("keydown", key);
   });
   const c = CHAPTERS[i];
+  const [hero, heroLabel, heroSrc] = c?.data[0] ?? ["", "", ""];
+  const names = [...CHAPTERS.map((x) => x.title), "展望"];
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-8 pb-16 pt-7">
-      <PageHead title="演示工作面"
-                subtitle="跟着一条真实录制的需求走一遍（大模型真实运行，数据为模拟）：左边是工作面上的画面，右边讲这一步的价值。键盘 ← → 翻页。"
-                aside={<button className="btn btn-plain" onClick={toDesk}>去沉浸工作面亲手操作</button>} />
-      <nav className="flex flex-wrap gap-1">
-        {[...CHAPTERS.map((x) => x.title), "未来展望"].map((t, n) => (
+    <div className="mx-auto flex max-w-[1180px] flex-col px-10 pb-16 pt-6">
+      <div className="flex items-baseline justify-between">
+        <p className="text-[13px] text-ink-3"><span className="font-semibold text-ink-2">演示工作面</span>　一条真实录制的需求，从客户的一句话到新品回流（大模型真实运行，数据为模拟）</p>
+        <button className="link shrink-0" onClick={toDesk}>去沉浸工作面亲手操作 →</button>
+      </div>
+      {/* 步骤条：一行安静的文字，只有当前一步是黑字加下划线 */}
+      <nav className="mt-3 flex border-b border-sep">
+        {names.map((t, n) => (
           <button key={t} onClick={() => go(n)}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] transition-colors ${
-                    n === i ? "bg-accent font-semibold text-white" : n < i ? "bg-[rgba(10,108,223,.09)] text-accent" : "bg-fill text-ink-2 hover:bg-[rgba(118,118,128,.18)]"}`}>
-            <span className="num">{n}</span>{t}
+                  className={`-mb-px border-b-2 px-3 py-2 text-[13px] transition-colors ${
+                    n === i ? "border-ink font-semibold text-ink" : `border-transparent hover:text-ink ${n < i ? "text-ink-2" : "text-ink-3"}`}`}>
+            {t}
           </button>
         ))}
       </nav>
       {c ? (
-        <div key={i} className="anim-fade grid grid-cols-[minmax(0,7fr)_minmax(0,5fr)] items-start gap-6">
-          <div className="flex flex-col gap-3">
-            <LayerRail on={c.layer} />
-            <Screen who={c.who}>{c.screen}</Screen>
+        <div key={i} className="anim-fade mt-9 flex flex-col">
+          <div className="grid grid-cols-[1fr_auto] items-end gap-10">
+            <div>
+              <p className="flex items-center gap-2 text-[13px] text-ink-3">
+                第 {i} 步 / {total - 1}
+                {c.layer !== 0 && <><span>·</span><LayerChip layer={c.layer} /><span>{LAYER_WHO[c.layer]}</span></>}
+              </p>
+              <h1 className="mt-2 text-[30px] font-semibold leading-[40px] tracking-[-0.01em]">{c.headline}</h1>
+              <p className="mt-3 max-w-[720px] text-[15px] leading-[25px] text-ink-2">{c.happened}</p>
+            </div>
+            <div className="w-[260px] pb-1 text-right">
+              <p className="num text-[40px] font-semibold leading-[46px] tracking-[-0.02em] text-accent">{hero}</p>
+              <p className="mt-1 text-[13px] leading-5 text-ink-2">{heroLabel}</p>
+              <p className="mt-0.5 text-[11px] text-ink-3">{heroSrc}</p>
+            </div>
           </div>
-          <Value c={c} />
+          <div className="mt-9 grid grid-cols-[minmax(0,7fr)_minmax(0,5fr)] items-start gap-12">
+            <div>
+              <p className="mb-2 text-[12px] font-semibold text-ink-3">工作面上的样子</p>
+              <Screen who={c.who}>{c.screen}</Screen>
+            </div>
+            <Why c={c} />
+          </div>
         </div>
-      ) : <div key={i} className="anim-fade"><Future /></div>}
-      <div className="flex items-center justify-between border-t border-sep pt-4">
+      ) : <div key={i} className="anim-fade mt-9"><Future /></div>}
+      <div className="mt-10 flex items-center justify-between border-t border-sep pt-4">
         <button className="btn btn-plain" disabled={i === 0} onClick={() => go(i - 1)}>上一步</button>
-        <span className="num text-[12px] text-ink-3">{i} / {total - 1}</span>
         {i < total - 1
-          ? <button className="btn btn-primary" onClick={() => go(i + 1)}>下一步：{i + 1 < CHAPTERS.length ? CHAPTERS[i + 1].title : "未来展望"}</button>
+          ? <button className="btn btn-primary" onClick={() => go(i + 1)}>下一步：{names[i + 1]}</button>
           : <button className="btn btn-primary" onClick={toDesk}>去沉浸工作面亲手走一遍</button>}
       </div>
     </div>
