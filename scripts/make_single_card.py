@@ -63,6 +63,7 @@ def _readme(d: dict, metrics: dict) -> str:
 ## 必须说明
 
 1. **单卡是按固定规则选出的例子**，不代表每张卡都这样；证据是上面的统计。
+   底部统计让每张卡都走到研发；现实中只有应升级的需求到研发，按此拆开的数字见 `docs/reports/distortion/README.md`。
 2. G1 的转述噪声是假设参数（`config/eval/distortion.yaml`），见 `docs/reports/distortion/README.md`。
 3. 模板客户与规则抽取共用种子里的口语说法表，G3 的槽位错误率偏乐观。
 4. 规则打分的追问、回问在界面上标「规则」，不显示为概率。
