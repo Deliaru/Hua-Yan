@@ -94,13 +94,14 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
 
 
 def _edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase) -> int:
-    """研发改过的 L3 条目去掉已有 L3 骨架与译文后还剩内容，即未被覆盖。"""
+    """研发改过的 L3 条目去掉已有 L3 骨架与译文后还剩内容，即未被覆盖；已从该条目沉淀过的算覆盖
+    （研发 Agent 提炼的译文不必与修改逐字一致）。"""
     terms = sorted(((u.text.split(" → ", 1)[1], u.title) for u in kb.list(_INTERNAL, kinds=["translation"])
                     if u.level == 3), key=lambda t: len(t[0]), reverse=True)
     rd_ids = {a.id for a in seeds.actors if a.role == "rd"}
     uncovered = 0
     for item in req.chem_lang:
-        if item.edited_by not in rd_ids:
+        if item.edited_by not in rd_ids or any(r.startswith(f"ku:translation:{req.id}:") for r in item.ku_refs):
             continue
         text = item.text
         for term, title in terms:

@@ -60,8 +60,8 @@ items:
 
   - id: case:reuse_softness
     phenomenon: harsh_hand
-    slots: {fiber: 涤纶}
+    slots: {fiber: 涤纶, process: 浸染}
     product_id: HY-SF520
-    scene_text: "（模拟）涤纶布整理后手感发硬，P01 的历史小样曾使用 HY-SF520 改善；说明书尚未列入涤纶。"
-    pm_translation: "（模拟）既有小样显示该柔软整理方案可改善涤纶手感，建议研发审定后在客户工艺下试样确认。"
+    scene_text: "（模拟）涤纶布浸染后整理手感发硬，P01 的历史小样曾使用 HY-SF520 改善；说明书尚未列入涤纶。"
+    pm_translation: "（模拟）既有小样显示该柔软整理方案可改善涤纶浸染布的手感，建议研发审定后在客户工艺下试样确认。"
     owner: pm:P01
