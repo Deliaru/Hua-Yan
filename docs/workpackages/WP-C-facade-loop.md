@@ -17,6 +17,7 @@
 ## 依赖
 
 - 契约 v5.2（已在 main）。
+- 总线 `set_prepared` 与问题事件的 `template_id` / `by` 已在 main 补齐（`bus.py`，WP-0v5 遗漏，人批准后直接在 main 实现；`by` 与事件 actor 取问题的 `owner_id`，为空时取 `owner_role`）；本包只读。
 - WP-J 第 1 步（模板、`session_state` / `requirement_state`、`publish` 的主人与签字人解析、`load_records`）：B 在 T+8 前合入 main；合入前门面按契约签名调用，测试等它合入后转绿。**不为觉写替身。**
 - 本包第 1 步的 `leak_hits` 是 WP-J 的依赖，单独提交、尽早由人合入 main。
 

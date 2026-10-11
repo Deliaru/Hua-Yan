@@ -13,6 +13,7 @@
 
 - 契约 v5.3（已在 main；机会汇聚的合并见 `WP-0v5.md` C14，现成产品由研发审定见 C15）。
 - WP-C 第 1 步的 `leak_hits`（`escalation/translate.py`）：A 单独提交、尽早合入 main；合入前 `n_leak_hits` 先按 0 构建，**不另写一份匹配逻辑**。
+- 总线 `set_prepared` 与问题事件的 `template_id` / `by` 已在 main 补齐（`bus.py`，本包只读）：模拟业务周按 `prepared_at` 判断待签，第 5 项的处置关联读这些事件字段。
 - 第 3、4 步（重跑模拟业务周、重训 Jue-K）依赖 WP-C 的门面合入。
 
 ## 必读
@@ -21,7 +22,7 @@
 
 ## 允许修改的范围
 
-`src/huayan/jue/`、`config/templates/`、`src/huayan/sim/`、`src/huayan/eval/week.py`、`src/huayan/eval/catalog.py`（新）、`web/src/fixtures/single_card.json`（WP-E2 的单卡对照样例，只此一个文件）、`scripts/make_jue_k_data.py`、`scripts/train_jue_k.py`、`scripts/eval_jue_k.py`、`scripts/run_week.py`、`scripts/catalog_stats.py`（新）、`models/jue_k/`、`data/week/`、`tests/test_wp_b1.py`、`tests/test_wp_b2.py`、`tests/test_wp_b3.py`、`docs/JUE_K_TRAINING.md`、`docs/reports/`
+`src/huayan/jue/`、`config/templates/`、`config/baselines/`（只做第 2 项末条的格式迁移）、`src/huayan/sim/`、`src/huayan/eval/week.py`、`src/huayan/eval/catalog.py`（新）、`scripts/make_jue_k_data.py`、`scripts/train_jue_k.py`、`scripts/eval_jue_k.py`、`scripts/run_week.py`、`scripts/catalog_stats.py`（新）、`models/jue_k/`、`data/week/`、`tests/test_wp_b1.py`、`tests/test_wp_b2.py`、`tests/test_wp_b3.py`、`docs/JUE_K_TRAINING.md`、`docs/reports/`
 
 不改：`app.py`、`agent/`、`l1/`、`escalation/`、`ui/`、`web/`、契约。
 
@@ -55,13 +56,14 @@
 - 全部规则打分：`rule_score: "1"`（前置条件通过即 1.0，觉视图画「到点」阶跃）。
 - `distortion` 的主人随层：模板只能写一个 `owner_role`，写 `pm`；layer 3 的失真由 `publish` 按「layer 3 → rd」改写主人（写在解析表里，一行；已确认）。
 - 每个模板的 `decision_label` / `title` / `worth_prompt` 用业务语言写（「研发是否接单」「是否有现成产品可用」），不出现属性名。
+- **基线迁移 `config/baselines/`**：`b1_required`、`b2_info_value` 的 `ask_slot` 与 `rule_alert` 的三个模板按新格式补 `kind`（与 `config/templates/` 同 family 一致），`rule_alert` 的 `owner_role` / `signer_role` 与同 family 新模板一致（`opportunity`：pm / rd；`knowledge_conflict`：rd / rd；`leak_risk`：supervisor / supervisor），`ask_slot` 不填 `signer_role`；前置条件、打分与阈值一字不改（它们是对照组）。`eval/week.py` 与 `scripts/eval_ask_policies.py` 加载这三个目录不报错即可，脚本不改。
 - `opportunity`（D19，契约 v5.2 / C14）：`decision_label` 改为「同类需求是否合并立项」，`signer_role: rd`；`worth_prompt` 里「已转给产品经理」改为「已转给产品经理 Agent」。前置条件不变。
 
 **3. 发布 `jue/publish.py`**
 
 - 所有 `p_need ≥ threshold` 且模板 `signer_role` 不为空的组合生成问题，不再区分实时 / 定时；`ask_slot` 仍只走 `select_asks`，`ask_back` 照旧发布（提示类，`signer_role` 为空，进总线但不进待签）。
 - 填 `template_id`、`signer_role`，按契约 C1 的解析表填 `owner_id` / `signer_id`。解析所需的 id 由门面经 `refs` 传入（`sales_id`、`assigned_rd`）；knowledge 对象的归属研发从种子产品取，theme 对象的研发取 `refs.assigned_rd`（C14），supervisor 取 id 最小的主管。
-- 加载模板时校验：family 唯一、`object_type` 合法、`kind` 合法；未知 family 的 `ScoredDecision` 直接抛错。
+- 加载模板时校验：family 唯一、`object_type` 合法、`kind` 合法；引用未加载 family（不在本次加载的模板目录里）的 `ScoredDecision` 直接抛错，不写死 family 枚举。
 - `huayan/jue/` 不 import 网关（铁律 3），也不 import `huayan.app`。
 
 **4. 打分来源 `jue/proto.py`、`jue/jue_k.py`**
@@ -104,14 +106,14 @@
 - 重跑 w1，在文档与报告里**替换**旧的「3/3 命中、0/4 误报」，新数字是多少写多少；做不完则材料中不再引用 w1 数字（REPLAN 7.2 可砍清单最后一项）。
 - 新增的推进类不训练；失真、对外泄密的注入与标签属于阶段 2。
 
-### 附：WP-E2 单卡对照样例（B，T+8 前）
+### 附：单卡对照样例
 
-前端的单卡对照页（WP-U2 第 4 项）要一份真实数据开发。B 在 T+8 前用现有失真对照（`run_distortion.py`）真实跑一张需求卡，导出 `web/src/fixtures/single_card.json`：卡 id 与「（模拟）」标注；逐轮对话（发言人、原话）；左栏一次性翻译的 L3 条目与研发是否退回；右栏化言每轮觉的追问概率（`p_need`、阈值、`scored_by`）、最终 L3 条目与研发是否退回；底部 60 张卡三组统计（取已有报告的数字）。字段说明贴在汇报里，前端按它开发；WP-E2 的接口做好后结构不变。
+B 在 T+8 前交付 `web/src/fixtures/single_card.json`，属于 WP-E2 第 1 步（见 `WP-E2-single-card.md`），不在本包范围内。
 
 ## 验收
 
 1. `tests/test_wp_b1.py`（仍 1 个测试，小种子，零网络）：
-   - 加载模板目录：15 个 family 全部通过校验；构造一个未知 family 的模板被拒；
+   - 加载模板目录：15 个 family 全部通过校验，`config/baselines/` 三个目录也能加载；构造一条引用未加载 family 的 `ScoredDecision`，`publish` 时被拒（合法 family 由已加载的模板目录定义，代码里不写死 family 枚举）；
    - 构造 4 个需求单状态（刚建单未查复用、已查无产品、有待签复用建议、已接单），`propose` 后只有对应的推进决策到点：`reuse_product` → `accept_requirement` → 无 → `confirm_translation`；
    - 原有「定时发现命中注入、不碰困难负样本」照旧通过；
    - 计量里 caller 以 `jue` 开头的大模型调用为 0。
