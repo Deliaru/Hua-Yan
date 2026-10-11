@@ -15,8 +15,18 @@ def test_translation_release_and_ownership(tmp_path):
     path = tmp_path / "app.yaml"
     path.write_text(yaml.safe_dump(config), encoding="utf-8")
     app = HuayanApp.build(str(path))
+
+    def prepare(family, object_id):
+        # 离线直接起草后，由问题主人标记准备；问题必须由觉真实提出。
+        question = next(q for q in app.bus.list(family=family) if q.object_id == object_id)
+        app.mark_prepared(question.id, question.owner_id)
+
     session = app.start_session("customer:C01", "sales:S01")
     session = app.add_turn(session.id, "customer", "深一块浅一块，锦纶氨纶的，气流缸")
+    with pytest.raises(ValueError, match="准备中"):
+        app.escalate(session.id, "sales:S01")
+    app.save_escalate_note(session.id, "（模拟）锦纶氨纶、气流缸色花，现有产品无法匹配", "sales:S01")
+    prepare("escalate_need", f"session:{session.id}")
     req = app.escalate(session.id, "sales:S01")
     session = app.add_turn(session.id, "customer", "还要求不要APEO")
     app.save_reuse_proposal(req.id, None, [], "", "离线：未检索现成产品", "pm:agent")
@@ -30,14 +40,17 @@ def test_translation_release_and_ownership(tmp_path):
     l3_term = next(t.chem_term for t in app.seeds.translations if t.level == 3)
     with pytest.raises(ValueError, match="研发术语"):
         app.return_requirement(req.id, l3_term, rd)
+    prepare("accept_requirement", f"requirement:{req.id}")
     returned = app.return_requirement(req.id, "请突出客户的无APEO要求", rd)
     assert returned.status == "draft" and returned.return_notes == ["请突出客户的无APEO要求"]
     app.draft_requirement(req.id, "pm:agent")
+    prepare("accept_requirement", f"requirement:{req.id}")
     app.accept_requirement(req.id, rd)
     req = app.translate_requirement(req.id, rd)
     first = req.chem_lang[0]
     app.edit_req_item(req.id, 0, first.model_copy(update={"text": first.text + "；验证低浴比稳定性"}), rd)
     app.contribute_translation(req.id, 0, "低浴比匀染", "（模拟）低浴比缓染稳定性", rd)
+    prepare("confirm_translation", f"requirement:{req.id}")
     req = app.confirm_translation(req.id, rd)
     assert req.product_id == "T-206"
     cited_owners = {e.owner for e in app.ledger.list() if e.reason == "cited"}
@@ -52,9 +65,13 @@ def test_translation_release_and_ownership(tmp_path):
         app.requirement_view(req.id, "sales:S01")
     app.record_trial(Trial(id="trial:1", product_id=req.product_id, requirement_id=req.id, rd=rd,
         conditions=req.known_slots, result="pass", cause="none", at=get_clock().now()))
+    prepare("market_eval", f"requirement:{req.id}")
     app.record_market_eval(req.id, "pass", "（模拟）客户试用通过", "sales:S01")
+    app.save_points_draft(req.id, "（模拟）改善低浴比匀染；按工艺试样确认。", ["（模拟）分段吸附诀窍"], rd)
+    prepare("seal_points", f"requirement:{req.id}")
     app.set_public_points(req.id, "（模拟）改善低浴比匀染；按工艺试样确认。", ["（模拟）分段吸附诀窍"], rd)
     sheet = app.package_sheet(req.id, "pm:agent")
+    prepare("release", f"requirement:{req.id}")
     with pytest.raises(PermissionDenied):
         app.release_product(req.id, "pm:agent")
     with pytest.raises(PermissionDenied):
@@ -80,6 +97,8 @@ def test_translation_release_and_ownership(tmp_path):
     reuse_session = app.start_session("customer:C03", "sales:S01")
     reuse_session = app.add_turn(reuse_session.id, "customer", "涤纶布手感发硬")
     assert reuse_session.recommendation is None
+    app.save_escalate_note(reuse_session.id, "（模拟）涤纶手感发硬，无说明书匹配产品", "sales:S01")
+    prepare("escalate_need", f"session:{reuse_session.id}")
     reuse_req = app.escalate(reuse_session.id, "sales:S01")
     note = "（模拟）可用 HY-SF520 改善手感，按用法先做小样。"
     app.save_reuse_proposal(reuse_req.id, "HY-SF520", ["ku:case:case:reuse_softness"], note,
@@ -89,6 +108,7 @@ def test_translation_release_and_ownership(tmp_path):
     assert pending.card is None and not pending.reuse.usage
     with pytest.raises(PermissionDenied):
         app.adopt_reuse(reuse_req.id, "sales:S01")
+    prepare("reuse_product", f"requirement:{reuse_req.id}")
     adopted = app.adopt_reuse(reuse_req.id, reuse_req.assigned_rd)
     assert adopted.status == "recommended" and adopted.recommendation.product_id == "HY-SF520"
     assert app.requirement_view(reuse_req.id, reuse_req.assigned_rd).requirement.status == "reused"
@@ -101,6 +121,7 @@ def test_translation_release_and_ownership(tmp_path):
     assert not any(e.payload["requirement_id"] == reuse_req.id for e in app.events.query(["requirement_accepted"]))
     sent = app.add_turn(reuse_session.id, "sales", note)
     assert sent.status == "recommended" and sent.recommendation == adopted.recommendation
+    assert not any(q.object_id == f"session:{reuse_session.id}" for q in app.bus.list(family="escalate_need"))
     assert app.view_session(reuse_session.id, "sales:S01").card.note == sales_view.card.note
     repeated = app.add_turn(reuse_session.id, "customer", "对，涤纶布手感发硬")
     assert repeated.recommendation == adopted.recommendation

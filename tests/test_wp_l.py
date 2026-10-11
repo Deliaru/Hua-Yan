@@ -74,7 +74,8 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
         signer_role="rd", signer_id="rd:R01", scored_by="rule", discoverer="jue_proto",
         dedup_key=f"release:{req.id}", created_at=get_clock().now()))
     assert [x.id for x in app.questions("pm:agent")] == [q.id]
-    assert [x.id for x in app.questions("rd:R01")] == [q.id]
+    assert [x.id for x in app.questions("rd:R01") if x.family == "release"] == [q.id]
+    assert any(x.family == "seal_leak" for x in app.questions("rd:R01"))
     assert not app.questions("rd:R02")
     with pytest.raises(PermissionDenied):
         app.mark_prepared(q.id, "rd:R01")

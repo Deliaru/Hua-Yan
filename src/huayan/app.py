@@ -495,6 +495,79 @@ class HuayanApp:
         self.scan()
         return self.requirement_view(req_id, by).requirement
 
+    def save_merge_proposal(self, question_id, target_req_id, member_ids, note, by):
+        if by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 可以起草合并建议")
+        q = self.bus.get(question_id)
+        if q.family != "opportunity" or q.status != "open":
+            raise ValueError("需要待处理的机会汇聚问题")
+        candidates = q.refs["requirement_ids"].split(",")
+        if target_req_id not in candidates or any(rid not in candidates for rid in member_ids):
+            raise ValueError("合并对象必须来自本问题的候选需求单")
+        if target_req_id in member_ids or len(set(member_ids)) != len(member_ids):
+            raise ValueError("被并入单不能重复或包含主单")
+        req, _ = self._requirement(target_req_id, by, {"pm"}, {"draft"})
+        for rid in member_ids:
+            self._requirement(rid, by, {"pm"}, {"draft"})
+        previous = next((e.payload for e in reversed(self.events.query(["merge_proposed"]))
+                         if e.payload["question_id"] == question_id), None)
+        if previous and previous["target"] != target_req_id:
+            old = self._requirements[previous["target"]]
+            old.merge_from, old.merge_note = [], ""
+            self._save_requirement(old)
+        req.merge_from, req.merge_note = list(member_ids), note
+        if q.prepared_at is not None:
+            self.bus.set_prepared(q.id, None)
+        self.events.append("merge_proposed", by, {"question_id": question_id,
+            "target": target_req_id, "members": list(member_ids)})
+        self._save_requirement(req)
+        self._after(req_ids=[target_req_id])
+        return self.requirement_view(target_req_id, by).requirement
+
+    def merge_requirements(self, question_id, by):
+        q = self.bus.get(question_id)
+        if q.family != "opportunity" or q.status != "open":
+            raise ValueError("需要待处理的机会汇聚问题")
+        proposal = next((e.payload for e in reversed(self.events.query(["merge_proposed"]))
+                         if e.payload["question_id"] == question_id), None)
+        if proposal is None:
+            raise ValueError("请先准备合并建议")
+        req, _ = self._requirement(proposal["target"], by, {"rd"}, {"draft"})
+        if q.signer_id != by:
+            raise PermissionDenied("只有指定签字人可以合并需求单")
+        if q.prepared_at is None:
+            raise ValueError("问题尚在准备中")
+        if not req.merge_from:
+            raise ValueError("合并建议没有被并入单，可选择现在不需要")
+        members = [self._requirements[rid] for rid in req.merge_from]
+        known = dict(req.known_slots)
+        for member in [req, *members]:
+            if member.status != "draft" or member.reuse is None or (member.reuse.product_id and not member.reuse.declined_reason):
+                raise ValueError("只能合并尚未接单且复用检查已结束的需求单")
+            for slot, value in member.known_slots.items():
+                if slot in known and known[slot] != value:
+                    raise ValueError("需求单的已知条件存在冲突，请先核对")
+                known[slot] = value
+        at = get_clock().now()
+        for member in members:
+            req.session_ids.extend(sid for sid in member.session_ids if sid not in req.session_ids)
+            member.status, member.merged_into = "merged", req.id
+            for question in self.bus.list():
+                if question.refs.get("requirement_id") == member.id:
+                    self.bus.resolve(question.id, Resolution(action="answered", by=by, note=f"已并入 {req.id}"), at)
+            self._save_requirement(member)
+        before = {"product_lang": [item.model_dump() for item in req.product_lang], "direction": req.direction}
+        req.known_slots, req.direction = known, ""
+        req.product_lang = [item for item in req.product_lang if item.edited_by]
+        self.events.append("requirement_edited", by, {"requirement_id": req.id, "layer": 2, "index": -1,
+            "before": before, "after": {"product_lang": [item.model_dump() for item in req.product_lang], "direction": ""}})
+        self.events.append("requirements_merged", by, {"question_id": q.id, "target": req.id, "members": list(req.merge_from)})
+        self._settle(q.id, Resolution(action="sign", by=by))
+        self._return_to_preparation(req)
+        self._save_requirement(req)
+        self._after(req.session_ids, [req.id, *req.merge_from])
+        return self.requirement_view(req.id, by).requirement
+
     def record_market_eval(self, req_id, result, note, by):
         req, _ = self._requirement(req_id, by, {"sales"}, {"rd_confirmed"})
         self._sales_session(req.session_ids[0], by)

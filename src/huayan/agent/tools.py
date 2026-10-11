@@ -38,7 +38,8 @@ def openai_schemas(role: Role) -> list[dict]:
 
 
 def _items(items: list[ReqItem]) -> list[dict]:
-    return [{"index": i, "text": it.text, "quote_refs": it.quote_refs, "ku_refs": it.ku_refs} for i, it in enumerate(items)]
+    return [{"index": i, "text": it.text, "quote_refs": it.quote_refs, "ku_refs": it.ku_refs,
+             "edited_by": it.edited_by} for i, it in enumerate(items)]
 
 
 def _req(req) -> dict:
@@ -47,6 +48,7 @@ def _req(req) -> dict:
             "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id,
             "sheet": req.sheet and req.sheet.model_dump(), "return_notes": req.return_notes,
             "reuse": req.reuse and req.reuse.model_dump(),
+            "session_ids": req.session_ids, "merge_from": req.merge_from, "merge_note": req.merge_note,
             "sealed": req.sealed, "points_draft": req.points_draft and req.points_draft.model_dump(),
             "contribution_drafts": [d.model_dump() for d in req.contribution_drafts]}
 
@@ -209,6 +211,19 @@ def propose_reuse(ctx: ToolContext, args: ReuseArgs) -> ToolResult:
 @tool("draft_product_need", "draft", ["pm"], "为已有需求单起草 L2 产品需求（规则骨架，之后可逐条修改）", ReqId)
 def draft_product_need(ctx: ToolContext, args: ReqId) -> ToolResult:
     return ToolResult(data=_req(ctx.app.draft_requirement(args.req_id, ctx.principal.id)))
+
+
+class MergeArgs(BaseModel):
+    question_id: str
+    target_req_id: str
+    member_ids: list[str]
+    note: str
+
+
+@tool("propose_merge", "draft", ["pm"], "保存同类需求合并建议；不是同一需求时 member_ids 留空并写理由", MergeArgs)
+def propose_merge(ctx: ToolContext, args: MergeArgs) -> ToolResult:
+    req = ctx.app.save_merge_proposal(args.question_id, args.target_req_id, args.member_ids, args.note, ctx.principal.id)
+    return ToolResult(data=_req(req))
 
 
 LANG = {"pm": "product_lang", "rd": "chem_lang"}         # 编辑哪一层由门面按角色决定，这里只用来读原条目
