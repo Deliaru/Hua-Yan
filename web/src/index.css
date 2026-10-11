@@ -6,8 +6,8 @@
   --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
                "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --color-ink: #1c1c1e;                 /* label */
-  --color-ink-2: rgba(60, 60, 67, .64); /* secondaryLabel */
-  --color-ink-3: rgba(60, 60, 67, .36); /* tertiaryLabel */
+  --color-ink-2: rgba(60, 60, 67, .76); /* secondaryLabel（比系统值深，投屏与小字看得清） */
+  --color-ink-3: rgba(60, 60, 67, .54); /* tertiaryLabel（同上） */
   --color-sep: rgba(60, 60, 67, .12);   /* separator */
   --color-bg: #f2f2f5;
   --color-panel: #f8f8fa;               /* 右侧 Agent 栏 */

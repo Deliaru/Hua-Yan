@@ -101,7 +101,7 @@ function Hero() {
   return (
     <section className="flex flex-col gap-8">
       <div>
-        <p className="text-[13px] font-semibold tracking-[0.08em] text-ink-3">化言 HUAYAN</p>
+        <p className="text-[13px] font-semibold tracking-[0.08em] text-ink-2">化言 HUAYAN</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[52px] tracking-[-0.02em]">
           让客户需求不再层层失真，<br />让专家经验成为企业持续增长的能力。
         </h1>
@@ -112,8 +112,8 @@ function Hero() {
           <p className="text-[12px] text-ink-2">客户描述的是</p>
           <p className="mt-1.5 text-[20px] font-semibold leading-8">「布面深一块浅一块」</p>
         </div>
-        <div className="flex flex-col items-center justify-center text-[12px] text-ink-3">
-          <span>层层转述</span><span className="text-[20px] leading-6">→</span><span>变了形</span>
+        <div className="flex flex-col items-center justify-center text-[13px] font-semibold text-attn-ink">
+          <span>层层转述</span><span className="text-[22px] leading-7">→</span><span>变了形</span>
         </div>
         <div className="group px-5 py-4">
           <p className="text-[12px] text-ink-2">研发需要的却是</p>
@@ -125,14 +125,14 @@ function Hero() {
       </p>
 
       <div>
-        <p className="text-[13px] leading-[21px] text-ink-2">
+        <p className="text-[14px] leading-[22px] text-ink-2">
           基于功能化学一线业务需求交流：传统 AI 化学家着重回答「应该使用什么产品」，企业还需要回答——
         </p>
         <div className="mt-3 grid grid-cols-4 gap-3">
           {QUESTIONS.map(([q, a]) => (
             <div key={q} className="group flex flex-col justify-between gap-3 px-4 py-3.5">
               <p className="text-[15px] font-semibold leading-[22px]">{q}</p>
-              <p className="text-[12px] text-ink-3">化言：{a}</p>
+              <p className="text-[13px] text-ink-2"><span className="mr-1.5 font-semibold text-accent">化言</span>{a}</p>
             </div>
           ))}
         </div>
@@ -157,7 +157,7 @@ function Pillars() {
           <div key={t} className="group flex flex-col px-5 py-4">
             <p className="num text-[12px] font-semibold text-ink-3">0{i + 1}</p>
             <p className="mt-1 text-[17px] font-semibold leading-6">{t}</p>
-            <p className="mt-1.5 flex-1 text-[13.5px] leading-[22px] text-ink-2">{d}</p>
+            <p className="mt-1.5 flex-1 text-[14px] leading-[23px] text-ink-2">{d}</p>
             <p className="mt-3 text-[12px] font-semibold text-ink">{k}</p>
           </div>
         ))}
