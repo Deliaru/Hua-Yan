@@ -73,7 +73,7 @@ uv run python web/src/fixtures/generate.py
 | `market-eval` | `req_id, result, note, by` |
 | `points` | `req_id, text, sealed, by` |
 | `sheet` | `req_id, sheet, by`；sheet 是 `{sheet: 正文, usage: 用法}` |
-| `trial` | `trial`；完整契约 `Trial` 对象，at 为带时区的 ISO 时间 |
+| `trial` | `req_id, result, by`；`result` 为 `pass` / `fail`，`by` 为接单研发；后端生成编号、产品、需求条件和业务时间，返回 `Trial`。`cause=none` 表示未填写原因，不推断失败归因 |
 | `decrypt/request` | `session_id, by` |
 | `decrypt/decide` | `question_id, by, approve`；可选 `text` 为研发审定的客户说明 |
 | `reply-draft`、`escalate-note` | `session_id, text, by` |

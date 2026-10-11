@@ -38,7 +38,8 @@ def recommend(session, deps):
     session.recommendation, session.status = None, "open"
     if decision.confident and decision.choice != "none":
         viewer = deps.actors[session.sales_id]
-        maximum = cap(viewer, session.customer_id, decision.choice, deps.grants)
+        maximum = "product_usage" if deps.kb.is_frozen(viewer.id) else cap(
+            viewer, session.customer_id, decision.choice, deps.grants)
         disclosure = deps.jev.disclose(session.need, decision.choice, maximum)
         card = render(decision.choice, disclosure.choice, viewer, deps.kb, session_id=session.id,
                       customer_id=session.customer_id, grants=deps.grants)
