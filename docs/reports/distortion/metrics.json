@@ -12,31 +12,33 @@
     "swap_prob": 0.1
   },
   "jue": {
-    "ask_threshold": 0.5,
-    "back_threshold": 0.5,
+    "model": "jue_k",
+    "jue_k_dir": "models/jue_k",
+    "ask_threshold": 0.15,
+    "back_threshold": 0.15,
     "max_rounds": 8,
     "max_backs": 2
   },
   "calls": {
-    "jue": 202,
+    "jue": 169,
     "llm": 0,
     "s1": 0
   },
   "metrics": {
     "G1 业务员转述": {
-      "completeness": 0.510989010989011,
-      "slot_error": 0.06578947368421052,
+      "completeness": 0.5,
+      "slot_error": 0.07317073170731707,
       "mistranslation": null,
       "asks": 1.0,
       "backs": 0.0,
       "backs_useful": null,
       "traceable": 0.0,
-      "returned": 0.9666666666666667
+      "returned": 0.95
     },
     "G2 一次性翻译": {
-      "completeness": 0.4010989010989011,
+      "completeness": 0.4175824175824176,
       "slot_error": 0.0,
-      "mistranslation": 0.10784313725490197,
+      "mistranslation": 0.1111111111111111,
       "asks": 0.0,
       "backs": 0.0,
       "backs_useful": null,
@@ -44,24 +46,24 @@
       "returned": 1.0
     },
     "G3 化言（不含回问）": {
-      "completeness": 0.8516483516483516,
+      "completeness": 0.6868131868131868,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 1.3666666666666667,
+      "asks": 0.8166666666666667,
       "backs": 0.0,
       "backs_useful": null,
       "traceable": 1.0,
-      "returned": 0.43333333333333335
+      "returned": 0.7666666666666667
     },
     "G3 化言": {
-      "completeness": 0.8956043956043956,
+      "completeness": 0.7692307692307693,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 1.3666666666666667,
-      "backs": 0.9,
-      "backs_useful": 0.4074074074074074,
+      "asks": 0.8166666666666667,
+      "backs": 0.7833333333333333,
+      "backs_useful": 0.3404255319148936,
       "traceable": 1.0,
-      "returned": 0.3
+      "returned": 0.5666666666666667
     }
   },
   "labels": {

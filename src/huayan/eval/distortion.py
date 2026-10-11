@@ -1,6 +1,7 @@
 """WP-E 失真对照：同一批需求卡、同一个模拟客户随机种子，比较三种做法到达研发时的需求信息。
 G1 业务员转述（假设的转述噪声）/ G2 一次性翻译（只有开场白，全部转化对照）/ G3 化言（觉追问 → L2 → L3 → 回问）。
-抽取、觉与转译全是规则实现，不调用大模型。只有 sim 与 eval 可以读需求卡。"""
+抽取与转译是规则实现，觉按配置用规则原型或本地 Jue-K，不调用大模型。只有 sim 与 eval 可以读需求卡。
+trace=True 时另返回每张卡 G2、G3 的逐轮轨迹（WP-E2 单卡对照），统计口径不变。"""
 from __future__ import annotations
 
 import random
@@ -8,9 +9,10 @@ import random
 import pandas as pd
 
 from huayan.clock import get_clock
-from huayan.contracts import NeedCard, NeedState, Question, ReqItem, Requirement, Seeds, Session, Turn
+from huayan.contracts import NeedCard, NeedState, ReqItem, Requirement, ReuseProposal, Seeds, Session, Turn
 from huayan.escalation.translate import draft_chem_need, draft_product_need, match_translations
 from huayan.events import EventLog
+from huayan.jue.jue_k import JueK
 from huayan.jue.proto import JueProto
 from huayan.jue.publish import ask_hints
 from huayan.jue.state import requirement_state, trans_hits
@@ -64,16 +66,49 @@ def _score(card: NeedCard, seeds: Seeds, trans: dict[str, list[str]], group: str
             "returned": not phen_ok or req_ok < len(required)}
 
 
-def run_distortion(cards: list[NeedCard], seeds: Seeds, cfg: dict, rng: random.Random, meter=None) -> pd.DataFrame:
-    """每张卡 × 每组一行；meter 记录觉的调用（用来证明发现环节没有大模型调用）。"""
+def _gaps(card: NeedCard, seeds: Seeds, phenomenon: str | None, slots: dict[str, str]) -> dict:
+    """研发视角：缺了哪些、错了哪些（与 _score 的退回口径一致），以及给人看的退回理由。"""
+    required = [s for s in next(p for p in seeds.phenomena if p.id == card.phenomenon).required_slots
+                if s not in card.unknown_slots]
+    labels = {s.id: s.label for s in seeds.slots} | {"phenomenon": "现象"}
+    missing = ([] if phenomenon == card.phenomenon else ["phenomenon"]) + [s for s in required if s not in slots]
+    wrong = [s for s in required if s in slots and slots[s] != card.slots[s]]
+    reason = "；".join(f"{k}：{'、'.join(labels[s] for s in v)}" for k, v in (("缺", missing), ("错", wrong)) if v)
+    return {"missing": missing, "wrong": wrong, "returned": bool(missing or wrong), "return_reason": reason}
+
+
+def _items(items: list[ReqItem], turns: list[Turn], owners: dict[str, str] | None = None) -> list[dict]:
+    """需求单条目 → 展示：原话取第一条 quote_ref 的发言；owners 给出所引转化知识的归属人。"""
+    text = {t.id: t.text for t in turns}
+    out = []
+    for i in items:
+        row = {"text": i.text, "quote": text[i.quote_refs[0]] if i.quote_refs else None}
+        if owners is not None:
+            row["owner"] = next((owners[r] for r in i.ku_refs if r in owners), None)
+        out.append(row)
+    return out
+
+
+def _model(cfg: dict, meter):
+    if cfg["model"] == "jue_k":
+        return JueK(cfg["jue_k_dir"], "config/templates", "realtime", meter)
+    return JueProto("config/templates", None, "realtime", meter)
+
+
+def run_distortion(cards: list[NeedCard], seeds: Seeds, cfg: dict, rng: random.Random, meter=None,
+                   trace: bool = False):
+    """每张卡 × 每组一行；meter 记录觉的调用（用来证明发现环节没有大模型调用）。
+    trace=True 时返回 (DataFrame, {card_id: 轨迹})。"""
     kb = KnowledgeBase.from_seeds(seeds, EventLog(), AuditLog())
-    extractor, model = RuleExtractor(seeds), JueProto("config/templates", None, "realtime", meter)
+    extractor, model = RuleExtractor(seeds), _model(cfg["jue"], meter)
     slot_defs, phens = {s.id: s for s in seeds.slots}, {p.id: p for p in seeds.phenomena}
-    pm = next(a for a in seeds.actors if a.role == "pm")
+    pm = next(a for a in seeds.actors if a.id == "pm:agent")
     rd = min((a for a in seeds.actors if a.role == "rd"), key=lambda a: a.id)
-    trans = {ku.id: ku.phenomenon_ids for ku in kb.list(rd, kinds=["translation"])}
+    translations = kb.list(rd, kinds=["translation"])
+    trans = {ku.id: ku.phenomenon_ids for ku in translations}
+    owners = {ku.id: ku.owner for ku in translations}
     products, relay, jue = kb.products(), cfg["relay"], cfg["jue"]
-    rows = []
+    rows, traces = [], {}
     for card in cards:
         seed, now = rng.randrange(2 ** 31), get_clock().now()
         score = lambda *a, **k: rows.append(_score(card, seeds, trans, *a, **k))
@@ -101,42 +136,60 @@ def run_distortion(cards: list[NeedCard], seeds: Seeds, cfg: dict, rng: random.R
                          ku_refs=[h.ku.id]) for h in match_translations(opening.text, kb, rd)]
         items += [ReqItem(text=f"条件：{v}", slot=s, quote_refs=[opening.id]) for s, v in d.need.known().items()]
         score(GROUPS[1], d.need.phenomenon, d.need.known(), items, 0)
+        one_shot = {"turns": [{"speaker": opening.speaker, "text": opening.text}], "chem_lang": _items(items, d.turns),
+                    **_gaps(card, seeds, d.need.phenomenon, d.need.known())}
 
         # G3 化言：按觉的第一条提示追问 → L2 → L3；再对 L3 草稿回问，回填后重新起草 L3
         d = _Dialog(card, seeds, random.Random(seed), extractor)
-        asks = 0
+        asks, rounds = 0, []
+        required = next(p for p in seeds.phenomena if p.id == card.phenomenon).required_slots
         for _ in range(jue["max_rounds"]):
-            hints, _ = ask_hints(d.need, seeds, products, model, jue["ask_threshold"])
+            hints, out = ask_hints(d.need, seeds, products, model, jue["ask_threshold"])
+            scored = {x.object_id: x for x in out.decisions if x.family == "ask_slot"}
+            said = d.turns[-1]
+            rounds.append({"turn": {"speaker": said.speaker, "text": said.text},
+                           "p_need": {s: scored[f"slot:{d.id}/{s}"].p_need for s in required},
+                           "scored_by": {s: scored[f"slot:{d.id}/{s}"].scored_by or out.scored_by for s in required},
+                           "threshold": jue["ask_threshold"], "asked": hints[0].slot if hints else None,
+                           "ask_text": slot_defs[hints[0].slot].ask_text if hints else None})
             if not hints:
                 break
             d.ask(slot_defs[hints[0].slot])
             asks += 1
         session = d.session()
-        q = Question(id=f"q:{card.id}", family="escalate_need", title="升级", object_id=session.id, owner_role="pm",
-                     scored_by="human", discoverer="human", dedup_key=f"escalate_need:{session.id}", created_at=now)
-        req = Requirement(id=f"req:{card.id}", question_id=q.id, session_ids=[session.id],
+        # v5：业务员签字升级 → 空单 → 产品经理 Agent 查无现成产品后起草 L2 → 研发接单 → 起草 L3
+        req = Requirement(id=f"req:{card.id}", question_id=f"q:{card.id}", session_ids=[session.id],
                           phenomenon=d.need.phenomenon, known_slots=d.need.known(), assigned_rd=rd.id,
-                          status="draft", drafted_by=pm.id, created_at=now)
+                          reuse=ReuseProposal(product_id=None), status="draft", drafted_by=pm.id, created_at=now)
         pm_draft = draft_product_need(req, [session], kb, pm, now)
         req.direction, req.product_lang = pm_draft.direction, pm_draft.product_lang
         req.status, req.rd_accepted_by = "rd_accepted", rd.id
         chem = draft_chem_need(req, [session], kb, rd, now).chem_lang
         score(GROUPS[2], req.phenomenon, req.known_slots, chem, asks)
-        state = requirement_state(req, d.need, seeds, kb, now)
-        backs = sorted(((x.p_need, state.objects[x.object_id].attrs["slot"]) for x in model.propose(state).decisions
+        state = requirement_state(req, d.need, seeds, kb, now, EventLog())
+        out = model.propose(state)
+        backs = sorted(((x.p_need, state.objects[x.object_id].attrs["slot"], x.scored_by or out.scored_by)
+                        for x in out.decisions
                         if x.family == "ask_back" and x.p_need is not None and x.p_need >= jue["back_threshold"]),
                        reverse=True)[:jue["max_backs"]]
-        useful = 0
-        for _, slot in backs:
+        useful, back_asks = 0, []
+        for p_need, slot, scored_by in backs:
             before = d.need.known()
             d.ask(slot_defs[slot])
-            useful += trans_hits(phens[req.phenomenon], before, kb, 3) != trans_hits(phens[req.phenomenon],
+            changed = trans_hits(phens[req.phenomenon], before, kb, 3) != trans_hits(phens[req.phenomenon],
                                                                                     d.need.known(), kb, 3)
+            useful += changed
+            back_asks.append({"slot": slot, "p_need": p_need, "scored_by": scored_by,
+                              "threshold": jue["back_threshold"], "ask_text": slot_defs[slot].ask_text,
+                              "answer": d.turns[-1].text, "changed": changed})
         if backs:
             req = req.model_copy(update={"known_slots": d.need.known()})
             chem = draft_chem_need(req, [d.session()], kb, rd, now).chem_lang
         score(GROUPS[3], req.phenomenon, req.known_slots, chem, asks, len(backs), useful)
-    return pd.DataFrame(rows)
+        traces[card.id] = {"one_shot": one_shot, "huayan": {
+            "rounds": rounds, "back_asks": back_asks, "chem_lang": _items(chem, d.turns, owners),
+            **_gaps(card, seeds, req.phenomenon, req.known_slots)}}
+    return (pd.DataFrame(rows), traces) if trace else pd.DataFrame(rows)
 
 
 def summarize(df: pd.DataFrame) -> pd.DataFrame:

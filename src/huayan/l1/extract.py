@@ -1,5 +1,6 @@
 """逐轮需求抽取：规则实现与单次结构化模型调用。"""
 import json
+import re
 from pathlib import Path
 
 from huayan.contracts import (ExtractedSlot, ExtractionResult, LLMRequest, Message,
@@ -25,7 +26,16 @@ class RuleExtractor:
         phenomenon = find_phenomenon(text, self.seeds.phenomena)
         if phenomenon:
             result.phenomenon, result.phenomenon_quote = phenomenon
-        for slot, (value, quote) in find_slot_values(text, self.seeds.slots).items():
+        values = find_slot_values(text, self.seeds.slots)
+        # 数值 pH / 加酸到目标值是本轮的新条件，不能沿用上一轮的「中性」。
+        ph_slot = next((s for s in self.seeds.slots if s.id == "bath_ph"), None)
+        for match in re.finditer(r"(?:pH\s*(?:[=:：为是]|调到|控制在)?|加酸(?:调)?到)\s*"
+                                 r"(\d+(?:\.\d+)?)(?![\d.%％])", text, re.IGNORECASE):
+            ph = float(match.group(1))
+            value = "强酸性" if ph < 4 else "弱酸性" if ph < 7 else "中性" if ph == 7 else "碱性"
+            if ph_slot and 0 <= ph <= 14 and value in ph_slot.values:
+                values["bath_ph"] = (value, match.group())
+        for slot, (value, quote) in values.items():
             result.slots.append(ExtractedSlot(slot=slot, value=value, status="filled",
                 confidence=0.7, quote=quote, turn_n=turn.n))
         if any(word in text for word in ("不清楚", "不知道", "不确定")):

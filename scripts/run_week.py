@@ -1,5 +1,6 @@
 """业务周对照（WP-E）：处置 / 不处置两个分支 × 觉原型、Jue-K、规则告警三种发现器 → runs/week-<周>-<发现器>-<分支>/
-与 docs/reports/week/（metrics.json、week_detection.png、week_escalations.png）。零成本：抽取规则、Jev 桩、转译规则模式。
+与 docs/reports/week/（metrics.json、week_detection.png、week_escalations.png）。零成本：抽取规则、Jev 桩、起草走 hub 离线骨架。
+流程只由觉的问题与模拟人的签字推进（eval/week.py）；handling 为处置分支里除升级、回问以外的签字记录。
 
 uv run python scripts/run_week.py --week data/week/w1
 """
@@ -41,8 +42,9 @@ def main():
               "runs": {f"{d}/{p}": str(run) for (d, p), run in runs.items()},
               "detection": {d: summary(runs[(d, "ignore")], injections) for d in DISCOVERERS},
               "consequences": {f"{d}/{p}": consequences(runs[(d, p)], theme, seeds) for d in DISCOVERERS for p in POLICIES},
-              "handling": {d: [json.loads(l) for l in (runs[(d, "handle")] / "week_log.jsonl")
-                               .read_text(encoding="utf-8").splitlines() if '"approve"' in l or '"release"' in l]
+              "handling": {d: [r for r in map(json.loads, (runs[(d, "handle")] / "week_log.jsonl")
+                                              .read_text(encoding="utf-8").splitlines())
+                               if r["family"] not in ("escalate_need", "ask_back")]
                            for d in DISCOVERERS}}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

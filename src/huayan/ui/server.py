@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 from pydantic import BaseModel
 
 from huayan.app import HuayanApp
-from huayan.contracts import ReqItem, SheetDraft, Trial
+from huayan.contracts import ReqItem, SheetDraft
 from huayan.knowledge import PermissionDenied
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
@@ -21,7 +21,7 @@ PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
 DIST = Path("web/dist")
 MAINLINE = Path("scripts/demo_mainline.py")      # WP-I 提供 run_offline(app)
 REPORTS = Path("docs/reports")
-REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）
+REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）；single_card 经门面按查看者读取
 
 app = HuayanApp.build(CONFIG)
 lock = Lock()                                     # 门面不是线程安全的，一次只处理一个请求
@@ -66,6 +66,8 @@ def session(p):
 
 def report(p):
     name = p["name"]
+    if name == "single_card":                         # 单卡明细按查看者裁剪，由门面决定（WP-E2）
+        return app.single_card_report(p["viewer"])
     if name not in REPORT_NAMES:
         raise KeyError(name)
     return json.loads((REPORTS / name / "metrics.json").read_text(encoding="utf-8"))
@@ -122,7 +124,7 @@ POST = {
     "/api/points": lambda p: app.set_public_points(p["req_id"], p["text"], p["sealed"], p["by"]),
     "/api/sheet": lambda p: app.save_sheet(p["req_id"], SheetDraft.model_validate(p["sheet"]), p["by"]),
     "/api/release": lambda p: app.release_product(p["req_id"], p["by"]),
-    "/api/trial": lambda p: app.record_trial(Trial.model_validate(p["trial"])),
+    "/api/trial": lambda p: app.record_requirement_trial(p["req_id"], p["result"], p["by"]),
     "/api/decrypt/request": lambda p: app.request_decrypt(p["session_id"], p["by"]),
     "/api/decrypt/decide": lambda p: app.decide_decrypt(p["question_id"], p["by"], p["approve"], p.get("text", "")),
     "/api/reply-draft": lambda p: app.save_reply_draft(p["session_id"], p["text"], p["by"]),

@@ -4,176 +4,176 @@
     "不追问": {
       "tau": 2.0,
       "mean_asks": 0.0,
-      "accuracy": 0.5465
+      "accuracy": 0.626
     },
     "Jue-K": [
       {
         "tau": 0.05,
-        "mean_asks": 1.628,
-        "accuracy": 0.909
+        "mean_asks": 1.846,
+        "accuracy": 0.912
       },
       {
         "tau": 0.1,
-        "mean_asks": 1.4865,
-        "accuracy": 0.9025
+        "mean_asks": 1.5165,
+        "accuracy": 0.906
       },
       {
         "tau": 0.15,
-        "mean_asks": 1.336,
-        "accuracy": 0.8945
+        "mean_asks": 1.186,
+        "accuracy": 0.8995
       },
       {
         "tau": 0.2,
-        "mean_asks": 1.2025,
-        "accuracy": 0.885
+        "mean_asks": 1.186,
+        "accuracy": 0.8995
       },
       {
         "tau": 0.25,
-        "mean_asks": 0.9975,
-        "accuracy": 0.8645
+        "mean_asks": 1.186,
+        "accuracy": 0.8995
       },
       {
         "tau": 0.3,
-        "mean_asks": 0.755,
-        "accuracy": 0.8295
+        "mean_asks": 1.186,
+        "accuracy": 0.8995
       },
       {
         "tau": 0.4,
-        "mean_asks": 0.5755,
-        "accuracy": 0.79
+        "mean_asks": 0.558,
+        "accuracy": 0.8045
       },
       {
         "tau": 0.5,
-        "mean_asks": 0.189,
-        "accuracy": 0.6605
+        "mean_asks": 0.316,
+        "accuracy": 0.772
       },
       {
         "tau": 0.6,
-        "mean_asks": 0.144,
-        "accuracy": 0.6315
+        "mean_asks": 0.316,
+        "accuracy": 0.772
       },
       {
         "tau": 0.7,
-        "mean_asks": 0.144,
-        "accuracy": 0.6315
+        "mean_asks": 0.316,
+        "accuracy": 0.772
       },
       {
         "tau": 0.8,
-        "mean_asks": 0.0,
-        "accuracy": 0.5465
+        "mean_asks": 0.098,
+        "accuracy": 0.6845
       },
       {
         "tau": 0.9,
-        "mean_asks": 0.0,
-        "accuracy": 0.5465
+        "mean_asks": 0.004,
+        "accuracy": 0.626
       }
     ],
     "觉原型（规则分）": [
       {
         "tau": 0.05,
-        "mean_asks": 1.6545,
-        "accuracy": 0.909
+        "mean_asks": 1.9215,
+        "accuracy": 0.908
       },
       {
         "tau": 0.1,
-        "mean_asks": 1.6545,
-        "accuracy": 0.909
+        "mean_asks": 1.9215,
+        "accuracy": 0.908
       },
       {
         "tau": 0.15,
-        "mean_asks": 1.6545,
-        "accuracy": 0.909
+        "mean_asks": 1.9215,
+        "accuracy": 0.908
       },
       {
         "tau": 0.2,
-        "mean_asks": 1.6545,
-        "accuracy": 0.909
+        "mean_asks": 1.9215,
+        "accuracy": 0.908
       },
       {
         "tau": 0.25,
-        "mean_asks": 1.6545,
-        "accuracy": 0.909
+        "mean_asks": 1.9215,
+        "accuracy": 0.908
       },
       {
         "tau": 0.3,
-        "mean_asks": 1.6545,
-        "accuracy": 0.909
+        "mean_asks": 1.9215,
+        "accuracy": 0.908
       },
       {
         "tau": 0.4,
-        "mean_asks": 1.6545,
-        "accuracy": 0.909
+        "mean_asks": 1.803,
+        "accuracy": 0.908
       },
       {
         "tau": 0.5,
-        "mean_asks": 1.627,
-        "accuracy": 0.909
+        "mean_asks": 1.6415,
+        "accuracy": 0.907
       },
       {
         "tau": 0.6,
-        "mean_asks": 0.4545,
-        "accuracy": 0.759
+        "mean_asks": 0.545,
+        "accuracy": 0.845
       },
       {
         "tau": 0.7,
-        "mean_asks": 0.3405,
-        "accuracy": 0.7275
+        "mean_asks": 0.433,
+        "accuracy": 0.815
       },
       {
         "tau": 0.8,
-        "mean_asks": 0.21,
-        "accuracy": 0.6535
+        "mean_asks": 0.2035,
+        "accuracy": 0.7125
       },
       {
         "tau": 0.9,
-        "mean_asks": 0.101,
-        "accuracy": 0.584
+        "mean_asks": 0.113,
+        "accuracy": 0.662
       }
     ],
     "B1 必问清单": {
       "tau": 0.5,
-      "mean_asks": 1.92,
-      "accuracy": 0.908
+      "mean_asks": 1.9215,
+      "accuracy": 0.911
     },
     "B2 信息价值规则": {
       "tau": 0.5,
-      "mean_asks": 1.6335,
-      "accuracy": 0.9085
+      "mean_asks": 1.649,
+      "accuracy": 0.911
     },
     "Jue-K − 觉原型（同追问次数，百分点）": {
       "0.5": {
-        "diff_pp": -0.011779073584217148,
+        "diff_pp": -3.623568476977568,
         "ci95_pp": [
-          -1.1208419908355087,
-          1.1732427097036788
+          -4.685775198672118,
+          -2.451076342887759
         ]
       },
       "0.75": {
-        "diff_pp": 3.159588349537623,
+        "diff_pp": -2.304684128132073,
         "ci95_pp": [
-          2.140058424217701,
-          4.161427528040756
+          -3.4237887631430777,
+          -1.2566271104431692
         ]
       },
       "1.0": {
-        "diff_pp": 3.5963219616204634,
+        "diff_pp": 0.06357431433542393,
         "ci95_pp": [
-          2.573215338548441,
-          4.57230844208167
+          -0.8741793815071255,
+          1.013138464637991
         ]
       },
       "1.25": {
-        "diff_pp": 2.7610426998235127,
+        "diff_pp": 1.5895497846607154,
         "ci95_pp": [
-          1.9547282024042274,
-          3.5563102268208198
+          0.7759135038590917,
+          2.474576689198756
         ]
       },
       "1.5": {
-        "diff_pp": 1.0367476097553618,
+        "diff_pp": 0.667640367197786,
         "ci95_pp": [
-          0.42678271203876966,
-          1.6486693972303668
+          -0.10257423352017013,
+          1.4641699862310966
         ]
       }
     }
@@ -183,155 +183,176 @@
     "不追问": {
       "tau": 2.0,
       "mean_asks": 0.0,
-      "accuracy": 0.8105
+      "accuracy": 0.808
     },
     "Jue-K": [
       {
         "tau": 0.05,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 1.8115,
+        "accuracy": 0.93
       },
       {
         "tau": 0.1,
-        "mean_asks": 0.9085,
+        "mean_asks": 1.8105,
         "accuracy": 0.93
       },
       {
         "tau": 0.15,
-        "mean_asks": 0.572,
-        "accuracy": 0.873
+        "mean_asks": 0.5905,
+        "accuracy": 0.8905
       },
       {
         "tau": 0.2,
-        "mean_asks": 0.187,
-        "accuracy": 0.827
+        "mean_asks": 0.5905,
+        "accuracy": 0.8905
       },
       {
         "tau": 0.25,
-        "mean_asks": 0.015,
-        "accuracy": 0.812
+        "mean_asks": 0.5905,
+        "accuracy": 0.8905
       },
       {
         "tau": 0.3,
-        "mean_asks": 0.015,
-        "accuracy": 0.812
+        "mean_asks": 0.5905,
+        "accuracy": 0.8905
       },
       {
         "tau": 0.4,
         "mean_asks": 0.015,
-        "accuracy": 0.812
+        "accuracy": 0.808
       },
       {
         "tau": 0.5,
-        "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "mean_asks": 0.015,
+        "accuracy": 0.808
       },
       {
         "tau": 0.6,
-        "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "mean_asks": 0.015,
+        "accuracy": 0.808
       },
       {
         "tau": 0.7,
-        "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "mean_asks": 0.0025,
+        "accuracy": 0.808
       },
       {
         "tau": 0.8,
         "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "accuracy": 0.808
       },
       {
         "tau": 0.9,
         "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "accuracy": 0.808
       }
     ],
     "觉原型（规则分）": [
       {
         "tau": 0.05,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 1.8115,
+        "accuracy": 0.93
       },
       {
         "tau": 0.1,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 1.8115,
+        "accuracy": 0.93
       },
       {
         "tau": 0.15,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 1.8115,
+        "accuracy": 0.93
       },
       {
         "tau": 0.2,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 1.8115,
+        "accuracy": 0.93
       },
       {
         "tau": 0.25,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 1.8115,
+        "accuracy": 0.93
       },
       {
         "tau": 0.3,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 1.8115,
+        "accuracy": 0.93
       },
       {
         "tau": 0.4,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 1.8115,
+        "accuracy": 0.93
       },
       {
         "tau": 0.5,
-        "mean_asks": 0.912,
-        "accuracy": 0.9305
+        "mean_asks": 0.9005,
+        "accuracy": 0.932
       },
       {
         "tau": 0.6,
         "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "accuracy": 0.808
       },
       {
         "tau": 0.7,
         "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "accuracy": 0.808
       },
       {
         "tau": 0.8,
         "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "accuracy": 0.808
       },
       {
         "tau": 0.9,
         "mean_asks": 0.0,
-        "accuracy": 0.8105
+        "accuracy": 0.808
       }
     ],
     "B1 必问清单": {
       "tau": 0.5,
-      "mean_asks": 1.828,
-      "accuracy": 0.935
+      "mean_asks": 1.8115,
+      "accuracy": 0.932
     },
     "B2 信息价值规则": {
       "tau": 0.5,
-      "mean_asks": 0.912,
-      "accuracy": 0.9305
+      "mean_asks": 0.9005,
+      "accuracy": 0.932
     },
     "Jue-K − 觉原型（同追问次数，百分点）": {
       "0.5": {
-        "diff_pp": -1.1892071086807898,
+        "diff_pp": 0.06758601626375427,
         "ci95_pp": [
-          -2.071752646185764,
-          -0.3370358541255467
+          -0.7705643932291802,
+          0.8337171844177607
         ]
       },
       "0.75": {
-        "diff_pp": -0.6032650348009705,
+        "diff_pp": -1.5611818456959359,
         "ci95_pp": [
-          -1.0959597111433603,
-          -0.0887535654706549
+          -2.480079108017251,
+          -0.6664870322008931
+        ]
+      },
+      "1.0": {
+        "diff_pp": -2.802315708732972,
+        "ci95_pp": [
+          -3.5986847172725662,
+          -2.0049687734224264
+        ]
+      },
+      "1.25": {
+        "diff_pp": -1.9380047371830744,
+        "ci95_pp": [
+          -2.5365370385824972,
+          -1.3376357776437693
+        ]
+      },
+      "1.5": {
+        "diff_pp": -1.0736937656331547,
+        "ci95_pp": [
+          -1.3941311340222742,
+          -0.7566302725363775
         ]
       }
     }

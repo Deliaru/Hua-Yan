@@ -5,12 +5,32 @@ from huayan.contracts import NeedCard, Phenomenon, Seeds
 from huayan.domain import correct_product
 
 
-def sample_slots(phen: Phenomenon, seeds: Seeds, rng: random.Random) -> dict[str, str]:
-    slots = {}
+# 槽位取值的化学相容性（印染常识，模拟假设）：(槽位甲, 槽位乙) → 甲的取值 → 乙可取的值
+COMPATIBLE = {
+    ("fiber", "dye_class"): {"棉": ["活性染料", "还原染料"], "粘胶": ["活性染料", "还原染料"], "涤纶": ["分散染料"],
+                             "涤棉": ["分散染料", "活性染料", "还原染料"], "锦纶": ["酸性染料"],
+                             "锦纶氨纶": ["酸性染料", "分散染料"]},
+    ("dye_class", "bath_ph"): {"活性染料": ["碱性", "中性"], "还原染料": ["碱性"], "分散染料": ["弱酸性"],
+                               "酸性染料": ["强酸性", "弱酸性"]},
+    ("dye_class", "process"): {"活性染料": ["浸染", "连续轧染", "冷轧堆", "印花"], "还原染料": ["浸染", "连续轧染", "印花"],
+                               "分散染料": ["浸染", "连续轧染", "印花"], "酸性染料": ["浸染", "印花"]},
+}
+
+
+def compatible(slots: dict[str, str]) -> bool:
+    return all(slots[b] in table[slots[a]] for (a, b), table in COMPATIBLE.items() if a in slots and b in slots)
+
+
+def sample_slots(phen: Phenomenon, seeds: Seeds, rng: random.Random, fixed: dict[str, str] | None = None) -> dict[str, str]:
+    """按现象先验逐槽抽样，只在与已定取值（含 fixed）相容的值里抽。"""
+    slots = dict(fixed or {})
     for slot in seeds.slots:
-        prior = phen.slot_priors.get(slot.id)
-        slots[slot.id] = rng.choices(list(prior), weights=list(prior.values()))[0] if prior else rng.choice(slot.values)
-    return slots
+        if slot.id in slots:
+            continue
+        prior = phen.slot_priors.get(slot.id) or {v: 1.0 for v in slot.values}
+        ok = {v: w for v, w in prior.items() if w > 0 and compatible({**slots, slot.id: v})}
+        slots[slot.id] = rng.choices(list(ok), weights=list(ok.values()))[0]
+    return {s.id: slots[s.id] for s in seeds.slots}
 
 
 def make_card(card_id: str, phen: Phenomenon, slots: dict[str, str], customer_id: str, seeds: Seeds,

@@ -6,8 +6,11 @@ relay:                        # G1 业务员转述
   vague_prob: 0.3             # 现象被说成笼统的「染色有问题」
   drop_prob: 0.2              # 每个已知槽位被漏掉
   swap_prob: 0.1              # 每个已知槽位被记成同槽位的另一个取值
-jue:                          # G3 化言：觉用规则原型（config/templates/），阈值同 config/app.yaml
-  ask_threshold: 0.5
-  back_threshold: 0.5
+jue:                          # G3 化言：觉的模型与阈值，与现场一致（WP-J 第 8 项：追问、回问均由 Jue-K 胜出；
+                              # 门面在 jue_k 模式下追问、回问都用 config/app.yaml 的 ask_jue_k）
+  model: jue_k                # jue_proto | jue_k
+  jue_k_dir: models/jue_k
+  ask_threshold: 0.15
+  back_threshold: 0.15
   max_rounds: 8
   max_backs: 2

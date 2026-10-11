@@ -29,7 +29,7 @@ META = ["family", "object_type", "object_id", "at", "source_id", "label", "split
 SOURCES = {"ask_slot": "程序轨迹（需求卡 + 随机追问策略 + 抽取噪声）", "ask_back": "程序轨迹结束时构造的需求单（应升级的卡）",
            "opportunity": "多周模拟业务周在真实链路上跑出的事件", "knowledge_conflict": "多周模拟业务周在真实链路上跑出的事件",
            "leak_risk": "多周模拟业务周在真实链路上跑出的事件"}
-LABELS = {"ask_slot": "补上 / 改正真实值后，最终推荐是否由错变对", "ask_back": "补上 / 改正真实值后，本层转化对照命中集合是否变化",
+LABELS = {"ask_slot": "补上 / 改正真实值后，最终推荐是否由错变对；或需求应升级而该槽位是研发必问信息", "ask_back": "补上 / 改正真实值后，本层转化对照命中集合是否变化",
           "opportunity": "落在非困难负样本注入的 [earliest, latest] 内、object_id 一致（注入外、≥ 2 位客户升级的主题不进样本）",
           "knowledge_conflict": "同 opportunity", "leak_risk": "同 opportunity"}
 
