@@ -117,7 +117,7 @@ export default function App() {
       </aside>
 
       <main className="ml-[232px] pt-[52px]">
-        {page === "overview" && <Overview />}
+        {page === "overview" && <Overview toStory={() => { setPage("story"); window.scrollTo(0, 0); }} />}
         {page === "story" && <Story toDesk={() => setPage("desk")} />}
         {page === "desk" && (actor.role === "sales" ? <Sales key={key} /> : actor.role === "rd" ? <Rd key={key} /> : <Supervisor key={key} />)}
         {page === "jue" && <JuePage key={key} />}

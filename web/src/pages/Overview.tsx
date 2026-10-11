@@ -1,9 +1,9 @@
-// 架构总览：分层转译的业务流程图（可逐步播放一条需求）、三处设计取舍、效率对照（数字取自 docs/reports/ 的真实运行）。
+// 架构总览（默认首页）：首屏一句主张 + 问题与四个问题、三条主张、整条协作链的流程图（可逐步播放一条需求，下方进入演示工作面）、效率对照（数字取自 docs/reports/ 的真实运行）。
 // 流程图里的示例话术是模拟数据，只说明用法；橙色菱形是「觉提出 → 人签字」的决策点。
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useData } from "../ctx";
-import { Group, PageHead, ReplayNote } from "../components/ui";
+import { ReplayNote } from "../components/ui";
 
 const X = [250, 432, 614, 796, 978, 1160];
 const Y = { 1: 164, 2: 296, 3: 428 } as const;
@@ -67,16 +67,102 @@ export const STEPS: { node: string; text: string; how: string }[] = [
   { node: "kb", text: "研发审定发布，新品回到 L1 知识库", how: "下一位客户同样描述，业务员在 L1 直接命中新品，不再升级——这一轮系统又多会了一件事。" },
 ];
 
-export function Overview() {
+export function Overview({ toStory }: { toStory: () => void }) {
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-8 px-8 pb-16 pt-7">
-      <PageHead title="架构总览"
-                subtitle="化言把一条会失真的传话链，变成逐层转译、每句可回查、由觉推动、人来签字的协同流程。" />
-      <ReplayNote />
-      <FlowDiagram />
-      <Innovations />
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-14 px-8 pb-16 pt-10">
+      <Hero />
+      <Pillars />
+      <section className="flex flex-col gap-5">
+        <h2 className="mx-auto max-w-[860px] text-center text-[26px] font-semibold leading-[38px] tracking-[-0.01em]">
+          化言重构的不是一次化学问答，<br />而是从客户需求到研发行动，再到知识回流的<span className="text-accent">整条企业协作链</span>。
+        </h2>
+        <FlowDiagram />
+        <div className="flex flex-col items-center gap-3 pt-2">
+          <p className="text-[15px] text-ink-2">让 AI 不只提供答案，更让企业有能力持续发现问题、协同决策、积累经验。</p>
+          <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]" onClick={toStory}>进入演示流程，进一步理解架构及其价值 →</button>
+        </div>
+      </section>
       <Efficiency />
+      <ReplayNote />
     </div>
+  );
+}
+
+// ── 首屏：一句主张 + 问题 + 一线需求交流里得到的四个问题 ─────────────────
+const NEEDS = ["面料成分", "染色设备", "工艺条件", "性能要求", "化学约束"];
+const QUESTIONS: [string, string][] = [
+  ["什么时候应该追问？", "觉 · 追问 / 回问"],
+  ["什么时候需要研发介入？", "觉 · 升级 / 接单"],
+  ["专家知识如何安全共享？", "分层权限 · 只见归属"],
+  ["一次的经验，如何成为下一次决策的依据？", "沉淀 · 发布 · 回流 L1"],
+];
+
+function Hero() {
+  return (
+    <section className="flex flex-col gap-8">
+      <div>
+        <p className="text-[13px] font-semibold tracking-[0.08em] text-ink-3">化言 HUAYAN</p>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[52px] tracking-[-0.02em]">
+          让客户需求不再层层失真，<br />让专家经验成为企业持续增长的能力。
+        </h1>
+      </div>
+
+      <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-4">
+        <div className="group px-5 py-4">
+          <p className="text-[12px] text-ink-2">客户描述的是</p>
+          <p className="mt-1.5 text-[20px] font-semibold leading-8">「布面深一块浅一块」</p>
+        </div>
+        <div className="flex flex-col items-center justify-center text-[12px] text-ink-3">
+          <span>层层转述</span><span className="text-[20px] leading-6">→</span><span>变了形</span>
+        </div>
+        <div className="group px-5 py-4">
+          <p className="text-[12px] text-ink-2">研发需要的却是</p>
+          <p className="mt-2 flex flex-wrap gap-1.5">{NEEDS.map((n) => <span key={n} className="tag !text-[13px]">{n}</span>)}</p>
+        </div>
+      </div>
+      <p className="-mt-3 text-[16px] leading-[26px]">
+        真正的问题，往往不是企业缺少答案，而是<b className="font-semibold">问题在传递中变了形，知识在组织中难以流动</b>。
+      </p>
+
+      <div>
+        <p className="text-[13px] leading-[21px] text-ink-2">
+          基于功能化学一线业务需求交流：传统 AI 化学家着重回答「应该使用什么产品」，企业还需要回答——
+        </p>
+        <div className="mt-3 grid grid-cols-4 gap-3">
+          {QUESTIONS.map(([q, a]) => (
+            <div key={q} className="group flex flex-col justify-between gap-3 px-4 py-3.5">
+              <p className="text-[15px] font-semibold leading-[22px]">{q}</p>
+              <p className="text-[12px] text-ink-3">化言：{a}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── 三条主张：由「觉」驱动的多层 Agent 决策协同架构 ──────────────
+const PILLARS: [string, string, string][] = [
+  ["主动发现，而非被动响应", "独立的「觉」模型识别需求缺失、业务升级与知识复用机会，让正确的问题在正确的时机被提出。", "觉 · 发现环节零大模型调用"],
+  ["准确传递，而非层层转述", "多层 Agent 把客户的场景语言逐步转成产品需求与化学要求，保留原始依据，遵守不同角色的知识权限。", "L1 场景 → L2 产品 → L3 化学"],
+  ["知识生长，而非一次性回答", "专家审核关键决策；研发修改、试样结果与知识贡献被记录和追溯，经验在保护归属与权益的前提下持续复用。", "引用即记分 · 解密由研发审批"],
+];
+
+function Pillars() {
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="text-[22px] font-semibold leading-8 tracking-[-0.01em]">由「觉」驱动的多层 Agent 决策协同架构</h2>
+      <div className="grid grid-cols-3 gap-4">
+        {PILLARS.map(([t, d, k], i) => (
+          <div key={t} className="group flex flex-col px-5 py-4">
+            <p className="num text-[12px] font-semibold text-ink-3">0{i + 1}</p>
+            <p className="mt-1 text-[17px] font-semibold leading-6">{t}</p>
+            <p className="mt-1.5 flex-1 text-[13.5px] leading-[22px] text-ink-2">{d}</p>
+            <p className="mt-3 text-[12px] font-semibold text-ink">{k}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -255,33 +341,10 @@ function Diamond() {
   return <i className="inline-block h-2 w-2 rotate-45 bg-attn" />;
 }
 
-// ── 三处取舍 ─────────────────────────────────────────────
-function Innovations() {
-  const items = [
-    ["分层转译，而不是一次翻译", "一次性翻译变不出客户没说的信息。化言让每一层只用本层能看的知识，把需求逐层换成下一层能直接用的语言；每一句都能回到客户原话和知识归属人。", "L1 → L2 → L3 → 反向包装"],
-    ["觉推动流程，人签字生效", "下一步该谁决定什么，写在决策目录里，不写死在代码里。觉在每次状态改变后判断此刻是否需要有人决策（模型打分给概率，规则打分到点即提出），Agent 起草，人按按钮签字。", "发现环节零大模型调用"],
-    ["权责对等，知识愿意沉淀", "知识被引用即给归属人记分；研发改过的转译沉淀为自己的知识；上层知识对下层只显示归属不显示原文，解密由研发本人审批。", "安全靠结构，不靠提示词"],
-  ];
-  return (
-    <section>
-      <div className="group-title">三处设计取舍</div>
-      <div className="grid grid-cols-3 gap-4">
-        {items.map(([t, d, k], i) => (
-          <div key={t} className="group flex flex-col px-5 py-4">
-            <p className="num text-[12px] font-semibold text-ink-3">0{i + 1}</p>
-            <p className="mt-1 text-[16px] font-semibold leading-6">{t}</p>
-            <p className="mt-1.5 flex-1 text-[13px] leading-[21px] text-ink-2">{d}</p>
-            <p className="mt-3 text-[12px] font-semibold text-accent">{k}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 // ── 效率对照（真实运行）───────────────────────────────────
 type Num = number | null;
-interface Distortion { n_cards: number; placeholder_seeds: boolean; metrics: Record<string, Record<string, Num>> }
+type Metrics = Record<string, Record<string, Num>>;
+interface Distortion { n_cards: number; placeholder_seeds: boolean; by_route: { escalate: { n_cards: number; metrics: Metrics } } }
 interface Detect { hits: number; positives: number; false_alarms: number; mean_lead_hours: Num; jue_llm_calls: number }
 interface Week { detection: Record<string, Detect>; consequences: Record<string, { escalations_after: number; l1_hits_after: number }> }
 
@@ -294,7 +357,8 @@ const METRICS: [string, string, boolean][] = [
 ];
 
 function Efficiency() {
-  const d = useData(() => api.report<Distortion>("distortion").catch(() => null), []);
+  // 与评测页一致：只看应升级、真正会到研发的那部分卡（distortion_300）
+  const d = useData(() => api.report<Distortion>("distortion_300").catch(() => null), []);
   const w = useData(() => api.report<Week>("week").catch(() => null), []);
   return (
     <section>
@@ -304,21 +368,23 @@ function Efficiency() {
       </div>
       {d ? (
         <div className="grid grid-cols-4 gap-4">
-          {METRICS.map(([k, label, up]) => <MetricCard key={k} d={d} k={k} label={label} up={up} />)}
+          {METRICS.map(([k, label, up]) => <MetricCard key={k} m={d.by_route.escalate.metrics} k={k} label={label} up={up} />)}
         </div>
-      ) : <div className="group px-5 py-4 text-[13px] text-ink-3">失真对照报告尚未生成（docs/reports/distortion/）。</div>}
+      ) : <div className="group px-5 py-4 text-[13px] text-ink-3">失真对照报告尚未生成（docs/reports/distortion_300/）。</div>}
       {w && <WeekCard w={w} />}
       {d && (
         <p className="group-foot">
-          {d.n_cards} 张程序生成的需求卡 + 模拟客户，同一批卡上三组方案对照{d.placeholder_seeds ? "；种子为占位数据" : ""}。定时发现取自一个模拟业务周。全部为模拟数据。
+          {d.n_cards} 张程序生成的需求卡 + 模拟客户中，应升级（真正会到研发）的 {d.by_route.escalate.n_cards} 张，同一批卡上三组方案对照{d.placeholder_seeds ? "；种子为占位数据" : ""}。定时发现取自一个模拟业务周。全部为模拟数据。
         </p>
       )}
     </section>
   );
 }
 
-function MetricCard({ d, k, label, up }: { d: Distortion; k: string; label: string; up: boolean }) {
-  const vals = GROUPS.map(([g]) => d.metrics[g]?.[k] ?? null);
+const pct1 = (v: number) => `${Math.round(v * 1000) / 10}%`;
+
+function MetricCard({ m, k, label, up }: { m: Metrics; k: string; label: string; up: boolean }) {
+  const vals = GROUPS.map(([g]) => m[g]?.[k] ?? null);
   const ours = vals[2];
   const bi = vals[0] != null ? 0 : 1;
   const base = vals[bi];
@@ -326,10 +392,10 @@ function MetricCard({ d, k, label, up }: { d: Distortion; k: string; label: stri
     <div className="group px-5 py-4">
       <p className="text-[12px] text-ink-2">{label}<span className="ml-1 text-ink-3">{up ? "越高越好" : "越低越好"}</span></p>
       <p className="mt-1 flex items-baseline gap-2">
-        <span className="num text-[28px] font-semibold leading-8 tracking-[-0.02em]">{ours == null ? "—" : `${Math.round(ours * 100)}%`}</span>
+        <span className="num text-[28px] font-semibold leading-8 tracking-[-0.02em]">{ours == null ? "—" : pct1(ours)}</span>
         {ours != null && base != null && base !== ours && (
           <span className="num text-[12px] font-semibold text-accent">
-            {up ? "↑" : "↓"} {Math.abs(Math.round((ours - base) * 100))} 个百分点
+            {up ? "↑" : "↓"} {Math.abs(Math.round((ours - base) * 1000) / 10)} 个百分点
             <span className="ml-1 font-normal text-ink-3">较{bi ? "一次性翻译" : "现状"}</span>
           </span>
         )}
@@ -341,7 +407,7 @@ function MetricCard({ d, k, label, up }: { d: Distortion; k: string; label: stri
             <div key={g}>
               <div className="flex justify-between text-[11.5px]">
                 <span className={i === 2 ? "font-semibold" : "text-ink-2"}>{name}</span>
-                <span className="num text-ink-2">{v == null ? "不适用" : `${Math.round(v * 100)}%`}</span>
+                <span className="num text-ink-2">{v == null ? "不适用" : pct1(v)}</span>
               </div>
               <div className="mt-1 h-[6px] overflow-hidden rounded-full bg-fill">
                 <div className={`h-full rounded-full ${i === 2 ? "bg-accent" : "bg-[rgba(60,60,67,.3)]"}`} style={{ width: `${(v ?? 0) * 100}%` }} />
@@ -371,7 +437,7 @@ function WeekCard({ w }: { w: Week }) {
     <div className="group mt-4 grid grid-cols-[1.3fr_1fr_1fr_1fr_1.3fr] divide-x divide-[var(--color-sep)]">
       <div className="px-5 py-4">
         <p className="text-[12px] text-ink-2">定时发现 · 模拟业务周</p>
-        <p className="mt-1 text-[15px] font-semibold leading-6">觉比规则告警更早、更准地发现同类需求、知识冲突与套问</p>
+        <p className="mt-1 text-[15px] font-semibold leading-6">觉比规则告警更准地发现同类需求、知识冲突与套问</p>
       </div>
       {cell("命中注入问题", `${jk.hits} / ${jk.positives}`, `${rule.hits} / ${rule.positives}`)}
       {cell("误报", `${jk.false_alarms}`, `${rule.false_alarms}`)}
