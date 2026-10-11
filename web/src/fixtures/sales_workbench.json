@@ -1,0 +1,277 @@
+{
+  "simulated": true,
+  "scenarios": {
+    "asking": {
+      "label": "追问提示与回复草稿",
+      "session": {
+        "session_id": "sess:fixture-reuse",
+        "viewer": "sales:S01",
+        "viewer_level": 1,
+        "turns": [
+          {
+            "id": "turn:sess:fixture-reuse:1",
+            "session_id": "sess:fixture-reuse",
+            "n": 1,
+            "speaker": "customer",
+            "text": "（模拟）这批布洗了掉色。",
+            "ts": "2026-10-11T09:00:00+08:00"
+          }
+        ],
+        "slots": [],
+        "hints": [
+          {
+            "session_id": "sess:fixture-reuse",
+            "slot": "fiber",
+            "label": "面料成分",
+            "ask_text": "请问是什么面料？",
+            "p_need": 0.82,
+            "scored_by": "jue_k"
+          }
+        ],
+        "replies": [],
+        "card": null,
+        "status": "open",
+        "escalation_question_id": null,
+        "requirement": null,
+        "reply_draft": "请问是什么面料？",
+        "escalate_note": "",
+        "reuse": null
+      },
+      "questions": []
+    },
+    "escalation_ready": {
+      "label": "升级说明已准备，业务员待签",
+      "session": {
+        "session_id": "sess:fixture-reuse",
+        "viewer": "sales:S01",
+        "viewer_level": 1,
+        "turns": [
+          {
+            "id": "turn:sess:fixture-reuse:1",
+            "session_id": "sess:fixture-reuse",
+            "n": 1,
+            "speaker": "customer",
+            "text": "（模拟）这批布洗了掉色。",
+            "ts": "2026-10-11T09:00:00+08:00"
+          },
+          {
+            "id": "turn:sess:fixture-reuse:2",
+            "session_id": "sess:fixture-reuse",
+            "n": 2,
+            "speaker": "sales",
+            "text": "请问是什么面料？",
+            "ts": "2026-10-11T09:01:00+08:00"
+          },
+          {
+            "id": "turn:sess:fixture-reuse:3",
+            "session_id": "sess:fixture-reuse",
+            "n": 3,
+            "speaker": "customer",
+            "text": "（模拟）莱赛尔布，希望水洗后不掉色。",
+            "ts": "2026-10-11T09:02:00+08:00"
+          }
+        ],
+        "slots": [
+          {
+            "slot": "fiber",
+            "value": "莱赛尔",
+            "status": "filled",
+            "confidence": 1.0,
+            "quote": "莱赛尔布",
+            "turn_id": "turn:sess:fixture-reuse:3"
+          }
+        ],
+        "hints": [],
+        "replies": [],
+        "card": null,
+        "status": "open",
+        "escalation_question_id": null,
+        "requirement": null,
+        "reply_draft": "我会进一步核对适用方案。",
+        "escalate_note": "（模拟）客户反馈莱赛尔布水洗掉色，当前无直接推荐，请查历史案例。",
+        "reuse": null
+      },
+      "questions": [
+        {
+          "id": "q:fixture:escalate_need:session:sess:fixture-reuse",
+          "family": "escalate_need",
+          "title": "是否转产品经理 Agent",
+          "object_id": "session:sess:fixture-reuse",
+          "owner_role": "sales",
+          "owner_id": "sales:S01",
+          "signer_role": "sales",
+          "signer_id": "sales:S01",
+          "prepared_at": "2026-10-11T09:03:00+08:00",
+          "template_id": "escalate_need",
+          "status": "open",
+          "p_need": 1.0,
+          "urgency": null,
+          "scored_by": "rule",
+          "discoverer": "jue_proto",
+          "evidence": [
+            {
+              "summary": "（模拟）当前没有适用的直接推荐。",
+              "event_ids": [],
+              "quote": ""
+            }
+          ],
+          "refs": {
+            "session_id": "sess:fixture-reuse",
+            "sales_id": "sales:S01"
+          },
+          "bounty_points": 0,
+          "dedup_key": "escalate_need:session:sess:fixture-reuse",
+          "created_at": "2026-10-11T09:02:00+08:00",
+          "resolved_at": null,
+          "resolution": null
+        }
+      ]
+    },
+    "pending": {
+      "label": "现成产品等待研发审定",
+      "session": {
+        "session_id": "sess:fixture-reuse",
+        "viewer": "sales:S01",
+        "viewer_level": 1,
+        "turns": [
+          {
+            "id": "turn:sess:fixture-reuse:1",
+            "session_id": "sess:fixture-reuse",
+            "n": 1,
+            "speaker": "customer",
+            "text": "（模拟）这批布洗了掉色。",
+            "ts": "2026-10-11T09:00:00+08:00"
+          },
+          {
+            "id": "turn:sess:fixture-reuse:2",
+            "session_id": "sess:fixture-reuse",
+            "n": 2,
+            "speaker": "sales",
+            "text": "请问是什么面料？",
+            "ts": "2026-10-11T09:01:00+08:00"
+          },
+          {
+            "id": "turn:sess:fixture-reuse:3",
+            "session_id": "sess:fixture-reuse",
+            "n": 3,
+            "speaker": "customer",
+            "text": "（模拟）莱赛尔布，希望水洗后不掉色。",
+            "ts": "2026-10-11T09:02:00+08:00"
+          }
+        ],
+        "slots": [
+          {
+            "slot": "fiber",
+            "value": "莱赛尔",
+            "status": "filled",
+            "confidence": 1.0,
+            "quote": "莱赛尔布",
+            "turn_id": "turn:sess:fixture-reuse:3"
+          }
+        ],
+        "hints": [],
+        "replies": [],
+        "card": null,
+        "status": "escalated",
+        "escalation_question_id": "q:fixture:escalate_need:session:sess:fixture-reuse",
+        "requirement": null,
+        "reply_draft": "",
+        "escalate_note": "（模拟）客户反馈莱赛尔布水洗掉色，当前无直接推荐，请查历史案例。",
+        "reuse": {
+          "requirement_id": "req:fixture-reuse",
+          "product_id": "HY-FX301",
+          "product_name": "无醛固色剂 HY-FX301（模拟）",
+          "usage": "",
+          "customer_note": "",
+          "basis": [],
+          "status": "pending"
+        }
+      },
+      "questions": []
+    },
+    "adopted": {
+      "label": "研发审定后转给业务员",
+      "session": {
+        "session_id": "sess:fixture-reuse",
+        "viewer": "sales:S01",
+        "viewer_level": 1,
+        "turns": [
+          {
+            "id": "turn:sess:fixture-reuse:1",
+            "session_id": "sess:fixture-reuse",
+            "n": 1,
+            "speaker": "customer",
+            "text": "（模拟）这批布洗了掉色。",
+            "ts": "2026-10-11T09:00:00+08:00"
+          },
+          {
+            "id": "turn:sess:fixture-reuse:2",
+            "session_id": "sess:fixture-reuse",
+            "n": 2,
+            "speaker": "sales",
+            "text": "请问是什么面料？",
+            "ts": "2026-10-11T09:01:00+08:00"
+          },
+          {
+            "id": "turn:sess:fixture-reuse:3",
+            "session_id": "sess:fixture-reuse",
+            "n": 3,
+            "speaker": "customer",
+            "text": "（模拟）莱赛尔布，希望水洗后不掉色。",
+            "ts": "2026-10-11T09:02:00+08:00"
+          }
+        ],
+        "slots": [
+          {
+            "slot": "fiber",
+            "value": "莱赛尔",
+            "status": "filled",
+            "confidence": 1.0,
+            "quote": "莱赛尔布",
+            "turn_id": "turn:sess:fixture-reuse:3"
+          }
+        ],
+        "hints": [],
+        "replies": [],
+        "card": {
+          "session_id": "sess:fixture-reuse",
+          "viewer": "sales:S01",
+          "product_id": "HY-FX301",
+          "version": "product_usage",
+          "sections": [
+            {
+              "title": "产品说明",
+              "text": "（模拟）改善水洗牢度。",
+              "ku_id": "ku:sheet:HY-FX301",
+              "level": 1
+            },
+            {
+              "title": "用法",
+              "text": "（模拟）1–3 % o.w.f.，皂洗后 40–50 ℃ 固色 20 分钟。",
+              "ku_id": "ku:usage:HY-FX301",
+              "level": 1
+            }
+          ],
+          "note": "（模拟）研发 R02 审定：（模拟）可试用此产品改善水洗掉色，先按推荐用量做小样确认。"
+        },
+        "status": "recommended",
+        "escalation_question_id": "q:fixture:escalate_need:session:sess:fixture-reuse",
+        "requirement": null,
+        "reply_draft": "（模拟）可试用此产品改善水洗掉色，先按推荐用量做小样确认。",
+        "escalate_note": "（模拟）客户反馈莱赛尔布水洗掉色，当前无直接推荐，请查历史案例。",
+        "reuse": {
+          "requirement_id": "req:fixture-reuse",
+          "product_id": "HY-FX301",
+          "product_name": "无醛固色剂 HY-FX301（模拟）",
+          "usage": "（模拟）1–3 % o.w.f.，皂洗后 40–50 ℃ 固色 20 分钟。",
+          "customer_note": "（模拟）可试用此产品改善水洗掉色，先按推荐用量做小样确认。",
+          "basis": [
+            "产品经理 P01 · 历史案例 · L2"
+          ],
+          "status": "adopted"
+        }
+      },
+      "questions": []
+    }
+  }
+}
