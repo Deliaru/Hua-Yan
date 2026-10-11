@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"match_translations-1791720599498312873-1479","name":"match_translations","arguments":{"phenomenon":"color_unlevel","text":"颜色不匀"}}],"usage":{"input_tokens":4515,"output_tokens":29},"latency_ms":4545.385099998384,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

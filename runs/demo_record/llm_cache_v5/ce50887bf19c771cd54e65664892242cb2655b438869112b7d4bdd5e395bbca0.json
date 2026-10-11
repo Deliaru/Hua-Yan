@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791720678594504853-1495","name":"search_knowledge","arguments":{"kind":"translation","query":"气流 锦纶氨纶 低浴比 匀染"}}],"usage":{"input_tokens":6601,"output_tokens":34},"latency_ms":3330.383799999254,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

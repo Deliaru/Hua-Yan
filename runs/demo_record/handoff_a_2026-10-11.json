@@ -1,0 +1,33 @@
+{
+  "record_run": "run-1a432a62f626",
+  "reason": "运行器默认 focus 与界面当前会话对齐",
+  "mainline_and_d17_complete": true,
+  "signatures": 11,
+  "llm_meter_rows": 86,
+  "llm_cache_hits": 14,
+  "new_llm_requests": 72,
+  "onejev_meter_rows": 3,
+  "onejev_cache_hits": 3,
+  "new_onejev_requests": 0,
+  "failed_requests": 0,
+  "cost": null,
+  "cost_note": "单价未配置；缓存计量不视为新增费用",
+  "full_replay_current_record": "尚未执行；旧版 run-d749989c1ef5 的通过结果不能代替本版本",
+  "ui_current_cache_verified": [
+    "研发待接单 → 回问待答",
+    "回问待答 → 封存待签"
+  ],
+  "ui_previous_record_only": [
+    "封存待签 → 发布 → 新客户命中",
+    "现成产品审定 → 业务员发送"
+  ],
+  "live_edit": {
+    "run_id": "run-9537b5b0afc6",
+    "result": "pH 答复改为约 5.2 后真实抽取与研发重起草成功",
+    "llm_meter_rows": 53,
+    "gateway_cache_hits": 52,
+    "new_llm_requests": 1
+  },
+  "pytest": "11 passed",
+  "paused_by_user": true
+}

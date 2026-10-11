@@ -96,7 +96,7 @@ class Mainline:
         self.call("POST", "turn", session_id=self.sessions[body["session"]], speaker="sales", text=text)
 
     def chat(self, body):
-        focus = body.get("focus")
+        focus = body.get("focus", body.get("session"))
         if focus:
             alias, separator, rest = focus.partition("/")
             focus = {**self.sessions, **self.requirements}[alias] + separator + rest

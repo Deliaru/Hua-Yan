@@ -1,0 +1,722 @@
+[
+  {
+    "url": "http://127.0.0.1:8767/api/meta",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/demo/checkpoints",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/report?name=distortion",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/report?name=week",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/demo/load",
+    "status": 200,
+    "method": "POST",
+    "body": "{\"name\":\"支线·现成产品待审定\"}"
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/meta",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/demo/checkpoints",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/report?name=distortion",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/report?name=week",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=supervisor%3AM01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/session?id=sess%3A2&viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/pending?actor=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=sales%3AS01&session_id=sess%3A2",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=sales%3AS01&session_id=sess%3A2",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/pending?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=supervisor%3AM01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/pending?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/timeline?target_id=req%3A3&viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/reuse-note",
+    "status": 200,
+    "method": "POST",
+    "body": "{\"req_id\":\"req:3\",\"text\":\"适用于明显改善涤纶浸染后整理手感发硬问题，赋予织物柔软手感；建议先做小样确认效果，整理时推荐用量 1–2 % o.w.f.。\",\"by\":\"rd:R02\"}"
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=supervisor%3AM01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/pending?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/timeline?target_id=req%3A3&viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/reuse/adopt",
+    "status": 200,
+    "method": "POST",
+    "body": "{\"req_id\":\"req:3\",\"by\":\"rd:R02\"}"
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=supervisor%3AM01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/pending?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/timeline?target_id=req%3A3&viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=supervisor%3AM01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/session?id=sess%3A4&viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/pending?actor=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=sales%3AS02&session_id=sess%3A4",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=sales%3AS02&session_id=sess%3A4",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/chat",
+    "status": 200,
+    "method": "POST",
+    "body": "{\"actor\":\"sales:S02\",\"text\":\"研发确认了现成产品，帮我回一句告诉客户\",\"session_id\":\"sess:4\",\"focus\":\"sess:4\"}"
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=supervisor%3AM01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/pending?actor=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=sales%3AS02&session_id=sess%3A4",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/session?id=sess%3A4&viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=sales%3AS02&session_id=sess%3A4",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/turn",
+    "status": 200,
+    "method": "POST",
+    "body": "{\"session_id\":\"sess:4\",\"speaker\":\"sales\",\"text\":\"我们和研发确认过了，推荐您使用柔软剂 HY-SF520。该产品能有效改善涤纶浸染后整理手感发硬的问题，带来柔软手感；整理时推荐用量为 1–2 % o.w.f.，建议您可以先做个小样确认效果，有需要随时沟通！\"}"
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirements?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=rd%3AR02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=supervisor%3AM01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/pending?actor=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=sales%3AS02&session_id=sess%3A4",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/sessions",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/session?id=sess%3A4&viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/agents/conversation?actor=sales%3AS02&session_id=sess%3A4",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/questions?viewer=sales%3AS02",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  },
+  {
+    "url": "http://127.0.0.1:8767/api/requirement?id=req%3A3&viewer=rd%3AR01",
+    "status": 200,
+    "method": "GET",
+    "body": null
+  }
+]
