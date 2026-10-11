@@ -594,9 +594,28 @@ class HuayanApp:
             self.kb.freeze(q.refs["actor_id"], by, get_clock().now())
         return self._settle(question_id, Resolution(action=action, by=by, note=note)).model_copy(deep=True)
 
+    def questions(self, viewer_id):
+        viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
+        if self.kb.is_frozen(viewer.id):
+            raise PermissionDenied("高层级访问已冻结")
+        return [q.model_copy(deep=True) for q in self.bus.list()
+                if viewer_id in (q.owner_id, q.signer_id)]
+
+    def mark_prepared(self, question_id, by):
+        """由 hub 在主人准备完毕后调用；只标待签，不签字、不推进业务。"""
+        actor = self._actor(by, {"sales", "pm", "rd", "supervisor"})
+        if self.kb.is_frozen(actor.id):
+            raise PermissionDenied("高层级访问已冻结")
+        question = _find(self.bus.questions, question_id, "问题")
+        if question.owner_id != by:
+            raise PermissionDenied("只有问题主人能标记准备完成")
+        if question.status != "open" or question.signer_role is None:
+            raise ValueError("只有待处理的签字问题能标记准备完成")
+        return self.bus.set_prepared(question_id, get_clock().now()).model_copy(deep=True)
+
     def _ask_back(self, req, at):
         need = self._sessions[req.session_ids[0]].need
-        state = requirement_state(req, need, self.seeds, self.kb, at)
+        state = requirement_state(req, need, self.seeds, self.kb, at, self.events)
         out = self._propose(self.jue_realtime, state)
         refs = {oid: {"session_id": need.session_id, "sales_id": need.sales_id} for oid in state.objects}
         # 回问和实时追问一样是「问不问客户」：Jue-K 输出校准概率，用同一个 ask_jue_k 阈值

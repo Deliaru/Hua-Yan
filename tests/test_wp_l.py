@@ -5,7 +5,7 @@ import yaml
 
 from huayan.app import HuayanApp
 from huayan.clock import get_clock
-from huayan.contracts import PointsDraft, ReqItem, Requirement, SheetDraft
+from huayan.contracts import PointsDraft, Question, ReqItem, Requirement, SheetDraft
 from huayan.knowledge import PermissionDenied
 
 
@@ -52,3 +52,18 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     assert proposed.pending_action_id and not req.public_points
     with pytest.raises(PermissionDenied):
         hub.approve(proposed.pending_action_id, "rd:R02")
+
+    # 手工待处理问题只验准备权限：主人准备，签字人查看；准备不等于签字。
+    q = app.bus.publish(Question(id="", family="release", template_id="release", title="审定发布",
+        object_id=f"requirement:{req.id}", owner_role="pm", owner_id="pm:agent",
+        signer_role="rd", signer_id="rd:R01", scored_by="rule", discoverer="jue_proto",
+        dedup_key=f"release:{req.id}", created_at=get_clock().now()))
+    assert [x.id for x in app.questions("pm:agent")] == [q.id]
+    assert [x.id for x in app.questions("rd:R01")] == [q.id]
+    assert not app.questions("rd:R02")
+    with pytest.raises(PermissionDenied):
+        app.mark_prepared(q.id, "rd:R01")
+    prepared = app.mark_prepared(q.id, "pm:agent")
+    assert prepared.prepared_at == get_clock().now() and prepared.status == "open"
+    assert req.status == "rd_confirmed" and prepared.resolution is None
+    assert app.events.query(["question_prepared"])[-1].actor == "pm:agent"
