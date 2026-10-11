@@ -6,6 +6,7 @@ import { ACTION, REQ_STATUS, Side, hhmm, useApp, useData, useLabels } from "../c
 import type { AgentMessage, CitedKnowledge, LeakHit, Question, ReqItem, RequirementView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
+import { useGlow } from "../components/Guide";
 import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead } from "../components/ui";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
@@ -132,6 +133,7 @@ function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode })
   const L = useLabels();
   const req = view.requirement;
   const t = useData(() => api.timeline(req.id, me), [req.id, me]);
+  const glowTrial = useGlow("trial");
   const ended = ({ reused: "已复用现成产品，没有立项", merged: "已并入另一张单", rejected: "已失效" } as Record<string, string>)[req.status];
   const nodes = (t?.nodes ?? []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
   // 需求单视图里没有试样状态：试样通过后觉会提出「客户评价」，以此判断试样已录入
@@ -172,7 +174,7 @@ function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode })
               <span className="h-[18px] w-[18px] shrink-0 rounded-full shadow-[inset_0_0_0_1.5px_rgba(60,60,67,.25)]" />
               <span className="w-[92px] shrink-0 text-[14px] font-semibold">试样</span>
               <span className="min-w-0 flex-1 text-[12.5px] text-ink-2">不经过觉：研发在实验室做试样，演示里用按钮模拟实验室系统回传结果</span>
-              <Act kind="plain" label="试样通过" run={() => api.trial(req.id, "pass", me)} />
+              <Act kind="plain" label="试样通过" glow={glowTrial} run={() => api.trial(req.id, "pass", me)} />
               <Act kind="quiet" label="不通过" run={() => api.trial(req.id, "fail", me)} />
             </div>
           )}
@@ -212,6 +214,16 @@ function RequirementSheet({ view, notes, selectItem }: { view: RequirementView; 
   return (
     <section className="flex flex-col gap-6">
       <SheetNotes reqId={req.id} notes={notes} />
+      {/* 放出与封存紧跟签字区：审定发布时要拿说明书对照这两栏 */}
+      {(req.public_points || !!req.sealed.length) && (
+        <div className="grid grid-cols-2 gap-4">
+          <Group title="已放出的对外要点"><div className="row text-[14px] leading-[21px]">{req.public_points || "—"}</div></Group>
+          <Group title="已封存（只有研发可见）">
+            {req.sealed.map((s) => <div key={s} className="row text-[14px]">{s}</div>)}
+            {!req.sealed.length && <div className="row text-[13px] text-ink-2">无</div>}
+          </Group>
+        </div>
+      )}
       <div>
         <div className="group-title flex items-baseline justify-between">
           <span>化学要点 · L3</span>
@@ -232,15 +244,6 @@ function RequirementSheet({ view, notes, selectItem }: { view: RequirementView; 
           {!points.length && <p className="px-5 py-4 text-[13px] text-ink-2">接单后由你的 Agent 起草化学要点。</p>}
         </div>
       </div>
-      {(req.public_points || !!req.sealed.length) && (
-        <div className="grid grid-cols-2 gap-4">
-          <Group title="已放出的对外要点"><div className="row text-[14px] leading-[21px]">{req.public_points || "—"}</div></Group>
-          <Group title="已封存（只有研发可见）">
-            {req.sealed.map((s) => <div key={s} className="row text-[14px]">{s}</div>)}
-            {!req.sealed.length && <div className="row text-[13px] text-ink-2">无</div>}
-          </Group>
-        </div>
-      )}
     </section>
   );
 }
@@ -347,6 +350,7 @@ function ReqContext({ view }: { view: RequirementView }) {
 export function SignArea({ q, view }: { q: Question; view: RequirementView | null }) {
   const { me } = useApp();
   const L = useLabels();
+  const glow = useGlow(`sign:${q.family}`);
   const dismiss = <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />;
   const head = (
     <div className="row attn-edge">
@@ -374,15 +378,49 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
       case "reuse_product": return <ReuseReview q={q} view={view!} dismiss={dismiss} />;
       case "opportunity": return <MergeReview q={q} view={view!} dismiss={dismiss} />;
       case "accept_requirement": return <AcceptReview reqId={req.id} dismiss={dismiss} evidence={evidence} />;
-      case "confirm_translation":
-        return <>{evidence}<div className="row gap-2"><Act label="确认转译" run={() => api.confirm(req.id, me)} />{dismiss}</div></>;
+      case "confirm_translation": return <ConfirmReview view={view!} dismiss={dismiss} />;
       case "contribution": return <ContributionReview view={view!} dismiss={dismiss} />;
       case "seal_points": return <PointsReview view={view!} dismiss={dismiss} />;
       case "release": case "seal_leak": return <SheetReview view={view!} release={q.family === "release"} dismiss={dismiss} />;
       default: return <>{evidence}<div className="row">{dismiss}</div></>;
     }
   })();
-  return <Group title="待你签字">{head}{body}</Group>;
+  return <Group title="待你签字" className={glow ? "guide-scope" : ""}>{head}{body}</Group>;
+}
+
+// 确认化学要点（confirm_translation）：签的是「下方化学要点就是研发要做的事」；这里说清转了什么、依据谁、还缺什么
+function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: React.ReactNode }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const req = view.requirement;
+  const cited = Object.fromEntries(view.cited.map((c) => [c.ku_id, c]));
+  const points = req.chem_lang.filter((it) => !isCond(it));
+  const owners = [...new Set(points.flatMap((it) => it.ku_refs.map((r) => cited[r]?.owner).filter(Boolean)))] as string[];
+  const edited = points.filter((it) => it.edited_by != null).length;
+  const known = Object.entries(req.known_slots);
+  return (
+    <>
+      <div className="row !items-start flex-col !gap-1">
+        <p className="text-[14px] font-semibold">化言已经为您辅助理解了客户的需求，请您确认</p>
+        <p className="text-[13px] leading-5 text-ink-2">
+          客户要的归结为下面 {points.length} 条化学要点{owners.length ? `，依据 ${owners.map(L.name).join("、")} 的转化知识` : ""}{edited ? `；您已改过 ${edited} 条` : ""}。
+        </p>
+      </div>
+      {points.map((it, n) => (
+        <div key={n} className="row !items-start text-[13px] leading-5">
+          <span className="num w-5 shrink-0 text-ink-3">{n + 1}</span>
+          <span className="min-w-0 flex-1 truncate">{splitArrow(it.text).body}</span>
+        </div>
+      ))}
+      {!!known.length && <div className="row text-[13px] text-ink-2">已知条件：{known.map(([s, v]) => `${L.slot(s)} ${v}`).join("；")}</div>}
+      <div className="row !items-start">
+        <div className="flex flex-1 flex-col gap-2">
+          <p className="text-[13px] text-ink-2">每条的来历（客户原话）在下方「化学要点 · L3」，理解有偏差可以直接「修改」。确认后按这几条安排试样。</p>
+          <div className="flex flex-wrap gap-2"><Act label="确认" run={() => api.confirm(req.id, me)} />{dismiss}</div>
+        </div>
+      </div>
+    </>
+  );
 }
 
 function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: React.ReactNode; evidence: React.ReactNode }) {
@@ -541,6 +579,15 @@ function SheetReview({ view, release, dismiss }: { view: RequirementView; releas
   const changed = sheet !== s.sheet || usage !== s.usage;
   return (
     <>
+      {release && (
+        <div className="row !items-start flex-col !gap-1">
+          <p className="text-[14px] font-semibold">新品 {L.product(req.product_id)} 要上架了：下面是给业务员和客户看的说明书，请您把关</p>
+          <p className="text-[13px] leading-5 text-ink-2">
+            产品经理 Agent 只用您在「封存 / 放出」里放出的对外要点（紧接下方，与封存项并排）包装，读不到化学要点和封存项。请看两件事：有没有说出不该对外的（机理、配方、您封存的工艺），
+            业务员照着讲客户能不能听懂；不对就直接改、保存。点「审定发布」后新品上架，同类客户在业务员那里会直接被推荐它，客户看到的就是这段话。
+          </p>
+        </div>
+      )}
       <div className="row !items-start">
         <span className="w-14 shrink-0 text-[13px] text-ink-2">说明书</span>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">

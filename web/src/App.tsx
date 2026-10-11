@@ -15,7 +15,7 @@ import { Layers } from "./pages/Layers";
 import { Eval } from "./pages/Eval";
 import { Ledger } from "./pages/Ledger";
 import { Overview } from "./pages/Overview";
-import { Guide } from "./components/Guide";
+import { Guide, useGuide } from "./components/Guide";
 
 const PAGES = [
   ["overview", "架构总览", NavArch],
@@ -44,6 +44,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [side, setSide] = useState<HTMLElement | null>(null);
+  const guide = useGuide();
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
   useEffect(() => { api.meta().then(setMeta, fail); }, []);
@@ -72,7 +73,8 @@ export default function App() {
           <StatusMenu s={meta.status} />
           <CheckpointMenu onLoad={(name) => restart(`正在载入检查点「${name}」……`, api.loadCheckpoint(name))} />
           <Popover align="right" trigger={(toggle) => (
-            <button onClick={toggle} className="flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill">
+            <button onClick={toggle} className={`flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill ${
+              page === "desk" && guide.who && guide.who !== actor.id ? "glow" : ""}`}>
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#8e8e93] text-[11px] font-semibold text-white">
                 {ROLE_NAME[actor.role][0]}
               </span>
@@ -84,14 +86,16 @@ export default function App() {
               <div key={r}>
                 <p className="px-2.5 pb-0.5 pt-1.5 text-[12px] text-ink-2">{ROLE_NAME[r]}</p>
                 {people.filter((a) => a.role === r).map((a) => (
-                  <button key={a.id} className="menu-item" onClick={() => { setMe(a.id); close(); }}>
+                  <button key={a.id} className={`menu-item ${a.id === guide.who && a.id !== actor.id ? "font-semibold text-accent" : ""}`} onClick={() => { setMe(a.id); close(); }}>
                     <span className="w-3">{a.id === actor.id ? "✓" : ""}</span><Name id={a.id} />
                   </button>
                 ))}
               </div>
             ))}
           </Popover>
-          <button className="icon-btn" title="新开一轮" onClick={() => restart("正在开启新一轮……", api.reset())}><Refresh /></button>
+          <button className="btn btn-plain gap-1.5" title="清空所有会话与需求单，从头开始"
+                  onClick={() => confirm("重置进度：清空所有客户会话、需求单和签字记录，从头开始。确定吗？") && restart("正在重置进度……", api.reset())}>
+            <Refresh />重置进度</button>
         </div>
       </header>
 

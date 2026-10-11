@@ -5,6 +5,7 @@ web/dist 存在时同时提供构建后的前端页面。"""
 import importlib.util
 import json
 import os
+import traceback
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -79,9 +80,9 @@ def demo_actions():
 def next_line(app, p):
     session = next(s for s in app.sessions() if s.id == p["session"])
     actions = demo_actions()
-    aliases = [a["start"]["session"] for a in actions if "start" in a
-               and a["start"]["customer"] == session.customer_id and a["start"]["sales"] == session.sales_id]
-    matching = [s.id for s in app.sessions() if s.customer_id == session.customer_id and s.sales_id == session.sales_id]
+    # 台词按客户定位（不管是哪位业务员接待），试用者切错业务员也能取到下一句
+    aliases = [a["start"]["session"] for a in actions if "start" in a and a["start"]["customer"] == session.customer_id]
+    matching = [s.id for s in app.sessions() if s.customer_id == session.customer_id]
     index = matching.index(session.id)
     if index >= len(aliases):
         return {"text": None}
@@ -221,6 +222,9 @@ class Handler(SimpleHTTPRequestHandler):
             status, body = 400, {"error": str(e)}
         except (KeyError, StopIteration) as e:
             status, body = 404, {"error": f"不存在：{e}"}
+        except Exception as e:                          # 模型服务、网络等意外错误原样报给界面，不断开连接
+            traceback.print_exc()
+            status, body = 500, {"error": f"服务出错：{type(e).__name__}: {e}"}
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")

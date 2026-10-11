@@ -91,8 +91,8 @@ export function Disclosure({ label, children, initial = false }: { label: React.
 
 // 签字按钮：直接调门面原子方法；门面拒绝时把它给的原因显示在按钮旁，不在前端自己算可签条件。
 // done：成功后按钮换成这句话（用于签字后对象状态不在本人视图里的动作，如申请解密）
-export function Act({ label, run, kind = "primary", disabled, done }: {
-  label: string; run: () => Promise<unknown>; kind?: "primary" | "plain" | "quiet" | "chip"; disabled?: boolean; done?: string;
+export function Act({ label, run, kind = "primary", disabled, done, glow }: {
+  label: string; run: () => Promise<unknown>; kind?: "primary" | "plain" | "quiet" | "chip"; disabled?: boolean; done?: string; glow?: boolean;
 }) {
   const { refresh } = useApp();
   const [busy, setBusy] = useState(false);
@@ -106,7 +106,7 @@ export function Act({ label, run, kind = "primary", disabled, done }: {
   if (ok && done) return <span className="text-[12px] text-ink-2">{done}</span>;
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <button type="button" disabled={busy || disabled} onClick={go} className={kind === "chip" ? "chip" : `btn btn-${kind}`}>{busy ? "处理中……" : label}</button>
+      <button type="button" disabled={busy || disabled} onClick={go} className={`${kind === "chip" ? "chip" : `btn btn-${kind}`} ${glow ? "glow" : ""}`}>{busy ? "处理中……" : label}</button>
       {err && <span role="alert" className="text-[12px] text-danger">{err}</span>}
     </span>
   );

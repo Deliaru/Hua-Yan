@@ -26,7 +26,7 @@ export function Side({ children }: { children: React.ReactNode }) {
 // ── 显示用标签：界面上不出现内部 id 与枚举 ─────────────────
 export const FAMILY: Record<string, string> = {
   ask_slot: "追问", escalate_need: "推荐还是升级", reuse_product: "现成产品审定", opportunity: "机会汇聚",
-  accept_requirement: "接单", ask_back: "回问", distortion: "转译失真", confirm_translation: "确认转译",
+  accept_requirement: "接单", ask_back: "回问", distortion: "转译失真", confirm_translation: "确认化学要点",
   contribution: "沉淀", market_eval: "客户评价", seal_points: "封存 / 放出", seal_leak: "说明书泄密",
   release: "发布审定", knowledge_conflict: "知识冲突", leak_risk: "拼凑风险", decrypt_request: "解密申请",
 };
@@ -39,7 +39,7 @@ export const PREPARING: Record<string, string> = {
 };
 export const REQ_STATUS: Record<string, string> = {
   draft: "产品经理 Agent 起草中", reused: "已复用现成产品", merged: "已并入另一张单", rd_accepted: "研发已接单",
-  rd_confirmed: "研发已确认转译", released: "已发布", rejected: "已失效",
+  rd_confirmed: "研发已确认化学要点", released: "已发布", rejected: "已失效",
 };
 export const SESSION_STATUS: Record<string, string> = { open: "进行中", recommended: "已推荐", escalated: "已转产品经理 Agent" };
 export const ACTION: Record<string, string> = {
@@ -75,6 +75,7 @@ export function useLabels() {
     leak: (s: string) => LEAK_SOURCE[s] ?? s,
     // 模板标题、证据里的对象 id 换成人话（铁律：界面不暴露内部 id）
     scrub: (text: string) => text
+      .replace("转译可以确认了吗", "化学要点（L3）可以确认了吗")   // 模板标题进 Agent 提示词（改了会让录制缓存失效），只在显示处改说法
       .replace(/(需求单\s*)?(?:requirement:)?req:[\w-]+/g, "需求单")
       .replace(/\s*(?:ku:)?(?:case|tr|translation):[\w:-]+/g, "")
       .replace(/slot:(?:sess:)?[\w-]+\/(\w+)/g, (_, s) => slot(s))
