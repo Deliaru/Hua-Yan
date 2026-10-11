@@ -790,7 +790,7 @@ class HuayanApp:
             unit = self.kb._units[ref]
             readable = unit.level <= level_of(viewer)
             cited.append(CitedKnowledge(ku_id=ref, owner=unit.owner, level=unit.level,
-                title=unit.title if readable else f"研发 {unit.owner} 的转化知识（L3）",
+                title=unit.title if readable else f"{self.actors[unit.owner].name}的知识（L{unit.level}，仅显示归属）",
                 text=unit.text if readable else None,
                 n_cited=sum(e.reason == "cited" and e.ku_id == ref for e in self.ledger.list())))
         quote_refs = {ref for item in req.product_lang + req.chem_lang for ref in item.quote_refs}
@@ -907,7 +907,8 @@ class HuayanApp:
             if not entries:
                 continue
             result.append(ContributionStat(owner=unit.owner, ku_id=unit.id, level=unit.level,
-                title=unit.title if unit.level <= level_of(viewer) else f"研发 {unit.owner} 的转化知识",
+                title=unit.title if unit.level <= level_of(viewer) else
+                    f"{self.actors[unit.owner].name}的知识（L{unit.level}，仅显示归属）",
                 n_cited=sum(e.reason == "cited" for e in entries), points=sum(e.points for e in entries),
                 used_by=sorted({e.ref for e in entries})))
         return result
