@@ -2,13 +2,15 @@ import json
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
+
 from huayan.bus import QuestionBus
-from huayan.contracts import NeedState, Requirement, ReuseProposal, Session
+from huayan.contracts import NeedState, Requirement, ReuseProposal, ScoredDecision, Session
 from huayan.events import EventLog
 from huayan.jev.system1 import MockSystem1Client
 from huayan.jue.expr import evaluate
 from huayan.jue.proto import JueProto, load_templates
-from huayan.jue.publish import ask_hints
+from huayan.jue.publish import ask_hints, publish
 from huayan.jue.scan import scan
 from huayan.jue.state import requirement_state, session_state
 from huayan.knowledge import AuditLog, KnowledgeBase
@@ -25,6 +27,8 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     events, t0 = EventLog(), sim_clock.now()
     def escalate(i, cust, ph, known):
         ts = t0 + timedelta(hours=5 * i)
+        events.append("requirement_created", "sales:S01", {"requirement_id": f"req:{i}", "question_id": f"q:x{i}",
+            "phenomenon": ph, "session_ids": [f"sess:{i}"], "assigned_rd": "rd:R01"}, ts=ts)
         events.append("escalate", "sales:S01", {"question_id": f"q:x{i}", "requirement_id": f"req:{i}",
             "phenomenon": ph, "known": known, "customer_id": cust, "p_none": 0.8},
             session_id=f"sess:{i}", ts=ts)
@@ -46,9 +50,10 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     model = JueProto(TEMPLATES, system1, "scheduled", meter)
     at = t0 + timedelta(days=2)
     published = scan(events, at, model, mini_seeds, mini_seeds.products, load_templates(TEMPLATES), bus, 0.5)
-    assert [(q.family, q.object_id, q.owner_role, q.scored_by) for q in published] == [
-        ("opportunity", TARGET, "pm", "rule")]
+    assert [(q.family, q.object_id, q.owner_id, q.signer_id, q.scored_by) for q in published] == [
+        ("opportunity", TARGET, "pm:agent", "rd:R01", "rule")]
     assert published[0].refs["session_ids"] == "sess:0,sess:1,sess:2,sess:3"
+    assert published[0].refs["requirement_ids"] == "req:0,req:1,req:2,req:3"
     assert scan(events, at, model, mini_seeds, mini_seeds.products, load_templates(TEMPLATES), bus, 0.5) == []
 
     need = NeedState(session_id="sess:20", customer_id="customer:C01", sales_id="sales:S01", phenomenon="color_unlevel")
@@ -87,6 +92,20 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     assert due() == []
     req.status = "rd_accepted"
     assert due() == ["confirm_translation"]
+
+    # 发布：需求单问题按解析表填主人与签字人；引用未加载 family 的决策被拒
+    state = requirement_state(req, need, mini_seeds, kb, t0, EventLog())
+    out = JueProto(TEMPLATES, system1, "realtime", meter).propose(state)
+    refs = {oid: {"session_id": need.session_id, "sales_id": need.sales_id, "assigned_rd": req.assigned_rd}
+            for oid in state.objects}
+    [q] = [q for q in publish(out, state, templates, bus, 0.5, seeds=mini_seeds, refs=refs)
+           if q.object_id == "requirement:req:1"]
+    assert (q.family, q.owner_id, q.signer_id, q.refs["requirement_id"]) == (
+        "confirm_translation", "rd:R01", "rd:R01", "req:1")
+    rogue = out.model_copy(update={"decisions": [ScoredDecision(family="approve_project", object_id="requirement:req:1",
+                                                                p_need=1.0)]})
+    with pytest.raises(ValueError):
+        publish(rogue, state, templates, bus, 0.5, seeds=mini_seeds, refs=refs)
 
     # 觉零大模型调用：计量里只有 jue 记录，且觉的源码不引用网关
     assert {json.loads(line)["kind"] for line in meter.path.read_text(encoding="utf-8").splitlines()} == {"jue"}

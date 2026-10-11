@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
 from huayan.contracts import (AskHint, Evidence, JueObject, JueOutput, JueState, JueTemplate, NeedState, Product,
-                              Question, Seeds)
+                              Question, ScoredDecision, Seeds)
 from huayan.jue.state import realtime_state
 
 
@@ -39,15 +39,29 @@ def _summary(family: str, a: dict) -> str:
                 f"其中 {a['n_fail_product']} 次原因为产品本身")
     if family == "ask_back":
         return f"第 {a['layer']} 层转译中，该信息有 {a['trans_splits']} 种取值会改变引用的转化知识，客户尚未说明"
-    return (f"检索 {a['n_queries']} 次，被拦截的高层级命中 {a['n_blocked']} 条，"
-            f"最集中的产品占 {a['blocked_top_share']:.0%}，涉及 {a['n_distinct_products']} 个产品")
+    if family == "leak_risk":
+        return (f"检索 {a['n_queries']} 次，被拦截的高层级命中 {a['n_blocked']} 条，"
+                f"最集中的产品占 {a['blocked_top_share']:.0%}，涉及 {a['n_distinct_products']} 个产品")
+    if family == "escalate_need":
+        return f"最近一次匹配中「都不合适」概率 {a['p_none']:.2f}，高于最好的候选产品 {a['p_top']:.2f}；已了解 {a['n_filled']} 项信息"
+    if family == "distortion":
+        return f"本层有 {a['n_unmapped_constraints']} 项上层约束未承接，{a['n_unquoted_items']} 条条目缺少客户原话"
+    if family == "seal_leak":
+        return f"说明书与用法中有 {a['n_leak_hits']} 句命中封存项、L3 术语或研发方向假设"
+    if family == "contribution":
+        return f"研发修改过、未被已有转化知识覆盖的条目 {a['n_edited_uncovered']} 条"
+    return "上一步已签字、本步未签（规则到点）"
 
 
 def _label(obj: JueObject, seeds: Seeds | None) -> str:
     """给人看的对象名；没有种子时用 object_id。"""
+    a = obj.attrs
+    if obj.object_type == "requirement":
+        return f"需求单 {obj.object_id.removeprefix('requirement:')}"
+    if obj.object_type == "session":
+        return f"会话 {obj.object_id.removeprefix('session:')}"
     if seeds is None:
         return obj.object_id
-    a = obj.attrs
     if obj.object_type == "slot":
         return next(s.label for s in seeds.slots if s.id == a["slot"])
     if obj.object_type == "theme":
@@ -60,11 +74,49 @@ def _label(obj: JueObject, seeds: Seeds | None) -> str:
     return next((f"{x.name}（{x.id}）" for x in seeds.actors if x.id == actor), actor)
 
 
+def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None) -> str | None:
+    """契约 5.4 解析表：角色 × 对象 → 具体的人。"""
+    if role is None:
+        return None
+    if role == "pm":
+        return "pm:agent"
+    if role == "sales":
+        return ref["sales_id"]
+    if role == "supervisor":
+        return min(a.id for a in seeds.actors if a.role == "supervisor")
+    if obj.object_type == "knowledge":
+        return next((p.owner for p in seeds.products if p.id == obj.attrs["product_id"]), None)
+    return ref["assigned_rd"]      # requirement / slot（第 2、3 层）/ theme（机会汇聚，C14）
+
+
+def _refs(d: ScoredDecision, ref: dict) -> dict[str, str]:
+    """门面传入的引用（列表用逗号连接，event_ids 进证据）+ 由对象 id 得到的引用。"""
+    q_refs = {k: ",".join(v) if isinstance(v, list) else v for k, v in ref.items()
+              if k != "event_ids" and v not in (None, [])}
+    kind, _, rest = d.object_id.partition(":")
+    if kind == "requirement":
+        q_refs["requirement_id"] = rest
+    elif kind == "session":
+        q_refs["session_id"] = rest
+    elif kind == "slot" and d.family == "ask_back":
+        q_refs["requirement_id"], q_refs["slot"] = rest.rsplit("/", 1)
+    elif kind == "knowledge":
+        q_refs["product_id"] = rest.split("|", 1)[0]
+    elif kind == "actor":
+        q_refs["actor_id"] = rest
+    return q_refs
+
+
 def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], bus: QuestionBus, threshold: float,
             *, seeds: Seeds | None = None, refs: dict[str, dict] | None = None) -> list[Question]:
-    """seeds 用于给人看的标题与知识冲突的 owner_id（产品归属研发）。
-    refs：定时对象来自 collect_scheduled（event_ids、session_ids）；回问对象为 {session_id, sales_id}（见 scan_requirement）。"""
-    owners = {p.id: p.owner for p in seeds.products} if seeds else {}
+    """所有非 ask_slot 的组合 p_need ≥ threshold 即生成问题，不区分实时 / 定时。
+    refs：每个对象由门面传入解析主人与签字人所需的 id（sales_id、assigned_rd）与要带进问题的引用
+    （session_id、requirement_ids 等）；定时对象另有 collect_scheduled 的 event_ids、session_ids。
+    seeds 用于给人看的标题、知识冲突的归属研发与主管。"""
+    catalog = {t.family for t in templates.values()}
+    unknown = {d.family for d in out.decisions} - catalog
+    if unknown:
+        raise ValueError(f"决策目录中没有这些 family：{sorted(unknown)}")
     existing = {q.id for q in bus.list(status=None)}
     published = []
     for d in out.decisions:
@@ -72,22 +124,15 @@ def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], 
             continue
         t, obj = templates[d.template_id], state.objects[d.object_id]
         ref = (refs or {}).get(d.object_id, {})
-        q_refs = {"session_ids": ",".join(ref["session_ids"])} if ref.get("session_ids") else {}
-        owner_id = None
-        if d.family == "knowledge_conflict":
-            q_refs["product_id"] = obj.attrs["product_id"]
-            owner_id = owners.get(obj.attrs["product_id"])
-        elif d.family == "leak_risk":
-            q_refs["actor_id"] = d.object_id.removeprefix("actor:")
-        elif d.family == "ask_back":
-            req_id, slot = d.object_id.removeprefix("slot:").rsplit("/", 1)
-            q_refs = {"session_id": ref["session_id"], "requirement_id": req_id, "slot": slot}
-            owner_id = ref["sales_id"]
+        owner_role = "rd" if d.family == "distortion" and obj.attrs["layer"] == 3 else t.owner_role
         q = bus.publish(Question(
-            id="", family=d.family, title=t.title.format(object=_label(obj, seeds), attrs=SimpleNamespace(**obj.attrs)), object_id=d.object_id, owner_role=t.owner_role,
-            owner_id=owner_id, p_need=d.p_need, urgency=d.urgency, scored_by=out.scored_by, discoverer=out.model,
+            id="", family=d.family, title=t.title.format(object=_label(obj, seeds), attrs=SimpleNamespace(**obj.attrs)),
+            object_id=d.object_id, owner_role=owner_role, owner_id=_resolve(owner_role, obj, ref, seeds),
+            signer_role=t.signer_role, signer_id=_resolve(t.signer_role, obj, ref, seeds), template_id=t.id,
+            p_need=d.p_need, urgency=d.urgency, scored_by=d.scored_by or out.scored_by, discoverer=out.model,
             evidence=[Evidence(summary=_summary(d.family, obj.attrs), event_ids=ref.get("event_ids", []))],
-            refs=q_refs, bounty_points=t.bounty_points, dedup_key=f"{d.family}:{d.object_id}", created_at=out.at))
+            refs=_refs(d, ref), bounty_points=t.bounty_points, dedup_key=f"{d.family}:{d.object_id}",
+            created_at=out.at))
         if q.id and q.id not in existing:   # 合并进已有问题或被抑制的不算新发布
             published.append(q)
     return published

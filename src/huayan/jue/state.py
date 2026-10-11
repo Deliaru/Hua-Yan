@@ -165,8 +165,8 @@ def scheduled_state(events: EventLog, at: datetime, seeds: Seeds, products: list
 
 
 def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: list[Product],
-                      windows: dict | None = None) -> tuple[JueState, dict[str, dict[str, list[str]]]]:
-    """返回状态，以及每个对象的引用（event_ids、session_ids），供发布层写证据。"""
+                      windows: dict | None = None) -> tuple[JueState, dict[str, dict]]:
+    """返回状态，以及每个对象的引用（event_ids、session_ids；主题另有 requirement_ids、assigned_rd），供发布层写证据与解析签字人。"""
     w = {**WINDOWS, **(windows or {})}
     objects, refs = {}, {}
     for obj, ref in [*_themes(events, at, seeds, at - timedelta(days=w["theme_days"])),
@@ -178,12 +178,14 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
 
 def _themes(events, at, seeds, since):
     # 立项、合并、发布不限窗口；复用状态取最后一次决定。
-    history = events.query(["escalate", "recommend", "reuse_proposed", "reuse_declined", "reuse_adopted",
-                            "requirement_accepted", "requirements_merged", "product_released"], until=at)
-    req_theme, handled, reuse_closed, projects = {}, {}, set(), set()
+    history = events.query(["requirement_created", "escalate", "recommend", "reuse_proposed", "reuse_declined",
+                            "reuse_adopted", "requirement_accepted", "requirements_merged", "product_released"], until=at)
+    req_theme, req_rd, handled, reuse_closed, projects = {}, {}, {}, set(), set()
     for e in history:
         p = e.payload
-        if e.kind == "escalate":
+        if e.kind == "requirement_created":
+            req_rd[p["requirement_id"]] = p["assigned_rd"]
+        elif e.kind == "escalate":
             req_theme[p["requirement_id"]] = theme_id(p["phenomenon"], p["known"], seeds)
         elif e.kind == "reuse_proposed":
             (reuse_closed.add if p["product_id"] is None else reuse_closed.discard)(p["requirement_id"])
@@ -218,7 +220,10 @@ def _themes(events, at, seeds, since):
             "n_matched": len(evs) - len(esc), "days_active": len({e.ts.date() for e in evs}),
             "open_project": key in open_themes,
             "mean_p_none": sum(e.payload["p_none"] for e in esc) / len(esc) if esc else 0.0,
-        }), {"event_ids": [e.id for e in esc], "session_ids": sorted({e.session_id for e in esc if e.session_id})}
+        }), {"event_ids": [e.id for e in esc], "session_ids": sorted({e.session_id for e in esc if e.session_id}),
+             # 机会汇聚的候选单 = 计入 n_escalations 的单（C14）；签字研发取最早一张的研发
+             "requirement_ids": [e.payload["requirement_id"] for e in esc],
+             "assigned_rd": req_rd[esc[0].payload["requirement_id"]] if esc else None}
 
 
 def _knowledge(events, at, products, since):
