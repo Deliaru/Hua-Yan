@@ -1,4 +1,4 @@
-"""契约 ⑥：问题总线。同 dedup_key 合并，dismiss 后抑制，每次变化追加快照。"""
+"""契约 ⑥：问题总线。同 dedup_key 合并，dismiss 后抑制，每次变化追加快照；v5 增加 set_prepared。"""
 import builtins
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -33,7 +33,8 @@ class QuestionBus:
         q = q.model_copy(update={"id": f"q:{len(self.questions) + 1}"})
         self.questions[q.id] = q
         self.events.append("question_published", q.discoverer,
-                           {"question_id": q.id, "family": q.family, "object_id": q.object_id},
+                           {"question_id": q.id, "family": q.family, "object_id": q.object_id,
+                            "template_id": q.template_id},
                            session_id=q.refs.get("session_id"), ts=q.created_at)
         self._snapshot(q)
         return q
@@ -53,7 +54,18 @@ class QuestionBus:
         q.resolution, q.resolved_at = resolution, at
         self.events.append("question_resolved", resolution.by,
                            {"question_id": q.id, "family": q.family, "object_id": q.object_id,
-                            "action": resolution.action},
+                            "template_id": q.template_id, "action": resolution.action, "by": resolution.by},
                            session_id=q.refs.get("session_id"), ts=at)
+        self._snapshot(q)
+        return q
+
+    def set_prepared(self, qid: str, at: datetime | None) -> Question:
+        # 契约签名没有 by：准备完成的就是主人
+        q = self.questions[qid]
+        q.prepared_at = at
+        if at is not None:
+            by = q.owner_id or q.owner_role
+            self.events.append("question_prepared", by, {"question_id": q.id, "family": q.family, "by": by},
+                               session_id=q.refs.get("session_id"), ts=at)
         self._snapshot(q)
         return q
