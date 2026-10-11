@@ -1,5 +1,27 @@
 # 工作包总览
 
+## v5（当前，2026-10-11）
+
+> 依据 `REPLAN-v5.md`（第 7 节时间表与检查点）。开工前先读 `AGENTS.md` → `REPLAN-v5.md` → `docs/CONTRACTS.md` → 自己的工作包。下文 v4 及以前的内容只作历史参考，与 REPLAN 冲突处一律以 REPLAN 为准。
+
+| 包 | 内容 | 负责 | 时段 | 依赖 | 分支 |
+|---|---|---|---|---|---|
+| [WP-0v5](WP-0v5.md) | 契约 v5 差异（v5.3 已在 main）；总线 `set_prepared` 已补齐 | 人 | T+0～4 | REPLAN 第 5 节 | `main` |
+| [WP-J](WP-J-jue-catalog.md) | 觉：决策目录、会话与需求单对象、发布；基线模板迁移；处置关联与目录飞轮；按新语义重跑业务周、新 Jue-K | B | T+4～16（第 1 步 T+8 前合入） | WP-0v5；第 3、4 步依赖 WP-C | `dev/b` |
+| [WP-C](WP-C-facade-loop.md) | 门面：统一循环、签字方法、`leak_hits`；产品经理 Agent 与 Agent 协作；接口样例 | A | T+4～16（第 0、1 步先交付） | WP-0v5、WP-J 第 1 步 | `dev/a` |
+| [WP-U2](WP-U2-workbench.md) | 前端：业务员与研发工作面、Agent 协作栏、签字按钮、觉视图、单卡对照页 | 前端 Agent | T+0～16 用样例，T+16～24 接真实接口 | WP-C 接口样例、WP-E2 单卡样例 | `dev/u` |
+| [WP-E2](WP-E2-single-card.md) | 单卡对照样例与数据接口；按新语义重跑失真对照；阶段 2（T+16 决定） | B | 第 1 步 T+8 前，第 2 步 T+12～16 | WP-C 第 1 步、WP-J 第 8 项 | `dev/b` |
+| [WP-I2](WP-I2-integration.md) | 集成：新主线台词、沿界面路径录制与回放、检查点载入 | A + B | T+16～24 | 以上 | `main` |
+| [WP-D2](WP-D2-demo.md) | 演示脚本、README、提交前检查、排练 | B + 人 | T+24～30 | WP-I2 | `main` |
+
+被替代：WP-U 后半 → WP-U2；WP-D 与 `docs/DEMO.md` → WP-D2；`demo/mainline.yaml` 由 WP-I2 重写。其余 v4 包（WP-0、S、A1～A3、B1～B3、T、L、E、U、I）已完成，只作历史参考。
+
+检查点：**T+4** 规格与契约冻结、打 `v4-final`；**T+16** 打通「升级 → 接单 → 确认 → 评价 → 封存 → 发布」，决定阶段 2 与可砍项；**T+24** 功能冻结。
+
+---
+
+## v4 及以前（历史）
+
 > 目标：**8 小时内产出第一版可演示 Demo**，两人并行（A、B），每人用编程 Agent 执行工作包。
 > 开工前先读 `AGENTS.md`、`docs/CONTRACTS.md`，再读自己的工作包。愿景和架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`。
 >
