@@ -21,7 +21,7 @@
 
 ## 允许修改的范围
 
-`src/huayan/jue/`、`config/templates/`、`src/huayan/sim/`、`src/huayan/eval/week.py`、`src/huayan/eval/catalog.py`（新）、`scripts/make_jue_k_data.py`、`scripts/train_jue_k.py`、`scripts/eval_jue_k.py`、`scripts/run_week.py`、`scripts/catalog_stats.py`（新）、`models/jue_k/`、`data/week/`、`tests/test_wp_b1.py`、`tests/test_wp_b2.py`、`tests/test_wp_b3.py`、`docs/JUE_K_TRAINING.md`、`docs/reports/`
+`src/huayan/jue/`、`config/templates/`、`src/huayan/sim/`、`src/huayan/eval/week.py`、`src/huayan/eval/catalog.py`（新）、`web/src/fixtures/single_card.json`（WP-E2 的单卡对照样例，只此一个文件）、`scripts/make_jue_k_data.py`、`scripts/train_jue_k.py`、`scripts/eval_jue_k.py`、`scripts/run_week.py`、`scripts/catalog_stats.py`（新）、`models/jue_k/`、`data/week/`、`tests/test_wp_b1.py`、`tests/test_wp_b2.py`、`tests/test_wp_b3.py`、`docs/JUE_K_TRAINING.md`、`docs/reports/`
 
 不改：`app.py`、`agent/`、`l1/`、`escalation/`、`ui/`、`web/`、契约。
 
@@ -35,7 +35,7 @@
 - `requirement_state(req, need, seeds, kb, at, events) -> JueState`：签名按契约（增加 `events`）；除原有 slot 对象外，**总是**产出一个 `requirement:<id>` 对象，属性按 5.2 的 requirement 表，加上 v5.1 的 `reuse_checked`、`reuse_pending`、`reuse_declined`；`status` 为 `released` / `rejected` / `reused` / `merged` 的需求单不构建。
   - `n_leak_hits` = `leak_hits(sheet.sheet + "\n" + sheet.usage, req.sealed, req.hypotheses, kb)` 的**去重句序号数**，没有说明书时为 0。
   - `n_unmapped_constraints`、`n_unquoted_items`、`n_edited_uncovered` 按契约 5.2 的定义算，只算计数，不放文本。
-- 主题对象（定时）：`open_project` 改为「该主题有 `rd_accepted` / `rd_confirmed` 的需求单且未发布」，由 `requirement_accepted` 与 `product_released` 事件算（`requirement_confirmed` 已删除）；`n_escalations` 只统计 `escalate` 事件（业务员签字后才写），**所在需求单后来被 `reuse_adopted` 的升级不计入**（现成产品已解决，不是未满足的需求）；`requirements_merged` 事件与立项一样计为该主题的「已处理」时刻（沿用现有 `handled` 机制），合并后不会再次到点。主题 id 一律用 `theme_id()`，门面给机会汇聚填候选需求单（`requirement_ids`）时也调它。
+- 主题对象（定时）：`open_project` 改为「该主题有 `rd_accepted` / `rd_confirmed` 的需求单且未发布」，由 `requirement_accepted` 与 `product_released` 事件算（`requirement_confirmed` 已删除）；`n_escalations` 只统计 `escalate` 事件（业务员签字后才写），且**只计复用检查已关闭且没有现成产品的那些**：所在需求单有 `product_id` 为空的 `reuse_proposed`，或有 `reuse_declined`；复用还没查完的、被 `reuse_adopted` 的都不计入（第二位客户升级后，要等产品经理 Agent 查完现成产品，机会汇聚才可能到点，否则会在复用卡前抢先提出）；`requirements_merged` 事件与立项一样计为该主题的「已处理」时刻（沿用现有 `handled` 机制），合并后不会再次到点。主题 id 一律用 `theme_id()`，门面给机会汇聚填候选需求单（`requirement_ids`）时也调它。
 
 **2. 模板 `config/templates/`**（每个 family 一个文件；新增 10 个，原 5 个只核对 `kind` / `signer_role`）
 
@@ -67,8 +67,11 @@
 **4. 打分来源 `jue/proto.py`、`jue/jue_k.py`**
 
 - 10 个新模板一律规则打分（前置条件到点），不走 Jue-K，也不走 OneJev（概率未校准，REPLAN 4.7）。
-- 五类有样本的决策按第 8 项新训练的 Jue-K 打分；在新模型就位前，`JueK.propose` 对它没覆盖的 family 回落到原型规则。同一次输出里**逐条**填 `ScoredDecision.scored_by`。
-- `JueProto` 只对原有的 `knowledge_conflict`、`leak_risk`、`opportunity` 在 OneJev 可用时用 OneJev 打分。
+- 两种模式，由配置 `realtime_model` / `scheduled_model` 选：
+  - **`jue_k`（演示与模拟周用这个）**：五类有样本的决策按第 8 项新训练的 Jue-K 打分；新模型没覆盖或评估输给规则的 family **回落到规则打分，不回落到 OneJev**。这个模式下觉不发出任何大模型或 OneJev 调用。
+  - `jue_proto`（对照与降级）：`JueProto` 对原有的 `knowledge_conflict`、`leak_risk`、`opportunity` 在 OneJev 可用时用 OneJev 打分，其余规则；状态条标「觉：原型」。
+  - 同一次输出里**逐条**填 `ScoredDecision.scored_by`。
+- 觉视图底部的 `n_llm_calls` 由门面统计计量中 caller 以 `jue` 开头、`kind` 不是 `jue` 的记录（网关调用与 OneJev 调用都算）：`jue_k` 模式下为 0，`jue_proto` + OneJev 时如实显示次数。不改契约。
 - 读取函数 `jue/records.py: load_records(run_dir) -> list[JueRecord]` 也放在这一步交付（WP-C 的觉视图要用）。
 
 ### 第 2 步（T+8～12）：处置关联与目录飞轮的数据
@@ -77,7 +80,7 @@
 
 **6. 目录飞轮统计 `eval/catalog.py` + `scripts/catalog_stats.py`**
 
-- 按模板统计：提出次数、签字（`sign` / `accept`）、退回、`dismiss`（被忽略；机会汇聚中「产品经理 Agent 判断不是同一件事后被 dismiss」单列，不算觉提多了）、异常类自动关闭数、被忽略率；**只对 Jue-K 打分的决策**给阈值建议（被忽略率高于 0.5 时建议上调到使被忽略率减半的阈值，按 JueRecord 中的 `p_need` 回放算）。
+- 按模板统计：提出次数、签字（`sign` / `accept`）、退回、`dismiss`（被忽略；机会汇聚中「产品经理 Agent 判断不是同一件事后被 dismiss」单列，不算觉提多了）、异常类自动关闭数、被忽略率；定时三类另按注入清单算误报率。**只报计数与比率，不给阈值建议**（模拟周的处置是脚本定的，按它调阈值是循环论证）。
 - `human_decision` 事件按「动作 × 对象类型」计数，列出每组的属性快照均值。**不做聚类、不生成候选模板**（第 3 阶段，只写进材料）。
 - 输出 `runs/<run_id>/catalog_stats.json` 与一页 `docs/reports/catalog_stats.md`。
 
@@ -93,12 +96,16 @@
 - 删除 `_handle` 里的 `approve_project`、`confirm_requirement` 调用；立项 ≡ 研发接单。
 - 起草与「无现成产品」都由门面的 hub 离线路径完成（WP-C），本包不写起草逻辑，也不另记复用结果。
 
-**8. 训练新的 Jue-K（D20）**：不沿用旧模型与旧数字，五类全部按 v5 语义重新生成样本、训练、评估。
+**8. 训练新的 Jue-K（D20）**（第 4 项 `jue_k` 模式的模型来源）：不沿用旧模型与旧数字，五类全部按 v5 语义重新生成样本、训练、评估。
 - 实时两类（追问、回问）：`sim/trajectory.py` 改走 v5 链路（业务员签字升级 → 空单 → 产品经理 Agent 起草 L2 → 研发接单 → 起草 L3），**回问样本取 L2、L3 起草时的需求单状态**，标签沿用「补上真实值后本层转化对照的命中是否改变」；
 - 定时三类（机会汇聚、知识冲突、拼凑）：用第 7 项重跑的模拟业务周事件生成样本；
 - 评估：每类 AUC、Brier、ECE，与规则打分在同一组合上对比；**新模型赢的用模型，输的回落规则**，结论写进 `docs/JUE_K_TRAINING.md`；阈值按类校准（回问不再借用追问的阈值）；
 - 重跑 w1，在文档与报告里**替换**旧的「3/3 命中、0/4 误报」，新数字是多少写多少；做不完则材料中不再引用 w1 数字（REPLAN 7.2 可砍清单最后一项）。
 - 新增的推进类不训练；失真、对外泄密的注入与标签属于阶段 2。
+
+### 附：WP-E2 单卡对照样例（B，T+8 前）
+
+前端的单卡对照页（WP-U2 第 4 项）要一份真实数据开发。B 在 T+8 前用现有失真对照（`run_distortion.py`）真实跑一张需求卡，导出 `web/src/fixtures/single_card.json`：卡 id 与「（模拟）」标注；逐轮对话（发言人、原话）；左栏一次性翻译的 L3 条目与研发是否退回；右栏化言每轮觉的追问概率（`p_need`、阈值、`scored_by`）、最终 L3 条目与研发是否退回；底部 60 张卡三组统计（取已有报告的数字）。字段说明贴在汇报里，前端按它开发；WP-E2 的接口做好后结构不变。
 
 ## 验收
 
@@ -113,4 +120,4 @@
 
 ## 不做
 
-写后触发与问题处置（WP-C）；草稿与起草逻辑（WP-C）；觉视图的接口与界面（WP-C、WP-U2）；决策目录的自动挖掘与候选模板生成；停滞、解密时机等第二档决策（T+16 决定）；单卡对照数据（WP-E2）；新增测试文件。
+写后触发与问题处置（WP-C）；草稿与起草逻辑（WP-C）；觉视图的接口与界面（WP-C、WP-U2）；决策目录的自动挖掘与候选模板生成；停滞、解密时机等第二档决策（T+16 决定）；单卡对照的数据接口（WP-E2，样例除外）；新增测试文件。
