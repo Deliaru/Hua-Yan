@@ -62,7 +62,8 @@ def _translate(sources: list[ReqItem], kb: KnowledgeBase, actor: Actor, phenomen
         for h in hits:
             item = items.setdefault(h.ku.id, ReqItem(text=f"『{h.ku.title}』→ {_term(h.ku)}", ku_refs=[h.ku.id]))
             item.quote_refs += [q for q in src.quote_refs if q not in item.quote_refs]
-        if not hits:
+        # 条件即使命中化学译文也须保留，供后续核对上层约束是否被承接。
+        if not hits or src.slot:
             rest.append(src if src.slot else ReqItem(text="未转译：" + src.text.removeprefix("未转译："), quote_refs=src.quote_refs))
     return list(items.values()) + rest
 

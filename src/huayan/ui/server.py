@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 from pydantic import BaseModel
 
 from huayan.app import HuayanApp
+from huayan.contracts import ReqItem, SheetDraft, Trial
 from huayan.knowledge import PermissionDenied
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
@@ -63,10 +64,6 @@ def session(p):
                                  if q.refs.get("session_id") == p["id"] and q.status != "open"]}
 
 
-def questions(p):
-    return [q for q in app.bus.list(owner_role=p["role"]) if q.owner_id in (None, p["viewer"])]
-
-
 def report(p):
     name = p["name"]
     if name == "single_card":                         # 单卡明细按查看者裁剪，由门面决定（WP-E2）
@@ -86,34 +83,17 @@ def offline_mainline(_):
     return {"ok": True}
 
 
-def turn(p):
-    # 离线模式直接录入发言；和 chat 一样之后 tick，问题队列与回问才会更新
-    session = app.add_turn(p["session_id"], p["speaker"], p["text"])
-    app.tick()
-    return session
-
-
-def chat(p):
-    conv = app.agents.chat(p["actor"], p["text"], p.get("session_id"))
-    app.tick()
-    return conv
-
-
-def decide(p, approve: bool):
-    action = (app.agents.approve(p["action_id"], p["by"]) if approve
-              else app.agents.reject(p["action_id"], p["by"], p.get("note", "")))
-    app.tick()
-    return action
-
-
 GET = {
+    "/api/status": lambda p: app.status(),
     "/api/meta": meta,
     "/api/sessions": sessions,
     "/api/session": session,
-    "/api/questions": questions,
+    "/api/questions": lambda p: app.questions(p["viewer"]),
     "/api/requirements": lambda p: [{"id": r.id, "status": r.status, "phenomenon": r.phenomenon}
                                     for r in app.requirements(p["viewer"])],
     "/api/requirement": lambda p: app.requirement_view(p["id"], p["viewer"]),
+    "/api/leak": lambda p: app.leak_check(p["id"], p["viewer"]),
+    "/api/timeline": lambda p: app.jue_timeline(p["target_id"], p["viewer"]),
     "/api/ledger": lambda p: app.ledger.totals(),
     "/api/contributions": lambda p: app.contributions(p["viewer"]),
     "/api/report": report,
@@ -126,10 +106,32 @@ POST = {
     "/api/reset": reset,
     "/api/offline-mainline": offline_mainline,
     "/api/sessions": lambda p: app.start_session(p["customer_id"], p["sales_id"]),
-    "/api/turn": turn,
-    "/api/agents/chat": chat,
-    "/api/agents/approve": lambda p: decide(p, True),
-    "/api/agents/reject": lambda p: decide(p, False),
+    "/api/turn": lambda p: app.add_turn(p["session_id"], p["speaker"], p["text"]),
+    "/api/recommend": lambda p: app.recommend_now(p["session_id"]),
+    "/api/resolve": lambda p: app.resolve(p["question_id"], p["action"], p["by"], p.get("note", "")),
+    "/api/escalate": lambda p: app.escalate(p["session_id"], p["by"]),
+    "/api/reuse/adopt": lambda p: app.adopt_reuse(p["req_id"], p["by"]),
+    "/api/reuse/decline": lambda p: app.decline_reuse(p["req_id"], p["reason"], p["by"]),
+    "/api/reuse-note": lambda p: app.update_reuse_note(p["req_id"], p["text"], p["by"]),
+    "/api/merge": lambda p: app.merge_requirements(p["question_id"], p["by"]),
+    "/api/accept": lambda p: app.accept_requirement(p["req_id"], p["by"]),
+    "/api/return": lambda p: app.return_requirement(p["req_id"], p["reason"], p["by"]),
+    "/api/req-item": lambda p: app.edit_req_item(p["req_id"], p["index"], ReqItem.model_validate(p["item"]), p["by"]),
+    "/api/confirm": lambda p: app.confirm_translation(p["req_id"], p["by"]),
+    "/api/contribute": lambda p: app.contribute_translation(p["req_id"], p["item_index"],
+        p["scene_phrase"], p["chem_term"], p["by"]),
+    "/api/market-eval": lambda p: app.record_market_eval(p["req_id"], p["result"], p["note"], p["by"]),
+    "/api/points": lambda p: app.set_public_points(p["req_id"], p["text"], p["sealed"], p["by"]),
+    "/api/sheet": lambda p: app.save_sheet(p["req_id"], SheetDraft.model_validate(p["sheet"]), p["by"]),
+    "/api/release": lambda p: app.release_product(p["req_id"], p["by"]),
+    "/api/trial": lambda p: app.record_trial(Trial.model_validate(p["trial"])),
+    "/api/decrypt/request": lambda p: app.request_decrypt(p["session_id"], p["by"]),
+    "/api/decrypt/decide": lambda p: app.decide_decrypt(p["question_id"], p["by"], p["approve"], p.get("text", "")),
+    "/api/reply-draft": lambda p: app.save_reply_draft(p["session_id"], p["text"], p["by"]),
+    "/api/escalate-note": lambda p: app.save_escalate_note(p["session_id"], p["text"], p["by"]),
+    "/api/agents/chat": lambda p: app.agents.chat(p["actor"], p["text"], p.get("session_id"), focus=p.get("focus")),
+    "/api/agents/approve": lambda p: app.agents.approve(p["action_id"], p["by"]),
+    "/api/agents/reject": lambda p: app.agents.reject(p["action_id"], p["by"], p.get("note", "")),
 }
 
 
@@ -142,7 +144,10 @@ class Handler(SimpleHTTPRequestHandler):
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
             with lock:
-                status, body = 200, dump(routes[url.path](params))
+                result = routes[url.path](params)
+                if routes is POST:
+                    app.tick()
+                status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
         except ValueError as e:

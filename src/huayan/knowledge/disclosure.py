@@ -43,6 +43,9 @@ def render(product_id: str, version: Version, viewer: Actor, kb: KnowledgeBase, 
         decrypted = unit.kind == "mechanism" and unit.decryptable and allowed == "full_mechanism"
         if unit.level > level_of(viewer) and not decrypted:
             raise PermissionDenied("卡片包含超出查看者权限的知识")
+    grant = next((g for g in reversed(valid_grants) if g.customer_id == customer_id and g.product_id == product_id), None)
     return RecommendationCard(session_id=session_id, viewer=viewer.id, product_id=product_id,
-        version=version, sections=[CardSection(title=u.title, text=u.text, ku_id=u.id, level=u.level) for u in units],
+        version=version, sections=[CardSection(title=u.title,
+            text=grant.text if level_of(viewer) == 1 and u.kind == "mechanism" and grant and grant.text else u.text,
+            ku_id=u.id, level=u.level) for u in units],
         note="机理已经研发审批解密" if level_of(viewer) == 1 and version == "full_mechanism" else "")

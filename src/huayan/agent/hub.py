@@ -1,11 +1,9 @@
 """契约 ⑭：AgentHub。管理每个人的助手对话、确认卡（PendingAction）、派单与执行轨迹；HuayanApp.agents。"""
-from collections import Counter
-
 from huayan.clock import get_clock
 from huayan.contracts import AgentMessage, AgentStep, Conversation, PendingAction, ToolResult
 from huayan.knowledge import PermissionDenied
 
-from .loop import run_turn
+from .loop import OUT_OF_STEPS, run_turn
 from .tools import TOOLS, ToolContext
 
 OFFLINE = "助手需要大模型（当前离线）。"
@@ -17,7 +15,7 @@ class AgentHub:
         self._conversations: dict[str, Conversation] = {}
         self._pending: dict[str, PendingAction] = {}
         self._steps: list[AgentStep] = []
-        self._dispatched: set[str] = set()
+        self._dispatched: set[tuple[str, int]] = set()
 
     # ---- 对话 ----
 
@@ -31,9 +29,11 @@ class AgentHub:
             self.app.view_session(session_id, actor_id)      # 由门面校验会话归属：只能绑定自己参与的会话
         return ToolContext(self.app, actor, f"conv:{actor_id}:{session_id or 'inbox'}", session_id)
 
-    def chat(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation:
+    def chat(self, actor_id: str, text: str, session_id: str | None = None,
+             focus: str | None = None) -> Conversation:
         ctx = self.context(actor_id, session_id)
-        return self._respond(ctx, AgentMessage(role="principal", text=text, at=get_clock().now()))
+        ctx.focus = focus
+        return self._respond(ctx, AgentMessage(role="principal", text=text, at=get_clock().now(), target=focus))
 
     def notify(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation:
         ctx = self.context(actor_id, session_id)
@@ -43,7 +43,7 @@ class AgentHub:
         conv = self._conversation(ctx)
         conv.messages.append(message)
         if self.app.config["gateway_mock"]:
-            conv.messages.append(AgentMessage(role="system", text=OFFLINE, at=get_clock().now()))
+            conv.messages.append(AgentMessage(role="system", text=OFFLINE, at=get_clock().now(), target=ctx.focus))
         else:
             conv.messages += run_turn(conv, ctx, self, self.app.gateway)
         self._save(conv)
@@ -60,7 +60,11 @@ class AgentHub:
             return ToolResult(ok=False, error=f"你的委托人没有工具 {name}")
         spec, fn = TOOLS[name]
         if spec.kind != "effect":
-            return _run(fn, ctx, spec.params, args)
+            self.app._agent_drafting = spec.kind == "draft"
+            try:
+                return _run(fn, ctx, spec.params, args)
+            finally:
+                self.app._agent_drafting = False
         try:
             params = spec.params.model_validate(args).model_dump()
         except ValueError as exc:
@@ -85,8 +89,6 @@ class AgentHub:
         action.result = _run(fn, ToolContext(self.app, self.app.actors[by], conv.id, conv.session_id), spec.params, action.args)
         outcome = "已执行" if action.result.ok else f"执行失败：{action.result.error}"
         self._close(action, conv, f"{by} 已确认：{action.summary}。{outcome}")
-        if action.result.ok:
-            self._hand_over(action, action.result.data)
         return action.model_copy(deep=True)
 
     def reject(self, action_id: str, by: str, note: str = "") -> PendingAction:
@@ -110,43 +112,68 @@ class AgentHub:
         self.app.events.append("agent_action_decided", action.principal, {"action_id": action.id, "tool": action.tool,
                                "principal": action.principal, "status": action.status}, session_id=conv.session_id)
 
-    def _hand_over(self, action: PendingAction, data: dict) -> None:
-        """确认后派单（契约 ⑭，写死）。"""
-        name = self.app.actors[action.principal].name
-        if action.tool == "confirm_requirement":
-            self.notify(self._translator(data["phenomenon"]),
-                        f"{name} 已确认需求单 {data['req_id']} 的产品需求（现象 {data['phenomenon']}），请起草化学语言需求单。")
-        elif action.tool == "set_public_points":
-            req = self.app.requirement_view(data["req_id"], action.principal).requirement
-            self.notify(req.pm_confirmed_by, f"{name} 已确认需求单 {req.id} 的对外要点，请生成 L1 说明书并发布。")
-        elif action.tool == "request_decrypt":
-            self._dispatched.add(data["question_id"])
-            self.notify(data["owner_id"], f"{name} 为客户申请了解密（问题 {data['question_id']}），请审批。")
-
-    def _translator(self, phenomenon: str) -> str:
-        """该现象 L3 转化对照条数最多的研发，并列取 id 最小。"""
-        reader = next(a for a in self.app.actors.values() if a.role == "rd")
-        counts = Counter(u.owner for u in self.app.kb.list(reader, kinds=["translation"], phenomenon=phenomenon)
-                         if u.level == 3)
-        return min(counts, key=lambda owner: (-counts[owner], owner))
-
     # ---- 派单 ----
 
     def dispatch(self) -> list[Conversation]:
-        """同一次派单里同一个人（同一会话）的新问题合成一条通知，助手一轮看全再处理。"""
-        batches: dict[tuple[str, str | None], list] = {}
-        for q in self.app.bus.list(status="open"):
-            if q.id in self._dispatched or q.owner_role not in ("sales", "pm", "rd"):
-                continue
-            owner = q.owner_id or min(a.id for a in self.app.actors.values() if a.role == q.owner_role)
-            batches.setdefault((owner, q.refs.get("session_id") if q.owner_role == "sales" else None), []).append(q)
+        """只派觉已提出的问题；准备被撤回后，同一问题可再次起草。"""
         out = []
-        for (owner, session_id), questions in batches.items():
-            lines = [f"{q.id}（{q.family}）：{q.title}。证据：{'；'.join(e.summary for e in q.evidence) or '无'}"
-                     for q in questions]
-            out.append(self.notify(owner, f"新问题 {len(questions)} 个：\n" + "\n".join(lines), session_id))
-            self._dispatched.update(q.id for q in questions)   # 通知成功后才算派过；失败的下次 dispatch 再派
+        exhausted = set()
+        while True:
+            rounds = {}
+            for event in self.app.events.query(["question_prepared"]):
+                qid = event.payload["question_id"]
+                rounds[qid] = rounds.get(qid, 0) + 1
+            pending = [q for q in self.app.bus.list() if q.prepared_at is None
+                       and q.id not in exhausted
+                       and (q.owner_role in ("sales", "pm", "rd")
+                            or (self.app.config["gateway_mock"] and q.owner_role == "supervisor"))
+                       and (q.id, rounds.get(q.id, 0)) not in self._dispatched]
+            if not pending:
+                break
+            for q in pending:
+                if q.status != "open" or q.prepared_at is not None:
+                    continue
+                session_id = q.refs.get("session_id") if q.owner_role == "sales" else None
+                text = (f"{q.id}（{q.family}）：{q.title}。引用：{q.refs}。"
+                        f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。请为此问题准备草稿，不签字。")
+                if self.app.config["gateway_mock"]:
+                    text += "\n" + self._prepare_offline(q)
+                    ctx = ToolContext(self.app, self.app.actors[q.owner_id],
+                                      f"conv:{q.owner_id}:{session_id or 'inbox'}", session_id)
+                    conv = self._conversation(ctx)
+                    conv.messages.append(AgentMessage(role="system", text=text, at=get_clock().now(), target=q.object_id))
+                    self._save(conv)
+                    out.append(conv.model_copy(deep=True))
+                else:
+                    out.append(self.notify(q.owner_id, text, session_id))
+                    if out[-1].messages[-1].text == OUT_OF_STEPS:
+                        exhausted.add(q.id)
+                        continue  # 本轮不重试它，继续派其他问题；下次 dispatch 再试。
+                if q.status == "open" and q.signer_role is not None:
+                    self.app.mark_prepared(q.id, q.owner_id)
+                self._dispatched.add((q.id, rounds.get(q.id, 0)))
         return out
+
+    def _prepare_offline(self, q) -> str:
+        """WP-C 指定的离线骨架；只起草，签字仍由人调用门面。"""
+        if q.family == "accept_requirement":
+            self.app.draft_requirement(q.refs["requirement_id"], q.owner_id)
+        elif q.family == "confirm_translation":
+            self.app.translate_requirement(q.refs["requirement_id"], q.owner_id)
+        elif q.family == "release":
+            self.app.package_sheet(q.refs["requirement_id"], q.owner_id)
+        elif q.family == "reuse_product":
+            self.app.save_reuse_proposal(q.refs["requirement_id"], None, [], "",
+                                         "离线模式：未检索现成产品", q.owner_id)
+        elif q.family == "opportunity":
+            reqs = [self.app.requirement_view(rid, q.owner_id).requirement
+                    for rid in q.refs["requirement_ids"].split(",")]
+            reqs.sort(key=lambda req: req.created_at)
+            self.app.save_merge_proposal(q.id, reqs[0].id, [req.id for req in reqs[1:]],
+                                         "离线模式：按主题规则合并，未经产品经理 Agent 判断", q.owner_id)
+        else:
+            return "离线，无草稿。" if q.signer_role is not None else "离线，仅提示，不标记准备完成。"
+        return "离线模式：已由规则骨架起草，未经角色 Agent 判断。"
 
     # ---- 查询 ----
 
