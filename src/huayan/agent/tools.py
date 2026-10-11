@@ -124,6 +124,7 @@ def save_escalate_note(ctx: ToolContext, args: Text) -> ToolResult:
 def get_need_card(ctx: ToolContext, args: NoArgs) -> ToolResult:
     v = ctx.app.view_session(ctx.session_id, ctx.principal.id)
     return ToolResult(data={"status": v.status, "slots": [{"slot": f.slot, "value": f.value, "quote": f.quote} for f in v.slots],
+                            "turns": [{"turn_id": t.id, "speaker": t.speaker, "text": t.text} for t in v.turns],
                             "ask_hints": [h.ask_text for h in v.hints], "escalation_question_id": v.escalation_question_id,
                             "reply_draft": v.reply_draft, "escalate_note": v.escalate_note,
                             "reuse": v.reuse and v.reuse.model_dump(),
@@ -201,7 +202,7 @@ class ReuseArgs(BaseModel):
     note: str
 
 
-@tool("propose_reuse", "draft", ["pm"], "保存现成产品建议供研发审定；查无产品时 product_id 填 null，note 写检索结果", ReuseArgs)
+@tool("propose_reuse", "draft", ["pm"], "保存复用建议；ku_refs 仅限 L2 案例/转化知识。查无产品时 product_id=null、ku_refs=[]、customer_note为空，note 写检索结果", ReuseArgs)
 def propose_reuse(ctx: ToolContext, args: ReuseArgs) -> ToolResult:
     req = ctx.app.save_reuse_proposal(args.req_id, args.product_id, args.ku_refs,
                                      args.customer_note, args.note, ctx.principal.id)

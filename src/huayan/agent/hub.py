@@ -3,7 +3,7 @@ from huayan.clock import get_clock
 from huayan.contracts import AgentMessage, AgentStep, Conversation, PendingAction, ToolResult
 from huayan.knowledge import PermissionDenied
 
-from .loop import run_turn
+from .loop import OUT_OF_STEPS, run_turn
 from .tools import TOOLS, ToolContext
 
 OFFLINE = "助手需要大模型（当前离线）。"
@@ -140,6 +140,8 @@ class AgentHub:
                     out.append(conv.model_copy(deep=True))
                 else:
                     out.append(self.notify(q.owner_id, text, session_id))
+                    if out[-1].messages[-1].text == OUT_OF_STEPS:
+                        return out  # 本轮未完成，保留准备中；下次显式派单可继续。
                 if q.status == "open" and q.signer_role is not None:
                     self.app.mark_prepared(q.id, q.owner_id)
                 self._dispatched.add((q.id, rounds.get(q.id, 0)))
