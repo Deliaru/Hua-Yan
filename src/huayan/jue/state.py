@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from huayan.contracts import Actor, JueObject, JueState, NeedState, Phenomenon, Product, Requirement, Seeds, SlotDef
+from huayan.contracts import Actor, JueObject, JueState, NeedState, Phenomenon, Product, Requirement, Seeds, Session, SlotDef
 from huayan.domain import match_candidates
 from huayan.escalation.translate import match_translations
 from huayan.events import EventLog
@@ -20,6 +20,29 @@ _INTERNAL = Actor(id="system:jue", role="rd", name="觉（内部身份，只用�
 
 def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: datetime) -> JueState:
     return JueState(at=at, mode="realtime", objects=_slot_objects(need.session_id, need.known(), need, seeds, products, 1))
+
+
+def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
+    """会话快照应对应 at；事件只取该时刻之前的本会话记录，不由匹配结果推断已升级。"""
+    relevant = [e for e in events.query(["match", "decrypt_request"], until=at) if e.session_id == sess.id]
+    matches = sorted((e for e in relevant if e.kind == "match"), key=lambda e: e.ts)
+    match = matches[-1].payload if matches else None
+    p_none = match["p_none"] if match is not None else 0.0
+    p_top = max(match["p_choice"].values(), default=0.0) if match is not None else 0.0
+    need = sess.need
+    oid = f"session:{sess.id}"
+    obj = JueObject(object_id=oid, object_type="session", attrs={
+        "phenomenon": need.phenomenon or "unknown", "phenomenon_known": need.phenomenon is not None,
+        "turn": need.turn_count, "n_filled": len(need.known()),
+        "n_open_asks": len(sess.hints),  # hints 已由 select_asks 按阈值筛选
+        "matched": match is not None, "p_none": p_none, "p_top": p_top,
+        "n_candidates": len(match["candidate_ids"]) if match is not None else 0,
+        "top_is_none": match is not None and p_none >= p_top,
+        "recommended": sess.status == "recommended", "escalated": sess.status == "escalated",
+        "chem_savvy": need.profile.chem_savvy, "asked_mechanism": need.profile.asked_mechanism,
+        "decrypt_requested": any(e.kind == "decrypt_request" for e in relevant),
+    })
+    return JueState(at=at, mode="realtime", objects={oid: obj})
 
 
 def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase, at: datetime) -> JueState:

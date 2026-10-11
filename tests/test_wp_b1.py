@@ -3,12 +3,13 @@ from datetime import timedelta
 from pathlib import Path
 
 from huayan.bus import QuestionBus
-from huayan.contracts import NeedState
+from huayan.contracts import NeedState, Session
 from huayan.events import EventLog
 from huayan.jev.system1 import MockSystem1Client
 from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import ask_hints
 from huayan.jue.scan import scan
+from huayan.jue.state import session_state
 from huayan.meter import FileMeter
 
 ROOT = Path(__file__).parents[1]
@@ -48,6 +49,54 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     need = NeedState(session_id="sess:20", customer_id="customer:C01", sales_id="sales:S01", phenomenon="color_unlevel")
     hints, out = ask_hints(need, mini_seeds, mini_seeds.products, JueProto(TEMPLATES, system1, "realtime", meter), 0.5)
     assert {h.slot for h in hints} == {"fiber", "equipment"} and out.scored_by == "rule"
+
+    # 未匹配时，0 对 0 不能成为升级信号；别的会话与未来事件不能污染当前判断。
+    session = Session(id=need.session_id, customer_id=need.customer_id, sales_id=need.sales_id,
+                      started_at=t0, need=need, hints=hints)
+    session_events = EventLog()
+    before = session.model_dump()
+    state = session_state(session, session_events, t0)
+    assert state.mode == "realtime" and list(state.objects) == ["session:sess:20"]
+    attrs = state.objects["session:sess:20"].attrs
+    assert not attrs["matched"] and not attrs["top_is_none"]
+    assert attrs["p_none"] == attrs["p_top"] == attrs["n_candidates"] == 0
+    assert attrs["n_open_asks"] == 2 and not attrs["decrypt_requested"]
+
+    match_payload = {"phenomenon": "color_unlevel", "known": {}, "customer_id": need.customer_id,
+                     "candidate_ids": ["T-101", "T-205"], "p_choice": {"T-101": 0.2, "T-205": 0.4},
+                     "p_none": 0.4, "scored_by": "mock"}
+    session_events.append("match", "sales:S01", match_payload, session_id=session.id, ts=t0)
+    # 补录更早的事件，仍须选择业务时间最新的匹配。
+    product_wins = {**match_payload, "p_choice": {"T-101": 0.1, "T-205": 0.8}, "p_none": 0.1}
+    session_events.append("match", "sales:S01", product_wins, session_id=session.id,
+                          ts=t0 - timedelta(minutes=1))
+    session_events.append("match", "sales:S02", product_wins, session_id="sess:other", ts=t0)
+    session_events.append("match", "sales:S01", product_wins, session_id=session.id,
+                          ts=t0 + timedelta(minutes=1))
+    decrypt = {"question_id": "q:decrypt", "customer_id": need.customer_id, "product_id": "T-205"}
+    session_events.append("decrypt_request", "sales:S02", decrypt, session_id="sess:other", ts=t0)
+    session_events.append("decrypt_request", "sales:S01", decrypt, session_id=session.id,
+                          ts=t0 + timedelta(minutes=1))
+    attrs = session_state(session, session_events, t0).objects["session:sess:20"].attrs
+    assert attrs["matched"] and attrs["top_is_none"]  # 并列也按契约 >= 提出升级信号
+    assert attrs["p_none"] == attrs["p_top"] == 0.4 and attrs["n_candidates"] == 2
+    assert not attrs["escalated"] and not attrs["recommended"] and not attrs["decrypt_requested"]
+    assert session.model_dump() == before  # 发现只读，不改状态或清理日志
+    assert len(session_events.events) == 6
+
+    session.status = "recommended"
+    attrs = session_state(session, session_events, t0 + timedelta(minutes=1)).objects["session:sess:20"].attrs
+    assert attrs["p_top"] == 0.8 and not attrs["top_is_none"]
+    assert attrs["recommended"] and attrs["decrypt_requested"]
+    # 同时刻后写的匹配覆盖前一条；零候选也是有效匹配，但签字前仍不算升级。
+    session_events.append("match", "sales:S01", {**match_payload, "candidate_ids": [], "p_choice": {}, "p_none": 1.0},
+                          session_id=session.id, ts=t0 + timedelta(minutes=1))
+    session.status = "open"
+    attrs = session_state(session, session_events, t0 + timedelta(minutes=1)).objects["session:sess:20"].attrs
+    assert attrs["top_is_none"] and attrs["n_candidates"] == attrs["p_top"] == 0
+    assert not attrs["escalated"]
+    session.status = "escalated"
+    assert session_state(session, session_events, t0 + timedelta(minutes=1)).objects["session:sess:20"].attrs["escalated"]
 
     # 觉零大模型调用：计量里只有 jue 记录，且觉的源码不引用网关
     assert {json.loads(line)["kind"] for line in meter.path.read_text(encoding="utf-8").splitlines()} == {"jue"}
