@@ -5,9 +5,10 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from huayan.contracts import Actor, JueObject, JueState, NeedState, Phenomenon, Product, Requirement, Seeds, Session, SlotDef
+from huayan.contracts import (Actor, JueObject, JueState, NeedState, Phenomenon, Product, Requirement,
+                              Seeds, Session, SlotDef, Trial)
 from huayan.domain import match_candidates
-from huayan.escalation.translate import match_translations
+from huayan.escalation.translate import leak_hits, match_translations
 from huayan.events import EventLog
 
 if TYPE_CHECKING:
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 
 WINDOWS = {"theme_days": 7, "knowledge_days": 7, "actor_hours": 48}   # 与 config/app.yaml 的 windows 一致
 _PRODUCT_KU = {"sheet", "usage", "mechanism", "formula"}
-_INTERNAL = Actor(id="system:jue", role="rd", name="觉（内部身份，只用于计算 trans_splits）")
+_INTERNAL = Actor(id="system:jue", role="rd", name="觉（内部身份，只用于属性计数）")
 
 
 def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: datetime) -> JueState:
@@ -45,14 +46,79 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
     return JueState(at=at, mode="realtime", objects={oid: obj})
 
 
-def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase, at: datetime) -> JueState:
-    """需求单起草中的槽位（draft → layer 2，pm_confirmed → layer 3）；已知槽位以 req.known_slots 为准。"""
-    layer = {"draft": 2, "pm_confirmed": 3}.get(req.status)
-    if layer is None:
+def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase, at: datetime,
+                      events: EventLog) -> JueState:
+    """需求单与知识库快照应对应 at；活动单始终产出需求单对象，起草中另产出槽位对象。"""
+    if req.status in {"released", "rejected", "reused", "merged"}:
         return JueState(at=at, mode="realtime", objects={})
+    layer = {"draft": 2, "rd_accepted": 3}.get(req.status, 0)
     need = need.model_copy(update={"phenomenon": req.phenomenon})
-    return JueState(at=at, mode="realtime",
-                    objects=_slot_objects(req.id, req.known_slots, need, seeds, kb.products(), layer, kb))
+    objects = _slot_objects(req.id, req.known_slots, need, seeds, kb.products(), layer, kb) if layer else {}
+    history = sorted(events.query(until=at), key=lambda e: e.ts)
+    own = [e for e in history if e.payload.get("requirement_id") == req.id]
+    items = {2: req.product_lang, 3: req.chem_lang}.get(layer, [])
+    upstream = set(req.known_slots) if layer == 2 else {i.slot for i in req.product_lang if i.slot} if layer == 3 else set()
+    open_backs = set()
+    for e in history:
+        p = e.payload
+        if e.kind in {"question_published", "question_resolved"} and p["family"] == "ask_back" \
+                and p["object_id"].startswith(f"slot:{req.id}/"):
+            (open_backs.add if e.kind == "question_published" else open_backs.discard)(p["question_id"])
+    # draft 内的退回只是重写草稿，不重置「停留在 draft」的时间。
+    entered_kind = {"draft": "requirement_created", "rd_accepted": "requirement_accepted",
+                    "rd_confirmed": "requirement_translated"}[req.status]
+    entered_at = next((e.ts for e in reversed(own) if e.kind == entered_kind), req.created_at)
+    declined = req.reuse is not None and bool(req.reuse.declined_reason)
+    oid = f"requirement:{req.id}"
+    objects[oid] = JueObject(object_id=oid, object_type="requirement", attrs={
+        "status": req.status, "layer": layer,
+        "n_product_items": len(req.product_lang), "n_chem_items": len(req.chem_lang),
+        "n_returns": len(req.return_notes), "n_open_ask_back": len(open_backs),
+        "n_unmapped_constraints": len(upstream - {i.slot for i in items if i.slot}),
+        "n_unquoted_items": sum(not i.quote_refs for i in items),
+        "n_edited_uncovered": _edited_uncovered(req, seeds, kb, at),
+        "n_contributed": len({e.payload["ku_id"] for e in own if e.kind == "knowledge_contributed"}),
+        **_trial_attrs(req, kb, own, at),
+        "points_set": any(e.kind == "points_set" for e in own),
+        "n_sealed": len(req.sealed), "sheet_ready": req.sheet is not None,
+        "n_leak_hits": len({h.index for h in leak_hits(req.sheet.sheet + "\n" + req.sheet.usage,
+                                                     req.sealed, req.hypotheses, kb)}) if req.sheet else 0,
+        "released": False, "hours_in_status": (at - entered_at).total_seconds() / 3600,
+        "reuse_checked": req.reuse is not None,
+        "reuse_pending": req.reuse is not None and req.reuse.product_id is not None and not declined,
+        "reuse_declined": declined,
+    })
+    return JueState(at=at, mode="realtime", objects=objects)
+
+
+def _edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase, at: datetime) -> int:
+    """只用 L3 译文覆盖研发修改；旧译文前后新增的约束仍需沉淀。"""
+    terms = sorted(((u.text.split(" → ", 1)[1], u.title) for u in kb.list(_INTERNAL, kinds=["translation"])
+                    if u.level == 3 and u.created_at <= at), key=lambda t: len(t[0]), reverse=True)
+    rd_ids = {a.id for a in seeds.actors if a.role == "rd"}
+    uncovered = 0
+    for item in req.chem_lang:
+        if item.edited_by not in rd_ids:
+            continue
+        text = item.text
+        # 只移除与已知 L3 知识完全一致的骨架片段，保留片段前后及引号内的人为修改。
+        for term, title in terms:
+            text = text.replace(f"『{title}』→ {term}", "")
+        for term, _ in terms:
+            text = text.replace(term, "")
+        uncovered += bool(text.strip(" \t\r\n，。；、：:！？!?/"))
+    return uncovered
+
+
+def _trial_attrs(req: Requirement, kb: KnowledgeBase, own: list, at: datetime) -> dict:
+    """试样知识保留 Trial.requirement_id；同产品的其他需求单不混入本单。"""
+    trials = [Trial.model_validate_json(u.text) for u in kb.list(_INTERNAL, kinds=["trial"]) if u.created_at <= at]
+    trials = sorted((t for t in trials if t.requirement_id == req.id and t.at <= at), key=lambda t: t.at)
+    passed = next((t for t in reversed(trials) if t.result == "pass"), None)
+    evaluation = next((e.payload["result"] for e in reversed(own)
+                       if e.kind == "market_eval" and passed is not None and e.payload["trial_id"] == passed.id), "none")
+    return {"n_trials": len(trials), "trial_passed": bool(trials) and trials[-1].result == "pass",
+            "market_eval": evaluation}
 
 
 def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: Seeds, products: list[Product],

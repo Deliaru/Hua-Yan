@@ -36,8 +36,8 @@ def test_hindsight_labels_on_hand_examples(mini_seeds, sim_clock):
     # 补上真值「锦纶氨纶」后多命中 R02 的 tr:5 → 1
     kb = KnowledgeBase.from_seeds(mini_seeds, EventLog(), AuditLog())
     req = Requirement(id="req:1", question_id="q:1", session_ids=["s"], phenomenon="color_unlevel",
-                      known_slots={"equipment": "气流染色机"}, direction="", product_lang=[], status="pm_confirmed",
-                      drafted_by="pm:P01", created_at=at)
+                      known_slots={"equipment": "气流染色机"}, direction="", product_lang=[], status="rd_accepted",
+                      assigned_rd="rd:R01", drafted_by="pm:agent", created_at=at)
     back_card = card({**truth, "fiber": "锦纶氨纶", "equipment": "气流染色机"})
     assert back_label(req, need(equipment=fill("equipment", "气流染色机")), back_card, "fiber", phen, kb, 3) == 1
 

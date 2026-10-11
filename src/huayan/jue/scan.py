@@ -18,6 +18,6 @@ def scan(events: EventLog, at: datetime, model: QuestionModel, seeds: Seeds, pro
 def scan_requirement(req: Requirement, need: NeedState, at: datetime, model: QuestionModel, seeds: Seeds, kb,
                      templates: dict[str, JueTemplate], bus: QuestionBus, threshold: float) -> list[Question]:
     """need = 需求单首个会话的 NeedState；回问发给该会话的业务员。门面要写 JueRecord 时可自行分三步调用。"""
-    state = requirement_state(req, need, seeds, kb, at)
+    state = requirement_state(req, need, seeds, kb, at, bus.events)
     refs = {oid: {"session_id": need.session_id, "sales_id": need.sales_id} for oid in state.objects}
     return publish(model.propose(state), state, templates, bus, threshold, seeds=seeds, refs=refs)
