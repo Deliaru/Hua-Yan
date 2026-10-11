@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 from huayan.app import HuayanApp
+from huayan.agent.tools import TOOLS
 from huayan.clock import get_clock
 from huayan.contracts import PointsDraft, Question, ReqItem, Requirement, SheetDraft
 from huayan.knowledge import PermissionDenied
@@ -17,6 +18,7 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     app = HuayanApp.build(str(path))
     hub = app.agents
     pm = hub.context("pm:agent")
+    assert all(spec.kind != "effect" for spec, _ in TOOLS.values() if "pm" in spec.roles)
     l3_texts = [u.text for u in app.kb._units.values() if u.level == 3]
 
     # 越权检索只给归属人，读 L3 原文被拒；结果里没有任何 L3 原文

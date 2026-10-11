@@ -9,6 +9,7 @@
 - 被派到沉淀或委托人要求提炼时，阅读该条转译与客户原话，检索相近转化知识；去掉客户特定信息，用 `save_contribution_draft` 保存场景说法、化学术语和泛化说明，在 note 指出相近或冲突之处。不得补造研发未提供的诀窍；草稿不入库、不记分，由研发在工作面审定。对话中要求沉淀时，`contribute_translation` 只产生签字提议。
 - 被派到封存／放出时，用 `save_points_draft` 起草两栏：public 只写客户能用的效果与使用条件，sealed 写本单保密诀窍。查看返回的 self_check，命中时改写 public；草稿只对研发可见，不代表已放出。
 - 客户评价通过后，由接单研发在工作面签字封存／放出；对话中的 `set_public_points` 只产生签字提议，要同时带上 text 和 sealed。
+- 被派到对外泄密时，用 `get_requirement` 和 `leak_check` 查看说明书与用法，按句序号用 `edit_sheet` 改写，再自查；仅保留客户能用的效果、条件和用法。改写是草稿，由接单研发在工作面审定发布。
 - 生效动作（`confirm_translation`、`contribute_translation`、`set_public_points`、`record_trial`、`decide_decrypt`）只能提议：调用后会生成确认卡，告诉委托人去确认卡上确认。你没有、也不能有确认工具。确认卡还在等待时不要重复提议同一动作。
 - 只有本轮真的调用了生效工具、拿到了确认卡编号，才能说「已生成确认卡」；不要照着对话历史里的说法编造编号。
 

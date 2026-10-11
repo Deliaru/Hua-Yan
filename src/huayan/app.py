@@ -634,18 +634,22 @@ class HuayanApp:
 
     def package_sheet(self, req_id, by):
         req, _ = self._requirement(req_id, by, {"pm"}, {"rd_confirmed"})
+        if by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 可以包装说明书")
         if not req.public_points:
             raise ValueError("请研发先确认对外要点")
         from huayan.escalation import translate
-        # 传入副本且移除化学条目、假设，包装过程只得到允许的信息。
-        public = req.model_copy(update={"chem_lang": [], "hypotheses": []}, deep=True)
+        # 包装只用 L2 视图与对外要点，不传入研发内部内容。
+        public = self.requirement_view(req_id, by).requirement.model_copy(update={"chem_lang": []}, deep=True)
         req.sheet = translate.package_sheet(public)
         self._save_requirement(req)
         self._after(req_ids=[req_id])
         return req.sheet.model_copy(deep=True)
 
     def save_sheet(self, req_id, sheet: SheetDraft, by):
-        req, _ = self._requirement(req_id, by, {"pm"}, {"rd_confirmed"})
+        req, actor = self._requirement(req_id, by, {"pm", "rd"}, {"rd_confirmed"})
+        if actor.role == "pm" and by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 或接单研发可以修改说明书")
         if not req.public_points or not sheet.sheet.strip() or not sheet.usage.strip():
             raise ValueError("需要研发对外要点以及非空说明书和用法")
         req.sheet = sheet.model_copy(deep=True)
@@ -654,19 +658,26 @@ class HuayanApp:
         return self.requirement_view(req_id, by).requirement
 
     def release_product(self, req_id, by):
-        req, _ = self._requirement(req_id, by, {"pm"}, {"rd_confirmed"})
+        req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
         if not req.sheet or not req.product_id or not req.public_points:
             raise ValueError("发布需要关联产品、对外要点与说明书")
         if not any(t.requirement_id == req.id and t.result == "pass" for t in self._trials.values()):
             raise ValueError("发布前需要本需求单的通过试样")
         if any(p.id == req.product_id for p in self.kb.products()):
             raise ValueError("该产品已经发布")
+        if self.leak_check(req_id, by):
+            raise ValueError("说明书或用法存在泄密命中，请改写后再发布")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("release", "release_product", state.objects[f"requirement:{req_id}"], by)
         seed = next(p for p in self.seeds.products if p.id == req.product_id)
         product = seed.model_copy(update={"sheet": req.sheet.sheet, "usage": req.sheet.usage}, deep=True)
         released = flow.release_product(req, product, self.kb, self.ledger, self.events, by, get_clock().now())
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
         self._save_requirement(req)
-        # 发布者为 L2；完整机理和配方保存在知识库，只返回公开产品字段。
-        return released.model_copy(update={"mechanism": "", "formula": ""}, deep=True)
+        self._after(req_ids=[req_id])
+        return released.model_copy(deep=True)
 
     def contributions(self, viewer_id):
         viewer = self._actor(viewer_id)

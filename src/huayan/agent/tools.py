@@ -44,6 +44,7 @@ def _req(req) -> dict:
     return {"req_id": req.id, "status": req.status, "phenomenon": req.phenomenon, "known_slots": req.known_slots,
             "direction": req.direction, "product_lang": _items(req.product_lang), "chem_lang": _items(req.chem_lang),
             "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id,
+            "sheet": req.sheet and req.sheet.model_dump(),
             "sealed": req.sealed, "points_draft": req.points_draft and req.points_draft.model_dump(),
             "contribution_drafts": [d.model_dump() for d in req.contribution_drafts]}
 
@@ -248,29 +249,18 @@ class SheetArgs(BaseModel):
     usage: str
 
 
-@tool("edit_sheet", "draft", ["pm"], "修改 L1 说明书草稿（说明与用法）", SheetArgs)
+@tool("edit_sheet", "draft", ["pm", "rd"], "修改 L1 说明书草稿（说明与用法）；研发可改写泄密句", SheetArgs)
 def edit_sheet(ctx: ToolContext, args: SheetArgs) -> ToolResult:
     req = ctx.app.save_sheet(args.req_id, SheetDraft(sheet=args.sheet, usage=args.usage), ctx.principal.id)
     return ToolResult(data={"req_id": req.id, "sheet": req.sheet.model_dump()})
 
 
+@tool("leak_check", "read", ["pm", "rd"], "检查说明书与用法，仅返回命中句序号与类别", ReqId)
+def leak_check(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=[h.model_dump() for h in ctx.app.leak_check(args.req_id, ctx.principal.id)])
+
+
 # ---- 生效动作（只挂起为确认卡，委托人确认后才执行） ----
-
-class DismissArgs(BaseModel):
-    question_id: str
-    note: str = ""
-
-
-@tool("dismiss_question", "effect", ["pm"], "提议忽略一个问题（写明理由）", DismissArgs, "忽略问题 {question_id}：{note}")
-def dismiss_question(ctx: ToolContext, args: DismissArgs) -> ToolResult:
-    q = ctx.app.resolve(args.question_id, "dismiss", ctx.principal.id, args.note)
-    return ToolResult(data={"question_id": q.id, "status": q.status})
-
-
-@tool("release_product", "effect", ["pm"], "提议按说明书草稿发布新产品，回到 L1", ReqId, "按需求单 {req_id} 的说明书发布新产品，L1 可直接推荐")
-def release_product(ctx: ToolContext, args: ReqId) -> ToolResult:
-    p = ctx.app.release_product(args.req_id, ctx.principal.id)
-    return ToolResult(data={"product_id": p.id, "name": p.name})
 
 
 @tool("confirm_translation", "effect", ["rd"], "提议确认 L3 化学语言需求单（关联研发中产品，给所引知识的归属人记分）", ReqId,
