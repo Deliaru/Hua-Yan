@@ -1,7 +1,6 @@
-"""L1 链路：抽取 → 觉的追问提示（门面 ask_hints）→ Jev 推荐或升级 → L1 回答。"""
+"""L1 链路：抽取 → 觉的追问提示 → Jev 匹配与推荐 → L1 回答；升级由门面签字执行。"""
 from huayan.clock import get_clock
-from huayan.contracts import (AuditRecord, Evidence, LedgerEntry, Question,
-                              Recommendation, Resolution, Turn)
+from huayan.contracts import AuditRecord, LedgerEntry, Recommendation, Turn
 from huayan.domain import match_candidates
 from huayan.knowledge.disclosure import cap, render
 from .answer import answer
@@ -23,42 +22,21 @@ def record_disclosure(card, deps):
 
 
 def recommend(session, deps):
-    if not session.need.phenomenon:
+    if not session.need.phenomenon or session.status in ("escalated", "closed"):
         return session
     products = {p.id: p for p in deps.kb.products()}
     candidates = match_candidates(session.need.phenomenon, session.need.known(), list(products.values()))
     decision = deps.jev.match(session.need, candidates, products)
     at = get_clock().now()
-    if decision.choice == "none" or (not decision.confident and not session.hints):
-        evidence = [Evidence(summary=f"{s.slot}: {s.value}", quote=s.quote)
-                    for s in session.need.slots.values()]
-        history = [q for q in deps.bus.list(status=None, family="escalate_need")
-                   if q.refs.get("session_id") == session.id]
-        previous = history[-1] if history else None
-        # 同一轮升级仍合并；系统撤销后使用新对象、新问题 ID，兼容助手按 ID 派单。
-        object_id = session.id if not history else f"{session.id}/need:{len(history) + 1}"
-        if previous and (previous.status == "open" or
-                         (previous.status == "dismissed" and previous.resolution.by != "system:l1")):
-            object_id = previous.object_id  # 人工忽略继续由总线执行原抑制窗口。
-        refs = {"session_id": session.id, "customer_id": session.customer_id}
-        if previous and object_id != previous.object_id:
-            refs["previous_question_id"] = previous.id
-            evidence.append(Evidence(summary=f"最新需求替代旧升级 {previous.id}，请按当前条件重新核对并起草"))
-        q = deps.bus.publish(Question(id="", family="escalate_need", title="没有合适产品，需产品经理处理",
-            object_id=object_id, owner_role=deps.config["routing"]["escalate_need"],
-            scored_by=decision.scored_by, discoverer="jev", created_at=at,
-            dedup_key=f"escalate_need:{object_id}", refs=refs,
-            evidence=evidence))
-        same_escalation = (session.recommendation is not None and
-                           session.recommendation.escalated_question_id == q.id)
-        session.status = "escalated"
-        session.recommendation = Recommendation(product_id=None, candidates=candidates, match=decision,
-            disclose=None, version=None, escalated_question_id=q.id or None, at=at)
-        if q.id and not same_escalation:
-            deps.events.append("escalate", session.sales_id, {"question_id": q.id,
-                "phenomenon": session.need.phenomenon, "known": session.need.known(),
-                "customer_id": session.customer_id, "p_none": decision.probabilities["none"]}, session_id=session.id)
-    elif decision.confident:
+    deps.events.append("match", session.sales_id, {
+        "phenomenon": session.need.phenomenon, "known": session.need.known(),
+        "customer_id": session.customer_id, "candidate_ids": [c.product_id for c in candidates],
+        "p_choice": {c.product_id: decision.probabilities[c.product_id] for c in candidates},
+        "p_none": decision.probabilities["none"], "scored_by": decision.scored_by,
+    }, session_id=session.id, ts=at)
+    # 匹配失败也须清除先前推荐；结果由 match 事件交给觉，不在此发布升级问题。
+    session.recommendation, session.status = None, "open"
+    if decision.confident and decision.choice != "none":
         viewer = deps.actors[session.sales_id]
         maximum = cap(viewer, session.customer_id, decision.choice, deps.grants)
         disclosure = deps.jev.disclose(session.need, decision.choice, maximum)
@@ -72,23 +50,11 @@ def recommend(session, deps):
             "phenomenon": session.need.phenomenon, "known": session.need.known(),
             "customer_id": session.customer_id}, session_id=session.id)
         record_disclosure(card, deps)
-        retire_escalation(session, deps, f"最新需求已匹配 {decision.choice}，撤销旧升级")
     return session
 
 
-def retire_escalation(session, deps, note):
-    """保留撤销快照；已由人处理的问题和需求单保持原有记录。"""
-    for q in deps.bus.list(family="escalate_need"):
-        if q.refs.get("session_id") != session.id:
-            continue
-        q.evidence = [Evidence(summary=f"最新 {s.slot}: {s.value}", quote=s.quote)
-                      for s in session.need.slots.values()]
-        q.evidence.append(Evidence(summary=note, quote=session.turns[-1].text))
-        deps.bus.resolve(q.id, Resolution(action="dismiss", by="system:l1", note=note), get_clock().now())
-
-
 def handle_turn(session, speaker, text, deps, answering=False):
-    """answering：会话有待回答的回问，客户这轮是在为需求单补信息，L1 不再自行撤销升级、追问或推荐。"""
+    """回问及已签字升级的会话只抽取和回答；需求单生命周期由门面处理。"""
     n = len(session.turns) + 1
     turn = Turn(id=f"turn:{session.id}:{n}", session_id=session.id, n=n, speaker=speaker,
                 text=text, ts=get_clock().now())
@@ -103,10 +69,10 @@ def handle_turn(session, speaker, text, deps, answering=False):
     deps.events.append("extraction", session.sales_id, {"intent": result.intent, "phenomenon": result.phenomenon,
         "filled": session.need.known(), "extracted_by": deps.extractor.name,
         "conditions_changed": conditions_changed, "turn_id": turn.id}, session_id=session.id)
-    if conditions_changed and not answering:
-        retire_escalation(session, deps, "客户需求条件已变化，旧升级依据失效，重新评估")
+    matching = not answering and session.status not in ("escalated", "closed")
+    if conditions_changed and matching:
         session.recommendation, session.status = None, "open"
-    if (result.intent == "need" or conditions_changed) and not answering:
+    if (result.intent == "need" or conditions_changed) and matching:
         session.hints = deps.ask_hints(session.need)
         deps.events.append("ask_hint", session.sales_id, {"slots": [h.slot for h in session.hints],
             "p": {h.slot: h.p_need for h in session.hints}, "model": deps.jue_realtime.name}, session_id=session.id)
