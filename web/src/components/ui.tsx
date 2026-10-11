@@ -59,10 +59,15 @@ export function AgentMark({ who = "Agent 起草" }: { who?: string }) {
 }
 
 // 觉的打分：模型打分显示概率与细条，规则打分显示「到点」（不冒充概率）
-export function Score({ q }: { q: Pick<Question, "p_need" | "scored_by"> }) {
+// 异常类决策（决策目录 kind: anomaly）：规则打分命中阈值才提出；其余推进类到点即提出
+const ANOMALY = new Set(["distortion", "seal_leak", "knowledge_conflict", "leak_risk"]);
+
+export function Score({ q }: { q: Pick<Question, "p_need" | "scored_by" | "family"> }) {
   const L = useLabels();
   if (q.scored_by === "human") return <span className="tag" title="由人发起，不经觉打分">人工提出</span>;
-  if (!isModel(q.scored_by) || q.p_need == null) return <span className="tag" title="规则前置条件成立">规则 · 到点</span>;
+  if (!isModel(q.scored_by) || q.p_need == null) return ANOMALY.has(q.family)
+    ? <span className="tag" title="规则打分超过阈值">规则 · 命中</span>
+    : <span className="tag" title="上一步已签字，规则到点即提出">规则 · 到点</span>;
   return (
     <span className="flex shrink-0 items-center gap-1.5" title={`${L.scorer(q.scored_by)} 打分`}>
       <span className="h-[3px] w-8 overflow-hidden rounded-full bg-fill">
