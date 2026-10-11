@@ -1,4 +1,4 @@
-"""一段对话的 L1 → L2 → L3 转译（规则骨架，零成本）。M1 演示用。
+"""一段对话的 L1 → L2 → L3 转译（模拟数据、规则骨架，零成本）。不替代门面签字流程验收。
 
 uv run python scripts/translate_cli.py [--dialogue 对话.yaml] [--seeds-dir seeds]
 对话 yaml：sessions: [{customer_id, sales_id, turns: [[customer|sales, 文字], ...]}]；不给则用内置的「锦纶氨纶 + 气流缸」两段升级对话。
@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 from huayan.clock import get_clock
-from huayan.contracts import NeedState, Question, Requirement, Session, SlotFill, Turn
+from huayan.contracts import NeedState, Requirement, Session, SlotFill, Turn
 from huayan.domain import find_phenomenon, find_slot_values, load_seeds
 from huayan.escalation.translate import draft_chem_need, draft_product_need
 from huayan.events import EventLog
@@ -52,8 +52,11 @@ def main() -> None:
     sessions = [build_session(k, s, seeds, at) for k, s in enumerate(spec["sessions"], 1)]
     kb = KnowledgeBase.from_seeds(seeds, EventLog(), AuditLog())
     actors = {a.id: a for a in seeds.actors}
-    pm = next(a for a in seeds.actors if a.role == "pm")
-    rd = min((a for a in seeds.actors if a.role == "rd"), key=lambda a: a.id)
+    pm = actors["pm:agent"]
+    phenomenon = sessions[0].need.phenomenon
+    rd = min((a for a in seeds.actors if a.role == "rd"), key=lambda a: (
+        -sum(t.level == 3 and t.owner == a.id and phenomenon in t.phenomenon_ids
+             for t in seeds.translations), a.id))
     labels = {s.id: s.label for s in seeds.slots}
     quotes = {t.id: t.text for s in sessions for t in s.turns}
     owners = {u.id: u.owner for u in kb.list(rd)}
@@ -72,18 +75,18 @@ def main() -> None:
         print(f"  {s.id}（{s.customer_id}）现象：{s.need.phenomenon}（原话「{s.need.phenomenon_quote}」）")
         for f in s.need.slots.values():
             print(f"    {labels[f.slot]}：{f.value}（原话「{f.quote}」，{f.turn_id}）")
-    q = Question(id="q:cli", family="escalate_need", title="升级", object_id=sessions[0].id, owner_role="pm",
-                 scored_by="human", discoverer="human", dedup_key=f"escalate_need:{sessions[0].id}", created_at=at)
-    draft = draft_product_need(q, sessions, kb, pm, at)
-    print(f"== L2 产品需求（{pm.name}）  方向：{draft.direction}")
-    show(draft.product_lang)
     known = {}
     for s in sessions:
         for slot, value in s.need.known().items():
             known.setdefault(slot, value)
-    req = Requirement(id="req:cli", question_id=q.id, session_ids=[s.id for s in sessions],
-                      phenomenon=sessions[0].need.phenomenon, known_slots=known, direction=draft.direction,
-                      product_lang=draft.product_lang, status="pm_confirmed", drafted_by=pm.id, created_at=at)
+    req = Requirement(id="req:cli", question_id="q:cli", session_ids=[s.id for s in sessions],
+                      phenomenon=phenomenon, known_slots=known, assigned_rd=rd.id,
+                      status="draft", drafted_by=pm.id, created_at=at)
+    draft = draft_product_need(req, sessions, kb, pm, at)
+    print(f"== L2 产品需求（{pm.name}）  方向：{draft.direction}")
+    show(draft.product_lang)
+    req.direction, req.product_lang = draft.direction, draft.product_lang
+    req.status, req.rd_accepted_by = "rd_accepted", rd.id   # 手工构造下一层输入，非实际签字。
     chem = draft_chem_need(req, sessions, kb, rd, at)
     print(f"== L3 化学语言需求单（{rd.name}）")
     show(chem.chem_lang)
