@@ -60,7 +60,11 @@ class AgentHub:
             return ToolResult(ok=False, error=f"你的委托人没有工具 {name}")
         spec, fn = TOOLS[name]
         if spec.kind != "effect":
-            return _run(fn, ctx, spec.params, args)
+            self.app._agent_drafting = spec.kind == "draft"
+            try:
+                return _run(fn, ctx, spec.params, args)
+            finally:
+                self.app._agent_drafting = False
         try:
             params = spec.params.model_validate(args).model_dump()
         except ValueError as exc:
@@ -113,12 +117,14 @@ class AgentHub:
     def dispatch(self) -> list[Conversation]:
         """只派觉已提出的问题；准备被撤回后，同一问题可再次起草。"""
         out = []
+        exhausted = set()
         while True:
             rounds = {}
             for event in self.app.events.query(["question_prepared"]):
                 qid = event.payload["question_id"]
                 rounds[qid] = rounds.get(qid, 0) + 1
             pending = [q for q in self.app.bus.list() if q.prepared_at is None
+                       and q.id not in exhausted
                        and (q.owner_role in ("sales", "pm", "rd")
                             or (self.app.config["gateway_mock"] and q.owner_role == "supervisor"))
                        and (q.id, rounds.get(q.id, 0)) not in self._dispatched]
@@ -141,7 +147,8 @@ class AgentHub:
                 else:
                     out.append(self.notify(q.owner_id, text, session_id))
                     if out[-1].messages[-1].text == OUT_OF_STEPS:
-                        return out  # 本轮未完成，保留准备中；下次显式派单可继续。
+                        exhausted.add(q.id)
+                        continue  # 本轮不重试它，继续派其他问题；下次 dispatch 再试。
                 if q.status == "open" and q.signer_role is not None:
                     self.app.mark_prepared(q.id, q.owner_id)
                 self._dispatched.add((q.id, rounds.get(q.id, 0)))

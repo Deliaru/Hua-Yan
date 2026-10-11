@@ -51,7 +51,14 @@ def test_translation_release_and_ownership(tmp_path):
     app.accept_requirement(req.id, rd)
     req = app.translate_requirement(req.id, rd)
     first = req.chem_lang[0]
+    agent_edit = app.agents.call_tool(app.agents.context(rd), "edit_item", {"req_id": req.id, "index": 0,
+        "text": first.text + "；待核对低浴比条件", "quote_refs": first.quote_refs, "ku_refs": first.ku_refs})
+    assert agent_edit.ok
+    assert app.requirement_view(req.id, rd).requirement.chem_lang[0].edited_by is None
+    assert app.events.query(["requirement_edited"])[-1].payload["after"]["edited_by"] is None
+    assert not any(q.refs.get("requirement_id") == req.id for q in app.bus.list(family="contribution"))
     app.edit_req_item(req.id, 0, first.model_copy(update={"text": first.text + "；验证低浴比稳定性"}), rd)
+    assert app.requirement_view(req.id, rd).requirement.chem_lang[0].edited_by == rd
     prepare("contribution", f"requirement:{req.id}")
     app.contribute_translation(req.id, 0, "低浴比匀染", "（模拟）低浴比缓染稳定性", rd)
     prepare("confirm_translation", f"requirement:{req.id}")

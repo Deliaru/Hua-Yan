@@ -72,6 +72,7 @@ class HuayanApp:
         app.jue_scheduled = app._jue_model(app.config["scheduled_model"], "scheduled")
         app._jue_trace, app._answers = {}, {}
         app._last_scan = None
+        app._agent_drafting = False  # Hub 工具执行期间的来源标记，不由模型或 HTTP 参数指定。
         app.agents = AgentHub(app)
         return app
 
@@ -621,7 +622,7 @@ class HuayanApp:
                                    {"draft"} if actor.role == "pm" else {"rd_accepted"})
         self._validate_item(req, item, actor)
         items = req.product_lang if actor.role == "pm" else req.chem_lang
-        item = item.model_copy(deep=True, update={"edited_by": None if by == "pm:agent" else by})
+        item = item.model_copy(deep=True, update={"edited_by": None if self._agent_drafting or by == "pm:agent" else by})
         before = None
         if index == -1:
             items.append(item)
