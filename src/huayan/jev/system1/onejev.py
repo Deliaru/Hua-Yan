@@ -148,6 +148,9 @@ class LLMSystem1Fallback:
     def __init__(self, gateway, meter):
         self.gateway, self.meter = gateway, meter
 
+    def close(self):
+        pass
+
     def ask(self, state, media, questions, caller):
         started, ok = time.monotonic(), False
         try:

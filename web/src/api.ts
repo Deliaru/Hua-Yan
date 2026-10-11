@@ -2,7 +2,7 @@
 // 身份由界面选择后作为 viewer / by 传入，裁剪与可签条件都在门面里；门面拒绝时原样显示它返回的 error。
 import type {
   Conversation, ContributionStat, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
-  RequirementView, SessionSummary, SessionView, SheetDraft, NextAction,
+  RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -29,6 +29,8 @@ const q = (params: Record<string, string | null | undefined>) =>
 export const api = {
   meta: () => call<Meta>("meta"),
   reset: () => call<{ run_id: string }>("reset", {}),
+  // 切换本会话的运行方式（回放 / 自带密钥）；密钥只发给本服务，服务端只存在内存里
+  setMode: (body: Record<string, string | boolean>) => call<RunMode>("mode", body),
 
   // 读
   sessions: () => call<SessionSummary[]>("sessions"),

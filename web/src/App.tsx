@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
-import type { Meta, Role, RunStatus } from "./types";
+import type { Meta, Role, RunMode, RunStatus } from "./types";
 import { Popover } from "./components/Controls";
 import { ChevronDown, Close, NavArch, NavDesk, NavEval, NavJue, NavLayers, NavLedger, NavStory, Refresh } from "./components/Icons";
 import { Logo } from "./components/Logo";
@@ -19,6 +19,7 @@ import { Overview } from "./pages/Overview";
 import { Story } from "./pages/Story";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
+import { ModeDialog } from "./components/Mode";
 
 const PAGES = [
   ["overview", "架构总览", NavArch],
@@ -48,6 +49,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [side, setSide] = useState<HTMLElement | null>(null);
+  const [modeOpen, setModeOpen] = useState(false);
   const guide = useGuide();
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
@@ -74,7 +76,7 @@ export default function App() {
         <div className="w-[200px]"><Logo /></div>
         {page === "desk" && <div className="absolute left-1/2 -translate-x-1/2"><Guide /></div>}
         <div className="ml-auto flex items-center gap-1.5">
-          <StatusMenu s={meta.status} />
+          <StatusMenu s={meta.status} m={meta.mode} onMode={() => setModeOpen(true)} />
           <CheckpointMenu onLoad={(name) => restart(`正在载入检查点「${name}」……`, api.loadCheckpoint(name))} />
           <Popover align="right" trigger={(toggle) => (
             <button onClick={toggle} className={`flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill ${
@@ -126,6 +128,8 @@ export default function App() {
         {page === "ledger" && <Ledger key={key} />}
       </main>
 
+      {modeOpen && <ModeDialog mode={meta.mode} onClose={() => setModeOpen(false)}
+                               onDone={() => { setModeOpen(false); restart("正在切换运行方式……", Promise.resolve()); }} />}
       {error && (
         <div className="popover anim-fade fixed right-4 top-[60px] flex max-w-[360px] items-start gap-2 px-3 py-2.5 text-[13px]">
           <span className="flex-1 text-danger">{error}</span>
@@ -142,26 +146,30 @@ function Name({ id }: { id: string }) {
 
 // 状态指示：常驻工具栏，一行写运行方式，点开逐项看（铁律 6：降级可见，降级项标黄）
 // 回放时大模型与 OneJev 的输出来自录制缓存，逐项写「录制回放」，不写「在线」；觉（Jue-K）是本地推理，回放时也在实时运行
+// 自带密钥（BYOK）时写试用者填的模型名；没接 OneJev 时 Jev 是大模型降级，标黄
 
-function StatusMenu({ s }: { s: RunStatus }) {
+function StatusMenu({ s, m, onMode }: { s: RunStatus; m: RunMode; onMode: () => void }) {
   const R = "录制回放";
-  const jev: Record<string, string> = { onejev: "OneJev", mock: "桩", llm: "大模型降级" };
+  const byok = m.kind === "byok";
+  const jev: Record<string, string> = { onejev: "OneJev", mock: "桩", llm_fallback: "大模型降级" };
   const jue: Record<string, string> = { jue_k: "Jue-K · 本地实时", jue_proto: "规则原型", onejev: "OneJev" };
   // [项, 值, 种类]：ok 正常运行，warn 降级，replay 录制回放
   type Kind = "ok" | "warn" | "replay";
-  const llm = (on: string): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${on} · ${R}`, "replay"] : [`${on} · 在线`, "ok"];
+  const llm = (on: string): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${on} · ${R}`, "replay"]
+    : byok ? [`${m.llm_model} · 自带密钥`, "ok"] : [`${on} · 在线`, "ok"];
   const items: [string, string, Kind][] = [
     ["数据", "模拟", "ok"],
     ...(s.seeds_placeholder ? [["种子", "占位", "warn"] as [string, string, Kind]] : []),
     ["Agent", ...llm("大模型")],
     ["抽取", ...(s.extractor === "llm" ? llm("大模型") : ["规则", "warn"] as [string, Kind])],
     ["Jev", ...(s.system1_impl !== "onejev" ? [jev[s.system1_impl] ?? s.system1_impl, "warn"] as [string, Kind]
-      : s.replay ? [`OneJev · ${R}`, "replay"] as [string, Kind] : ["OneJev · 在线", "ok"] as [string, Kind])],
+      : s.replay ? [`OneJev · ${R}`, "replay"] as [string, Kind]
+      : byok ? [`${m.jev_model} · 自带接口${m.jev_fallback ? "，失败降级" : ""}`, "ok"] as [string, Kind] : ["OneJev · 在线", "ok"] as [string, Kind])],
     ["觉", jue[s.realtime_model] ?? s.realtime_model, s.realtime_model === "jue_proto" ? "warn" : "ok"],
   ];
   const degraded = items.filter(([, , k]) => k === "warn").length;
-  const mode = s.replay ? "录制回放" : s.gateway_mock ? "离线演示" : "现场运行";
-  const sub = s.replay ? "非在线运行" : degraded ? `${degraded} 项降级` : "全部正常";
+  const mode = s.replay ? "录制回放" : byok ? "自带密钥" : s.gateway_mock ? "离线演示" : "现场运行";
+  const sub = s.replay ? "非在线运行" : degraded ? `${degraded} 项降级` : byok ? "真实运行" : "全部正常";
   const TAG: Record<Kind, string> = { ok: "text-ink", warn: "tag tag-warn", replay: "tag" };
   return (
     <Popover align="right" trigger={(toggle) => (
@@ -172,7 +180,7 @@ function StatusMenu({ s }: { s: RunStatus }) {
         <span className="text-ink-3"><ChevronDown /></span>
       </button>
     )}>
-      {() => (
+      {(close) => (
         <div className="w-[300px] p-1">
           <p className="eyebrow px-2 pb-1.5 pt-1">运行状态</p>
           {items.map(([k, v, kind]) => (
@@ -184,7 +192,10 @@ function StatusMenu({ s }: { s: RunStatus }) {
           {s.replay && <p className="mx-2 mt-2 rounded-[8px] bg-fill px-2.5 py-2 text-[12px] leading-[18px] text-ink">{RECORDING_NOTE}</p>}
           <p className="px-2 pt-1.5 text-[11px] leading-4 text-ink-3">
             {s.replay ? "录制回放：Agent、抽取与 Jev 的输出是录制时的真实结果，只能按演示台词走；觉在本地实时计算。" : ""}
+            {byok ? "自带密钥：Agent、抽取与 Jev 真实调用你填的接口；觉在本地实时计算。" : ""}
             黄色为降级运行，结果上同样标注来源。</p>
+          {m.kind !== "local" && <button className="btn btn-plain mx-2 mb-1 mt-2.5 w-[calc(100%-16px)]" onClick={() => { close(); onMode(); }}>
+            {byok ? "切换运行方式…" : "接入自己的模型（BYOK）…"}</button>}
         </div>
       )}
     </Popover>

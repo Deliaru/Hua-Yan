@@ -3,7 +3,8 @@
 运行：uv run python -m huayan.ui.server（从仓库根目录）；开发时前端 `npm run dev` 经 Vite 代理 /api。
 web/dist 存在时同时提供构建后的前端页面。
 会话隔离：界面每个浏览器带一个会话号（请求头 X-Huayan-Session），每个会话有自己的门面与业务时钟，
-多人同时试用互不干扰；不带会话号的调用（脚本、curl）共用 default。"""
+多人同时试用互不干扰、互不排队；不带会话号的调用（脚本、curl）共用 default。
+运行方式按会话选择：录制回放（默认），或填自己的大模型 / OneJev 接口真实运行（BYOK，见 huayan.gateway.byok）。"""
 import importlib.util
 import json
 import os
@@ -13,7 +14,7 @@ import traceback
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import RLock
+from threading import Lock, RLock, local
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
@@ -23,6 +24,7 @@ from huayan.app import HuayanApp
 from huayan.clock import SimClock, get_clock, set_clock
 from huayan.contracts import ReqItem, SheetDraft, SHANGHAI
 from huayan.knowledge import PermissionDenied
+from huayan.gateway.byok import Byok, public_url
 from huayan.gateway.client import ReplayMiss
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
@@ -35,8 +37,27 @@ REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week")   # 评测页�
 MAX_SESSIONS = int(os.environ.get("HUAYAN_MAX_SESSIONS", "30"))   # 超出时淘汰最久未用的会话
 
 T0 = datetime(2026, 10, 12, 9, 0, tzinfo=SHANGHAI)
-lock = RLock()                                    # 载入检查点时，同一线程会再次调用 Api.call。
 SESSION_ID = re.compile(r"[0-9a-f-]{8,64}")
+
+
+class ThreadClock:
+    """进程里只装这一只时钟：处理请求的线程换上自己会话的 SimClock，会话之间可以并发（真实模型一次调用可能几十秒）。"""
+    local = local()
+
+    def now(self):
+        return self.local.clock.now()
+
+    def advance_to(self, ts):
+        self.local.clock.advance_to(ts)
+
+
+THREAD_CLOCK = ThreadClock()
+checkpoint_lock = Lock()                          # 载入检查点共用 runs/demo_v5/checkpoint.yaml
+
+
+def use_clock(clock):
+    ThreadClock.local.clock = clock
+    set_clock(THREAD_CLOCK)
 
 
 def dump(x):
@@ -102,7 +123,6 @@ def next_line(app, p):
 GET = {
     "/api/demo/next": next_line,
     "/api/status": lambda app, p: app.status(),
-    "/api/meta": meta,
     "/api/sessions": sessions,
     "/api/session": session,
     "/api/questions": lambda app, p: app.questions(p["viewer"]),
@@ -155,17 +175,22 @@ POST = {
 class Api:
     """HTTP 与演示脚本共用入口；调用方先设置 SimClock，再构建门面。"""
 
-    def __init__(self, app, config_path=CONFIG):
-        self.app, self.config_path = app, config_path
-        self.clock = get_clock()   # 业务时钟是进程全局的：每次调用先换上本会话的时钟，调用后收回
+    def __init__(self, app, config_path=CONFIG, clock=None, byok=None):
+        self.app, self.config_path, self.byok = app, config_path, byok
+        self.clock = clock or get_clock()   # 本会话的业务时钟；每次调用先在当前线程换上它
+        self.lock = RLock()
         self.writes = 0     # 本轮成功的写操作数；回放部署里按它对齐台词的下一步
 
     def checkpoints(self):
-        if Path(self.config_path).name not in ("app.demo.yaml", "app.demo.replay.yaml"):
+        if self.byok or Path(self.config_path).name not in ("app.demo.yaml", "app.demo.replay.yaml"):
             return []
         return [a["checkpoint"] for a in demo_actions() if "checkpoint" in a]
 
     def load_checkpoint(self, name):
+        with checkpoint_lock:
+            return self._load_checkpoint(name)
+
+    def _load_checkpoint(self, name):
         if name not in self.checkpoints():
             raise ValueError("检查点不存在或未使用 app.demo.yaml 启动")
         spec = importlib.util.spec_from_file_location("huayan_demo_mainline", "scripts/demo_mainline.py")
@@ -178,21 +203,21 @@ class Api:
         directory.mkdir(parents=True, exist_ok=True)
         replay_config = directory / "checkpoint.yaml"
         replay_config.write_text(yaml.safe_dump(config), encoding="utf-8")
-        previous_clock, loaded = get_clock(), None
+        loaded, clock = None, SimClock(T0)
         try:
-            set_clock(SimClock(T0))
+            use_clock(clock)
             loaded = HuayanApp.build(str(replay_config))
-            inner = Api(loaded, str(replay_config))
+            inner = Api(loaded, str(replay_config), clock)
             module.Mainline(inner, MAINLINE).run(name)
         except Exception:
-            set_clock(previous_clock)
+            use_clock(self.clock)
             if loaded is not None:
                 loaded.system1.close()
             raise
         # 回放成功后才替换工作面，并把两个客户端一起切回服务启动时的模式（演示部署保持回放）。
         loaded.config["replay"] = loaded.gateway.replay = loaded.system1.replay = deployed_replay
         self.app.system1.close()
-        self.app, self.writes = loaded, inner.writes
+        self.app, self.writes, self.clock = loaded, inner.writes, inner.clock
         return {"run_id": loaded.run_id, "checkpoint": name}
 
     def next_action(self):
@@ -209,12 +234,14 @@ class Api:
                 "action": None if done else writes[self.writes], "chapter": None if done else chapters[self.writes]}
 
     def call(self, method, path, params):
-        with lock:
-            set_clock(self.clock)
-            try:
-                return self._call(method, path, params)
-            finally:
-                self.clock = get_clock()
+        with self.lock:
+            use_clock(self.clock)
+            return self._call(method, path, params)
+
+    def build(self):
+        self.clock = SimClock(T0)
+        use_clock(self.clock)
+        self.app, self.writes = HuayanApp.build(self.config_path, byok=self.byok), 0
 
     def _call(self, method, path, params):
         if method == "GET" and path == "/api/demo/checkpoints":
@@ -224,24 +251,33 @@ class Api:
         if method == "POST" and path == "/api/demo/load":
             return self.load_checkpoint(params["name"])
         if method == "POST" and path == "/api/reset":
-            set_clock(SimClock(T0))
-            self.app, self.writes = HuayanApp.build(self.config_path), 0
+            self.app.system1.close()
+            self.build()
             return {"run_id": self.app.run_id}
+        if method == "GET" and path == "/api/meta":
+            return meta(self.app, params) | {"mode": self.mode()}
         route = {"GET": GET, "POST": POST}[method][path]
         if method == "POST":
-            clock = get_clock()
-            before = clock.now()
-            clock.advance_to(before + timedelta(minutes=1))
+            before = self.clock.now()
+            self.clock.advance_to(before + timedelta(minutes=1))
         try:
             result = route(self.app, params)
         except (PermissionDenied, ValueError, KeyError, StopIteration):
             if method == "POST":            # 被门面拒绝的写操作不占业务时间：误点不会让回放台词的时刻错位
-                set_clock(SimClock(before))
+                self.clock = SimClock(before)
+                use_clock(self.clock)
             raise
         if method == "POST":
             self.app.tick()
             self.writes += 1
         return result
+
+    def mode(self):
+        """本会话的运行方式（不含密钥）。"""
+        b = self.byok
+        return {"kind": "replay" if self.app.config["replay"] else "byok" if b else "local",
+                "llm_model": b.llm_model if b else None, "jev_model": b.jev_model if b and b.jev_base_url else None,
+                "jev_fallback": bool(b and b.jev_base_url and b.jev_fallback)}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -252,7 +288,8 @@ class Handler(SimpleHTTPRequestHandler):
         url = urlparse(self.path)
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
-            result = session_api(self.headers.get("X-Huayan-Session", "default")).call(method, url.path, params)
+            sid = self.headers.get("X-Huayan-Session", "default")
+            result = set_mode(sid, params) if url.path == "/api/mode" else session_api(sid).call(method, url.path, params)
             status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
@@ -299,15 +336,19 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 apis: OrderedDict[str, Api] = OrderedDict()
+apis_lock = Lock()
 
 
-def session_api(sid):
+def session_api(sid, byok=None, rebuild=False):
     if sid != "default" and not SESSION_ID.fullmatch(sid):
         raise ValueError("会话号格式不对")
-    with lock:
-        if sid not in apis:
-            set_clock(SimClock(T0))
-            apis[sid] = Api(HuayanApp.build(CONFIG))
+    with apis_lock:
+        if sid not in apis or rebuild:
+            api = Api(None, CONFIG, byok=byok)
+            api.build()
+            if sid in apis:
+                apis[sid].app.system1.close()
+            apis[sid] = api
             if len(apis) > MAX_SESSIONS:
                 _, old = apis.popitem(last=False)
                 old.app.system1.close()
@@ -315,7 +356,21 @@ def session_api(sid):
         return apis[sid]
 
 
+def set_mode(sid, p):
+    """切换本会话的运行方式：replay = 录制回放；byok = 用试用者填的大模型与（可选）OneJev 真实运行。切换后从头开始。"""
+    if p["mode"] == "replay":
+        return session_api(sid, rebuild=True).mode()
+    jev = (p.get("jev_base_url") or "").strip()
+    byok = Byok(public_url(p["llm_base_url"].strip()), p["llm_model"].strip(), p["llm_key"].strip(),
+                public_url(jev) if jev else None, (p.get("jev_model") or "OneJev-9B").strip(),
+                (p.get("jev_key") or "").strip() or None, bool(p.get("jev_fallback", True)))
+    if not (byok.llm_model and byok.llm_key):
+        raise ValueError("请填写大模型的模型名和密钥")
+    byok.check()
+    return session_api(sid, byok, rebuild=True).mode()
+
+
 if __name__ == "__main__":
-    session_api("default")
+    session_api("default")   # 先构建一次：Jue-K 模型等首次加载较慢
     print(f"化言界面后端：http://127.0.0.1:{PORT}（每个浏览器一个会话，最多 {MAX_SESSIONS} 个）")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

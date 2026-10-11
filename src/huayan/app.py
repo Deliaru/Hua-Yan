@@ -41,9 +41,12 @@ def _find(table, key, what):
 
 class HuayanApp:
     @classmethod
-    def build(cls, config_path: str = "config/app.yaml", run_id: str | None = None):
+    def build(cls, config_path: str = "config/app.yaml", run_id: str | None = None, byok=None):
+        # byok：试用者自带的大模型 / OneJev（huayan.gateway.byok.Byok），真实调用、不读写录制缓存；密钥只在内存里
         app = cls()
         app.config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+        if byok:
+            app.config |= {"replay": False, "gateway_mock": False, "llm_cache_dir": None, "system1_impl": byok.system1_impl}
         app.run_id = run_id or f"run-{uuid4().hex[:12]}"
         if Path(app.run_id).name != app.run_id or any(c in app.run_id for c in '/\\:'):
             raise ValueError("run_id 必须是单个目录名")
@@ -57,12 +60,16 @@ class HuayanApp:
         app.ledger = Ledger(app.run_dir / "ledger.jsonl", points=app.config["points"])
         app.bus = QuestionBus(app.events, app.run_dir / "questions.jsonl")
         app.kb = KnowledgeBase.from_seeds(app.seeds, app.events, app.audit)
-        app.gateway = build_gateway("config/models.yaml", app.config["gateway_mock"], app.meter)
-        if not app.config["gateway_mock"]:
-            cache = app.config.get("llm_cache_dir")
-            app.gateway.cache_dir = Path(cache) if cache else None
-            app.gateway.replay = app.config["replay"]
-        app.system1 = build_system1(app.config["system1_impl"], "config/system1.yaml", app.gateway, app.meter)
+        if byok:
+            app.gateway = byok.gateway(app.meter)
+            app.system1 = byok.system1(app.gateway, app.meter)
+        else:
+            app.gateway = build_gateway("config/models.yaml", app.config["gateway_mock"], app.meter)
+            if not app.config["gateway_mock"]:
+                cache = app.config.get("llm_cache_dir")
+                app.gateway.cache_dir = Path(cache) if cache else None
+                app.gateway.replay = app.config["replay"]
+            app.system1 = build_system1(app.config["system1_impl"], "config/system1.yaml", app.gateway, app.meter)
         app.jev = Jev(app.system1, app.config["thresholds"]["match"])
         app.extractor = (RuleExtractor(app.seeds) if app.config["extractor"] == "rule"
                          else LLMExtractor(app.seeds, app.gateway))

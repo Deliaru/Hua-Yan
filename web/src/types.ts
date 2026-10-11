@@ -15,8 +15,12 @@ export interface RunStatus {
   seeds_placeholder: boolean;
 }
 
+// 本会话的运行方式（服务端会话层给出，不含密钥）：replay 录制回放；byok 试用者自带模型；local 本地部署按配置运行
+export interface RunMode { kind: "replay" | "byok" | "local"; llm_model: string | null; jev_model: string | null; jev_fallback: boolean }
+
 export interface Meta {
   status: RunStatus;
+  mode: RunMode;
   actors: Actor[];
   slots: { id: string; label: string }[];
   phenomena: { id: string; label: string }[];
