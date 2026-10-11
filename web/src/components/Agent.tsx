@@ -4,9 +4,10 @@ import { useState } from "react";
 import { api } from "../api";
 import { useGuideArg } from "./Guide";
 import { useApp, useData } from "../ctx";
-import type { AgentMessage } from "../types";
+import type { AgentMessage, AgentRun } from "../types";
 import { ArrowUp, ChevronRight } from "./Icons";
 import { Group } from "./ui";
+import { LiveLine, RunLine } from "./Process";
 
 // 当前身份与这条会话（业务员）或收件箱（研发）的对话；批注按 target 挂到工作面对应位置
 export function useConversation(sessionId: string | null) {
@@ -35,15 +36,17 @@ export function Notes({ notes }: { notes: AgentMessage[] }) {
 export function AgentPanel({ sessionId, focus, external, title, children }: {
   sessionId: string | null; focus: string | null; external?: boolean; title: string; children?: React.ReactNode;
 }) {
-  const { me, agentOnline, refresh } = useApp();
+  const { me, agentOnline, refresh, meta } = useApp();
   const conv = useConversation(sessionId);
+  // 每轮回复的过程（步骤、工具、用时），按回复在对话里的位置对应
+  const runs = useData(() => (conv ? api.agentProcess(conv.id, me) : Promise.resolve({} as Record<string, AgentRun>)), [conv?.id, me]);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const scripted = useGuideArg("chat");   // 回放部署：台词里人要对 Agent 说的话
   // 系统消息是派单记录（带内部编号）；带 target 的批注已挂在工作面上，历史里只留人与 Agent 的对话
-  const history = (conv?.messages ?? []).filter((m) => m.role !== "system");
+  const history = (conv?.messages ?? []).map((m, i) => ({ ...m, i })).filter((m) => m.role !== "system");
   const send = () => {
     const t = text.trim();
     if (!t || busy) return;
@@ -65,16 +68,21 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
         <div className="dock overflow-hidden">
           <button type="button" onClick={() => setOpen(!open)} disabled={!history.length}
                   className="flex w-full items-center gap-2 px-3.5 pb-1 pt-2.5 text-left">
-            <span className="text-[12px] font-semibold">与 Agent 协作</span>
-            {external && <span className="text-[11px] text-ink-3">不会发给客户</span>}
-            {!!history.length && <span className="ml-auto flex items-center gap-1 text-[11px] text-ink-2">
+            <span className="shrink-0 whitespace-nowrap text-[12px] font-semibold">与 Agent 协作</span>
+            {meta.mode.llm_model && <span className="min-w-0 truncate text-[11px] text-ink-2" title="Agent 使用的大模型">
+              {meta.mode.llm_model}{meta.status.replay ? " · 录制" : ""}</span>}
+            {external && <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-3">不发给客户</span>}
+            {!!history.length && <span className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] text-ink-2">
               {history.length} 条<ChevronRight open={open} /></span>}
           </button>
           {open && (
             <div className="anim-fade flex max-h-[240px] flex-col gap-1.5 overflow-y-auto border-b border-sep px-3.5 pb-2.5 pt-1">
-              {history.map((m, i) => (
-                <p key={i} className={`max-w-[88%] rounded-[12px] px-2.5 py-1.5 text-[13px] leading-5 ${
-                  m.role === "principal" ? "self-end bg-[#ececf0]" : "self-start bg-[#f6f6f8]"}`}>{m.text}</p>
+              {history.map((m) => (
+                <div key={m.i} className="contents">
+                  <p className={`max-w-[88%] rounded-[12px] px-2.5 py-1.5 text-[13px] leading-5 ${
+                    m.role === "principal" ? "self-end bg-[#ececf0]" : "self-start bg-[#f6f6f8]"}`}>{m.text}</p>
+                  {m.role === "assistant" && runs?.[m.i] && <RunLine {...runs[m.i]} />}
+                </div>
               ))}
             </div>
           )}
@@ -93,7 +101,7 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
             </button>
           </form>
           {(busy || err) && <p role={err ? "alert" : "status"} className={`px-3.5 pb-2.5 text-[12px] ${err ? "text-danger" : "text-ink-2"}`}>
-            {err ?? "Agent 处理中……"}</p>}
+            {err ?? <LiveLine />}</p>}
         </div>
       </div>
     </aside>

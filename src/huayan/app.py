@@ -1,5 +1,6 @@
 """应用门面：负责身份与视图边界，界面只调用这里。"""
 import json
+import time
 from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -81,6 +82,7 @@ class HuayanApp:
         app._jue_trace, app._answers = {}, {}
         app._last_scan = None
         app._agent_drafting = False  # Hub 工具执行期间的来源标记，不由模型或 HTTP 参数指定。
+        app.progress = None          # 界面过程面板的进度回调（ui.server 设置）；只报「谁在做什么、用时」
         app.agents = AgentHub(app)
         return app
 
@@ -90,8 +92,15 @@ class HuayanApp:
             return JueK(self.config["jue_k_dir"], self.config["templates_dir"], mode, self.meter)
         return JueProto(self.config["templates_dir"], self.system1, mode, self.meter)
 
+    def emit(self, kind, **fields):
+        if self.progress:
+            self.progress(kind, **fields)
+
     def _propose(self, model, state):
+        started = time.perf_counter()
         out = model.propose(state)
+        self.emit("jue", mode=out.mode, model=out.model, n=sum(d.precondition_passed for d in out.decisions),
+                  latency_ms=(time.perf_counter() - started) * 1000)
         with (self.run_dir / "jue_samples.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(JueRecord(state=state, output=out).model_dump_json() + "\n")
         return out

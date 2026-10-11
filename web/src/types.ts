@@ -18,6 +18,18 @@ export interface RunStatus {
 // 本会话的运行方式（服务端会话层给出，不含密钥）：replay 录制回放；byok 试用者自带模型；local 本地部署按配置运行
 export interface RunMode { kind: "replay" | "byok" | "local"; llm_model: string | null; jev_model: string | null; jev_fallback: boolean }
 
+// 处理过程（服务端会话层，墙钟）：一次写操作里觉、模型、Jev、各角色 Agent 依次做了什么；别人的 Agent 不含工具名
+export interface ProgressEvent {
+  kind: "jue" | "llm_start" | "llm" | "s1_start" | "s1" | "dispatch" | "agent_start" | "step" | "agent_end";
+  t: number;                        // 距本次处理开始的秒数
+  caller?: string; model?: string; cached?: boolean; ok?: boolean; latency_ms?: number;   // 模型与 Jev；回放时 latency 为录制时耗时
+  n?: number; mode?: string;        // 觉：本次判断的决策点数
+  actor?: string; family?: string; conversation_id?: string; index?: number;            // Agent
+  step?: number; tool?: string | null; blocked?: boolean; pending?: boolean;
+}
+export interface Activity { path: string; running: boolean; elapsed_ms: number; error: string | null; events: ProgressEvent[] }
+export interface AgentRun { events: ProgressEvent[]; ms: number }
+
 export interface Meta {
   status: RunStatus;
   mode: RunMode;

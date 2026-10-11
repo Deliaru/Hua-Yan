@@ -2,15 +2,34 @@
 // 身份由界面选择后作为 viewer / by 传入，裁剪与可签条件都在门面里；门面拒绝时原样显示它返回的 error。
 import type {
   Conversation, ContributionStat, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
-  RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction,
+  RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
 const SESSION = localStorage.getItem("huayan-session") ?? crypto.randomUUID();
 localStorage.setItem("huayan-session", SESSION);
 
+// 正在进行的写操作数：过程面板据此轮询处理过程（切换运行方式有自己的提示，不计入）
+let inflight = 0;
+const listeners = new Set<() => void>();
+export const writes = {
+  count: () => inflight,
+  subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
+};
+const track = (d: number) => { inflight += d; listeners.forEach((fn) => fn()); };
+
 // 相对路径：页面可部署在子路径下（如 /huayan-demo/）
 async function call<T>(path: string, body?: object): Promise<T> {
+  const tracked = !!body && path !== "mode";
+  if (tracked) track(1);
+  try {
+    return await request<T>(path, body);
+  } finally {
+    if (tracked) track(-1);
+  }
+}
+
+async function request<T>(path: string, body?: object): Promise<T> {
   const r = await fetch(`api/${path}`, body ? {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Huayan-Session": SESSION },
@@ -31,6 +50,9 @@ export const api = {
   reset: () => call<{ run_id: string }>("reset", {}),
   // 切换本会话的运行方式（回放 / 自带密钥）；密钥只发给本服务，服务端只存在内存里
   setMode: (body: Record<string, string | boolean>) => call<RunMode>("mode", body),
+  // 处理过程：不排会话锁，处理中也能读
+  progress: (viewer: string) => call<Activity | null>(`progress?${q({ viewer })}`),
+  agentProcess: (conversation_id: string, viewer: string) => call<Record<string, AgentRun>>(`agents/process?${q({ conversation_id, viewer })}`),
 
   // 读
   sessions: () => call<SessionSummary[]>("sessions"),

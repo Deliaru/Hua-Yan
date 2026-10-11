@@ -20,6 +20,7 @@ import { Story } from "./pages/Story";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
+import { ActivityMenu } from "./components/Process";
 
 const PAGES = [
   ["overview", "架构总览", NavArch],
@@ -74,6 +75,7 @@ export default function App() {
     <AppCtx.Provider value={ctx}>
       <header className="bar fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-3 border-b border-sep px-4">
         <div className="w-[200px]"><Logo /></div>
+        <ActivityMenu />
         {page === "desk" && <div className="absolute left-1/2 -translate-x-1/2"><Guide /></div>}
         <div className="ml-auto flex items-center gap-1.5">
           <StatusMenu s={meta.status} m={meta.mode} onMode={() => setModeOpen(true)} />
@@ -155,16 +157,17 @@ function StatusMenu({ s, m, onMode }: { s: RunStatus; m: RunMode; onMode: () => 
   const jue: Record<string, string> = { jue_k: "Jue-K · 本地实时", jue_proto: "规则原型", onejev: "OneJev" };
   // [项, 值, 种类]：ok 正常运行，warn 降级，replay 录制回放
   type Kind = "ok" | "warn" | "replay";
-  const llm = (on: string): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${on} · ${R}`, "replay"]
-    : byok ? [`${m.llm_model} · 自带密钥`, "ok"] : [`${on} · 在线`, "ok"];
+  // 写出所用模型名：回放是录制时的模型，自带密钥是试用者填的模型
+  const llm = (): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${m.llm_model} · ${R}`, "replay"]
+    : [`${m.llm_model} · ${byok ? "自带密钥" : "在线"}`, "ok"];
   const items: [string, string, Kind][] = [
     ["数据", "模拟", "ok"],
     ...(s.seeds_placeholder ? [["种子", "占位", "warn"] as [string, string, Kind]] : []),
-    ["Agent", ...llm("大模型")],
-    ["抽取", ...(s.extractor === "llm" ? llm("大模型") : ["规则", "warn"] as [string, Kind])],
+    ["Agent", ...llm()],
+    ["抽取", ...(s.extractor === "llm" ? llm() : ["规则", "warn"] as [string, Kind])],
     ["Jev", ...(s.system1_impl !== "onejev" ? [jev[s.system1_impl] ?? s.system1_impl, "warn"] as [string, Kind]
-      : s.replay ? [`OneJev · ${R}`, "replay"] as [string, Kind]
-      : byok ? [`${m.jev_model} · 自带接口${m.jev_fallback ? "，失败降级" : ""}`, "ok"] as [string, Kind] : ["OneJev · 在线", "ok"] as [string, Kind])],
+      : s.replay ? [`${m.jev_model} · ${R}`, "replay"] as [string, Kind]
+      : byok ? [`${m.jev_model} · 自带接口${m.jev_fallback ? "，失败降级" : ""}`, "ok"] as [string, Kind] : [`${m.jev_model} · 在线`, "ok"] as [string, Kind])],
     ["觉", jue[s.realtime_model] ?? s.realtime_model, s.realtime_model === "jue_proto" ? "warn" : "ok"],
   ];
   const degraded = items.filter(([, , k]) => k === "warn").length;

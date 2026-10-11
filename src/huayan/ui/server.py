@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import re
+import time
 from collections import OrderedDict
 import traceback
 from datetime import datetime, timedelta
@@ -26,6 +27,7 @@ from huayan.contracts import ReqItem, SheetDraft, SHANGHAI
 from huayan.knowledge import PermissionDenied
 from huayan.gateway.byok import Byok, public_url
 from huayan.gateway.client import ReplayMiss
+from huayan.jev.system1 import OneJevClient
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
 PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
@@ -53,6 +55,25 @@ class ThreadClock:
 
 THREAD_CLOCK = ThreadClock()
 checkpoint_lock = Lock()                          # 载入检查点共用 runs/demo_v5/checkpoint.yaml
+
+
+class Activity:
+    """一次写操作的处理过程（墙钟），界面的过程面板轮询读取；只在内存里。"""
+
+    def __init__(self, path):
+        self.path, self.t0, self.events, self.ms, self.error = path, time.monotonic(), [], None, None
+
+    def add(self, kind, **fields):
+        self.events.append({"kind": kind, "t": round(time.monotonic() - self.t0, 2), **fields})
+
+    def view(self, viewer):
+        """别人的 Agent 只给「谁、做什么、用时」：去掉工具名（铁律 4 的裁剪在服务端做，界面不判断）。"""
+        owner, events = None, []
+        for e in list(self.events):
+            owner = e["actor"] if e["kind"] == "agent_start" else None if e["kind"] == "agent_end" else owner
+            events.append({k: v for k, v in e.items() if k != "tool"} if e["kind"] == "step" and owner != viewer else e)
+        elapsed = self.ms if self.ms is not None else (time.monotonic() - self.t0) * 1000
+        return {"path": self.path, "running": self.ms is None, "elapsed_ms": elapsed, "error": self.error, "events": events}
 
 
 def use_clock(clock):
@@ -180,6 +201,37 @@ class Api:
         self.clock = clock or get_clock()   # 本会话的业务时钟；每次调用先在当前线程换上它
         self.lock = RLock()
         self.writes = 0     # 本轮成功的写操作数；回放部署里按它对齐台词的下一步
+        self.activity = None                # 正在进行或最近一次写操作的处理过程
+        self.agent_runs = {}                # (对话 id, 回复序号) → 这一轮 Agent 的过程，供对话里展开
+        if app is not None:
+            self.attach(app)
+
+    def attach(self, app):
+        """把门面、网关、OneJev 的进度回调接到本会话的过程记录上。"""
+        app.progress = app.gateway.trace = self.emit
+        for client in (app.system1, getattr(app.system1, "onejev", None)):
+            if isinstance(client, OneJevClient):
+                client.trace = self.emit
+
+    def emit(self, kind, **fields):
+        activity = self.activity
+        if activity is None or activity.ms is not None:
+            return
+        activity.add(kind, **fields)
+        if kind == "agent_end":
+            events = activity.events
+            start = max(i for i, e in enumerate(events) if e["kind"] == "agent_start" and e["conversation_id"] == fields["conversation_id"])
+            self.agent_runs[(fields["conversation_id"], fields["index"])] = {
+                "events": events[start:], "ms": (events[-1]["t"] - events[start]["t"]) * 1000}
+
+    def progress(self, viewer):
+        return self.activity.view(viewer) if self.activity else None
+
+    def agent_process(self, conversation_id, viewer):
+        """自己的对话里每轮 Agent 回复的过程；只给对话的委托人本人。"""
+        if not conversation_id.startswith(f"conv:{viewer}:"):
+            raise PermissionDenied("只能查看自己 Agent 的过程")
+        return {str(i): run for (c, i), run in self.agent_runs.items() if c == conversation_id}
 
     def checkpoints(self):
         if self.byok or Path(self.config_path).name not in ("app.demo.yaml", "app.demo.replay.yaml"):
@@ -218,6 +270,8 @@ class Api:
         loaded.config["replay"] = loaded.gateway.replay = loaded.system1.replay = deployed_replay
         self.app.system1.close()
         self.app, self.writes, self.clock = loaded, inner.writes, inner.clock
+        self.agent_runs = inner.agent_runs
+        self.attach(loaded)
         return {"run_id": loaded.run_id, "checkpoint": name}
 
     def next_action(self):
@@ -242,6 +296,8 @@ class Api:
         self.clock = SimClock(T0)
         use_clock(self.clock)
         self.app, self.writes = HuayanApp.build(self.config_path, byok=self.byok), 0
+        self.activity, self.agent_runs = None, {}
+        self.attach(self.app)
 
     def _call(self, method, path, params):
         if method == "GET" and path == "/api/demo/checkpoints":
@@ -257,26 +313,34 @@ class Api:
         if method == "GET" and path == "/api/meta":
             return meta(self.app, params) | {"mode": self.mode()}
         route = {"GET": GET, "POST": POST}[method][path]
-        if method == "POST":
-            before = self.clock.now()
-            self.clock.advance_to(before + timedelta(minutes=1))
+        if method == "GET":
+            return route(self.app, params)
+        before = self.clock.now()
+        self.clock.advance_to(before + timedelta(minutes=1))
+        activity = self.activity = Activity(path)
         try:
-            result = route(self.app, params)
-        except (PermissionDenied, ValueError, KeyError, StopIteration):
-            if method == "POST":            # 被门面拒绝的写操作不占业务时间：误点不会让回放台词的时刻错位
+            try:
+                result = route(self.app, params)
+            except (PermissionDenied, ValueError, KeyError, StopIteration):
+                # 被门面拒绝的写操作不占业务时间：误点不会让回放台词的时刻错位
                 self.clock = SimClock(before)
                 use_clock(self.clock)
-            raise
-        if method == "POST":
+                raise
             self.app.tick()
-            self.writes += 1
+        except Exception as e:
+            activity.error = f"{type(e).__name__}: {e}"
+            raise
+        finally:
+            activity.ms = (time.monotonic() - activity.t0) * 1000
+        self.writes += 1
         return result
 
     def mode(self):
-        """本会话的运行方式（不含密钥）。"""
-        b = self.byok
-        return {"kind": "replay" if self.app.config["replay"] else "byok" if b else "local",
-                "llm_model": b.llm_model if b else None, "jev_model": b.jev_model if b and b.jev_base_url else None,
+        """本会话的运行方式与所用模型名（不含密钥）。"""
+        b, config = self.byok, self.app.config
+        llm = None if config["gateway_mock"] else self.app.gateway.tiers["fast"]["model"]
+        jev = (b.jev_model if b.jev_base_url else None) if b else self.app.system1.model if config["system1_impl"] == "onejev" else None
+        return {"kind": "replay" if config["replay"] else "byok" if b else "local", "llm_model": llm, "jev_model": jev,
                 "jev_fallback": bool(b and b.jev_base_url and b.jev_fallback)}
 
 
@@ -289,7 +353,15 @@ class Handler(SimpleHTTPRequestHandler):
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
             sid = self.headers.get("X-Huayan-Session", "default")
-            result = set_mode(sid, params) if url.path == "/api/mode" else session_api(sid).call(method, url.path, params)
+            # 过程面板的两个读接口不排会话锁：会话锁正被那次耗时的写操作占着
+            if url.path == "/api/mode":
+                result = set_mode(sid, params)
+            elif url.path == "/api/progress":
+                result = session_api(sid).progress(params["viewer"])
+            elif url.path == "/api/agents/process":
+                result = session_api(sid).agent_process(params["conversation_id"], params["viewer"])
+            else:
+                result = session_api(sid).call(method, url.path, params)
             status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}

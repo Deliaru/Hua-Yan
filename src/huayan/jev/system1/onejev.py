@@ -44,6 +44,7 @@ class OneJevClient:
         self.deadline = deadline
         self.last_request = self.last_response = None
         self.cache_dir, self.replay = None, False
+        self.trace = None   # 界面过程面板的进度回调（可选）
 
     def close(self):
         self.http.close()
@@ -75,11 +76,15 @@ class OneJevClient:
         cache_key = hashlib.sha256(json.dumps({"caller": caller, "request": body},
             sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
         path = Path(self.cache_dir) / f"{cache_key}.json" if self.cache_dir else None
+        if self.trace:
+            self.trace("s1_start", caller=caller, model=self.model)
         if path and path.exists():
             cached = json.loads(path.read_text(encoding="utf-8"))
             self.last_response = cached["response"]
             result = S1Result.model_validate(cached["result"])
             print(f"[cache:onejev] caller={caller}")
+            if self.trace:
+                self.trace("s1", caller=caller, model=self.model, cached=True, ok=True, latency_ms=result.latency_ms)
             self.meter.record(caller=caller, kind="s1", model=self.model, impl="onejev", degraded=False,
                               n_questions=len(questions), latency_ms=0, cost=0)
             return result
@@ -125,6 +130,8 @@ class OneJevClient:
             raise
         finally:
             elapsed = (time.monotonic() - started) * 1000
+            if self.trace:
+                self.trace("s1", caller=caller, model=self.model, cached=False, ok=ok, latency_ms=elapsed)
             usage = (self.last_response or {}).get("usage", {}) if ok else {}
             self.meter.record(caller=caller, kind="s1", model=self.model, impl="onejev", degraded=False, n_questions=len(questions),
                               input_tokens=usage.get("input_tokens", 0), latency_ms=elapsed, ok=ok,

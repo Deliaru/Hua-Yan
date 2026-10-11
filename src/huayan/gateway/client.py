@@ -51,9 +51,9 @@ class OpenAICompatGateway:
                               input_tokens=response.usage.input_tokens, output_tokens=response.usage.output_tokens,
                               latency_ms=response.latency_ms, cost=response.cost,
                               fallback_used=response.fallback_used, degraded=response.fallback_used)
-        if self.trace is not None:
-            self.trace("llm", caller=req.caller, tier=response.tier.value, model=response.model,
-                       cached=cached, fallback_used=response.fallback_used)
+        if self.trace is not None:   # model 用请求的模型名（中转服务返回的名字可能不同）；回放时 latency 是录制时的耗时
+            self.trace("llm", caller=req.caller, tier=response.tier.value, model=self.tiers[response.tier.value]["model"],
+                       cached=cached, fallback_used=response.fallback_used, latency_ms=response.latency_ms)
 
     def _complete(self, req, schema=None):
         if not req.caller:
@@ -62,6 +62,8 @@ class OpenAICompatGateway:
             "schema": schema.model_json_schema() if schema else None, "tiers": self.tiers},
             sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
         path = Path(self.cache_dir) / f"{cache_key}.json" if self.cache_dir else None
+        if self.trace is not None:
+            self.trace("llm_start", caller=req.caller, model=self.tiers[req.tier.value]["model"])
         if path and path.exists():
             response = LLMResponse.model_validate_json(path.read_text(encoding="utf-8"))
             print(f"[cache:gateway] caller={req.caller}")
