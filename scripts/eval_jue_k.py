@@ -1,9 +1,11 @@
 """评估 Jue-K → docs/reports/jue_k/：
 1. 校准（主结果）：每类在 test（追问 / 回问另加 heldout）上的 AUC、Brier、ECE，校准前后与原型规则分数对照；五类可靠性图；
 2. 定时发现：6 个测试周（与训练同一生成方式、在真实链路上跑出事件、未参与训练）上，Jue-K 与原型规则模式按 WP-E 口径比较窗口内发现、提前量、困难负样本误报。
+3. 学习曲线（--parts learning_curve，不依赖 1、2 的样本与模型）：真实世界的槽位先验偏离专家估计 λ 时，
+   追问上 Jue-K 随训练会话数的 AUC / Brier，对照只用专家先验的信息价值规则（p_fix）。λ 是假设，所以整条扫描都列出。
 ECE 用 10 个等频分箱、可靠性图用 10 个等宽分箱，做法参照 JUE-r2 eval/calibration.py。
 
-uv run python scripts/eval_jue_k.py（先跑 make_jue_k_data.py、train_jue_k.py；追问操作点见 eval_ask_policies.py）
+uv run python scripts/eval_jue_k.py [--parts main,learning_curve]（main 先跑 make_jue_k_data.py、train_jue_k.py；追问操作点见 eval_ask_policies.py）
 """
 import argparse
 import json
@@ -25,15 +27,15 @@ from huayan.contracts import SHANGHAI
 from huayan.domain import load_seeds
 from huayan.eval.week import chain_events
 from huayan.events import EventLog
-from huayan.jue.expr import evaluate
 from huayan.jue.features import vectorize
 from huayan.jue.jue_k import JueK
-from huayan.jue.proto import JueProto, load_templates
+from huayan.jue.proto import JueProto
 from huayan.jue.state import collect_scheduled
 from huayan.knowledge import AuditLog, KnowledgeBase
-from huayan.sim import make_week
+from huayan.sim import make_cards, make_week, shifted_world
+from huayan.sim.trajectory import trajectory
 from huayan.sim.week_events import TICK_HOURS
-from train_jue_k import META, features
+from train_jue_k import features, make_classifier, rule_scores
 
 FAMILIES = ["ask_slot", "ask_back", "opportunity", "knowledge_conflict", "leak_risk"]
 
@@ -92,8 +94,65 @@ def detection(seeds, products, models: dict, weeks: range, start: datetime, days
     return result
 
 
+def learning_curve(seeds, kb, templates: str, start: datetime, lams=(0.0, 0.25, 0.5, 1.0),
+                   sizes=(100, 300, 1000, 3000), n_test=1500, repeats=3) -> dict:
+    """每个 λ、每次重复：一个偏离世界（种子 42 + r），训练池按卡的顺序取前 N 张，测试另抽 n_test 张；只看追问。
+    Jue-K 与线上同一套特征与分类器（未另做 isotonic 校准）；规则 = p_fix（专家先验下的信息价值）与现模板规则分。"""
+    model = JueProto(templates, None, "realtime")
+
+    def rows(world, n, seed):
+        rng, out = random.Random(seed), []
+        for k, card in enumerate(make_cards(world, n, rng)):
+            out += [{**row, "card": k} for row in trajectory(card, seeds, kb, model, rng, start) if row["family"] == "ask_slot"]
+        return pd.DataFrame(out)
+
+    result = {}
+    for lam in lams:
+        runs = []
+        for r in range(repeats):
+            world = shifted_world(seeds, lam, random.Random(42 + r))
+            pool, test = rows(world, max(sizes), 1000 * r + 1), rows(world, n_test, 1000 * r + 2).drop(columns="card")
+            y = test.label.to_numpy()
+            run = {"p_fix": stats(test.p_fix.to_numpy(), y), "template_rule": stats(rule_scores(test, templates), y), "jue_k": {}}
+            for n in sizes:
+                train = pool[pool.card < n].drop(columns="card")
+                feats = features(train)
+                columns = sorted({k for f in feats for k in f})
+                clf = make_classifier().fit(np.asarray(vectorize(feats, columns)), train.label)
+                run["jue_k"][n] = stats(clf.predict_proba(np.asarray(vectorize(features(test), columns)))[:, 1], y)
+            runs.append(run)
+        mean = lambda get: float(np.mean([get(run) for run in runs]))
+        result[str(lam)] = {
+            "p_fix": {k: mean(lambda run: run["p_fix"][k]) for k in ("auc", "brier")},
+            "template_rule": {"auc": mean(lambda run: run["template_rule"]["auc"])},
+            "jue_k": {str(n): {k: mean(lambda run: run["jue_k"][n][k]) for k in ("auc", "brier")} for n in sizes},
+            "jue_k_range": {str(n): [min(run["jue_k"][n]["auc"] for run in runs), max(run["jue_k"][n]["auc"] for run in runs)]
+                            for n in sizes}}
+        print(f"λ={lam}: p_fix 规则 AUC {result[str(lam)]['p_fix']['auc']:.3f} / Brier {result[str(lam)]['p_fix']['brier']:.3f}  "
+              + "  ".join(f"N={n} {v['auc']:.3f}/{v['brier']:.3f}" for n, v in result[str(lam)]["jue_k"].items()), flush=True)
+    return {"lams": list(lams), "sizes": list(sizes), "n_test_cards": n_test, "repeats": repeats, "by_lam": result}
+
+
+def _plot_learning_curve(lc: dict, path: Path) -> None:
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+    for j, lam in enumerate(lc["lams"]):
+        r = lc["by_lam"][str(lam)]
+        for axis, key in zip(axes, ("auc", "brier")):
+            axis.plot(lc["sizes"], [r["jue_k"][str(n)][key] for n in lc["sizes"]], "o-", color=f"C{j}", label=f"Jue-K, λ={lam}")
+            axis.axhline(r["p_fix"][key], color=f"C{j}", ls="--", lw=1, label=f"VOI rule (expert prior), λ={lam}")
+    for axis, key in zip(axes, ("AUC (higher is better)", "Brier (lower is better)")):
+        axis.set(xscale="log", xlabel="training sessions (dispositions collected)", ylabel=key)
+        axis.grid(alpha=0.3)
+    axes[0].legend(fontsize=7)
+    fig.suptitle("ask_slot: Jue-K learns from outcomes vs. value-of-information rule on expert priors; "
+                 "λ = how far the world deviates from expert priors", fontsize=9)
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--parts", default="main,learning_curve", help="main = 校准与定时发现；learning_curve = 学习曲线")
     ap.add_argument("--samples", default="data/jue_k/samples.csv")
     ap.add_argument("--model-dir", default="models/jue_k")
     ap.add_argument("--templates", default="config/templates")
@@ -102,18 +161,29 @@ def main():
     ap.add_argument("--start", default="2026-10-12")
     ap.add_argument("--out", default="docs/reports/jue_k")
     args = ap.parse_args()
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    if "learning_curve" in args.parts:
+        seeds = load_seeds(args.seeds_dir)
+        lc = learning_curve(seeds, KnowledgeBase.from_seeds(seeds, EventLog(), AuditLog()), args.templates,
+                            datetime.fromisoformat(args.start).replace(tzinfo=SHANGHAI))
+        (out / "learning_curve.json").write_text(json.dumps(lc, ensure_ascii=False, indent=2), encoding="utf-8")
+        _plot_learning_curve(lc, out / "learning_curve.png")
+        print(f"写出 {out / 'learning_curve.json'}、{out / 'learning_curve.png'}")
+    if "main" in args.parts:
+        evaluate(args, out)
 
+
+def evaluate(args, out: Path) -> None:
     df = pd.read_csv(args.samples)
     with (Path(args.model_dir) / "model.pkl").open("rb") as stream:
         artifact = pickle.load(stream)
     columns = json.loads((Path(args.model_dir) / "features.json").read_text(encoding="utf-8"))["columns"]
     raw = artifact["classifier"].predict_proba(np.asarray(vectorize(features(df), columns)))[:, 1]
-    cal = np.array([artifact["calibrators"][f].predict([r])[0] for f, r in zip(df.family, raw)])
-    templates = {t.family: t for t in load_templates(args.templates).values()}
-    attrs = [c for c in df.columns if c not in META]
-    rule = np.array([min(1.0, max(0.0, float(evaluate(templates[row["family"]].rule_score,
-                                                         {k: v for k, v in row.items() if k in attrs and pd.notna(v)}))))
-                     for row in df.to_dict("records")])
+    rule = rule_scores(df, args.templates)
+    # 回落规则的类没有校准器：「jue_k」一栏即最终使用的分数（规则），与 JueK 推理一致
+    cal = np.array([artifact["calibrators"][f].predict([r])[0] if f in artifact["calibrators"] else q
+                    for f, r, q in zip(df.family, raw, rule)])
     y = df.label.to_numpy()
 
     calibration, curves = {}, {}
@@ -134,8 +204,6 @@ def main():
                                             "jue_proto_rule": JueProto(args.templates, None, "scheduled")},
                           test_weeks, start, 5, 0.5)
 
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
     (out / "metrics.json").write_text(json.dumps({"calibration": calibration, "scheduled_detection": {
         "weeks": list(test_weeks), "threshold": 0.5, **scheduled}, "ask_policies": "见 ask_policies.json"},
         ensure_ascii=False, indent=2), encoding="utf-8")

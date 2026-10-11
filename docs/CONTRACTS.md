@@ -552,6 +552,7 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState: ..
 | `chem_savvy` | bool | 客户画像 |
 | `layer` | int | 1 = 对话中（`realtime_state`）；2 = L2 起草中、3 = L3 起草中（`requirement_state`） |
 | `trans_splits` | int | 该槽位取各个值时，本层转化对照（layer 2 看 L2、layer 3 看 L3；layer 1 恒为 0）的命中集合会变成几种（≥ 2 说明问了会改变转译）；已填为 0。计算：text = 现象名 + 已知槽位取值（含假设取值 v）拼接，以 level=3 的内部身份调用 `match_translations(text, kb, actor, phenomenon)`，再按层级筛选；只产出计数，不外泄内容 |
+| `p_fix` | float | v5.4（人已批准）：信息价值。按种子中该现象的槽位先验（没有则均匀），问到该槽位真值后推荐由错变对的概率；只在 layer 1 计算，已填或现象未知为 0。只枚举解决该现象的产品适用范围限定过的未知槽位，用 `correct_product` 判断 |
 
 **theme（定时，机会汇聚）**：`phenomenon` str、`n_escalations` int（窗口内升级次数）、`n_customers` int（涉及客户数）、`n_matched` int（同主题被成功推荐次数）、`days_active` int（出现过的天数）、`open_project` bool（已有对应需求单在途）、`mean_p_none` float。
 

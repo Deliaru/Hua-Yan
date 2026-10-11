@@ -4,8 +4,9 @@ import random
 from datetime import datetime, timedelta
 
 from huayan.contracts import (CustomerProfile, JueObject, JueState, NeedCard, NeedState, Phenomenon, Product,
-                              QuestionModel, Requirement, Seeds, SlotFill)
+                              QuestionModel, Requirement, ReuseProposal, Seeds, SlotFill)
 from huayan.domain import correct_product
+from huayan.events import EventLog
 from huayan.jue.state import realtime_state, requirement_state, trans_hits
 
 TURNS = 6
@@ -64,9 +65,10 @@ def _sales_asks(need: NeedState, phen: Phenomenon, seeds: Seeds, rng: random.Ran
 
 
 def _rows(model: QuestionModel, state: JueState, label, source_id: str) -> list[dict]:
+    """只收追问、回问（槽位对象）；需求单对象上的推进决策由规则到点，不训练。"""
     rows = []
     for d in model.propose(state).decisions:
-        if d.precondition_passed:
+        if d.precondition_passed and d.family in ("ask_slot", "ask_back"):
             obj: JueObject = state.objects[d.object_id]
             rows.append({"family": d.family, "object_type": obj.object_type, "object_id": d.object_id,
                          "at": state.at.isoformat(), "source_id": source_id, "label": label(obj), **obj.attrs})
@@ -90,11 +92,14 @@ def trajectory(card: NeedCard, seeds: Seeds, kb, model: QuestionModel, rng: rand
             answer(need, card, slot, seeds, rng, turn + 1)
         need.turn_count += 1
     if card.truth_product is None:
-        for status, layer in (("draft", 2), ("pm_confirmed", 3)):
-            req = Requirement(id=f"req:{card.id}", question_id=f"q:{card.id}", session_ids=[card.id],
-                              phenomenon=card.phenomenon, known_slots=need.known(), direction="", product_lang=[],
-                              status=status, drafted_by="pm:P01", created_at=start)
-            state = requirement_state(req, need, seeds, kb, start + timedelta(minutes=TURNS + layer))
+        # v5 链路：业务员签字升级 → 空单 → 产品经理 Agent 查无现成产品后起草 L2（layer 2）→ 研发接单后起草 L3（layer 3）。
+        # 槽位对象只取决于已知槽位与层，与草稿内容无关，所以不生成条目。
+        req = Requirement(id=f"req:{card.id}", question_id=f"q:{card.id}", session_ids=[card.id],
+                          phenomenon=card.phenomenon, known_slots=need.known(), assigned_rd="rd:R01",
+                          reuse=ReuseProposal(product_id=None), status="draft", created_at=start)
+        for status, layer in (("draft", 2), ("rd_accepted", 3)):
+            req.status = status
+            state = requirement_state(req, need, seeds, kb, start + timedelta(minutes=TURNS + layer), EventLog())
             rows += _rows(model, state,
                           lambda o: back_label(req, need, card, o.attrs["slot"], phen, kb, layer), card.id)
     return rows
