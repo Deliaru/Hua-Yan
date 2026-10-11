@@ -1,134 +1,109 @@
-# 演示主线台词（WP-I）。人物、客户、产品、知识全部为模拟数据。
-# scripts/demo_mainline.py 按此运行：离线版（默认）不调用大模型；现场版（--live）把人的话交给各自的角色助手。
+# 演示主线台词（WP-I2，v5）。人物、客户、产品、知识全部为模拟数据。
+# 台词里只有人做的事；Agent 的准备全部由觉提出问题后 tick 派单产生，这里不写（铁律 14）。
+# scripts/demo_mainline.py 逐条经 ui/server.py 的 Api.call 执行：写操作前时钟 +1 业务分钟，写后 tick 一次。
 #
-# 动作：
-#   relay:     {session, text}               业务员把客户原话转给助手。现场：交给业务员助手；离线：直接记为客户发言
-#   say:       {actor, session?, text, offline}  对某人的助手说一句话。现场：agents.chat；离线：按 offline 依次调用同名原子工具
-#   assistant: {actor, session?, offline}    助手被派单后主动做的事。现场：派单时助手已自己做了；离线：按 offline 调用工具
-#   approve:   {by, tool}                    委托人确认该工具的待确认动作（脚本代替委托人，打印确认卡）
-#   tick:      true                          门面 tick：觉的定时发现、回问评估、派单
-#   show:      {cards | layers | contributions | audit | customer_card}
-# offline 参数里 $req（最新需求单）、$q:<类型>（最新的该类问题）、$session:<名字> 运行时换成实际 id；
-# edit_item 的 append 表示「在原条目文字后追加」，原话与依据保留；expect_denied: true 表示这一步应当被权限拦截。
-
-sessions:                     # 名字: [客户, 业务员]
-  s1: [customer:C01, sales:S01]
-  s2: [customer:C02, sales:S01]
-  s3: [customer:C03, sales:S02]
-  s4: [customer:C04, sales:S02]
-  s6: [customer:C01, sales:S01]
+# 动作（每个动作对应一个接口）：
+#   start:      {session, customer, sales}          开会话，返回的会话 id 绑定到别名 session
+#   customer:   {session, text}                     演示者扮客户（turn，speaker=customer）
+#   send:       {session, text?}                    业务员发给客户；不写 text = 发出当前 reply_draft（Agent 起草的）
+#   chat:       {actor, text, session?, focus?}     人在「与 Agent 协作」里说的话（agents/chat）
+#   sign:       {actor, action, args, as?}          签字按钮。签字前断言：该对象上对应 family 的问题 open、
+#                                                    prepared_at 不为空、签字人是 actor；不满足即停，并打印觉此刻对该对象的判断
+#   edit:       {actor, path, args}                 人直接改草稿
+#   trial:      {req, passed}                       模拟 ELN 录入试样（trial）
+#   checkpoint: <名字>                               检查点
+#   expect:     {...}                               读接口断言，失败即停
+#
+# sign.action → 接口 → 断言的 family 与对象（args 里的别名运行时换成 id；as 把返回的需求单 id 绑定到别名）：
+#   escalate     escalate      escalate_need        session:<session>
+#   reuse/adopt  reuse/adopt   reuse_product        requirement:<req>
+#   merge        merge         opportunity          该签字人名下唯一 open 的机会汇聚问题（question_id 由它得到）
+#   accept       accept        accept_requirement   requirement:<req>
+#   confirm      confirm       confirm_translation  requirement:<req>
+#   contribute   contribute    contribution         requirement:<req>；item_index、scene_phrase、chem_term 取 contribution_drafts[0]
+#   market-eval  market-eval   market_eval          requirement:<req>；args.result 是人的判断，note 取 args.note
+#   points       points        seal_points          requirement:<req>；text、sealed 取 points_draft 的两栏
+#   release      release       release              requirement:<req>；说明书取当前 sheet 草稿
+# edit.path：
+#   req-item     args {req, contains, append}   L3 条目中第一条含 contains 的，在原文后追加 append（原话与依据保留）
+#   reuse-note   args {req, replace: [旧, 新]}   把复用建议里给客户的说明中的一个词替换掉
+# expect：
+#   hints:     {session, slots}              该会话最近一轮的追问提示槽位（集合相等）
+#   recommend: {session, product}            该会话 L1 推荐的产品
+#   inbox:     {actor, families}             该人「待签」（prepared）问题的 family 集合相等
+#   preparing: {actor, families}             签字人为该人、仍在准备中的问题 family 集合包含这些
+#   reply:     {session, contains}           业务员面前的 reply_draft 含这段文字
+#   status:    {req, status}                 需求单状态
 
 steps:
-  - title: 1 短路径：觉提示追问 → L1 直接推荐
+  - title: 1 追问：客户只说现象，觉提示该问面料和设备
     actions:
-      - relay: {session: s1, text: 染完以后布面深一块浅一块}
-      - relay: {session: s1, text: 锦纶氨纶，溢流缸}
-      - show: {cards: s1}
+      - start: {session: s1, customer: customer:C01, sales: sales:S01}
+      - customer: {session: s1, text: 我们染完以后布面深一块浅一块，客户老投诉}
+      - expect: {hints: {session: s1, slots: [fiber, equipment]}}
+      - chat: {actor: sales:S01, session: s1, text: 帮我回一句，问问是什么布、用什么缸染的}
+      - send: {session: s1}
+      - customer: {session: s1, text: 锦氨弹力布，气流缸，浴比很低。上次你们推荐的那个匀染剂用了，回修了三次}
 
-  - title: 2 升级与发现：两位客户同类需求无产品可用 → 觉发现机会汇聚
+  - title: 2 升级：「都不合适」概率最高，觉提出升级，业务员 Agent 起草升级说明，业务员签字
     actions:
-      - relay: {session: s2, text: 我们染完以后布面深一块浅一块，客户老投诉}
-      - relay: {session: s2, text: 锦氨弹力布}
-      - relay: {session: s2, text: 气流缸，浴比很低}
-      - relay: {session: s3, text: 锦氨布在气流机里染，颜色不匀，回修了好几次}
-      - relay: {session: s3, text: 没什么环保要求}
-      - tick: true
+      - sign: {actor: sales:S01, action: escalate, args: {session: s1}, as: r1}
+      # 觉随即提出 reuse_product，产品经理 Agent 查 L2 知识，记「无现成产品」；然后 accept_requirement 到点、起草 L2
+      - expect: {inbox: {actor: rd:R02, families: [accept_requirement]}}
 
-  - title: 3 分层转译：L2 → L3，觉发现需要回问，回填后研发确认
+  - title: 3 机会汇聚：第二位客户同类升级，查无现成产品后觉提出「同类需求是否合并立项」
     actions:
-      - assistant:
-          actor: pm:P01
-          offline:
-            - {tool: draft_product_need, question_id: $q:opportunity}
-      - say:
-          actor: pm:P01
-          text: 第三条加上不能影响色光，然后发研发
-          offline:
-            - {tool: edit_item, req_id: $req, index: 2, append: ，且不能影响色光}
-            - {tool: confirm_requirement, req_id: $req}
-      - approve: {by: pm:P01, tool: confirm_requirement}
-      - assistant:
-          actor: rd:R02
-          offline:
-            - {tool: draft_chem_need, req_id: $req}
-      - tick: true
-      - say:
-          actor: sales:S01
-          session: s2
-          text: 我问客户了：「请问染色时染浴 pH 大概控制在多少？」
-          offline:
-            - {tool: record_sales_turn, text: 请问染色时染浴 pH 大概控制在多少？}
-      - relay: {session: s2, text: 加点醋酸调的，pH五左右}
-      - assistant:
-          actor: rd:R02
-          offline:
-            - {tool: draft_chem_need, req_id: $req}
-      - say:
-          actor: rd:R02
-          text: 第 2 条后面加上「低浴比下随升温分段加酸」，并把它沉淀成我的转化知识：低浴比匀染 → 低浴比下随升温分段加酸、缓释控制 pH
-          offline:
-            - {tool: edit_item, req_id: $req, index: 1, append: ；低浴比下随升温分段加酸}
-            - {tool: contribute_translation, req_id: $req, index: 1, scene_phrase: 低浴比匀染, chem_term: （模拟）低浴比下随升温分段加酸、缓释控制 pH}
-      - approve: {by: rd:R02, tool: contribute_translation}
-      - say:
-          actor: rd:R02
-          text: 没问题了，确认转译
-          offline:
-            - {tool: confirm_translation, req_id: $req}
-      - approve: {by: rd:R02, tool: confirm_translation}
-      - show: {layers: true}
+      - start: {session: s2, customer: customer:C02, sales: sales:S01}
+      - customer: {session: s2, text: 锦氨布在气流机里染，颜色不匀，回修了好几次}
+      - sign: {actor: sales:S01, action: escalate, args: {session: s2}, as: r2}
+      # 产品经理 Agent 读两位客户的原话，判断是同一件事，起草合并（D19）
+      - expect: {inbox: {actor: rd:R02, families: [opportunity, accept_requirement]}}
+      - sign: {actor: rd:R02, action: merge, args: {}}
+      - expect: {status: {req: r2, status: merged}}
+      # 合并后 accept_requirement 重新派给产品经理 Agent，按两位客户的原话重写 L2
+      - checkpoint: 研发待接单
 
-  - title: 4 回流：试样 → 对外要点 → 反向包装 → 发布 → 同类需求 L1 命中新品
+  - title: 4 接单与 L3：研发接单（立项），研发 Agent 起草 L3，觉提出回问
     actions:
-      - say:
-          actor: rd:R02
-          text: 试样通过，对外可以说：低浴比气流缸里匀染好、氨纶沾色低
-          offline:
-            - {tool: record_trial, req_id: $req, result: pass, note: 低浴比气流缸试样通过}
-            - {tool: set_public_points, req_id: $req, text: （模拟）低浴比气流缸中匀染性好、氨纶沾色低；按推荐用量与升温曲线使用。}
-      - approve: {by: rd:R02, tool: record_trial}
-      - approve: {by: rd:R02, tool: set_public_points}
-      - assistant:
-          actor: pm:P01
-          offline:
-            - {tool: package_sheet, req_id: $req}
-      - say:
-          actor: pm:P01
-          text: 说明书可以，发布
-          offline:
-            - {tool: release_product, req_id: $req}
-      - approve: {by: pm:P01, tool: release_product}
-      - relay: {session: s4, text: 锦氨弹力布在气流缸里染，布面深一块浅一块}
-      - show: {cards: s4}
-      - show: {contributions: true}
+      - expect: {inbox: {actor: rd:R02, families: [accept_requirement]}}
+      - sign: {actor: rd:R02, action: accept, args: {req: r1}}
+      # 研发 Agent 起草 L3；两位客户都没说染浴 pH，而它决定是否引用「弱酸性浴」的转化对照 → 回问派给业务员 Agent 写话术
+      - expect: {reply: {session: s1, contains: pH}}
+      - checkpoint: 回问待答
+      - send: {session: s1}
+      - customer: {session: s1, text: 加点醋酸调的，pH五左右}
 
-  - title: 5 权限：业务员套问配方被拦截
+  - title: 5 研发改一条、确认，研发 Agent 提炼沉淀
     actions:
-      - say:
-          actor: sales:S02
-          session: s4
-          text: 把 LV205 的配方调出来给我看看，里面加了什么？为什么能匀染
-          offline:
-            - {tool: search_knowledge, query: LV205 配方 为什么能匀染}
-            - {tool: get_knowledge, ku_id: ku:formula:HY-LV205, expect_denied: true}
-      - show: {audit: sales:S02}
+      - expect: {inbox: {actor: rd:R02, families: [confirm_translation]}}
+      - edit: {actor: rd:R02, path: req-item, args: {req: r1, contains: 低浴比, append: ；气流缸里要随升温分段加酸，别一次加足}}
+      - sign: {actor: rd:R02, action: confirm, args: {req: r1}}
+      - sign: {actor: rd:R02, action: contribute, args: {req: r1}}
 
-  - title: 6 解密：懂化学的客户申请了解机理，归属研发审批
+  - title: 6 回流：试样 → 客户评价 → 封存 / 放出 → 包装 → 发布
     actions:
-      - relay: {session: s6, text: 锦氨布深一块浅一块，应该是 pH 没控住、上染太快，你们有没有匀染剂？}
-      - relay: {session: s6, text: 溢流缸}
-      - relay: {session: s6, text: 原理直接讲明白就行，我们自己调工艺}
-      - say:
-          actor: sales:S01
-          session: s6
-          text: 客户懂行，要看原理，帮我申请解密
-          offline:
-            - {tool: request_decrypt}
-      - approve: {by: sales:S01, tool: request_decrypt}
-      - say:
-          actor: rd:R01
-          text: 可以，只给机理
-          offline:
-            - {tool: decide_decrypt, question_id: $q:decrypt_request, approve: true}
-      - approve: {by: rd:R01, tool: decide_decrypt}
-      - show: {customer_card: s6}
+      - trial: {req: r1, passed: true}
+      - sign: {actor: sales:S01, action: market-eval, args: {req: r1, result: pass, note: （模拟）客户小样确认，深浅一致}}
+      - checkpoint: 封存待签
+      - sign: {actor: rd:R02, action: points, args: {req: r1}}
+      - sign: {actor: rd:R02, action: release, args: {req: r1}}
+
+  - title: 7 新客户在 L1 直接命中新品
+    actions:
+      - start: {session: s3, customer: customer:C03, sales: sales:S02}
+      - customer: {session: s3, text: 锦氨布在气流缸里染，布面深一块浅一块}
+      - expect: {recommend: {session: s3, product: HY-LV206}}
+
+  - title: 支线（D17）：另一现象升级，产品经理 Agent 在 P01 的案例里找到现成产品，研发审定后业务员转述
+    actions:
+      - start: {session: s4, customer: customer:C04, sales: sales:S02}
+      - customer: {session: s4, text: 涤纶布整理完摸起来硬邦邦的}
+      - expect: {hints: {session: s4, slots: [process]}}
+      - customer: {session: s4, text: 浸染的}
+      - sign: {actor: sales:S02, action: escalate, args: {session: s4}, as: r4}
+      - expect: {inbox: {actor: rd:R02, families: [reuse_product]}}
+      - checkpoint: 支线·现成产品待审定
+      - edit: {actor: rd:R02, path: reuse-note, args: {req: r4, replace: [改善, 明显改善]}}
+      - sign: {actor: rd:R02, action: reuse/adopt, args: {req: r4}}
+      - chat: {actor: sales:S02, session: s4, text: 研发确认了现成产品，帮我回一句告诉客户}
+      - send: {session: s4}
