@@ -67,8 +67,12 @@ def test_mainline_offline(tmp_path):
         owner="rd:R02", created_at=get_clock().now()))
     confirm = prepared("confirm_translation", f"requirement:{main.id}")
     req = app.requirement_view(main.id, rd).requirement
-    edited = req.chem_lang[0].model_copy(update={"text": req.chem_lang[0].text + "；验证低浴比稳定性", "edited_by": rd})
-    app.edit_req_item(req.id, 0, edited, rd)
+    edited = req.chem_lang[0].model_copy(update={"text": req.chem_lang[0].text + "；验证低浴比稳定性"})
+    assert edited.edited_by is None
+    saved = app.edit_req_item(req.id, 0, edited, rd)
+    assert saved.chem_lang[0].edited_by == rd
+    event = app.events.query(["requirement_edited"])[-1]
+    assert event.actor == rd and event.payload["after"] == saved.chem_lang[0].model_dump()
     ask = next(q for q in app.bus.list(family="ask_back") if q.refs["requirement_id"] == req.id)
     assert ask.refs["slot"] == "constraint" and ask.refs["session_id"] == sessions[0]
     assert ask.prepared_at is None
@@ -80,7 +84,7 @@ def test_mainline_offline(tmp_path):
     prepared("confirm_translation", f"requirement:{req.id}")
     req = app.requirement_view(req.id, rd).requirement
     assert req.known_slots["constraint"] == "无APEO"
-    assert any(i.text == edited.text and i.edited_by == rd for i in req.chem_lang)
+    assert saved.chem_lang[0] in req.chem_lang
     assert any("ku:translation:tr:e2e" in i.ku_refs for i in req.chem_lang)
     app.confirm_translation(req.id, rd)
 
