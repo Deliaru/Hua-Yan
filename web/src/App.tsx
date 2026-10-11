@@ -1,7 +1,7 @@
 // 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list（架构总览、工作面、觉视图、三层对照、评测、知识与积分）。
 // 没有产品经理页面：产品经理 Agent 的产出只在研发工作面、三层对照、觉视图上出现（REPLAN 3.2 第 5 条）。
 import { useEffect, useState } from "react";
-import { FIXTURE, api, fixtureScenes, scene } from "./api";
+import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
 import type { Meta, Role, RunStatus } from "./types";
 import { Popover } from "./components/Controls";
@@ -70,7 +70,6 @@ export default function App() {
         {page === "desk" && <div className="absolute left-1/2 -translate-x-1/2"><Guide /></div>}
         <div className="ml-auto flex items-center gap-1.5">
           <StatusMenu s={meta.status} />
-          {FIXTURE && <SceneMenu onChange={() => setVersion((v) => v + 1)} />}
           <CheckpointMenu onLoad={(name) => restart(`正在载入检查点「${name}」……`, api.loadCheckpoint(name))} />
           <Popover align="right" trigger={(toggle) => (
             <button onClick={toggle} className="flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill">
@@ -144,10 +143,9 @@ function StatusMenu({ s }: { s: RunStatus }) {
     [s.extractor === "llm" ? "抽取 · 大模型" : "抽取 · 规则", s.extractor !== "llm"],
     [s.gateway_mock ? "Agent · 离线" : "Agent · 在线", s.gateway_mock],
     [s.replay ? "运行 · 回放" : "运行 · 现场", s.replay],
-    ...(FIXTURE ? [["数据源 · 接口样例", true] as [string, boolean]] : []),
   ];
   const degraded = items.filter(([, w]) => w).length;
-  const mode = FIXTURE ? "接口样例" : s.replay ? "记录回放" : s.gateway_mock ? "离线演示" : "现场运行";
+  const mode = s.replay ? "记录回放" : s.gateway_mock ? "离线演示" : "现场运行";
   return (
     <Popover align="right" trigger={(toggle) => (
       <button onClick={toggle} className="flex h-7 items-center gap-2 rounded-full px-2.5 text-[12px] hover:bg-fill">
@@ -176,31 +174,10 @@ function StatusMenu({ s }: { s: RunStatus }) {
   );
 }
 
-// 样例模式：切换工作面样例场景（接真实接口后删除）
-function SceneMenu({ onChange }: { onChange: () => void }) {
-  const [scenes, setScenes] = useState<Awaited<ReturnType<typeof fixtureScenes>> | null>(null);
-  useEffect(() => { fixtureScenes().then(setScenes); }, []);
-  if (!scenes) return null;
-  return (
-    <Popover align="right" trigger={(toggle) => <button onClick={toggle} className="btn btn-plain">样例场景<ChevronDown /></button>}>
-      {(close) => (["sales", "rd"] as const).map((r) => (
-        <div key={r}>
-          <p className="px-2.5 pb-0.5 pt-1.5 text-[12px] text-ink-2">{ROLE_NAME[r]}工作面</p>
-          {scenes[r].map(([k, label]) => (
-            <button key={k} className="menu-item" onClick={() => { scene[r] = k; onChange(); close(); }}>
-              <span className="w-3">{scene[r] === k ? "✓" : ""}</span>{label}
-            </button>
-          ))}
-        </div>
-      ))}
-    </Popover>
-  );
-}
-
 // 载入检查点（WP-I2）：只在服务以演示配置启动、接口返回检查点列表时出现
 function CheckpointMenu({ onLoad }: { onLoad: (name: string) => void }) {
   const [names, setNames] = useState<string[]>([]);
-  useEffect(() => { if (!FIXTURE) api.checkpoints().then(setNames, () => setNames([])); }, []);
+  useEffect(() => { api.checkpoints().then(setNames, () => setNames([])); }, []);
   if (!names.length) return null;
   return (
     <Popover align="right" trigger={(toggle) => <button onClick={toggle} className="btn btn-plain">载入检查点<ChevronDown /></button>}>

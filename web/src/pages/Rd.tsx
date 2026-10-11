@@ -8,6 +8,9 @@ import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "..
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
 import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead } from "../components/ui";
 
+// 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
+const reqsOf = (q: Question) => q.refs.requirement_id ? [q.refs.requirement_id] : (q.refs.requirement_ids ?? "").split(",").filter(Boolean);
+
 // 选中一项决策即打开它所说的需求单；也可以从侧栏直接打开需求单（此时签字区显示这张单上待你签的决策）
 export function Rd() {
   const { me } = useApp();
@@ -17,8 +20,9 @@ export function Rd() {
   const [qid, setQid] = useState<string | null>(null);
   const [chosenReq, setChosenReq] = useState<string | null>(null);
   const question = all.find((q) => q.id === qid)
-    ?? (chosenReq ? ready.find((q) => q.refs.requirement_id === chosenReq) ?? null : ready[0] ?? null);
-  const reqId = question?.refs.requirement_id ?? chosenReq ?? reqs[0]?.id ?? null;
+    ?? (chosenReq ? ready.find((q) => reqsOf(q).includes(chosenReq)) ?? null : ready[0] ?? null);
+  // 不挂在需求单上的决策（解密申请、知识冲突、拼凑风险）只显示签字区
+  const reqId = question ? reqsOf(question)[0] ?? null : chosenReq ?? (reqs.find((r) => r.status !== "merged") ?? reqs[0])?.id ?? null;
   return (
     <>
       <Side>
@@ -42,7 +46,7 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
   const { me } = useApp();
   const view = useData(() => (reqId ? api.requirement(reqId, me) : Promise.resolve(null)), [reqId, me]);
   const conv = useConversation(null);
-  const onThis = !!question && (!view || question.refs.requirement_id === view.requirement.id);
+  const onThis = !!question && (!view || reqsOf(question).includes(view.requirement.id));
   return (
     <>
       <div className="mr-[372px]">
@@ -58,7 +62,7 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
             : <EmptyState title="选一项待签的决策" text="收件箱里是觉提出、由你签字的决策；准备中的由产品经理 Agent 或你的 Agent 在起草。" />}
         </div>
       </div>
-      <AgentPanel title="这张单的来历" sessionId={null} focus={reqId}>
+      <AgentPanel title={view ? "这张单的来历" : "Agent 协作"} sessionId={null} focus={reqId}>
         {view && <ReqContext view={view} />}
       </AgentPanel>
     </>
@@ -78,7 +82,7 @@ const splitArrow = (text: string) => {
 function ReqHead({ view }: { view: RequirementView }) {
   const L = useLabels();
   const req = view.requirement;
-  const gaps = req.product_lang.filter(untranslated);
+  const gaps = [...new Set(req.product_lang.filter(untranslated).map((g) => g.text.replace("未转译：", "")))];
   return (
     <section className="flex flex-col gap-3">
       <PageHead title={L.phen(req.phenomenon)}
@@ -97,10 +101,10 @@ function ReqHead({ view }: { view: RequirementView }) {
               ))}
             </div>
           )}
-          {gaps.map((g, i) => (
-            <p key={i} className="mt-2.5 flex items-center gap-1.5 text-[12.5px] text-attn-ink">
+          {gaps.map((g) => (
+            <p key={g} className="mt-2.5 flex items-center gap-1.5 text-[12.5px] text-attn-ink">
               <i className="h-1.5 w-1.5 shrink-0 rounded-full bg-attn" />
-              客户说的「{g.text.replace("未转译：", "")}」产品经理 Agent 没能转成产品需求，留意是否漏了约束
+              客户说的「{g}」产品经理 Agent 没能转成产品需求，留意是否漏了约束
             </p>
           ))}
         </div>
@@ -302,9 +306,15 @@ function ReqContext({ view }: { view: RequirementView }) {
   const l2 = req.product_lang.filter((it) => !isCond(it) && !untranslated(it));
   return (
     <>
-      <Group title="客户原话">
-        {Object.values(view.quotes).map((t, i) => <div key={i} className="row !min-h-0 !py-2 text-[13px] leading-5">「{t}」</div>)}
-      </Group>
+      {req.session_ids.map((sid, n) => {
+        // 原话按会话分组：合并后的单有几位客户的原话（turn id 形如 turn:<会话>:<序号>）
+        const mine = Object.entries(view.quotes).filter(([id]) => id.startsWith(`turn:${sid}:`));
+        return !!mine.length && (
+          <Group key={sid} title={req.session_ids.length > 1 ? `客户 ${n + 1} 的原话` : "客户原话"}>
+            {mine.map(([id, t]) => <div key={id} className="row !min-h-0 !py-2 text-[13px] leading-5">「{t}」</div>)}
+          </Group>
+        );
+      })}
       {req.escalate_note && <Group title="业务员的升级说明"><div className="row text-[13px] leading-5">{req.escalate_note}</div></Group>}
       {req.reuse && (
         <Group title="现成产品">
@@ -350,6 +360,7 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
     <div key={i} className="row !items-start text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}{e.quote && `「${e.quote}」`}</div>
   ));
   const body = (() => {
+    if (q.family === "decrypt_request") return <DecryptReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (!req) return <>{evidence}<div className="row text-[13px] text-ink-2">证据 {q.evidence.length} 条</div><div className="row gap-2">{q.family === "knowledge_conflict" && <Act label="更新适用表" run={() => api.resolve(q.id, "update_sheet", me)} />}{q.family === "leak_risk" && <Act label="冻结权限" run={() => api.resolve(q.id, "freeze_access", me)} />}{dismiss}</div></>;
     switch (q.family) {
       case "reuse_product": return <ReuseReview q={q} view={view!} dismiss={dismiss} />;
@@ -360,7 +371,6 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
       case "contribution": return <ContributionReview view={view!} dismiss={dismiss} />;
       case "seal_points": return <PointsReview view={view!} dismiss={dismiss} />;
       case "release": case "seal_leak": return <SheetReview view={view!} release={q.family === "release"} dismiss={dismiss} />;
-      case "decrypt_request": return <DecryptReview q={q} dismiss={dismiss} evidence={evidence} />;
       default: return <>{evidence}<div className="row">{dismiss}</div></>;
     }
   })();
@@ -552,9 +562,14 @@ function SheetReview({ view, release, dismiss }: { view: RequirementView; releas
 
 function DecryptReview({ q, dismiss, evidence }: { q: Question; dismiss: React.ReactNode; evidence: React.ReactNode }) {
   const { me } = useApp();
+  const L = useLabels();
   const [text, setText] = useState("");
   return (
     <>
+      <div className="row text-[14px]">
+        <span className="w-12 shrink-0 text-[13px] text-ink-2">产品</span><span className="font-semibold">{L.product(q.refs.product_id)}</span>
+        <span className="ml-6 w-12 shrink-0 text-[13px] text-ink-2">客户</span><span>{L.name(q.refs.customer_id)}</span>
+      </div>
       {evidence}
       <div className="row !items-start">
         <div className="flex flex-1 flex-col gap-2">

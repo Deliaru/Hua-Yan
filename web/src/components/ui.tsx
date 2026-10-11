@@ -51,11 +51,17 @@ export function SideHead({ children, aside }: { children: React.ReactNode; aside
 }
 
 // 「Agent 起草」：草稿未经人修改
-export const AgentMark = ({ who = "Agent 起草" }: { who?: string }) => <span className="tag tag-agent">{who}</span>;
+// Agent 离线时草稿由规则骨架生成，标「离线 · 规则生成」而不是「Agent 起草」（铁律 6：降级必须标注）
+export function AgentMark({ who = "Agent 起草" }: { who?: string }) {
+  const { agentOnline } = useApp();
+  if (!agentOnline) return <span className="tag tag-warn" title="Agent 离线，这段由规则骨架生成">离线 · 规则生成</span>;
+  return <span className="tag tag-agent">{who}</span>;
+}
 
 // 觉的打分：模型打分显示概率与细条，规则打分显示「到点」（不冒充概率）
 export function Score({ q }: { q: Pick<Question, "p_need" | "scored_by"> }) {
   const L = useLabels();
+  if (q.scored_by === "human") return <span className="tag" title="由人发起，不经觉打分">人工提出</span>;
   if (!isModel(q.scored_by) || q.p_need == null) return <span className="tag" title="规则前置条件成立">规则 · 到点</span>;
   return (
     <span className="flex shrink-0 items-center gap-1.5" title={`${L.scorer(q.scored_by)} 打分`}>
@@ -79,17 +85,20 @@ export function Disclosure({ label, children, initial = false }: { label: React.
 }
 
 // 签字按钮：直接调门面原子方法；门面拒绝时把它给的原因显示在按钮旁，不在前端自己算可签条件。
-export function Act({ label, run, kind = "primary", disabled }: {
-  label: string; run: () => Promise<unknown>; kind?: "primary" | "plain" | "quiet" | "chip"; disabled?: boolean;
+// done：成功后按钮换成这句话（用于签字后对象状态不在本人视图里的动作，如申请解密）
+export function Act({ label, run, kind = "primary", disabled, done }: {
+  label: string; run: () => Promise<unknown>; kind?: "primary" | "plain" | "quiet" | "chip"; disabled?: boolean; done?: string;
 }) {
   const { refresh } = useApp();
   const [busy, setBusy] = useState(false);
+  const [ok, setOk] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const go = () => {
     setBusy(true);
     setErr(null);
-    run().then(refresh, (e) => setErr(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
+    run().then(() => { setOk(true); refresh(); }, (e) => setErr(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
   };
+  if (ok && done) return <span className="text-[12px] text-ink-2">{done}</span>;
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       <button type="button" disabled={busy || disabled} onClick={go} className={kind === "chip" ? "chip" : `btn btn-${kind}`}>{busy ? "处理中……" : label}</button>

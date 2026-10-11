@@ -26,8 +26,8 @@ const DO: Record<string, [number, string]> = {
   seal_leak: [8, "觉发现说明书碰到了封存内容；研发的 Agent 改写，研发签字"],
   release: [9, "说明书只用产品需求和对外要点写成；研发审定发布，新品回到 L1 知识库"],
   decrypt_request: [7, "客户要看机理，业务员申请解密；由研发本人审批"],
-  knowledge_conflict: [6, "两条知识说法冲突；研发判断以哪条为准"],
-  leak_risk: [8, "觉发现几次对外回答拼起来可能泄露配方；研发处理"],
+  knowledge_conflict: [6, "试样结果和产品适用表对不上；研发判断是否更新适用表"],
+  leak_risk: [8, "觉发现有人反复检索同一产品的机理和配方，可能在拼凑保密知识；主管判断是否冻结其高层级检索权限"],
 };
 
 export function Guide() {

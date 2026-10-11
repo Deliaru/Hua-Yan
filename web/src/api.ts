@@ -1,14 +1,9 @@
 // 前端唯一的数据入口：src/huayan/ui/server.py 的 JSON 接口，每个接口对应一个门面方法（WP-C 第 5 项）。
 // 身份由界面选择后作为 viewer / by 传入，裁剪与可签条件都在门面里；门面拒绝时原样显示它返回的 error。
-//
-// 样例模式（地址带 ?fixture）：WP-U2 接真实接口前，工作面与觉视图的读操作取 web/src/fixtures/ 的接口样例，
-// 写操作一律拒绝（不写门面替身）。身份、槽位名等仍取 /api/meta。接真实接口后删掉 FIXTURE 分支。
 import type {
   Conversation, ContributionStat, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, SessionSummary, SessionView, SheetDraft,
 } from "./types";
-
-export const FIXTURE = new URLSearchParams(location.search).has("fixture");
 
 // 种子与样例文本逐句带「（模拟）」前缀；全局已常驻「模拟数据」标识（铁律 7），显示时去掉逐句前缀。
 const clean = <T,>(x: T): T => (typeof x === "string" ? x.replace(/（模拟[^）]{0,6}）/g, "")
@@ -16,7 +11,6 @@ const clean = <T,>(x: T): T => (typeof x === "string" ? x.replace(/（模拟[^�
     ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, clean(v)])) : x) as T;
 
 async function call<T>(path: string, body?: object): Promise<T> {
-  if (FIXTURE && body && path !== "reset") throw new Error("样例模式：接真实接口后可用");
   const r = await fetch(`/api/${path}`, body ? {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -30,47 +24,19 @@ async function call<T>(path: string, body?: object): Promise<T> {
 const q = (params: Record<string, string | null | undefined>) =>
   new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString();
 
-// ── 样例 ────────────────────────────────────────────────
-interface SalesScene { label: string; session: SessionView; questions: Question[] }
-interface RdScene { label: string; requirement: RequirementView; questions: Question[]; leak: LeakHit[] }
-export const scene = { sales: "asking", rd: "reuse_pending" };
-const salesFx = () => import("./fixtures/sales_workbench.json").then((m) => clean(m.default.scenarios) as unknown as Record<string, SalesScene>);
-const rdFx = () => import("./fixtures/rd_workbench.json").then((m) => clean(m.default.scenarios) as unknown as Record<string, RdScene>);
-export const fixtureScenes = async () => ({
-  sales: Object.entries(await salesFx()).map(([k, v]) => [k, v.label] as const),
-  rd: Object.entries(await rdFx()).map(([k, v]) => [k, v.label] as const),
-});
-const fx = {
-  sessions: async (): Promise<SessionSummary[]> => {
-    const s = (await salesFx())[scene.sales].session;
-    return [{ id: s.session_id, customer_id: "", sales_id: s.viewer, status: s.status, phenomenon: null }];
-  },
-  session: async () => (await salesFx())[scene.sales].session,
-  questions: async (viewer: string) => viewer.startsWith("rd:") ? (await rdFx())[scene.rd].questions
-    : viewer.startsWith("sales:") ? (await salesFx())[scene.sales].questions : [],
-  requirements: async (): Promise<RequirementSummary[]> => {
-    const r = (await rdFx())[scene.rd].requirement.requirement;
-    return [{ id: r.id, status: r.status, phenomenon: r.phenomenon }];
-  },
-  requirement: async () => (await rdFx())[scene.rd].requirement,
-  leak: async () => (await rdFx())[scene.rd].leak,
-  timeline: () => import("./fixtures/jue_timeline.json").then((m) => clean(m.default) as unknown as JueTimeline),
-};
-
 // ── 接口 ────────────────────────────────────────────────
 export const api = {
   meta: () => call<Meta>("meta"),
   reset: () => call<{ run_id: string }>("reset", {}),
 
   // 读
-  sessions: () => FIXTURE ? fx.sessions() : call<SessionSummary[]>("sessions"),
-  session: (id: string, viewer: string) => FIXTURE ? fx.session()
-    : call<SessionView | { view: SessionView }>(`session?${q({ id, viewer })}`).then((d) => ("view" in d ? d.view : d)),
-  questions: (viewer: string) => FIXTURE ? fx.questions(viewer) : call<Question[]>(`questions?${q({ viewer })}`),
-  requirements: (viewer: string) => FIXTURE ? fx.requirements() : call<RequirementSummary[]>(`requirements?${q({ viewer })}`),
-  requirement: (id: string, viewer: string) => FIXTURE ? fx.requirement() : call<RequirementView>(`requirement?${q({ id, viewer })}`),
-  leak: (id: string, viewer: string) => FIXTURE ? fx.leak() : call<LeakHit[]>(`leak?${q({ id, viewer })}`),
-  timeline: (target: string, viewer: string) => FIXTURE ? fx.timeline() : call<JueTimeline>(`timeline?${q({ target_id: target, viewer })}`),
+  sessions: () => call<SessionSummary[]>("sessions"),
+  session: (id: string, viewer: string) => call<SessionView | { view: SessionView }>(`session?${q({ id, viewer })}`).then((d) => ("view" in d ? d.view : d)),
+  questions: (viewer: string) => call<Question[]>(`questions?${q({ viewer })}`),
+  requirements: (viewer: string) => call<RequirementSummary[]>(`requirements?${q({ viewer })}`),
+  requirement: (id: string, viewer: string) => call<RequirementView>(`requirement?${q({ id, viewer })}`),
+  leak: (id: string, viewer: string) => call<LeakHit[]>(`leak?${q({ id, viewer })}`),
+  timeline: (target: string, viewer: string) => call<JueTimeline>(`timeline?${q({ target_id: target, viewer })}`),
   ledger: () => call<Record<string, number>>("ledger"),
   contributions: (viewer: string) => call<ContributionStat[]>(`contributions?${q({ viewer })}`),
   report: <T,>(name: "distortion" | "jue_k" | "week") => call<T>(`report?${q({ name })}`),
@@ -107,11 +73,10 @@ export const api = {
     call("resolve", { question_id, action, by, note }),
 
   // Agent 协作（契约 ⑭）
-  conversation: (actor: string, session_id: string | null) => FIXTURE ? Promise.resolve(null)
-    : call<Conversation | null>(`agents/conversation?${q({ actor, session_id })}`),
+  conversation: (actor: string, session_id: string | null) => call<Conversation | null>(`agents/conversation?${q({ actor, session_id })}`),
   chat: (actor: string, text: string, session_id: string | null, focus: string | null) =>
     call<Conversation>("agents/chat", { actor, text, session_id, focus }),
-  pending: (actor: string) => FIXTURE ? Promise.resolve([]) : call<PendingAction[]>(`agents/pending?${q({ actor })}`),
+  pending: (actor: string) => call<PendingAction[]>(`agents/pending?${q({ actor })}`),
   approve: (action_id: string, by: string) => call<PendingAction>("agents/approve", { action_id, by }),
   reject: (action_id: string, by: string) => call<PendingAction>("agents/reject", { action_id, by }),
 

@@ -310,7 +310,7 @@ function RecCard({ card, sid, fill }: { card: RecommendationCard; sid: string; f
       ))}
       <div className="row flex-wrap">
         <button type="button" className="btn btn-plain" onClick={() => fill(card.sections.map((s) => s.text).join(""))}>填进发给客户</button>
-        {!decrypted && <Act kind="quiet" label="申请解密" run={() => api.requestDecrypt(sid, me)} />}
+        {!decrypted && <Act kind="quiet" label="申请解密" done="已申请解密，等研发审批" run={() => api.requestDecrypt(sid, me)} />}
         {decrypted && <span className="text-[12px] text-ink-2">研发审定的机理说明，由你转交客户</span>}
       </div>
     </Group>
@@ -373,7 +373,7 @@ function ReuseLine({ v, fill }: { v: SessionView; fill: (t: string) => void }) {
       </div>
       <div className="row flex-wrap">
         <button type="button" className="btn btn-plain" onClick={() => fill(r.customer_note)}>填进发给客户</button>
-        <Act kind="quiet" label="申请解密" run={() => api.requestDecrypt(v.session_id, me)} />
+        <Act kind="quiet" label="申请解密" done="已申请解密，等研发审批" run={() => api.requestDecrypt(v.session_id, me)} />
       </div>
     </Group>
   );

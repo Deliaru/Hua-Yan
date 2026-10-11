@@ -80,6 +80,7 @@ export function useLabels() {
       .replace(/slot:(?:sess:)?[\w-]+\/(\w+)/g, (_, s) => slot(s))
       .replace(/(?:session:)?sess:[\w-]+/g, "会话")
       .replace(/theme:(\w+)/g, (_, p) => phen(p))
+      .replace(/[（(](?:actor:)?(?:sales|rd|pm|supervisor|customer):\w+[）)]/g, "")
       .replace(/(?:actor:)?((?:sales|rd|pm|supervisor|customer):[\w]+)/g, (_, a) => name(a))
       .replace(/(\w+): /, (m, s) => (meta.slots.some((x) => x.id === s) ? `${slot(s)} ` : m)),
   };
