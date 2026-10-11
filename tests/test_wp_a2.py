@@ -21,8 +21,15 @@ def test_l1_recommend_and_escalate(tmp_path, monkeypatch):
     session = app.start_session("customer:C01", "sales:S01")
     session = app.add_turn(session.id, "customer", "染完布面深一块浅一块")
     assert {h.slot for h in session.hints} == {"fiber", "equipment"}
+    assert not app.events.query(kinds=["match"])
     session = app.add_turn(session.id, "customer", "锦纶氨纶的，溢流缸")
     assert session.recommendation.product_id == "T-205"
+    match = app.events.query(kinds=["match"])[-1]
+    assert match.session_id == session.id and match.actor == session.sales_id
+    assert match.payload == {"phenomenon": "color_unlevel",
+        "known": {"fiber": "锦纶氨纶", "equipment": "溢流染色机"}, "customer_id": "customer:C01",
+        "candidate_ids": ["T-205"], "p_choice": {"T-205": session.recommendation.match.probabilities["T-205"]},
+        "p_none": session.recommendation.match.probabilities["none"], "scored_by": "mock"}
     assert app.view_session(session.id, "sales:S01").card.version == "product_usage"
     assert any(s.ku_id == "ku:formula:T-205" for s in app.view_session(session.id, "rd:R01").card.sections)
     with pytest.raises(PermissionDenied):
@@ -99,6 +106,9 @@ def test_l1_recommend_and_escalate(tmp_path, monkeypatch):
     app.view_session(session.id, "customer:C01")
     assert len(app.ledger.list()) == counts[1]
 
+    _check_l1_match_without_automatic_escalation(app)
+
+    # 以下旧升级/草稿生命周期断言待 WP-C 门面签字模块按 v5 迁移，保留以暴露集成缺口。
     # 条件修改与问答同时出现时，先清除失效推荐，再回答。
     changed = app.add_turn(session.id, "customer", "设备是气流缸，怎么用？")
     assert changed.status == "escalated" and changed.recommendation.product_id is None
@@ -243,3 +253,55 @@ def test_l1_recommend_and_escalate(tmp_path, monkeypatch):
     released = app.release_product(updated.id, "pm:P01")
     assert not released.mechanism and not released.formula
     assert app.kb.get("ku:formula:T-206", app.actors["rd:R02"]).text
+
+
+def _check_l1_match_without_automatic_escalation(app):
+    """WP-C 第 2 步第 1 项；使用现有离线门面与 MockSystem1，不替代觉或签字流程。"""
+    assert "routing" not in app.config
+    questions_before = [q.model_dump() for q in app.bus.list(status=None)]
+    resolutions_before = len(app.events.query(kinds=["question_resolved"]))
+    session = app.start_session("customer:C02", "sales:S01")
+    session = app.add_turn(session.id, "customer", "深一块浅一块，锦纶氨纶的，气流缸")
+    assert session.status == "open" and session.recommendation is None
+    assert app.view_session(session.id, "sales:S01").card is None
+    event = app.events.query(kinds=["match"])[-1]
+    assert event.session_id == session.id
+    assert event.payload == {"phenomenon": "color_unlevel",
+        "known": {"fiber": "锦纶氨纶", "equipment": "气流染色机"}, "customer_id": "customer:C02",
+        "candidate_ids": [], "p_choice": {}, "p_none": 1.0, "scored_by": "rule"}
+    assert not app.events.query(kinds=["escalate"])
+    assert not app.requirements("rd:R01")
+    # 没有自动升级；更正条件后仍可在 L1 重新匹配，后续变更也不能保留旧卡。
+    session = app.add_turn(session.id, "customer", "刚才说错了，是溢流缸，怎么用？")
+    assert session.status == "recommended" and session.recommendation.product_id == "T-205"
+    assert set(session.replies[-1].ku_ids) == {"ku:sheet:T-205", "ku:usage:T-205"}
+    assert app.events.query(kinds=["match"])[-1].payload["known"]["equipment"] == "溢流染色机"
+    session = app.add_turn(session.id, "customer", "改回气流缸，怎么用？")
+    assert session.status == "open" and session.recommendation is None
+    assert not session.replies[-1].ku_ids and "已转" not in session.replies[-1].text
+    assert app.view_session(session.id, "sales:S01").card is None
+    # 有追问提示时点“直接推荐”也写 match；低置信度不推荐、不升级、不记披露积分。
+    undecided = app.start_session("customer:C03", "sales:S01")
+    undecided = app.add_turn(undecided.id, "customer", "深一块浅一块")
+    assert undecided.hints
+    records_before = len(app.audit.list()), len(app.ledger.list()), len(app.events.query(kinds=["recommend"]))
+    undecided = app.recommend_now(undecided.id)
+    assert undecided.status == "open" and undecided.recommendation is None
+    event = app.events.query(kinds=["match"])[-1]
+    assert event.session_id == undecided.id and event.payload["candidate_ids"]
+    assert max(event.payload["p_choice"].values()) < app.jev.match_threshold
+    assert records_before == (len(app.audit.list()), len(app.ledger.list()), len(app.events.query(kinds=["recommend"])))
+    # 相同条件下重新匹配变得不确定时，同样清除原推荐。
+    session = app.add_turn(session.id, "customer", "改成溢流缸")
+    assert session.status == "recommended"
+    threshold = app.jev.match_threshold
+    app.jev.match_threshold = 0.99
+    try:
+        session = app.recommend_now(session.id)
+    finally:
+        app.jev.match_threshold = threshold
+    assert session.status == "open" and session.recommendation is None
+    assert app.view_session(session.id, "sales:S01").card is None
+    assert [q.model_dump() for q in app.bus.list(status=None)] == questions_before
+    assert not app.events.query(kinds=["escalate"])
+    assert len(app.events.query(kinds=["question_resolved"])) == resolutions_before
