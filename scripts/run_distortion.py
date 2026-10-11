@@ -29,15 +29,18 @@ EN = {"completeness": "key info complete", "slot_error": "slot error", "mistrans
       GROUPS[3]: "G3 HuaYan"}                                           # 图中用英文，避免依赖中文字体
 
 
-def main():
+def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cards", default="data/sim/cards.jsonl")
     ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--config", default="config/eval/distortion.yaml")
     ap.add_argument("--seeds-dir", default="seeds")
     ap.add_argument("--out", default="docs/reports/distortion")
-    args = ap.parse_args()
+    return ap
 
+
+def run(args, trace: bool = False):
+    """跑一次失真对照并写出报告；返回 (cards, 逐卡逐组 DataFrame, metrics, 轨迹或 None)。make_single_card.py 复用。"""
     cfg = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
     seeds = load_seeds(args.seeds_dir)
     lines = Path(args.cards).read_text(encoding="utf-8").splitlines()[:args.n]
@@ -45,20 +48,23 @@ def main():
     set_clock(SimClock(datetime(2026, 10, 12, 9, tzinfo=SHANGHAI)))
     meter_path = Path("runs/distortion/metering.jsonl")
     meter_path.unlink(missing_ok=True)
-    df = run_distortion(cards, seeds, cfg, random.Random(cfg["seed"]), FileMeter("runs/distortion", "distortion"))
+    result = run_distortion(cards, seeds, cfg, random.Random(cfg["seed"]), FileMeter("runs/distortion", "distortion"),
+                            trace=trace)
+    df, traces = result if trace else (result, None)
     table = summarize(df)
     calls = [json.loads(line)["kind"] for line in meter_path.read_text(encoding="utf-8").splitlines()]
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     table.rename(columns=METRICS).to_csv(out / "table.csv", encoding="utf-8", float_format="%.3f")
-    (out / "metrics.json").write_text(json.dumps({
+    metrics = {
         "n_cards": len(cards), "cards": args.cards, "seed": cfg["seed"], "placeholder_seeds": seeds.placeholder,
         "relay_assumption": cfg["relay"], "jue": cfg["jue"],
         "calls": {"jue": calls.count("jue"), "llm": calls.count("llm"), "s1": calls.count("s1")},
         "metrics": {g: {k: (None if v is None or v != v else float(v)) for k, v in row.items()}
                     for g, row in table.to_dict("index").items()},
-        "labels": METRICS}, ensure_ascii=False, indent=2), encoding="utf-8")
+        "labels": METRICS}
+    (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
 
     fig, axis = plt.subplots(figsize=(11, 4.5))
     width = 0.8 / len(table)
@@ -77,6 +83,11 @@ def main():
 
     print(table.rename(columns=METRICS).to_string(float_format=lambda v: f"{v:.3f}"))
     print(f"觉调用 {calls.count('jue')} 次，大模型调用 {calls.count('llm')} 次；写出 {out}")
+    return cards, df, metrics, traces
+
+
+def main():
+    run(parser().parse_args())
 
 
 if __name__ == "__main__":

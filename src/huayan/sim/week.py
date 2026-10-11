@@ -45,11 +45,13 @@ def make_week(seeds: Seeds, start: datetime, days: int,
         injections.append(Injection(id=f"inj:{len(injections) + 1}", family=family, object_id=object_id,
                                     hard_negative=hard, onset=min(times), earliest=earliest, latest=latest))
 
-    def unsolved(phen: Phenomenon, exclude: set[str]) -> dict:
+    def unsolved(exclude: set[str]) -> tuple[Phenomenon, dict]:
+        """现象与槽位一起抽：相容约束下有的现象总有现成产品可解（如色牢度差），只固定现象会死循环。"""
         while True:
+            phen = rng.choice(seeds.phenomena)
             slots = sample_slots(phen, seeds, rng)
             if correct_product(phen.id, slots, seeds.products) is None and theme_id(phen.id, slots, seeds) not in exclude:
-                return slots
+                return phen, slots
 
     # 机会汇聚：第 1～4 天，3～4 个不同客户共 5 次同主题、无已发布产品适用
     project = next(p for p in sorted(seeds.products, key=lambda p: p.id)
@@ -58,14 +60,13 @@ def make_week(seeds: Seeds, start: datetime, days: int,
     fixed = {s: project.applicable[s][0] for s in phen.required_slots}
     opp_theme = theme_id(phen.id, fixed, seeds)
     group = rng.sample(customers, min(4, len(customers)))
-    visits = sorted((session(phen, {**sample_slots(phen, seeds, rng), **fixed}, c, rng.randrange(4)), c)
+    visits = sorted((session(phen, sample_slots(phen, seeds, rng, fixed), c, rng.randrange(4)), c)
                     for c in group + [rng.choice(group)])
     earliest = next(t for k, (t, _) in enumerate(visits) if len({c for _, c in visits[:k + 1]}) >= 2)
     inject("opportunity", opp_theme, [t for t, _ in visits], earliest, close(3))
 
     # 困难负样本：同一个客户就同一个无解需求反复咨询 3 次（第 2～4 天）
-    other = rng.choice(seeds.phenomena)
-    slots = unsolved(other, {opp_theme})
+    other, slots = unsolved({opp_theme})
     cust = rng.choice(customers)
     times = [session(other, slots, cust, d) for d in (1, 2, 3)]
     inject("opportunity", theme_id(other.id, slots, seeds), times, times[0], close(days - 1), hard=True)
