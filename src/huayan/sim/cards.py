@@ -32,3 +32,17 @@ def make_cards(seeds: Seeds, n: int, rng: random.Random) -> list[NeedCard]:
         phen = rng.choice(seeds.phenomena)
         cards.append(make_card(f"card:{i}", phen, sample_slots(phen, seeds, rng), rng.choice(customers), seeds, rng))
     return cards
+
+
+def shifted_world(seeds: Seeds, lam: float, rng: random.Random) -> Seeds:
+    """Jue-K 学习曲线用：真实世界的槽位先验 = (1-λ)·种子先验（专家估计）+ λ·随机先验（Dirichlet(0.5)）。
+    返回的种子只用于抽需求卡真值；觉的状态仍用原种子，即觉只知道专家估计。λ=0 时与原种子相同。"""
+    phenomena = []
+    for phen in seeds.phenomena:
+        priors = {}
+        for slot, prior in phen.slot_priors.items():
+            noise = [rng.gammavariate(0.5, 1.0) for _ in prior]
+            total, z = sum(prior.values()), sum(noise)
+            priors[slot] = {v: (1 - lam) * w / total + lam * n / z for (v, w), n in zip(prior.items(), noise)}
+        phenomena.append(phen.model_copy(update={"slot_priors": priors}))
+    return seeds.model_copy(update={"phenomena": phenomena})

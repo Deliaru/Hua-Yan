@@ -4,7 +4,14 @@
 > `make_jue_k_data.py` → `train_jue_k.py` → `eval_jue_k.py`、`eval_ask_policies.py`（合计约 6 分钟，CPU）。
 > 模型说明见 `models/jue_k/model_card.md`；数字见 `metrics.json`、`ask_policies.json`。
 
-## 结论（如实）
+## v4 补充：学习曲线（WP-J；下方 v0 结论待 WP-C 合入后按 v5 语义重训替换）
+
+![learning curve](learning_curve.png)
+
+追问：真实世界的槽位先验偏离专家估计 λ 时，Jue-K（在 N 个会话的处置结果上训练）与只用专家先验的信息价值规则 `p_fix` 对比，数字见 `learning_curve.json`，解读见 `docs/JUE_K_TRAINING.md` 第 12 节。
+专家准确（λ=0）时两者持平；λ=0.5 时约 300 个会话后 Jue-K 反超，3000 个会话时 AUC 0.809 vs 0.749。λ 是假设，整条扫描如实列出。
+
+## 结论（如实，v0）
 
 | 决策类型 | Jue-K 相对原型规则 | 一句话 |
 |---|---|---|

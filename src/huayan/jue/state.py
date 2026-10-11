@@ -1,13 +1,15 @@
 """契约 5.1 / 5.2：把会话、需求单与事件日志变成「对象 × 属性」。只读 NeedState、需求单、事件日志、种子与知识库。"""
 from __future__ import annotations
 
+import itertools
+import math
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from huayan.contracts import (Actor, JueObject, JueState, NeedState, Phenomenon, Product, Requirement,
                               Seeds, Session, SlotDef, Trial)
-from huayan.domain import match_candidates
+from huayan.domain import correct_product, match_candidates
 from huayan.escalation.translate import leak_hits, match_translations
 from huayan.events import EventLog
 
@@ -131,6 +133,7 @@ def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: See
         splits = 0 if filled or ph is None else len({ids({**known, slot.id: v}) for v in slot.values})
         trans = 0 if filled or kb is None else _trans_splits(phen, known, slot, kb, layer)
         prior = phen.slot_priors.get(slot.id, {}) if phen else {}
+        p_fix = 0.0 if filled or phen is None or layer != 1 else _p_fix(phen, known, slot.id, seeds, products)
         oid = f"slot:{owner}/{slot.id}"
         objects[oid] = JueObject(object_id=oid, object_type="slot", attrs={
             "slot": slot.id, "phenomenon": ph or "unknown", "filled": filled,
@@ -139,8 +142,30 @@ def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: See
             "asked": need.asked.get(slot.id, 0), "required": phen is not None and slot.id in phen.required_slots,
             "turn": need.turn_count, "n_filled": len(known), "n_candidates": len(ids(known)) if ph else 0,
             "splits": splits, "prior_top": max(prior.values(), default=0.0), "chem_savvy": need.profile.chem_savvy,
-            "layer": layer, "trans_splits": trans})
+            "layer": layer, "trans_splits": trans, "p_fix": p_fix})
     return objects
+
+
+def _p_fix(phen: Phenomenon, known: dict[str, str], slot_id: str, seeds: Seeds, products: list[Product]) -> float:
+    """信息价值：按种子中该现象的槽位先验（没有则均匀），问到该槽位真值后推荐由错变对的概率。
+    推荐只取决于解决该现象的产品在适用范围上限定过的槽位，只枚举其中未知的那些。"""
+    relevant = {s for p in products if p.status == "released" and phen.id in p.solves for s in p.applicable}
+    if slot_id not in relevant:
+        return 0.0
+    dists = []
+    for sd in seeds.slots:
+        if sd.id in relevant and sd.id not in known:
+            prior = phen.slot_priors.get(sd.id) or {v: 1.0 for v in sd.values}
+            total = sum(prior.values())
+            dists.append([(sd.id, v, w / total) for v, w in prior.items()])
+    now = correct_product(phen.id, known, products)
+    p = 0.0
+    for combo in itertools.product(*dists):
+        truth = {**known, **{sid: v for sid, v, _ in combo}}
+        target = correct_product(phen.id, truth, products)
+        if now != target and correct_product(phen.id, {**known, slot_id: truth[slot_id]}, products) == target:
+            p += math.prod(w for _, _, w in combo)
+    return p
 
 
 def _trans_splits(phen: Phenomenon, known: dict[str, str], slot: SlotDef, kb: KnowledgeBase, layer: int) -> int:
