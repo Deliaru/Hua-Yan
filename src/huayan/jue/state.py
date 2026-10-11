@@ -24,10 +24,9 @@ def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: d
 
 
 def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
-    """会话快照应对应 at；事件只取该时刻之前的本会话记录，不由匹配结果推断已升级。"""
-    relevant = [e for e in events.query(["match", "decrypt_request"], until=at) if e.session_id == sess.id]
-    matches = sorted((e for e in relevant if e.kind == "match"), key=lambda e: e.ts)
-    match = matches[-1].payload if matches else None
+    """p_none、p_top、n_candidates 取本会话最近一次 match 事件。"""
+    relevant = [e for e in events.query(["match", "decrypt_request"]) if e.session_id == sess.id]
+    match = next((e.payload for e in reversed(relevant) if e.kind == "match"), None)
     p_none = match["p_none"] if match is not None else 0.0
     p_top = max(match["p_choice"].values(), default=0.0) if match is not None else 0.0
     need = sess.need
@@ -48,13 +47,13 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
 
 def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase, at: datetime,
                       events: EventLog) -> JueState:
-    """需求单与知识库快照应对应 at；活动单始终产出需求单对象，起草中另产出槽位对象。"""
+    """活动单总是产出需求单对象，起草中（L2 / L3）另产出槽位对象。"""
     if req.status in {"released", "rejected", "reused", "merged"}:
         return JueState(at=at, mode="realtime", objects={})
     layer = {"draft": 2, "rd_accepted": 3}.get(req.status, 0)
     need = need.model_copy(update={"phenomenon": req.phenomenon})
     objects = _slot_objects(req.id, req.known_slots, need, seeds, kb.products(), layer, kb) if layer else {}
-    history = sorted(events.query(until=at), key=lambda e: e.ts)
+    history = events.query()
     own = [e for e in history if e.payload.get("requirement_id") == req.id]
     items = {2: req.product_lang, 3: req.chem_lang}.get(layer, [])
     upstream = set(req.known_slots) if layer == 2 else {i.slot for i in req.product_lang if i.slot} if layer == 3 else set()
@@ -76,9 +75,9 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
         "n_returns": len(req.return_notes), "n_open_ask_back": len(open_backs),
         "n_unmapped_constraints": len(upstream - {i.slot for i in items if i.slot}),
         "n_unquoted_items": sum(not i.quote_refs for i in items),
-        "n_edited_uncovered": _edited_uncovered(req, seeds, kb, at),
+        "n_edited_uncovered": _edited_uncovered(req, seeds, kb),
         "n_contributed": len({e.payload["ku_id"] for e in own if e.kind == "knowledge_contributed"}),
-        **_trial_attrs(req, kb, own, at),
+        **_trial_attrs(req, kb, own),
         "points_set": any(e.kind == "points_set" for e in own),
         "n_sealed": len(req.sealed), "sheet_ready": req.sheet is not None,
         "n_leak_hits": len({h.index for h in leak_hits(req.sheet.sheet + "\n" + req.sheet.usage,
@@ -91,17 +90,16 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
     return JueState(at=at, mode="realtime", objects=objects)
 
 
-def _edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase, at: datetime) -> int:
-    """只用 L3 译文覆盖研发修改；旧译文前后新增的约束仍需沉淀。"""
+def _edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase) -> int:
+    """研发改过的 L3 条目去掉已有 L3 骨架与译文后还剩内容，即未被覆盖。"""
     terms = sorted(((u.text.split(" → ", 1)[1], u.title) for u in kb.list(_INTERNAL, kinds=["translation"])
-                    if u.level == 3 and u.created_at <= at), key=lambda t: len(t[0]), reverse=True)
+                    if u.level == 3), key=lambda t: len(t[0]), reverse=True)
     rd_ids = {a.id for a in seeds.actors if a.role == "rd"}
     uncovered = 0
     for item in req.chem_lang:
         if item.edited_by not in rd_ids:
             continue
         text = item.text
-        # 只移除与已知 L3 知识完全一致的骨架片段，保留片段前后及引号内的人为修改。
         for term, title in terms:
             text = text.replace(f"『{title}』→ {term}", "")
         for term, _ in terms:
@@ -110,13 +108,13 @@ def _edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase, at: dat
     return uncovered
 
 
-def _trial_attrs(req: Requirement, kb: KnowledgeBase, own: list, at: datetime) -> dict:
-    """试样知识保留 Trial.requirement_id；同产品的其他需求单不混入本单。"""
-    trials = [Trial.model_validate_json(u.text) for u in kb.list(_INTERNAL, kinds=["trial"]) if u.created_at <= at]
-    trials = sorted((t for t in trials if t.requirement_id == req.id and t.at <= at), key=lambda t: t.at)
+def _trial_attrs(req: Requirement, kb: KnowledgeBase, own: list) -> dict:
+    """market_eval 取最近一次通过的试样上的客户评价（契约 5.2）。"""
+    trials = [t for t in (Trial.model_validate_json(u.text) for u in kb.list(_INTERNAL, kinds=["trial"]))
+              if t.requirement_id == req.id]
     passed = next((t for t in reversed(trials) if t.result == "pass"), None)
     evaluation = next((e.payload["result"] for e in reversed(own)
-                       if e.kind == "market_eval" and passed is not None and e.payload["trial_id"] == passed.id), "none")
+                       if e.kind == "market_eval" and passed and e.payload["trial_id"] == passed.id), "none")
     return {"n_trials": len(trials), "trial_passed": bool(trials) and trials[-1].result == "pass",
             "market_eval": evaluation}
 
@@ -179,10 +177,9 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
 
 
 def _themes(events, at, seeds, since):
-    # 生命周期不限窗口：历史接单在今天仍可在途；复用状态取截至 at 的最后一次决定。
-    history = sorted(events.query(["escalate", "recommend", "reuse_proposed", "reuse_declined", "reuse_adopted",
-                                   "requirement_accepted", "requirements_merged", "product_released"], until=at),
-                     key=lambda e: e.ts)
+    # 立项、合并、发布不限窗口；复用状态取最后一次决定。
+    history = events.query(["escalate", "recommend", "reuse_proposed", "reuse_declined", "reuse_adopted",
+                            "requirement_accepted", "requirements_merged", "product_released"], until=at)
     req_theme, handled, reuse_closed, projects = {}, {}, set(), set()
     for e in history:
         p = e.payload
@@ -195,11 +192,8 @@ def _themes(events, at, seeds, since):
         elif e.kind == "reuse_adopted":
             reuse_closed.discard(p["requirement_id"])
         elif e.kind == "requirement_accepted":
-            # 补齐槽位会改变主题；升级仍按当时的主题分组，接单也须处理该旧主题。
             handled[req_theme[p["requirement_id"]]] = e.ts
-            req_theme[p["requirement_id"]] = key = theme_id(p["phenomenon"], p["known"], seeds)
             projects.add(p["requirement_id"])
-            handled[key] = e.ts
         elif e.kind == "requirements_merged":
             handled[req_theme[p["target"]]] = e.ts
         elif e.kind == "product_released":
@@ -212,7 +206,7 @@ def _themes(events, at, seeds, since):
             continue
         key = theme_id(e.payload["phenomenon"], e.payload["known"], seeds)
         phenomena[key] = e.payload["phenomenon"]
-        evs = groups[key]  # 窗口内有活动但尚不能汇聚的主题仍保留，升级计数为 0。
+        evs = groups[key]
         if e.kind == "recommend" or (e.payload["requirement_id"] in reuse_closed
                                       and (key not in handled or e.ts > handled[key])):
             evs.append(e)

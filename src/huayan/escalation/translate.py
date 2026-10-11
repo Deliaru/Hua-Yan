@@ -30,13 +30,8 @@ def _term(ku: KnowledgeUnit) -> str:
 
 
 def _hypothesis_body(value: str) -> str:
-    """只去掉规则骨架写入的来源前缀，保留假设正文中的正常冒号。"""
-    body = value.strip()
-    source = re.match(r"^参考\s+\S+\s+的机理\s*[:：]\s*(.*)$", body)
-    if source:
-        body = source.group(1).strip()
-        body = re.sub(r"^(?:(?:（模拟机理）|\(模拟机理\))\s*)+", "", body).strip()
-    return body
+    """去掉规则骨架写入的「参考 X 的机理：（模拟机理）」前缀，免得前缀拉低重合度。"""
+    return re.sub(r"^参考 \S+ 的机理：(（模拟机理）)?", "", value)
 
 
 def leak_hits(text: str, sealed: list[str], hypotheses: list[str], kb: KnowledgeBase) -> list[LeakHit]:
