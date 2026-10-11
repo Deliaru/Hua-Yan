@@ -94,7 +94,7 @@ function Items({ view, field, f, showText }: { view: RequirementView; field: "pr
               return (
                 <p key={ref} className="mt-1 text-[12px] leading-[17px] text-ink-2" title={c.text ?? "无权查看原文，只显示归属"}>
                   <span className="text-ink">{L.name(c.owner)}</span>{" · "}
-                  {c.text == null ? <span className="text-ink-3">L{c.level} 转化知识 · 原文不可见</span> : L.scrub(c.title)}
+                  {c.text == null ? <span className="text-ink-3">{c.title}</span> : L.scrub(c.title)}
                   <span className="text-ink-3">　被引用 {c.n_cited} 次</span>
                   {showText && c.text && <span className="mt-0.5 block line-clamp-2 text-ink-3">{c.text}</span>}
                 </p>

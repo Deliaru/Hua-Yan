@@ -18,7 +18,7 @@ export function Ledger() {
         {mine.map((s) => (
           <div key={s.ku_id} className="row">
             <span className="tag w-7 justify-center">L{s.level}</span>
-            <span className="min-w-0 flex-1 truncate text-[14px]">{s.title}</span>
+            <span className="min-w-0 flex-1 truncate text-[14px]">{L.scrub(s.title)}</span>
             <span className="num shrink-0 text-[13px] text-ink-2">被引用 {s.n_cited} 次 · {s.points} 分</span>
           </div>
         ))}
@@ -29,7 +29,7 @@ export function Ledger() {
           <div key={s.ku_id} className="row">
             <span className="w-28 shrink-0 truncate text-[13px] text-ink-2">{L.name(s.owner)}</span>
             <span className="tag w-7 justify-center">L{s.level}</span>
-            <span className="min-w-0 flex-1 truncate text-[14px]">{s.title}</span>
+            <span className="min-w-0 flex-1 truncate text-[14px]">{L.scrub(s.title)}</span>
             <span className="num shrink-0 text-[13px] text-ink-2">被引用 {s.n_cited} 次 · {s.points} 分</span>
           </div>
         ))}
