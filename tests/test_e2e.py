@@ -2,10 +2,12 @@ import json
 from pathlib import Path
 
 import yaml
+import pytest
 
 from huayan.app import HuayanApp
 from huayan.clock import get_clock
 from huayan.contracts import KnowledgeUnit, Trial
+from huayan.knowledge import PermissionDenied
 
 
 def test_mainline_offline(tmp_path):
@@ -98,6 +100,20 @@ def test_mainline_offline(tmp_path):
     before = len(app.events.query(["question_prepared"]))
     app.tick()
     assert len(app.events.query(["question_prepared"])) == before
+
+    timeline = app.jue_timeline(req.id, rd)
+    assert {"opportunity", "accept_requirement", "confirm_translation", "release"} <= {n.family for n in timeline.nodes}
+    assert {f"session:{sid}" for sid in sessions} <= {p.object_id for p in timeline.points}
+    assert f"requirement:{member.id}" in {p.object_id for p in timeline.points}
+    assert timeline.n_questions == len(timeline.nodes) and timeline.n_signatures > 0
+    sales = app.jue_timeline(sessions[0], "sales:S01")
+    assert {p.family for p in sales.points} <= {"ask_slot", "escalate_need", "reuse_product", "market_eval", "ask_back"}
+    assert all(p.object_id != f"session:{sessions[1]}" for p in sales.points)
+    assert sales.n_judgments < timeline.n_judgments and timeline.n_llm_calls == 0
+    with pytest.raises(PermissionDenied):
+        app.jue_timeline(req.id, "sales:S02")
+    app.meter.record(caller="jue:timeline-check", kind="s1")
+    assert app.jue_timeline(req.id, rd).n_llm_calls == 1
 
     meter = [json.loads(line) for line in (app.run_dir / "metering.jsonl").read_text(encoding="utf-8").splitlines()]
     assert any(r["caller"].startswith("jue:") for r in meter)

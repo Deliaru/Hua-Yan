@@ -43,3 +43,40 @@ uv run python web/src/fixtures/generate.py
 时间线的分数、7 次判断、2 个问题和 2 次签字全部是演示用设定值，`n_judgments` 不等于点数。`n_llm_calls=0` 也是本样例的设定；实际接口必须从计量器读取，不能沿用这里的常量。
 
 本模块只交付数据与再生成方法；前端消费确认、权限门面实现、真实决策打分和全流程验收由后续模块完成。
+
+## 真实 HTTP 接口交接（WP-C）
+
+以下接口已在 `src/huayan/ui/server.py` 接入。前缀为 `/api/`，GET 使用查询参数，POST 使用 JSON。每次 POST 成功后统一执行 `tick()`；随后刷新工作对象与 `questions`，取得 Hub 准备后的状态。门面拒绝返回 `400 {error}`，无权限返回 `403 {error}`。
+
+| GET 路径 | 查询参数 | 响应 |
+|---|---|---|
+| `status` | 无 | `RunStatus` |
+| `session` | `id, viewer` | 沿用现有包装，`view` 是 `SessionView` |
+| `questions` | `viewer` | 主人或签字人为此人的 open 问题；旧 `role` 参数不再参与过滤 |
+| `requirement` | `id, viewer` | `RequirementView` |
+| `leak` | `id, viewer` | `list[LeakHit]` |
+| `timeline` | `target_id, viewer` | `JueTimeline`；target_id 是 `sess:n` 或 `req:n` |
+
+| POST 路径 | JSON 字段 |
+|---|---|
+| `recommend` | `session_id` |
+| `resolve` | `question_id, action, by`；可选 `note` |
+| `escalate` | `session_id, by`；升级说明先保存到 `escalate-note` |
+| `reuse/adopt` | `req_id, by` |
+| `reuse/decline` | `req_id, reason, by` |
+| `reuse-note` | `req_id, text, by` |
+| `merge` | `question_id, by`；建议由产品经理 Agent / Hub 准备 |
+| `accept`、`confirm`、`release` | `req_id, by` |
+| `return` | `req_id, reason, by` |
+| `req-item` | `req_id, index, item, by`；item 是契约 `ReqItem`，index 从 0 起，-1 追加 |
+| `contribute` | `req_id, item_index, scene_phrase, chem_term, by` |
+| `market-eval` | `req_id, result, note, by` |
+| `points` | `req_id, text, sealed, by` |
+| `sheet` | `req_id, sheet, by`；sheet 是 `{sheet: 正文, usage: 用法}` |
+| `trial` | `trial`；完整契约 `Trial` 对象，at 为带时区的 ISO 时间 |
+| `decrypt/request` | `session_id, by` |
+| `decrypt/decide` | `question_id, by, approve`；可选 `text` 为研发审定的客户说明 |
+| `reply-draft`、`escalate-note` | `session_id, text, by` |
+| `agents/chat` | `actor, text`；可选 `session_id, focus` |
+
+其余既有接口沿用原路径。合并门面 `save_merge_proposal`、`merge_requirements` 已实现；无需前端另写合并流程。上述交接验证使用正式模拟种子与真实本地 HTTP 服务，Agent 为离线骨架；尚不代表 WP-U2 页面或真实模型 Agent Loop 已验收。

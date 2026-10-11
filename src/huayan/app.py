@@ -1,4 +1,5 @@
 """应用门面：负责身份与视图边界，界面只调用这里。"""
+import json
 from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -10,7 +11,8 @@ from huayan.bus import QuestionBus
 from huayan.clock import get_clock
 from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
     Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
-    RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial)
+    RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
+    JueTimeline, TimelineNode, TimelinePoint)
 from huayan.domain import consistent, load_seeds
 from huayan.escalation import flow
 from huayan.escalation.translate import leak_hits
@@ -21,7 +23,8 @@ from huayan.jev.system1 import build_system1
 from huayan.jue.jue_k import JueK
 from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import publish, select_asks
-from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state
+from huayan.jue.records import load_records
+from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.disclosure import VERSIONS, cap, render
 from huayan.l1.extract import LLMExtractor, RuleExtractor
@@ -618,15 +621,22 @@ class HuayanApp:
                                    {"draft"} if actor.role == "pm" else {"rd_accepted"})
         self._validate_item(req, item, actor)
         items = req.product_lang if actor.role == "pm" else req.chem_lang
+        item = item.model_copy(deep=True, update={"edited_by": None if by == "pm:agent" else by})
+        before = None
         if index == -1:
-            items.append(item.model_copy(deep=True))
+            items.append(item)
         elif 0 <= index < len(items):
-            items[index] = item.model_copy(deep=True)
+            before = items[index].model_dump()
+            items[index] = item
         else:
             raise ValueError("条目索引不存在；追加请使用 -1")
         if actor.role == "rd":
             req.chem_drafted_by = by
-        return self._save_requirement(req, viewer_id=by)
+        self.events.append("requirement_edited", by, {"requirement_id": req_id,
+            "layer": 2 if actor.role == "pm" else 3, "index": index, "before": before, "after": item.model_dump()})
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def remove_req_item(self, req_id, index, by):
         actor = self._actor(by, {"pm", "rd"})
@@ -885,6 +895,7 @@ class HuayanApp:
         product = self.kb.product(rec.product_id)
         q = self.bus.publish(Question(id="", family="decrypt_request", title="客户申请了解产品机理",
             object_id=f"{session_id}/{product.id}", owner_role="rd", owner_id=product.owner,
+            signer_role="rd", signer_id=product.owner,
             scored_by="human", discoverer="human", created_at=get_clock().now(),
             dedup_key=f"decrypt_request:{session_id}/{product.id}",
             evidence=[Evidence(summary="客户明确要求机理", quote=profile.evidence_quote)],
@@ -895,7 +906,7 @@ class HuayanApp:
             "product_id": product.id}, session_id=session_id)
         return q.model_copy(deep=True)
 
-    def decide_decrypt(self, question_id, by, approve):
+    def decide_decrypt(self, question_id, by, approve, text=""):
         self._actor(by, {"rd"})
         question = _find(self.bus.questions, question_id, "问题")
         if question.family != "decrypt_request" or question.status != "open":
@@ -906,7 +917,7 @@ class HuayanApp:
         if approve:
             self.grants.append(DecryptGrant(id=f"grant:{len(self.grants) + 1}",
                 customer_id=refs["customer_id"], product_id=refs["product_id"],
-                session_id=refs["session_id"], approved_by=by, at=at))
+                session_id=refs["session_id"], approved_by=by, at=at, text=text))
             self.events.append("decrypt_approve", by, {"question_id": question.id,
                 "customer_id": refs["customer_id"], "product_id": refs["product_id"]}, session_id=refs["session_id"])
         self.audit.append(AuditRecord(ts=at, actor=by, action="decrypt_approve" if approve else "decrypt_reject",
@@ -958,6 +969,83 @@ class HuayanApp:
             raise PermissionDenied("高层级访问已冻结")
         return [q.model_copy(deep=True) for q in self.bus.list()
                 if viewer_id in (q.owner_id, q.signer_id)]
+
+    def jue_timeline(self, target_id, viewer_id):
+        viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
+        if self.kb.is_frozen(viewer_id):
+            raise PermissionDenied("高层级访问已冻结")
+        if target_id in self._sessions:
+            session = self._sessions[target_id]
+            if viewer.role == "sales" and session.sales_id != viewer_id:
+                raise PermissionDenied("只能查看自己负责的会话")
+            sids = {target_id}
+            req = next((r for r in reversed(list(self._requirements.values()))
+                        if target_id in r.session_ids and r.status != "merged"), None)
+        else:
+            req = _find(self._requirements, target_id, "需求单")
+            while req.merged_into:
+                req = self._requirements[req.merged_into]
+            sids = set(req.session_ids)
+            if viewer.role == "sales":
+                sids = {sid for sid in sids if self._sessions[sid].sales_id == viewer_id}
+                if not sids:
+                    raise PermissionDenied("只能查看自己负责的需求线程")
+        rids = set()
+        if req:
+            rids.add(req.id)
+            # 已实际合并的单属于线程；merge_from 在签字前仅是建议。
+            for member in self._requirements.values():
+                parent = member
+                while parent.merged_into:
+                    parent = self._requirements[parent.merged_into]
+                if parent.id == req.id:
+                    rids.add(member.id)
+            if viewer.role != "sales":
+                sids.update(req.session_ids)
+        themes = {theme_id(e.payload["phenomenon"], e.payload["known"], self.seeds)
+                  for e in self.events.query(["escalate"]) if e.session_id in sids}
+        themes.update(theme_id(self._requirements[rid].phenomenon, self._requirements[rid].known_slots, self.seeds)
+                      for rid in rids)
+        objects = {f"session:{sid}" for sid in sids} | {f"requirement:{rid}" for rid in rids} | themes
+        owners = sids | rids
+
+        def visible(family, oid):
+            if viewer.role == "sales":
+                if family not in {"ask_slot", "escalate_need", "reuse_product", "market_eval", "ask_back"}:
+                    return False
+                if family in {"reuse_product", "market_eval", "ask_back"}:
+                    rid = oid.removeprefix("slot:").rsplit("/", 1)[0] if family == "ask_back" else oid.removeprefix("requirement:")
+                    if rid not in rids or self._requirements[rid].session_ids[0] not in sids:
+                        return False
+            return oid in objects or (oid.startswith("slot:") and oid[5:].rsplit("/", 1)[0] in owners)
+
+        questions = [q for q in self.bus.list(status=None) if visible(q.family, q.object_id)]
+        raised = {(q.family, q.object_id, q.created_at) for q in questions}
+        points, judgments = [], 0
+        for record in load_records(self.run_dir):
+            ask_threshold = self.config["thresholds"]["ask_jue_k" if record.output.model == "jue_k" else "ask"]
+            hints = {f"slot:{h.session_id}/{h.slot}" for h in select_asks(record.output, record.state,
+                self.seeds, ask_threshold, self.config["thresholds"]["max_asks"])}
+            decisions = [d for d in record.output.decisions if visible(d.family, d.object_id)]
+            judgments += bool(decisions)
+            for d in decisions:
+                key = ("ask_jue_k" if record.output.model == "jue_k" else "ask") if d.family == "ask_slot" else (
+                    "ask_jue_k" if d.family == "ask_back" and record.output.model == "jue_k" else "publish")
+                points.append(TimelinePoint(at=record.output.at, family=d.family, object_id=d.object_id,
+                    p_need=d.p_need, threshold=self.config["thresholds"][key],
+                    scored_by=d.scored_by or record.output.scored_by,
+                    raised=(d.family, d.object_id, record.output.at) in raised or
+                           (d.family == "ask_slot" and d.object_id in hints)))
+        nodes = [TimelineNode(question_id=q.id, family=q.family, owner_id=q.owner_id, signer_id=q.signer_id,
+                    created_at=q.created_at, prepared_at=q.prepared_at, resolved_at=q.resolved_at,
+                    action=q.resolution.action if q.resolution else None, by=q.resolution.by if q.resolution else None)
+                 for q in questions]
+        meter = [json.loads(line) for line in self.meter.path.read_text(encoding="utf-8").splitlines()] if self.meter.path.exists() else []
+        return JueTimeline(target_id=target_id, viewer=viewer_id, points=sorted(points, key=lambda p: p.at),
+            nodes=sorted(nodes, key=lambda n: n.created_at), n_judgments=judgments,
+            n_llm_calls=sum(m["caller"].startswith("jue") and m["kind"] != "jue" for m in meter),
+            n_questions=len(nodes), n_signatures=sum(q.resolution is not None and q.signer_id is not None
+                and q.resolution.by == q.signer_id and q.resolution.action != "answered" for q in questions))
 
     def mark_prepared(self, question_id, by):
         """由 hub 在主人准备完毕后调用；只标待签，不签字、不推进业务。"""
