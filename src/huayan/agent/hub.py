@@ -125,8 +125,7 @@ class AgentHub:
                 rounds[qid] = rounds.get(qid, 0) + 1
             pending = [q for q in self.app.bus.list() if q.prepared_at is None
                        and q.id not in exhausted
-                       and (q.owner_role in ("sales", "pm", "rd")
-                            or (self.app.config["gateway_mock"] and q.owner_role == "supervisor"))
+                       and q.owner_role in ("sales", "pm", "rd", "supervisor")
                        and (q.id, rounds.get(q.id, 0)) not in self._dispatched]
             if not pending:
                 break
@@ -144,7 +143,7 @@ class AgentHub:
                     conv.messages.append(AgentMessage(role="system", text=text, at=get_clock().now(), target=q.object_id))
                     self._save(conv)
                     out.append(conv.model_copy(deep=True))
-                else:
+                elif q.owner_role != "supervisor":   # 主管没有 Agent：拼凑风险无需准备，直接待签（REPLAN 4.3 主人为「—」）
                     out.append(self.notify(q.owner_id, text, session_id))
                     if out[-1].messages[-1].text == OUT_OF_STEPS:
                         exhausted.add(q.id)

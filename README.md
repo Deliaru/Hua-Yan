@@ -4,7 +4,7 @@
 
 面向传化功能化学「市场—产品—研发」需求协同的多层 Agent 系统。参赛赛道：AI＋功能化学（自主深化「AI 化学家」推荐场景）。
 
-**当前状态：v5 集成开发中（WP-I2），正式主线录制与界面验收尚未完成。** 完整交付说明由 WP-D2 整理。
+**当前状态：v5 主线已录制（WP-I2），断网回放与四个检查点载入已核对；演示脚本与材料由 WP-D2 整理。**
 
 ## 运行
 
@@ -18,7 +18,7 @@ uv run pytest
 uv run python -m huayan.ui.server
 ```
 
-默认使用离线配置，界面地址为 `http://127.0.0.1:8766`。现场演示需在本机环境配置 `BACKUP_API_KEY`，按 `config/system1.yaml` 建立 OneJev 本地转发，并将 B 提供的模型放到 `models/jue_k/model.pkl`（不入库）。PowerShell 启动：
+默认使用离线配置，界面地址为 `http://127.0.0.1:8766`。现场演示需在本机环境配置 `BACKUP_API_KEY`，按 `config/system1.yaml` 建立 OneJev 本地转发（以 `app.demo.yaml` 启动时会先检查 OneJev，未启动则服务起不来），并将 B 提供的模型放到 `models/jue_k/model.pkl`（不入库）。PowerShell 启动：
 
 ```powershell
 $env:HUAYAN_CONFIG = "config/app.demo.yaml"
@@ -32,7 +32,7 @@ uv run python scripts/demo_mainline.py --record
 uv run python scripts/demo_mainline.py --replay
 ```
 
-缓存缺失直接报错，不转为现场调用。检查点、环境要求与验收范围见 [录制说明](runs/demo_record/README.md)。
+`--replay` 只读 `runs/demo_record/llm_cache_v5/`，不需要密钥与 OneJev，也不访问网络；缓存缺失直接报错，不转为现场调用。检查点、环境要求与验收范围见 [录制说明](runs/demo_record/README.md)。
 
 ## 文档
 
@@ -49,4 +49,6 @@ uv run python scripts/demo_mainline.py --replay
 ## 声明
 
 - 本项目使用的全部数据为模拟数据，不包含传化真实资料。
-- 部分基础模块（模型网关、OneJev 客户端、计量、时钟、表达式求值器）复用自团队赛前项目 JUE，文件头注明来源，开发后在此逐一列出。
+- 部分基础模块复用或改写自团队赛前项目 JUE，文件头注明来源：
+  - 复用（按契约与录制回放做了少量调整）：`src/huayan/clock.py`、`meter.py`、`contracts/_base.py`、`contracts/gateway.py`、`gateway/__init__.py`、`gateway/client.py`、`gateway/mock.py`、`jev/system1/onejev.py`、`jue/expr.py`；
+  - 改写或参照：`agent/loop.py`（JUE 的 Agent Loop 简化）、`agent/tools.py`（工具注册表写法）、`ui/server.py`（JUE 决策台的服务形式）、`scripts/train_jue_k.py` 与 `scripts/eval_jue_k.py`（JUE-r2 的训练与校准做法）、`scripts/probe_onejev.py`；界面视觉沿用 JUE 决策台。

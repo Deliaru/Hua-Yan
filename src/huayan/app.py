@@ -998,7 +998,8 @@ class HuayanApp:
         if viewer.role != "sales" and self.kb.is_frozen(viewer.id):
             raise PermissionDenied("高层级访问已冻结")
         return [q.model_copy(deep=True) for q in self.bus.list()
-                if viewer_id in (q.owner_id, q.signer_id)]
+                if viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
+                    and self._sessions[q.refs["session_id"]].sales_id == viewer_id)]
 
     def jue_timeline(self, target_id, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})

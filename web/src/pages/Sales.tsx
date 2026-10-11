@@ -41,6 +41,12 @@ function SalesSidebar({ mine, current, choose }: { mine: SessionSummary[]; curre
   );
 }
 
+// 主管冻结了本人的高层级访问：只读状态由门面给出，界面不自己判断权限
+function useFrozen() {
+  const { me } = useApp();
+  return useData(() => api.frozen(me), [me])?.frozen ?? false;
+}
+
 export function useMySessions() {
   const { me } = useApp();
   const all = useData(() => api.sessions(), []);
@@ -74,12 +80,14 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
   const [reply, setReply] = useState(v.reply_draft);
   useEffect(() => setReply(v.reply_draft), [v.reply_draft]);
   const [lit, setLit] = useState<string | null>(null); // 点槽位：时间轴里对应的那句原话高亮
+  const frozen = useFrozen();
   return (
     <>
       <div className="mr-[372px] pb-[260px]">
         <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pt-7">
           <PageHead title={summary.customer_id ? L.name(summary.customer_id) : "样例客户"}
                     subtitle={`${summary.phenomenon ? L.phen(summary.phenomenon) : "尚未识别现象"} · ${SESSION_STATUS[v.status] ?? v.status}`} />
+          {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的高层级访问已被主管冻结：客户只能拿到说明书与用法，暂不能申请解密。</p>}
           <PendingActions />
           <div className="grid grid-cols-[minmax(280px,5fr)_minmax(320px,6fr)] items-start gap-5">
             <Timeline v={v} lit={lit} />
@@ -294,6 +302,7 @@ function RecCard({ card, sid, fill }: { card: RecommendationCard; sid: string; f
   const { me } = useApp();
   const L = useLabels();
   const decrypted = card.version === "full_mechanism";
+  const frozen = useFrozen();
   return (
     <Group title="推荐" foot={card.note ? L.scrub(card.note) : undefined}>
       <div className="row">
@@ -310,7 +319,7 @@ function RecCard({ card, sid, fill }: { card: RecommendationCard; sid: string; f
       ))}
       <div className="row flex-wrap">
         <button type="button" className="btn btn-plain" onClick={() => fill(card.sections.map((s) => s.text).join(""))}>填进发给客户</button>
-        {!decrypted && <Act kind="quiet" label="申请解密" done="已申请解密，等研发审批" run={() => api.requestDecrypt(sid, me)} />}
+        {!decrypted && !frozen && <Act kind="quiet" label="申请解密" done="已申请解密，等研发审批" run={() => api.requestDecrypt(sid, me)} />}
         {decrypted && <span className="text-[12px] text-ink-2">研发审定的机理说明，由你转交客户</span>}
       </div>
     </Group>
@@ -354,6 +363,7 @@ function EscalateCard({ q, v, notes }: { q: Question; v: SessionView; notes: Age
 function ReuseLine({ v, fill }: { v: SessionView; fill: (t: string) => void }) {
   const { me } = useApp();
   const L = useLabels();
+  const frozen = useFrozen();
   const r = v.reuse!;
   const name = r.product_name.replace("（模拟）", "");
   if (r.status === "pending") return <p className="text-[13px] text-ink-2">产品经理 Agent 找到现成产品（{name}），研发审定中</p>;
@@ -373,7 +383,7 @@ function ReuseLine({ v, fill }: { v: SessionView; fill: (t: string) => void }) {
       </div>
       <div className="row flex-wrap">
         <button type="button" className="btn btn-plain" onClick={() => fill(r.customer_note)}>填进发给客户</button>
-        <Act kind="quiet" label="申请解密" done="已申请解密，等研发审批" run={() => api.requestDecrypt(v.session_id, me)} />
+        {!frozen && <Act kind="quiet" label="申请解密" done="已申请解密，等研发审批" run={() => api.requestDecrypt(v.session_id, me)} />}
       </div>
     </Group>
   );

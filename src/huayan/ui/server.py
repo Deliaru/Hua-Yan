@@ -98,8 +98,10 @@ GET = {
     "/api/sessions": sessions,
     "/api/session": session,
     "/api/questions": lambda app, p: app.questions(p["viewer"]),
-    "/api/requirements": lambda app, p: [{"id": r.id, "status": r.status, "phenomenon": r.phenomenon}
+    "/api/requirements": lambda app, p: [{"id": r.id, "status": r.status, "phenomenon": r.phenomenon,
+                                          "customer_ids": [s.customer_id for s in app.sessions() if s.id in r.session_ids]}
                                     for r in app.requirements(p["viewer"])],
+    "/api/frozen": lambda app, p: {"frozen": app.kb.is_frozen(p["actor"])},
     "/api/requirement": lambda app, p: app.requirement_view(p["id"], p["viewer"]),
     "/api/leak": lambda app, p: app.leak_check(p["id"], p["viewer"]),
     "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),

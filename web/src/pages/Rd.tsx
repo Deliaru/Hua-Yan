@@ -32,7 +32,7 @@ export function Rd() {
           <button key={r.id} onClick={() => { setChosenReq(r.id); setQid(null); }}
                   className={`side-row ${r.id === reqId ? "on" : ""}`}>
             <p className="text-[13px] font-semibold">{L.phen(r.phenomenon)}</p>
-            <p className="text-[12px] text-ink-2">{REQ_STATUS[r.status]}</p>
+            <p className="truncate text-[12px] text-ink-2">{[r.customer_ids.map(L.name).join("、"), REQ_STATUS[r.status]].filter(Boolean).join(" · ")}</p>
           </button>
         ))}
         {!reqs.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">暂无需求单</p>}
