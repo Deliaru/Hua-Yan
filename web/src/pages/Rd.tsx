@@ -1,8 +1,8 @@
-// 研发工作面（L3）：左侧收件箱；中间是需求单抬头、进度与签字区、化学要点（每条右侧并排写来历：产品需求 ← 客户原话）；
+// 研发工作面（L3）：左侧收件箱；中间是需求单抬头、觉在这张单上提出的决策与签字区、批注、化学要点（每条右侧并排写来历：产品需求 ← 客户原话）；
 // 右侧是这张单的来历与 Agent 协作。按钮就是签字，可签条件由门面判断，拒绝时在按钮旁显示门面给的原因。
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { REQ_STATUS, Side, useApp, useData, useLabels } from "../ctx";
+import { ACTION, REQ_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { AgentMessage, CitedKnowledge, LeakHit, Question, ReqItem, RequirementView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
@@ -51,7 +51,7 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
           {view ? (
             <>
               <ReqHead view={view} />
-              <Progress view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
+              <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
               <RequirementSheet view={view} notes={conv?.messages ?? []} />
             </>
           ) : question ? <SignArea key={question.id} q={question} view={null} />
@@ -115,65 +115,80 @@ function ReqHead({ view }: { view: RequirementView }) {
   );
 }
 
-// ── 进度：这张单走到哪一步；签字区挂在当前一步下面 ─────────────────
-// 只用于显示，可签条件仍由门面判断。试样结果不在需求单视图里，试样与客户评价合成一步。
-const STAGES = ["接单", "确认转译", "试样 · 客户评价", "封存 / 放出", "发布"];
-const WAITING = [
-  "产品经理 Agent 正在起草产品需求，起草好后觉会提出「是否接单」",
-  "你的 Agent 正在起草化学要点；有未答回问时要等业务员问回来",
-  "研发去实验室做试样（演示里用右边按钮模拟实验室系统回传结果）；试样通过后，业务员把样品交给客户、带回评价",
-  "你的 Agent 正在起草「封存 / 放出」两栏",
-  "产品经理 Agent 正在用对外要点包装说明书",
-];
-
-function stageOf(req: RequirementView["requirement"]) {
-  if (req.status === "released") return 5;
-  if (req.public_points || req.sealed.length) return 4;
-  if (req.points_draft) return 3;
-  if (req.rd_confirmed_by) return 2;
-  if (req.rd_accepted_by) return 1;
-  return 0;
-}
-
-function Progress({ view, sign }: { view: RequirementView; sign: React.ReactNode }) {
+// ── 觉在这张单上提出的决策：取自觉视图接口（真实的提出、准备、签字三个时刻），签字区挂在下面 ─────
+// 流程由觉提出的决策推动，不在前端写死步骤；试样不经过觉（模拟实验室系统回传），单列一行。
+function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode }) {
   const { me } = useApp();
+  const L = useLabels();
   const req = view.requirement;
+  const t = useData(() => api.timeline(req.id, me), [req.id, me]);
   const ended = ({ reused: "已复用现成产品，没有立项", merged: "已并入另一张单", rejected: "已失效" } as Record<string, string>)[req.status];
-  if (ended) return <div className="group px-5 py-4 text-[14px] text-ink-2">这张单{ended}。</div>;
-  const at = stageOf(req);
+  const nodes = (t?.nodes ?? []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // 需求单视图里没有试样状态：试样通过后觉会提出「客户评价」，以此判断试样已录入
+  const trial = req.status === "rd_confirmed" && !nodes.some((n) => n.family === "market_eval" || n.family === "seal_points");
   return (
     <section className="flex flex-col gap-4">
-      <div className="group px-6 pb-4 pt-5">
-        <ol className="flex items-start">
-          {STAGES.map((name, i) => {
-            const done = i < at, cur = i === at;
+      <div>
+        <div className="group-title flex items-baseline justify-between">
+          <span>觉在这张单上提出的决策</span>
+          {t && <span className="num font-normal text-ink-3">
+            觉判断 {t.n_judgments} 次 · 觉的大模型调用 {t.n_llm_calls} 次 · 提出 {t.n_questions} 个 · 人签字 {t.n_signatures} 次</span>}
+        </div>
+        <div className="group">
+          {ended && <div className="row text-[14px] text-ink-2">这张单{ended}。</div>}
+          {nodes.map((n) => {
+            const done = n.resolved_at != null, ready = !done && n.prepared_at != null;
             return (
-              <li key={name} className="relative flex flex-1 flex-col items-center gap-1.5">
-                {i > 0 && <i className={`absolute right-1/2 top-[11px] h-[2px] w-full ${i <= at ? "bg-accent" : "bg-[rgba(60,60,67,.14)]"}`} />}
-                <span className={`relative z-[1] flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-semibold ${
-                  done ? "bg-accent text-white"
-                    : cur ? (sign ? "bg-attn text-white shadow-[0_0_0_4px_rgba(242,140,6,.18)]" : "bg-white text-accent shadow-[inset_0_0_0_2px_var(--color-accent)]")
-                      : "bg-white text-ink-3 shadow-[inset_0_0_0_1.5px_rgba(60,60,67,.2)]"}`}>{done ? "✓" : i + 1}</span>
-                <span className={`text-[12.5px] ${cur ? "font-semibold" : done ? "" : "text-ink-3"}`}>{name}</span>
-              </li>
+              <div key={n.question_id} className={`row !min-h-[44px] ${ready ? "attn-edge" : ""}`}>
+                <span className={`num flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
+                  done ? "bg-accent text-white" : ready ? "bg-attn text-white" : "shadow-[inset_0_0_0_1.5px_rgba(60,60,67,.25)]"}`}>{done ? "✓" : ""}</span>
+                <span className="w-[92px] shrink-0 text-[14px] font-semibold">{L.family(n.family)}</span>
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-2">
+                  {n.family === "ask_back" ? `已派 ${L.name(n.owner_id)} 回头问客户，答复回填需求单`
+                    : `${n.owner_id ? `${L.name(n.owner_id)} 准备` : "产品经理 Agent 准备"} · ${n.signer_id ? `${L.name(n.signer_id)} 签字` : "无需签字"}`}
+                </span>
+                <span className="num shrink-0 text-[12px] text-ink-2">
+                  提出 {hhmm(n.created_at)}
+                  {n.prepared_at && ` · 准备好 ${hhmm(n.prepared_at)}`}
+                  {done ? <span className="text-ink"> · {ACTION[n.action ?? ""] ?? "已处理"} {hhmm(n.resolved_at!)}</span>
+                    : ready ? <span className="font-semibold text-attn-ink"> · 等待签字</span> : <span> · 准备中</span>}
+                </span>
+              </div>
             );
           })}
-        </ol>
-        {at < STAGES.length ? (
-          <div className="mt-4 flex items-center gap-3 rounded-[10px] bg-bg px-4 py-2.5">
-            <span className="text-[12px] font-semibold text-ink-2">当前一步</span>
-            <span className="flex-1 text-[13px]">{sign ? "觉已提出，在下方签字" : WAITING[at]}</span>
-            {at === 2 && !sign && (
-              <span className="flex gap-2">
-                <Act kind="plain" label="试样通过（模拟实验室系统）" run={() => api.trial(req.id, "pass", me)} />
-                <Act kind="quiet" label="不通过" run={() => api.trial(req.id, "fail", me)} />
-              </span>
-            )}
-          </div>
-        ) : <p className="mt-4 rounded-[10px] bg-bg px-4 py-2.5 text-[13px]">已发布：新品说明书回到 L1 知识库，下一位同类客户在业务员那里直接命中。</p>}
+          {t && !nodes.length && !ended && <div className="row text-[13px] text-ink-2">觉还没有在这张单上提出决策。</div>}
+          {trial && (
+            <div className="row">
+              <span className="h-[18px] w-[18px] shrink-0 rounded-full shadow-[inset_0_0_0_1.5px_rgba(60,60,67,.25)]" />
+              <span className="w-[92px] shrink-0 text-[14px] font-semibold">试样</span>
+              <span className="min-w-0 flex-1 text-[12.5px] text-ink-2">不经过觉：研发在实验室做试样，演示里用按钮模拟实验室系统回传结果</span>
+              <Act kind="plain" label="试样通过" run={() => api.trial(req.id, "pass", me)} />
+              <Act kind="quiet" label="不通过" run={() => api.trial(req.id, "fail", me)} />
+            </div>
+          )}
+        </div>
       </div>
       {sign}
     </section>
+  );
+}
+
+// Agent 在这张单上的批注：后端目前挂在整张单上，先集中显示在需求单顶部。
+// 派单记录（system）是给 Agent 的内部提示，含编号与参数，不显示；回问去向等由上面的决策列表体现。
+function SheetNotes({ reqId, notes }: { reqId: string; notes: AgentMessage[] }) {
+  const L = useLabels();
+  const mine = notes.filter((m) => m.role === "assistant" && m.target != null
+    && (m.target === reqId || m.target === `requirement:${reqId}` || m.target.startsWith(`slot:${reqId}/`)));
+  if (!mine.length) return null;
+  return (
+    <Group title="Agent 的批注">
+      {mine.map((m, i) => (
+        <div key={i} className="row !min-h-0 !items-start !py-2 text-[13px] leading-5">
+          <span className="num w-11 shrink-0 text-ink-3">{hhmm(m.at)}</span>
+          <span className="min-w-0 flex-1 text-ink-2">{L.scrub(m.text)}</span>
+        </div>
+      ))}
+    </Group>
   );
 }
 
@@ -186,6 +201,7 @@ function RequirementSheet({ view, notes }: { view: RequirementView; notes: Agent
   const l2 = req.product_lang.filter((it) => !isCond(it) && !untranslated(it));
   return (
     <section className="flex flex-col gap-6">
+      <SheetNotes reqId={req.id} notes={notes} />
       <div>
         <div className="group-title flex items-baseline justify-between">
           <span>化学要点 · L3</span>

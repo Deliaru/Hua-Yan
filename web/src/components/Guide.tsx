@@ -1,6 +1,6 @@
 // 演示导览：工具栏正中的一枚胶囊，点开看全部步骤；按系统当前状态说明主线走到哪一步、现在轮到谁、该在哪里做什么。
 // 只用于给评委看懂流程：步骤由会话、需求单状态与问题总线上的开放问题推断，可签条件仍由门面判断。
-// 导览是旁白视角，不随当前身份：需求单状态按研发身份读取，界面上只显示步骤，不显示需求单内容。
+// 导览是旁白视角，不随当前身份：以研发（L3）权限读取全局状态，浮层底部向评委写明；实际业务中当前身份看不到这些。
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useData, useLabels } from "../ctx";
@@ -61,14 +61,17 @@ export function Guide() {
   const preparing = state.open.find((q) => q.prepared_at == null && DO[q.family]);
   const req = state.view?.requirement;
   const owner = req?.assigned_rd ?? rd;
-  let step: number, who: string | null, todo: string;
+  // raised：觉此刻提出的决策（来自问题总线）；没有时给出不经过觉的操作提示（录入客户的话、试样）
+  let step: number, who: string | null, todo: string, raised: string | null = null;
   if (ready) {
     [step, todo] = DO[ready.family];
     who = ready.signer_id ?? ready.owner_id;
+    raised = `觉提出「${L.family(ready.family)}」· 已准备好，等 ${L.name(who!)} 签字`;
   } else if (preparing) {
     step = DO[preparing.family][0];
     who = null;
-    todo = `觉已提出「${L.family(preparing.family)}」，${preparing.owner_id ? L.name(preparing.owner_id) + " 的 Agent" : "产品经理 Agent"}正在准备，准备好后签字人的收件箱会出现待签项`;
+    todo = DO[preparing.family][1];
+    raised = `觉提出「${L.family(preparing.family)}」· ${preparing.owner_id ? L.name(preparing.owner_id) + " 的 Agent" : "产品经理 Agent"}正在准备`;
   } else if (req?.status === "released") {
     [step, who, todo] = [9, sales, "主线已走完。业务员再开一位客户、说同样的现象，这次在 L1 直接命中新品，不再升级"];
   } else if (req?.status === "rd_confirmed") {
@@ -85,7 +88,7 @@ export function Guide() {
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)} title="演示导览"
+      <button type="button" onClick={() => setOpen(!open)} title="演示导览：以研发（L3）权限读取全局状态，只为介绍流程"
               className={`flex h-7 items-center gap-2 rounded-full pl-1 pr-2.5 text-[12px] transition-colors ${open ? "bg-fill" : "hover:bg-fill"}`}>
         <span className="num flex h-5 items-center rounded-full bg-attn px-1.5 text-[11px] font-semibold text-white">{step + 1}/{SHORT.length}</span>
         <span className="font-semibold">{SHORT[step]}</span>
@@ -95,7 +98,12 @@ export function Guide() {
       </button>
       {open && (
         <div className="popover anim-fade left-1/2 top-full mt-2 w-[400px] -translate-x-1/2 !p-0">
-          <p className="eyebrow px-4 pb-2 pt-3">演示导览 · 一条需求怎样走完三层</p>
+          <div className="px-4 pb-2 pt-3">
+            <p className="eyebrow">演示导览</p>
+            <p className={`mt-1 text-[13px] ${raised ? "font-semibold text-attn-ink" : "text-ink-2"}`}>
+              {raised ?? "觉此刻没有提出决策；下一步由人操作"}</p>
+          </div>
+          <p className="px-4 pb-1 text-[11px] text-ink-3">典型路径（参考）· 实际走哪一步由觉提出</p>
           <ol className="px-2 pb-2">
             {SHORT.map((name, i) => i === step ? (
               <li key={name} className="my-1 rounded-[10px] bg-white px-3 py-2.5 shadow-[0_0_0_.5px_rgba(0,0,0,.08),0_1px_3px_rgba(0,0,0,.06)]">
@@ -116,7 +124,8 @@ export function Guide() {
               </li>
             ))}
           </ol>
-          <p className="border-t border-sep px-4 py-2 text-[11px] text-ink-3">按系统当前状态推断；完整流程图见「架构总览」</p>
+          <p className="border-t border-sep px-4 py-2 text-[11px] leading-4 text-ink-3">
+            导览以研发（L3）权限读取全局状态，只为介绍流程；实际业务中，当前身份看不到自己权限以外的内容。完整流程图见「架构总览」。</p>
         </div>
       )}
     </div>

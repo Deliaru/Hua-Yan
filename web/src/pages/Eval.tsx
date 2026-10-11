@@ -1,7 +1,7 @@
 // 评测页（WP-E）：展示 docs/reports/ 下失真对照、Jue-K、业务周三份报告的关键数字与图，每块写明数据来源。
 // 数字只读各报告的 metrics.json，图为同目录的 png；结论与限制以各报告 README.md 为准。
 import { api } from "../api";
-import { FAMILY, Side, pct, useData } from "../ctx";
+import { FAMILY, Side, pct, useData, useLabels } from "../ctx";
 import { Group, PageHead, SideHead } from "../components/ui";
 import { SingleCard } from "./SingleCard";
 
@@ -50,6 +50,7 @@ function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) 
 }
 
 function DistortionBlock() {
+  const L = useLabels();
   const d = useData(() => api.report<Distortion>("distortion"), []);
   if (!d) return null;
   const groups = Object.keys(d.metrics);
@@ -58,7 +59,7 @@ function DistortionBlock() {
     <Group title="失真对照：需求到研发手里还剩多少、对不对"
            foot={`来源：docs/reports/distortion/。${d.n_cards} 张程序生成的需求卡，${d.placeholder_seeds ? "种子为占位数据，" : ""}`
              + `模拟客户为模板模式，抽取、觉、转译均为规则实现；大模型调用 ${d.calls.llm} 次。G1 的转述噪声是假设参数`
-             + `（只问 ${a.habit_slots.join("、")}；现象说笼统 ${a.vague_prob}、漏槽位 ${a.drop_prob}、记错 ${a.swap_prob}），企业数据到位后替换。`}>
+             + `（只问 ${a.habit_slots.map(L.slot).join("、")}；现象说笼统 ${a.vague_prob}、漏槽位 ${a.drop_prob}、记错 ${a.swap_prob}），企业数据到位后替换。`}>
       <Table head={["指标", ...groups]}
              rows={Object.entries(d.labels).map(([k, label]) => [label, ...groups.map((g) => fmt(k, d.metrics[g][k]))])} />
       <Figure src="/reports/distortion/distortion.png" alt="失真对照" />

@@ -94,7 +94,7 @@ function Items({ view, field, f, showText }: { view: RequirementView; field: "pr
               return (
                 <p key={ref} className="mt-1 text-[12px] leading-[17px] text-ink-2" title={c.text ?? "无权查看原文，只显示归属"}>
                   <span className="text-ink">{L.name(c.owner)}</span>{" · "}
-                  {c.text == null ? <span className="text-ink-3">L3 转化知识 · 原文不可见</span> : c.title}
+                  {c.text == null ? <span className="text-ink-3">L{c.level} 转化知识 · 原文不可见</span> : L.scrub(c.title)}
                   <span className="text-ink-3">　被引用 {c.n_cited} 次</span>
                   {showText && c.text && <span className="mt-0.5 block line-clamp-2 text-ink-3">{c.text}</span>}
                 </p>
@@ -122,7 +122,7 @@ function Contributions({ stats }: { stats: ContributionStat[] }) {
           <span className="w-28 shrink-0 text-[14px] font-semibold">{L.name(o.owner)}</span>
           <span className="num w-24 shrink-0 text-[13px] text-ink-2">{o.n} 条知识</span>
           <span className="num w-24 shrink-0 text-[13px] text-ink-2">被引用 {o.cited} 次</span>
-          <span className="min-w-0 flex-1 truncate text-[12px] text-ink-3">用于 {o.used.join("、")}</span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-ink-3">用于 {o.used.length} 张需求单</span>
           <span className="num text-[15px] font-semibold">{o.points}</span><span className="text-[12px] text-ink-2">分</span>
         </div>
       ))}
@@ -176,7 +176,7 @@ function Compare({ id }: { id: string }) {
   return (
     <>
       <PageHead title={`三层对照 · ${L.phen(req.phenomenon)}`}
-                subtitle={`${REQ_STATUS[req.status]}${req.product_id ? ` · 关联产品 ${L.product(req.product_id)}` : ""} · 点一句客户原话，三列中引用它的条目一起高亮`} />
+                subtitle={`${REQ_STATUS[req.status]}${req.product_id ? ` · 关联产品 ${L.product(req.product_id)}` : ""} · 演示对照：三列各按该层身份读取，与当前身份无关 · 点一句客户原话，三列中引用它的条目一起高亮`} />
       <div className="flex items-start gap-5">
         <Column level={1} who={[...new Set(req.session_ids.map(sales))].map(L.name).join("、")}>
           {own?.map((v, i) => <L1Session key={v.session_id} v={v} f={f}
