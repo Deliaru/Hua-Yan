@@ -1,4 +1,5 @@
 """应用门面：负责身份与视图边界，界面只调用这里。"""
+import json
 from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -8,9 +9,10 @@ import yaml
 from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
-from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionStat, DecryptGrant,
-    Evidence, JueRecord, KnowledgeUnit, LedgerEntry, NeedState, Question, ReqItem, Requirement,
-    RequirementView, Resolution, RunStatus, Session, SessionView, SheetDraft, Trial)
+from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
+    Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
+    RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
+    JueTimeline, TimelineNode, TimelinePoint)
 from huayan.domain import consistent, load_seeds
 from huayan.escalation import flow
 from huayan.escalation.translate import leak_hits
@@ -21,7 +23,8 @@ from huayan.jev.system1 import build_system1
 from huayan.jue.jue_k import JueK
 from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import publish, select_asks
-from huayan.jue.state import collect_scheduled, realtime_state, requirement_state
+from huayan.jue.records import load_records
+from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.disclosure import VERSIONS, cap, render
 from huayan.l1.extract import LLMExtractor, RuleExtractor
@@ -68,7 +71,8 @@ class HuayanApp:
         app.jue_realtime = app._jue_model(app.config["realtime_model"], "realtime")
         app.jue_scheduled = app._jue_model(app.config["scheduled_model"], "scheduled")
         app._jue_trace, app._answers = {}, {}
-        app._last_scan, app._n_escalations = None, 0
+        app._last_scan = None
+        app._agent_drafting = False  # Hub 工具执行期间的来源标记，不由模型或 HTTP 参数指定。
         app.agents = AgentHub(app)
         return app
 
@@ -101,6 +105,43 @@ class HuayanApp:
             raise PermissionDenied("当前身份无权执行此动作")
         return actor
 
+    def _close_anomalies(self, out, object_ids):
+        inactive = {(d.family, d.object_id) for d in out.decisions if not d.precondition_passed}
+        anomalies = {t.family for t in self.templates.values() if t.kind == "anomaly"}
+        for q in self.bus.list():
+            if q.object_id in object_ids and q.family in anomalies and (q.family, q.object_id) in inactive:
+                self.bus.resolve(q.id, Resolution(action="answered", by="jue"), out.at)
+
+    def _after(self, session_ids=(), req_ids=()):
+        """写后评估会话及关联需求单；只提出决策，不派单或执行下一步。"""
+        at = get_clock().now()
+        session_ids = set(session_ids)
+        req_ids = set(req_ids) | {r.id for r in self._requirements.values()
+                                 if session_ids.intersection(r.session_ids)}
+        state = JueState(at=at, mode="realtime", objects={})
+        refs = {}
+        for sid in sorted(session_ids):
+            sess = self._sessions[sid]
+            objects = session_state(sess, self.events, at).objects
+            state.objects.update(objects)
+            refs.update({oid: {"session_id": sid, "sales_id": sess.sales_id} for oid in objects})
+        for rid in sorted(req_ids):
+            req = self._requirements[rid]
+            sess = self._sessions[req.session_ids[0]]
+            objects = requirement_state(req, sess.need, self.seeds, self.kb, at, self.events).objects
+            state.objects.update(objects)
+            refs.update({oid: {"session_id": sess.id, "sales_id": sess.sales_id,
+                               "requirement_id": rid, "assigned_rd": req.assigned_rd} for oid in objects})
+        out = self._propose(self.jue_realtime, state)
+        for sid in session_ids:
+            self._jue_trace.setdefault(sid, []).append(out)
+        self._close_anomalies(out, set(state.objects) | {f"requirement:{rid}" for rid in req_ids})
+        thresholds = self.config["thresholds"]
+        ready = out.model_copy(update={"decisions": [d for d in out.decisions
+            if d.p_need is not None and d.p_need >= thresholds[
+                "ask_jue_k" if d.family == "ask_back" and out.model == "jue_k" else "publish"]]})
+        return publish(ready, state, self.templates, self.bus, 0, seeds=self.seeds, refs=refs)
+
     def _save_session(self, session):
         path = self.run_dir / "sessions"
         path.mkdir(exist_ok=True)
@@ -116,6 +157,7 @@ class HuayanApp:
                            extracted_by=self.extractor.name))
         self._sessions[sid] = session
         self._save_session(session)
+        self._after([sid])
         return session.model_copy(deep=True)
 
     def add_turn(self, session_id, speaker, text):
@@ -134,12 +176,39 @@ class HuayanApp:
         if (previous.phenomenon, previous.known()) != (session.need.phenomenon, session.need.known()):
             for req in self._requirements.values():
                 if req.status == "draft" and session_id in req.session_ids and req.id not in answered:
-                    self._retire_draft(req)
+                    req.phenomenon, req.known_slots = session.need.phenomenon, session.need.known()
+                    req.product_lang = [item for item in req.product_lang if item.edited_by]
+                    self._return_to_preparation(req)
+                    self._save_requirement(req)
+        if speaker == "sales":
+            session.reply_draft = ""
         self._save_session(session)
+        self._after([session_id])
+        return session.model_copy(deep=True)
+
+    def _sales_session(self, session_id, by):
+        self._actor(by, {"sales"})
+        session = _find(self._sessions, session_id, "会话")
+        if session.sales_id != by:
+            raise PermissionDenied("只能修改自己负责的会话草稿")
+        return session
+
+    def save_reply_draft(self, session_id, text, by):
+        session = self._sales_session(session_id, by)
+        session.reply_draft = text
+        self._save_session(session)
+        self._after([session_id])
+        return session.model_copy(deep=True)
+
+    def save_escalate_note(self, session_id, text, by):
+        session = self._sales_session(session_id, by)
+        session.escalate_note = text
+        self._save_session(session)
+        self._after([session_id])
         return session.model_copy(deep=True)
 
     def _answer_ask_back(self, session, asks):
-        """客户本轮答了回问的槽位：回问结案，取值写入需求单，通知需求单当前的起草人。返回被回填的需求单 id。"""
+        """回问结案并回填条件；已有待签问题退回准备，由 hub 再派给主人。"""
         turn, answered = session.turns[-1], set()
         for q in asks:
             fill = session.need.slots.get(q.refs["slot"])
@@ -151,18 +220,15 @@ class HuayanApp:
             self._answers.setdefault(req.id, {})[fill.slot] = turn.id
             self.bus.resolve(q.id, Resolution(action="answered", by=session.customer_id,
                                               note=fill.value or "客户不清楚"), get_clock().now())
+            self._return_to_preparation(req)
             self._save_requirement(req)
             answered.add(req.id)
-            drafter = req.drafted_by if req.status == "draft" else req.chem_drafted_by
-            if drafter and not self.config["gateway_mock"]:
-                label = next(s.label for s in self.seeds.slots if s.id == fill.slot)
-                self.agents.notify(drafter, f"回问 {q.id} 已有答复：{label} = {fill.value or '客户不清楚'}"
-                                            f"（原话「{fill.quote}」），已写入需求单 {req.id}，请据此更新条目。")
         return answered
 
     def recommend_now(self, session_id):
         session = recommend(_find(self._sessions, session_id, "会话"), self)
         self._save_session(session)
+        self._after([session_id])
         return session.model_copy(deep=True)
 
     def view_session(self, session_id, viewer_id):
@@ -182,13 +248,32 @@ class HuayanApp:
             if level == 1:
                 record_disclosure(card, self)
         req = next((r for r in reversed(list(self._requirements.values()))
-                    if session_id in r.session_ids and r.status != "rejected"), None) if level > 1 else None
-        if req is not None:
-            req = self.requirement_view(req.id, viewer_id).requirement
+                    if session_id in r.session_ids and r.status not in {"rejected", "merged"}), None)
+        reuse = None
+        if req and req.reuse and req.session_ids[0] == session_id:
+            proposal = req.reuse
+            adopted = req.status == "reused"
+            if card and adopted and card.product_id == proposal.product_id:
+                card.note = "；".join(filter(None, [card.note, f"研发 {req.assigned_rd} 审定：{proposal.customer_note}"]))
+            if viewer_id == session.sales_id:
+                product = self.kb.product(proposal.product_id) if proposal.product_id else None
+                reuse = ReuseView(requirement_id=req.id, product_id=proposal.product_id,
+                    product_name=product.name if product else "",
+                    status="adopted" if adopted else "declined" if proposal.declined_reason else "pending" if product else "none")
+                if adopted:
+                    reuse.usage, reuse.customer_note = product.usage, proposal.customer_note
+                    for ref in dict.fromkeys(proposal.ku_refs):
+                        unit = self.kb._units[ref]
+                        label = "历史案例" if unit.kind == "case" else "转化知识"
+                        reuse.basis.append(f"{self.actors[unit.owner].name}（{unit.owner}） · {label} · L{unit.level}")
+        req = self.requirement_view(req.id, viewer_id).requirement if req and level > 1 else None
         return SessionView(session_id=session_id, viewer=viewer_id, viewer_level=level, turns=session.turns,
             slots=list(session.need.slots.values()), hints=session.hints, replies=session.replies,
             card=card, status=session.status, escalation_question_id=rec.escalated_question_id if rec else None,
-            requirement=req).model_copy(deep=True)
+            requirement=req, reuse=reuse,
+            reply_draft=session.reply_draft if viewer_id == session.sales_id else "",
+            escalate_note=session.escalate_note if viewer_id == session.sales_id or level > 1 else ""
+            ).model_copy(deep=True)
 
     def sessions(self):
         return [s.model_copy(deep=True) for s in self._sessions.values()]
@@ -208,6 +293,8 @@ class HuayanApp:
         if self.kb.is_frozen(by):
             raise PermissionDenied("高层级访问已冻结")
         req = _find(self._requirements, req_id, "需求单")
+        if actor.role == "rd" and actor.id != req.assigned_rd:
+            raise PermissionDenied("只有接单研发可以修改或签字")
         if req.status not in states:
             raise ValueError(f"当前状态 {req.status}，需要状态 {', '.join(sorted(states))}")
         return req, actor
@@ -231,137 +318,371 @@ class HuayanApp:
             except (ValueError, PermissionDenied) as exc:
                 raise ValueError("知识引用不存在或当前身份无权读取") from exc
 
-    def _retire_draft(self, req):
-        # 契约已有 rejected 状态用于废止旧草稿，保留原内容和引用供核对。
-        req.status = "rejected"
-        self._save_requirement(req)
-        question = self.bus.get(req.question_id)
-        if question.status == "open":
-            self.bus.publish(question.model_copy(update={"evidence": [Evidence(
-                summary=f"草稿 {req.id} 已失效：需求条件变化，需重新起草并核对后确认")]}))
+    def _decision(self, family, action, obj, by):
+        question = next((q for q in self.bus.list(family=family) if q.object_id == obj.object_id), None)
+        if question:
+            if question.signer_id != by:
+                raise PermissionDenied("只有指定签字人可以签字")
+            if question.prepared_at is None:
+                raise ValueError("问题尚在准备中")
+        else:
+            self.events.append("human_decision", by, {"action": action, "object_id": obj.object_id,
+                "object_type": obj.object_type, "attrs": obj.attrs})
+        return question
 
-    def _draft_needs_review(self, req):
-        sessions = [self._sessions[sid] for sid in req.session_ids]
-        known = sessions[0].need.known()
-        for session in sessions[1:]:
-            known = {key: value for key, value in known.items() if session.need.known().get(key) == value}
-        # 回问得到的答复已写入需求单，不算条件变化
-        answers = self._answers.get(req.id, {})
-        known.update({slot: req.known_slots[slot] for slot in answers if slot in req.known_slots})
-        return (any(s.need.phenomenon != req.phenomenon for s in sessions) or known != req.known_slots or
-                any(e.ts > req.created_at and e.session_id in req.session_ids and e.payload.get("conditions_changed")
-                    and e.payload["turn_id"] not in answers.values()
-                    for e in self.events.query(kinds=["extraction"], since=req.created_at)))
-
-    def draft_requirement(self, question_id, by):
-        actor = self._actor(by, {"pm"})
-        if self.kb.is_frozen(by):
-            raise PermissionDenied("高层级访问已冻结")
-        question = _find(self.bus.questions, question_id, "问题")
-        if question.family not in ("escalate_need", "opportunity") or question.status != "open":
-            raise ValueError("只能为待处理的升级或机会汇聚起草需求")
-        if question.owner_id is not None and question.owner_id != by:
-            raise PermissionDenied("问题已指派给其他负责人")
-        existing = next((r for r in reversed(list(self._requirements.values()))
-                         if r.question_id == question_id and r.status != "rejected"), None)
-        if existing and existing.status == "draft" and self._draft_needs_review(existing):
-            self._retire_draft(existing)
-            existing = None
-        if existing:
-            return self.requirement_view(existing.id, by).requirement
-        ids = question.refs.get("session_ids", question.refs.get("session_id", "")).split(",")
-        sessions = [self._sessions[sid] for sid in dict.fromkeys(ids) if sid]
-        if not sessions or not sessions[0].need.phenomenon:
-            raise ValueError("需求必须关联已识别现象的会话")
-        phenomenon = sessions[0].need.phenomenon
-        if any(s.need.phenomenon != phenomenon for s in sessions):
-            raise ValueError("一个需求单必须属于同一现象")
-        known = sessions[0].need.known()
-        for session in sessions[1:]:
-            known = {key: value for key, value in known.items() if session.need.known().get(key) == value}
-        from huayan.escalation import translate  # WP-T 提供；不另造转译实现。
+    def escalate(self, session_id, by):
+        session = self._sales_session(session_id, by)
+        if not session.need.phenomenon or session.status in {"escalated", "closed"}:
+            raise ValueError("只有已识别现象且尚未升级的会话可以升级")
+        at = get_clock().now()
+        obj = session_state(session, self.events, at).objects[f"session:{session_id}"]
+        question = self._decision("escalate_need", "escalate", obj, by)
         assigned_rd = min((a for a in self.actors.values() if a.role == "rd"), key=lambda a: (
-            -sum(t.level == 3 and t.owner == a.id and phenomenon in t.phenomenon_ids
+            -sum(t.level == 3 and t.owner == a.id and session.need.phenomenon in t.phenomenon_ids
                  for t in self.seeds.translations), a.id)).id
-        req = Requirement(id=f"req:{len(self._requirements) + 1}", question_id=question_id,
-            session_ids=[s.id for s in sessions], phenomenon=phenomenon, known_slots=known,
-            assigned_rd=assigned_rd, status="draft", drafted_by=by,
-            created_at=get_clock().now())
-        draft = translate.draft_product_need(req, sessions, self.kb, actor, get_clock().now())
-        req.direction, req.product_lang = draft.direction, draft.product_lang
+        req = Requirement(id=f"req:{len(self._requirements) + 1}", question_id=question.id if question else "",
+            session_ids=[session_id], phenomenon=session.need.phenomenon, known_slots=session.need.known(),
+            assigned_rd=assigned_rd, escalate_note=session.escalate_note, status="draft", created_at=at)
+        self._requirements[req.id] = req
+        session.status, session.recommendation = "escalated", None
+        self.events.append("escalate", by, {"question_id": req.question_id, "requirement_id": req.id,
+            "phenomenon": req.phenomenon, "known": req.known_slots, "customer_id": session.customer_id,
+            "p_none": obj.attrs["p_none"]}, session_id=session_id)
+        self.events.append("requirement_created", by, {"requirement_id": req.id, "question_id": req.question_id,
+            "phenomenon": req.phenomenon, "session_ids": req.session_ids, "assigned_rd": assigned_rd})
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
+        self._save_requirement(req)
+        self._after([session_id], [req.id])
+        return req.model_copy(deep=True)  # 此时为空单，仅有业务员原话与归属。
+
+    def accept_requirement(self, req_id, by):
+        req, actor = self._requirement(req_id, by, {"rd"}, {"draft"})
+        if not req.product_lang or req.reuse is None or (req.reuse.product_id and not req.reuse.declined_reason):
+            raise ValueError("接单需要产品需求草稿，且现成产品检查已结束")
+        blockers = [q for q in self.bus.list() if q.refs.get("requirement_id") == req_id
+                    and q.family in {"ask_back", "distortion"}]
+        if blockers:
+            raise ValueError(f"还有 {len(blockers)} 条未答回问或未处理失真")
         for item in req.product_lang:
             self._validate_item(req, item, actor)
-        self._requirements[req.id] = req
-        return self._save_requirement(req, viewer_id=by)
+        units = [self.kb.get(ref, actor) for ref in sorted({ref for item in req.product_lang for ref in item.ku_refs})]
+        units = [u for u in units if u.level == 2]
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("accept_requirement", "accept_requirement", state.objects[f"requirement:{req_id}"], by)
+        req.status, req.rd_accepted_by = "rd_accepted", by
+        for unit in units:
+            if unit.owner != "pm:agent" and not self.ledger.has(unit.owner, unit.id, req.id):
+                self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=unit.owner, ku_id=unit.id, ref=req.id,
+                    points=self.config["points"]["cited"], reason="cited"))
+        self.events.append("requirement_accepted", by, {"requirement_id": req.id,
+            "phenomenon": req.phenomenon, "known": req.known_slots, "ku_refs": [u.id for u in units]})
+        if question:
+            self._settle(question.id, Resolution(action="accept", by=by))
+        for q in self.bus.list(family="opportunity"):
+            if req_id in q.refs.get("requirement_ids", "").split(","):
+                self.bus.resolve(q.id, Resolution(action="accept", by=by), get_clock().now())
+        self._save_requirement(req)
+        self._after(req_ids=[req.id])
+        return self.requirement_view(req.id, by).requirement
+
+    def return_requirement(self, req_id, reason, by):
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
+        if not reason.strip():
+            raise ValueError("请填写退回理由")
+        if leak_hits(reason, [], [], self.kb):
+            raise ValueError("退回理由含研发术语，请改写为产品需求说明")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("accept_requirement", "return_requirement", state.objects[f"requirement:{req_id}"], by)
+        req.return_notes.append(reason)
+        self.events.append("requirement_returned", by, {"requirement_id": req_id, "reason": reason})
+        if question:
+            self._settle(question.id, Resolution(action="return", by=by, note=reason))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
+    def save_reuse_proposal(self, req_id, product_id, ku_refs, customer_note, note, by):
+        req, actor = self._requirement(req_id, by, {"pm"}, {"draft"})
+        if by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 可以起草复用建议")
+        if product_id is not None:
+            self.kb.product(product_id)
+        for ref in ku_refs:
+            unit = self.kb.get(ref, actor)
+            if unit.level != 2 or unit.kind not in {"case", "translation"}:
+                raise ValueError("复用依据必须是 L2 案例或转化知识")
+        hits = leak_hits(customer_note, req.sealed, req.hypotheses, self.kb)
+        if hits:
+            raise ValueError([hit.model_dump() for hit in hits])
+        req.reuse = ReuseProposal(product_id=product_id, ku_refs=ku_refs, customer_note=customer_note, note=note)
+        self.events.append("reuse_proposed", by, {"requirement_id": req_id, "product_id": product_id, "ku_refs": ku_refs})
+        if product_id is None:
+            for q in self.bus.list(family="reuse_product"):
+                if q.object_id == f"requirement:{req_id}":
+                    self.bus.resolve(q.id, Resolution(action="answered", by=by), get_clock().now())
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        if product_id is None:
+            self.scan()
+        return self.requirement_view(req_id, by).requirement
+
+    def update_reuse_note(self, req_id, text, by):
+        req, actor = self._requirement(req_id, by, {"pm", "rd"}, {"draft"})
+        if actor.role == "pm" and by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 或接单研发可以改写复用说明")
+        if req.reuse is None or req.reuse.product_id is None:
+            raise ValueError("需要先起草现成产品建议")
+        hits = leak_hits(text, req.sealed, req.hypotheses, self.kb)
+        if hits:
+            raise ValueError([hit.model_dump() for hit in hits])
+        before = req.reuse.customer_note
+        req.reuse.customer_note = text
+        self.events.append("requirement_edited", by, {"requirement_id": req_id, "layer": 2,
+            "index": -1, "field": "reuse.customer_note", "before": before, "after": text})
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
+    def adopt_reuse(self, req_id, by):
+        req, actor = self._requirement(req_id, by, {"rd"}, {"draft"})
+        if req.reuse is None or req.reuse.product_id is None or req.reuse.declined_reason:
+            raise ValueError("没有待审定的现成产品建议")
+        proposal = req.reuse
+        hits = leak_hits(proposal.customer_note, req.sealed, req.hypotheses, self.kb)
+        if hits:
+            raise ValueError([hit.model_dump() for hit in hits])
+        units = [self.kb.get(ref, actor) for ref in sorted(set(proposal.ku_refs))]
+        session = self._sessions[req.session_ids[0]]
+        at = get_clock().now()
+        state = requirement_state(req, session.need, self.seeds, self.kb, at, self.events)
+        question = self._decision("reuse_product", "adopt_reuse", state.objects[f"requirement:{req_id}"], by)
+        viewer = self.actors[session.sales_id]
+        maximum = cap(viewer, session.customer_id, proposal.product_id, self.grants)
+        disclosure = self.jev.disclose(session.need, proposal.product_id, maximum)
+        card = render(proposal.product_id, disclosure.choice, viewer, self.kb, session_id=session.id,
+                      customer_id=session.customer_id, grants=self.grants)
+        session.recommendation = Recommendation(product_id=proposal.product_id, candidates=[], match=None,
+            disclose=disclosure, version=disclosure.choice, at=at)
+        session.status, req.status = "recommended", "reused"
+        for unit in units:
+            if unit.level == 2 and unit.owner not in {"pm:agent", "jue"} and not self.ledger.has(unit.owner, unit.id, req.id):
+                self.ledger.add(LedgerEntry(ts=at, owner=unit.owner, ku_id=unit.id, ref=req.id,
+                    points=self.config["points"]["cited"], reason="cited"))
+        record_disclosure(card, self)
+        self.events.append("reuse_adopted", by, {"requirement_id": req_id,
+            "product_id": proposal.product_id, "session_id": session.id}, session_id=session.id)
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
+        self._save_requirement(req)
+        self._after([session.id], [req_id])
+        return session.model_copy(deep=True)
+
+    def decline_reuse(self, req_id, reason, by):
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
+        if req.reuse is None or req.reuse.product_id is None or req.reuse.declined_reason:
+            raise ValueError("没有待审定的现成产品建议")
+        if not reason.strip():
+            raise ValueError("请填写不采用的理由")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("reuse_product", "decline_reuse", state.objects[f"requirement:{req_id}"], by)
+        req.reuse.declined_reason = reason
+        self.events.append("reuse_declined", by, {"requirement_id": req_id,
+            "product_id": req.reuse.product_id, "reason": reason})
+        if question:
+            self._settle(question.id, Resolution(action="return", by=by, note=reason))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        self.scan()
+        return self.requirement_view(req_id, by).requirement
+
+    def save_merge_proposal(self, question_id, target_req_id, member_ids, note, by):
+        if by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 可以起草合并建议")
+        q = self.bus.get(question_id)
+        if q.family != "opportunity" or q.status != "open":
+            raise ValueError("需要待处理的机会汇聚问题")
+        candidates = q.refs["requirement_ids"].split(",")
+        if target_req_id not in candidates or any(rid not in candidates for rid in member_ids):
+            raise ValueError("合并对象必须来自本问题的候选需求单")
+        if target_req_id in member_ids or len(set(member_ids)) != len(member_ids):
+            raise ValueError("被并入单不能重复或包含主单")
+        req, _ = self._requirement(target_req_id, by, {"pm"}, {"draft"})
+        for rid in member_ids:
+            self._requirement(rid, by, {"pm"}, {"draft"})
+        previous = next((e.payload for e in reversed(self.events.query(["merge_proposed"]))
+                         if e.payload["question_id"] == question_id), None)
+        if previous and previous["target"] != target_req_id:
+            old = self._requirements[previous["target"]]
+            old.merge_from, old.merge_note = [], ""
+            self._save_requirement(old)
+        req.merge_from, req.merge_note = list(member_ids), note
+        if q.prepared_at is not None:
+            self.bus.set_prepared(q.id, None)
+        self.events.append("merge_proposed", by, {"question_id": question_id,
+            "target": target_req_id, "members": list(member_ids)})
+        self._save_requirement(req)
+        self._after(req_ids=[target_req_id])
+        return self.requirement_view(target_req_id, by).requirement
+
+    def merge_requirements(self, question_id, by):
+        q = self.bus.get(question_id)
+        if q.family != "opportunity" or q.status != "open":
+            raise ValueError("需要待处理的机会汇聚问题")
+        proposal = next((e.payload for e in reversed(self.events.query(["merge_proposed"]))
+                         if e.payload["question_id"] == question_id), None)
+        if proposal is None:
+            raise ValueError("请先准备合并建议")
+        req, _ = self._requirement(proposal["target"], by, {"rd"}, {"draft"})
+        if q.signer_id != by:
+            raise PermissionDenied("只有指定签字人可以合并需求单")
+        if q.prepared_at is None:
+            raise ValueError("问题尚在准备中")
+        if not req.merge_from:
+            raise ValueError("合并建议没有被并入单，可选择现在不需要")
+        members = [self._requirements[rid] for rid in req.merge_from]
+        known = dict(req.known_slots)
+        for member in [req, *members]:
+            if member.status != "draft" or member.reuse is None or (member.reuse.product_id and not member.reuse.declined_reason):
+                raise ValueError("只能合并尚未接单且复用检查已结束的需求单")
+            for slot, value in member.known_slots.items():
+                if slot in known and known[slot] != value:
+                    raise ValueError("需求单的已知条件存在冲突，请先核对")
+                known[slot] = value
+        at = get_clock().now()
+        for member in members:
+            req.session_ids.extend(sid for sid in member.session_ids if sid not in req.session_ids)
+            member.status, member.merged_into = "merged", req.id
+            for question in self.bus.list():
+                if question.refs.get("requirement_id") == member.id:
+                    self.bus.resolve(question.id, Resolution(action="answered", by=by, note=f"已并入 {req.id}"), at)
+            self._save_requirement(member)
+        before = {"product_lang": [item.model_dump() for item in req.product_lang], "direction": req.direction}
+        req.known_slots, req.direction = known, ""
+        req.product_lang = [item for item in req.product_lang if item.edited_by]
+        self.events.append("requirement_edited", by, {"requirement_id": req.id, "layer": 2, "index": -1,
+            "before": before, "after": {"product_lang": [item.model_dump() for item in req.product_lang], "direction": ""}})
+        self.events.append("requirements_merged", by, {"question_id": q.id, "target": req.id, "members": list(req.merge_from)})
+        self._settle(q.id, Resolution(action="sign", by=by))
+        self._return_to_preparation(req)
+        self._save_requirement(req)
+        self._after(req.session_ids, [req.id, *req.merge_from])
+        return self.requirement_view(req.id, by).requirement
+
+    def record_market_eval(self, req_id, result, note, by):
+        req, _ = self._requirement(req_id, by, {"sales"}, {"rd_confirmed"})
+        self._sales_session(req.session_ids[0], by)
+        if result not in {"pass", "fail"}:
+            raise ValueError("客户评价必须为 pass 或 fail")
+        trial = next((t for t in reversed(list(self._trials.values()))
+                      if t.requirement_id == req_id and t.result == "pass"), None)
+        if trial is None or trial.market_eval is not None:
+            raise ValueError("需要尚未录入客户评价的通过试样")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("market_eval", "record_market_eval", state.objects[f"requirement:{req_id}"], by)
+        trial.market_eval, trial.market_eval_by, trial.market_eval_note = result, by, note
+        unit = self.kb._units[f"ku:trial:{trial.id}"]
+        self.kb.add(unit.model_copy(update={"text": trial.model_dump_json()}))
+        self.events.append("market_eval", by, {"requirement_id": req.id, "trial_id": trial.id, "result": result})
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
+        self._after(req_ids=[req.id])
+        return trial.model_copy(deep=True)
+
+    def _return_to_preparation(self, req):
+        for q in self.bus.list():
+            if q.refs.get("requirement_id") == req.id and q.prepared_at is not None:
+                self.bus.set_prepared(q.id, None)
+
+    def draft_requirement(self, req_id, by):
+        req, actor = self._requirement(req_id, by, {"pm"}, {"draft"})
+        if by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 可以起草产品需求")
+        from huayan.escalation import translate
+        draft = translate.draft_product_need(req, [self._sessions[sid] for sid in req.session_ids],
+                                              self.kb, actor, get_clock().now())
+        edited = [i for i in req.product_lang if i.edited_by]
+        items = edited + [i for i in draft.product_lang
+                          if not any((i.slot == old.slot if i.slot or old.slot else set(i.quote_refs) & set(old.quote_refs))
+                                     for old in edited)]
+        for item in items:
+            self._validate_item(req, item, actor)
+        req.direction, req.product_lang, req.drafted_by = draft.direction, items, by
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def edit_req_item(self, req_id, index, item: ReqItem, by):
         actor = self._actor(by, {"pm", "rd"})
         req, _ = self._requirement(req_id, by, {actor.role},
-                                   {"draft"} if actor.role == "pm" else {"pm_confirmed"})
+                                   {"draft"} if actor.role == "pm" else {"rd_accepted"})
         self._validate_item(req, item, actor)
         items = req.product_lang if actor.role == "pm" else req.chem_lang
+        item = item.model_copy(deep=True, update={"edited_by": None if self._agent_drafting or by == "pm:agent" else by})
+        before = None
         if index == -1:
-            items.append(item.model_copy(deep=True))
+            items.append(item)
         elif 0 <= index < len(items):
-            items[index] = item.model_copy(deep=True)
+            before = items[index].model_dump()
+            items[index] = item
         else:
             raise ValueError("条目索引不存在；追加请使用 -1")
         if actor.role == "rd":
             req.chem_drafted_by = by
-        return self._save_requirement(req, viewer_id=by)
+        self.events.append("requirement_edited", by, {"requirement_id": req_id,
+            "layer": 2 if actor.role == "pm" else 3, "index": index, "before": before, "after": item.model_dump()})
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def remove_req_item(self, req_id, index, by):
         actor = self._actor(by, {"pm", "rd"})
         req, _ = self._requirement(req_id, by, {actor.role},
-                                   {"draft"} if actor.role == "pm" else {"pm_confirmed"})
+                                   {"draft"} if actor.role == "pm" else {"rd_accepted"})
         items = req.product_lang if actor.role == "pm" else req.chem_lang
         if not 0 <= index < len(items):
             raise ValueError("条目索引不存在")
-        items.pop(index)
-        return self._save_requirement(req, viewer_id=by)
+        before = items.pop(index).model_dump()
+        self.events.append("requirement_edited", by, {"requirement_id": req_id,
+            "layer": 2 if actor.role == "pm" else 3, "index": index, "before": before, "after": None})
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def set_direction(self, req_id, text, by):
         req, _ = self._requirement(req_id, by, {"pm"}, {"draft"})
         if not text.strip():
             raise ValueError("产品方向不能为空")
+        before = req.direction
         req.direction = text
-        return self._save_requirement(req, viewer_id=by)
-
-    def confirm_requirement(self, req_id, by):
-        req, actor = self._requirement(req_id, by, {"pm"}, {"draft", "rejected"})
-        if req.status == "rejected" or self._draft_needs_review(req):
-            if req.status == "draft":
-                self._retire_draft(req)
-            raise ValueError("草稿已失效，需求条件需重新核对；请重新起草并核对后确认")
-        if self.bus.get(req.question_id).status != "open":
-            raise ValueError("关联问题已非待处理状态，不能确认旧草稿")
-        if not req.product_lang:
-            raise ValueError("需求单没有产品需求条目")
-        for item in req.product_lang:
-            self._validate_item(req, item, actor)
-        req.status, req.pm_confirmed_by = "pm_confirmed", by
-        self.events.append("requirement_confirmed", by,
-            {"requirement_id": req.id, "phenomenon": req.phenomenon, "known": req.known_slots})
-        self._settle(req.question_id, Resolution(action="draft_requirement", by=by))
-        # 机会汇聚立项时，这些会话各自的升级也由这张需求单承接
-        for q in self.bus.list(family="escalate_need"):
-            if q.refs.get("session_id") in req.session_ids:
-                self.bus.resolve(q.id, Resolution(action="draft_requirement", by=by, note=f"已并入需求单 {req.id}"),
-                                 get_clock().now())
-        return self._save_requirement(req, viewer_id=by)
+        self.events.append("requirement_edited", by, {"requirement_id": req_id, "layer": 2, "index": -1,
+            "before": {"direction": before}, "after": {"direction": text}})
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def translate_requirement(self, req_id, by):
-        req, actor = self._requirement(req_id, by, {"rd"}, {"pm_confirmed"})
+        req, actor = self._requirement(req_id, by, {"rd"}, {"rd_accepted"})
         from huayan.escalation import translate
         draft = translate.draft_chem_need(req.model_copy(deep=True),
             [self._sessions[sid].model_copy(deep=True) for sid in req.session_ids], self.kb, actor, get_clock().now())
-        for item in draft.chem_lang:
+        edited = [item for item in req.chem_lang if item.edited_by]
+        items = edited + [item for item in draft.chem_lang
+                          if not any((item.slot == old.slot if item.slot or old.slot else set(item.quote_refs) & set(old.quote_refs))
+                                     for old in edited)]
+        for item in items:
             self._validate_item(req, item, actor)
-        req.chem_lang, req.hypotheses, req.chem_drafted_by = draft.chem_lang, draft.hypotheses, by
-        return self._save_requirement(req, viewer_id=by)
+        req.chem_lang, req.hypotheses, req.chem_drafted_by = items, draft.hypotheses, by
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def confirm_translation(self, req_id, by):
-        req, actor = self._requirement(req_id, by, {"rd"}, {"pm_confirmed"})
+        req, actor = self._requirement(req_id, by, {"rd"}, {"rd_accepted"})
         if not req.chem_lang:
             raise ValueError("请先起草化学语言条目")
         for item in req.chem_lang:
@@ -370,34 +691,79 @@ class HuayanApp:
             and req.phenomenon in p.solves and consistent(p, req.known_slots)), key=lambda p: p.id)
         if not products:
             raise ValueError("没有覆盖该需求的研发中产品，暂不能确认")
+        if any(q.family in {"ask_back", "distortion"} and q.refs.get("requirement_id") == req_id
+               for q in self.bus.list()):
+            raise ValueError("仍有未答回问或未处理失真")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("confirm_translation", "confirm_translation", state.objects[f"requirement:{req_id}"], by)
         req.product_id, req.status, req.rd_confirmed_by = products[0].id, "rd_confirmed", by
-        refs = sorted({ref for item in req.product_lang + req.chem_lang for ref in item.ku_refs})
+        refs = sorted({ref for item in req.chem_lang for ref in item.ku_refs})
         for ref in refs:
             unit = self.kb.get(ref, actor)
-            if not self.ledger.has(unit.owner, ref, req.id):
+            if unit.level == 3 and unit.owner != "pm:agent" and not self.ledger.has(unit.owner, ref, req.id):
                 self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=unit.owner, ku_id=ref, ref=req.id,
                     points=self.config["points"]["cited"], reason="cited"))
         self.events.append("requirement_translated", by, {"requirement_id": req.id, "ku_refs": refs})
-        return self._save_requirement(req, viewer_id=by)
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
+    def save_contribution_draft(self, req_id, draft: ContributionDraft, by):
+        req, _ = self._requirement(req_id, by, {"rd"}, {"rd_accepted", "rd_confirmed"})
+        if not 0 <= draft.item_index < len(req.chem_lang) or not draft.scene_phrase.strip() or not draft.chem_term.strip():
+            raise ValueError("需要有效化学条目索引、场景说法与化学术语")
+        req.contribution_drafts = [d for d in req.contribution_drafts if d.item_index != draft.item_index]
+        req.contribution_drafts.append(draft.model_copy(deep=True))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def contribute_translation(self, req_id, item_index, scene_phrase, chem_term, by):
-        req, actor = self._requirement(req_id, by, {"rd"}, {"pm_confirmed", "rd_confirmed"})
+        req, actor = self._requirement(req_id, by, {"rd"}, {"rd_accepted", "rd_confirmed"})
         if not 0 <= item_index < len(req.chem_lang) or not scene_phrase.strip() or not chem_term.strip():
             raise ValueError("需要有效化学条目索引、原文与译文")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("contribution", "contribute_translation", state.objects[f"requirement:{req_id}"], by)
         unit = flow.contribute_translation(req, item_index, scene_phrase, chem_term,
             actor, self.kb, self.ledger, self.events, get_clock().now())
         if req.status == "rd_confirmed":
             self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=by, ku_id=unit.id, ref=req.id,
                                        points=self.config["points"]["cited"], reason="cited"))
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
         self._save_requirement(req)
+        self._after(req_ids=[req_id])
         return unit
 
-    def set_public_points(self, req_id, text, by):
+    def save_points_draft(self, req_id, public, sealed, by):
+        req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
+        req.points_draft = PointsDraft(public=public, sealed=sealed,
+            self_check=leak_hits(public, sealed, req.hypotheses, self.kb))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
+    def set_public_points(self, req_id, text, sealed, by):
         req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
         if not text.strip():
             raise ValueError("对外要点不能为空")
-        req.public_points, req.sheet = text, None
-        return self._save_requirement(req, viewer_id=by)
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        obj = state.objects[f"requirement:{req_id}"]
+        if obj.attrs["market_eval"] != "pass":
+            raise ValueError("客户评价通过后才能签字封存／放出")
+        question = self._decision("seal_points", "set_public_points", obj, by)
+        req.public_points, req.sealed, req.sheet = text, list(sealed), None
+        self.events.append("points_set", by, {"requirement_id": req_id, "n_sealed": len(sealed)})
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def requirements(self, viewer_id):
         viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})
@@ -462,40 +828,56 @@ class HuayanApp:
         if trial.result == "pass":
             self.ledger.add(LedgerEntry(ts=trial.at, owner=trial.rd, ku_id=unit.id,
                 points=self.config["points"]["trial_pass"], reason="trial_pass", ref=trial.id))
+        if trial.requirement_id:
+            self._after(req_ids=[trial.requirement_id])
         return trial.model_copy(deep=True)
 
     def package_sheet(self, req_id, by):
         req, _ = self._requirement(req_id, by, {"pm"}, {"rd_confirmed"})
+        if by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 可以包装说明书")
         if not req.public_points:
             raise ValueError("请研发先确认对外要点")
         from huayan.escalation import translate
-        # 传入副本且移除化学条目、假设，包装过程只得到允许的信息。
-        public = req.model_copy(update={"chem_lang": [], "hypotheses": []}, deep=True)
+        # 包装只用 L2 视图与对外要点，不传入研发内部内容。
+        public = self.requirement_view(req_id, by).requirement.model_copy(update={"chem_lang": []}, deep=True)
         req.sheet = translate.package_sheet(public)
         self._save_requirement(req)
+        self._after(req_ids=[req_id])
         return req.sheet.model_copy(deep=True)
 
     def save_sheet(self, req_id, sheet: SheetDraft, by):
-        req, _ = self._requirement(req_id, by, {"pm"}, {"rd_confirmed"})
+        req, actor = self._requirement(req_id, by, {"pm", "rd"}, {"rd_confirmed"})
+        if actor.role == "pm" and by != "pm:agent":
+            raise PermissionDenied("只有产品经理 Agent 或接单研发可以修改说明书")
         if not req.public_points or not sheet.sheet.strip() or not sheet.usage.strip():
             raise ValueError("需要研发对外要点以及非空说明书和用法")
         req.sheet = sheet.model_copy(deep=True)
-        return self._save_requirement(req, viewer_id=by)
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def release_product(self, req_id, by):
-        req, _ = self._requirement(req_id, by, {"pm"}, {"rd_confirmed"})
+        req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
         if not req.sheet or not req.product_id or not req.public_points:
             raise ValueError("发布需要关联产品、对外要点与说明书")
         if not any(t.requirement_id == req.id and t.result == "pass" for t in self._trials.values()):
             raise ValueError("发布前需要本需求单的通过试样")
         if any(p.id == req.product_id for p in self.kb.products()):
             raise ValueError("该产品已经发布")
+        if self.leak_check(req_id, by):
+            raise ValueError("说明书或用法存在泄密命中，请改写后再发布")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("release", "release_product", state.objects[f"requirement:{req_id}"], by)
         seed = next(p for p in self.seeds.products if p.id == req.product_id)
         product = seed.model_copy(update={"sheet": req.sheet.sheet, "usage": req.sheet.usage}, deep=True)
         released = flow.release_product(req, product, self.kb, self.ledger, self.events, by, get_clock().now())
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
         self._save_requirement(req)
-        # 发布者为 L2；完整机理和配方保存在知识库，只返回公开产品字段。
-        return released.model_copy(update={"mechanism": "", "formula": ""}, deep=True)
+        self._after(req_ids=[req_id])
+        return released.model_copy(deep=True)
 
     def contributions(self, viewer_id):
         viewer = self._actor(viewer_id)
@@ -523,6 +905,7 @@ class HuayanApp:
         product = self.kb.product(rec.product_id)
         q = self.bus.publish(Question(id="", family="decrypt_request", title="客户申请了解产品机理",
             object_id=f"{session_id}/{product.id}", owner_role="rd", owner_id=product.owner,
+            signer_role="rd", signer_id=product.owner,
             scored_by="human", discoverer="human", created_at=get_clock().now(),
             dedup_key=f"decrypt_request:{session_id}/{product.id}",
             evidence=[Evidence(summary="客户明确要求机理", quote=profile.evidence_quote)],
@@ -533,7 +916,7 @@ class HuayanApp:
             "product_id": product.id}, session_id=session_id)
         return q.model_copy(deep=True)
 
-    def decide_decrypt(self, question_id, by, approve):
+    def decide_decrypt(self, question_id, by, approve, text=""):
         self._actor(by, {"rd"})
         question = _find(self.bus.questions, question_id, "问题")
         if question.family != "decrypt_request" or question.status != "open":
@@ -544,7 +927,7 @@ class HuayanApp:
         if approve:
             self.grants.append(DecryptGrant(id=f"grant:{len(self.grants) + 1}",
                 customer_id=refs["customer_id"], product_id=refs["product_id"],
-                session_id=refs["session_id"], approved_by=by, at=at))
+                session_id=refs["session_id"], approved_by=by, at=at, text=text))
             self.events.append("decrypt_approve", by, {"question_id": question.id,
                 "customer_id": refs["customer_id"], "product_id": refs["product_id"]}, session_id=refs["session_id"])
         self.audit.append(AuditRecord(ts=at, actor=by, action="decrypt_approve" if approve else "decrypt_reject",
@@ -557,7 +940,7 @@ class HuayanApp:
     def _settle(self, question_id, resolution):
         """人处置问题：带悬赏的给处置人记 bounty 积分。"""
         q = self.bus.resolve(question_id, resolution, get_clock().now())
-        if q.bounty_points and resolution.action != "dismiss":
+        if q.bounty_points and resolution.action != "dismiss" and resolution.by not in {"pm:agent", "jue"}:
             self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=resolution.by, points=q.bounty_points,
                                         reason="bounty", ref=q.id))
         return q
@@ -566,6 +949,7 @@ class HuayanApp:
         at = at or get_clock().now()
         state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"])
         out = self._propose(self.jue_scheduled, state)
+        self._close_anomalies(out, set(state.objects))
         self._last_scan = at
         return publish(out, state, self.templates, self.bus, self.config["thresholds"]["publish"],
                        seeds=self.seeds, refs=refs)
@@ -575,16 +959,11 @@ class HuayanApp:
         q = _find(self.bus.questions, question_id, "问题")
         if q.status != "open":
             raise ValueError("问题已处理")
-        if actor.role != q.owner_role or q.owner_id not in (None, by):
-            raise PermissionDenied("只有问题的负责人可以处置")
-        allowed = {"opportunity": "approve_project", "escalate_need": "approve_project",
-                   "knowledge_conflict": "update_sheet", "leak_risk": "freeze_access"}
+        if by == "pm:agent" or q.signer_id != actor.id:
+            raise PermissionDenied("只有问题的签字人可以处置")
+        allowed = {"knowledge_conflict": "update_sheet", "leak_risk": "freeze_access"}
         if action != "dismiss" and allowed.get(q.family) != action:
             raise ValueError(f"{q.family} 问题不能执行 {action}")
-        if action == "approve_project":
-            # 起草后问题保持 open，产品经理确认需求单时结案（confirm_requirement）
-            self.draft_requirement(question_id, by)
-            return q.model_copy(deep=True)
         if action == "update_sheet":
             pid, slot, value = q.refs["product_id"], *q.object_id.split("|")[1].split("=")
             current = self.kb.product(pid).applicable.get(slot) or next(
@@ -594,27 +973,106 @@ class HuayanApp:
             self.kb.freeze(q.refs["actor_id"], by, get_clock().now())
         return self._settle(question_id, Resolution(action=action, by=by, note=note)).model_copy(deep=True)
 
-    def _ask_back(self, req, at):
-        need = self._sessions[req.session_ids[0]].need
-        state = requirement_state(req, need, self.seeds, self.kb, at)
-        out = self._propose(self.jue_realtime, state)
-        refs = {oid: {"session_id": need.session_id, "sales_id": need.sales_id} for oid in state.objects}
-        # 回问和实时追问一样是「问不问客户」：Jue-K 输出校准概率，用同一个 ask_jue_k 阈值
-        thresholds = self.config["thresholds"]
-        threshold = thresholds["ask_jue_k"] if self.jue_realtime.name == "jue_k" else thresholds["publish"]
-        return publish(out, state, self.templates, self.bus, threshold, seeds=self.seeds, refs=refs)
+    def questions(self, viewer_id):
+        viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
+        if self.kb.is_frozen(viewer.id):
+            raise PermissionDenied("高层级访问已冻结")
+        return [q.model_copy(deep=True) for q in self.bus.list()
+                if viewer_id in (q.owner_id, q.signer_id)]
+
+    def jue_timeline(self, target_id, viewer_id):
+        viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
+        if self.kb.is_frozen(viewer_id):
+            raise PermissionDenied("高层级访问已冻结")
+        if target_id in self._sessions:
+            session = self._sessions[target_id]
+            if viewer.role == "sales" and session.sales_id != viewer_id:
+                raise PermissionDenied("只能查看自己负责的会话")
+            sids = {target_id}
+            req = next((r for r in reversed(list(self._requirements.values()))
+                        if target_id in r.session_ids and r.status != "merged"), None)
+        else:
+            req = _find(self._requirements, target_id, "需求单")
+            while req.merged_into:
+                req = self._requirements[req.merged_into]
+            sids = set(req.session_ids)
+            if viewer.role == "sales":
+                sids = {sid for sid in sids if self._sessions[sid].sales_id == viewer_id}
+                if not sids:
+                    raise PermissionDenied("只能查看自己负责的需求线程")
+        rids = set()
+        if req:
+            rids.add(req.id)
+            # 已实际合并的单属于线程；merge_from 在签字前仅是建议。
+            for member in self._requirements.values():
+                parent = member
+                while parent.merged_into:
+                    parent = self._requirements[parent.merged_into]
+                if parent.id == req.id:
+                    rids.add(member.id)
+            if viewer.role != "sales":
+                sids.update(req.session_ids)
+        themes = {theme_id(e.payload["phenomenon"], e.payload["known"], self.seeds)
+                  for e in self.events.query(["escalate"]) if e.session_id in sids}
+        themes.update(theme_id(self._requirements[rid].phenomenon, self._requirements[rid].known_slots, self.seeds)
+                      for rid in rids)
+        objects = {f"session:{sid}" for sid in sids} | {f"requirement:{rid}" for rid in rids} | themes
+        owners = sids | rids
+
+        def visible(family, oid):
+            if viewer.role == "sales":
+                if family not in {"ask_slot", "escalate_need", "reuse_product", "market_eval", "ask_back"}:
+                    return False
+                if family in {"reuse_product", "market_eval", "ask_back"}:
+                    rid = oid.removeprefix("slot:").rsplit("/", 1)[0] if family == "ask_back" else oid.removeprefix("requirement:")
+                    if rid not in rids or self._requirements[rid].session_ids[0] not in sids:
+                        return False
+            return oid in objects or (oid.startswith("slot:") and oid[5:].rsplit("/", 1)[0] in owners)
+
+        questions = [q for q in self.bus.list(status=None) if visible(q.family, q.object_id)]
+        raised = {(q.family, q.object_id, q.created_at) for q in questions}
+        points, judgments = [], 0
+        for record in load_records(self.run_dir):
+            ask_threshold = self.config["thresholds"]["ask_jue_k" if record.output.model == "jue_k" else "ask"]
+            hints = {f"slot:{h.session_id}/{h.slot}" for h in select_asks(record.output, record.state,
+                self.seeds, ask_threshold, self.config["thresholds"]["max_asks"])}
+            decisions = [d for d in record.output.decisions if visible(d.family, d.object_id)]
+            judgments += bool(decisions)
+            for d in decisions:
+                key = ("ask_jue_k" if record.output.model == "jue_k" else "ask") if d.family == "ask_slot" else (
+                    "ask_jue_k" if d.family == "ask_back" and record.output.model == "jue_k" else "publish")
+                points.append(TimelinePoint(at=record.output.at, family=d.family, object_id=d.object_id,
+                    p_need=d.p_need, threshold=self.config["thresholds"][key],
+                    scored_by=d.scored_by or record.output.scored_by,
+                    raised=(d.family, d.object_id, record.output.at) in raised or
+                           (d.family == "ask_slot" and d.object_id in hints)))
+        nodes = [TimelineNode(question_id=q.id, family=q.family, owner_id=q.owner_id, signer_id=q.signer_id,
+                    created_at=q.created_at, prepared_at=q.prepared_at, resolved_at=q.resolved_at,
+                    action=q.resolution.action if q.resolution else None, by=q.resolution.by if q.resolution else None)
+                 for q in questions]
+        meter = [json.loads(line) for line in self.meter.path.read_text(encoding="utf-8").splitlines()] if self.meter.path.exists() else []
+        return JueTimeline(target_id=target_id, viewer=viewer_id, points=sorted(points, key=lambda p: p.at),
+            nodes=sorted(nodes, key=lambda n: n.created_at), n_judgments=judgments,
+            n_llm_calls=sum(m["caller"].startswith("jue") and m["kind"] != "jue" for m in meter),
+            n_questions=len(nodes), n_signatures=sum(q.resolution is not None and q.signer_id is not None
+                and q.resolution.by == q.signer_id and q.resolution.action != "answered" for q in questions))
+
+    def mark_prepared(self, question_id, by):
+        """由 hub 在主人准备完毕后调用；只标待签，不签字、不推进业务。"""
+        actor = self._actor(by, {"sales", "pm", "rd", "supervisor"})
+        if self.kb.is_frozen(actor.id):
+            raise PermissionDenied("高层级访问已冻结")
+        question = _find(self.bus.questions, question_id, "问题")
+        if question.owner_id != by:
+            raise PermissionDenied("只有问题主人能标记准备完成")
+        if question.status != "open" or question.signer_role is None:
+            raise ValueError("只有待处理的签字问题能标记准备完成")
+        return self.bus.set_prepared(question_id, get_clock().now()).model_copy(deep=True)
 
     def tick(self):
         now = get_clock().now()
-        # 业务时钟可能不走（模拟时钟），所以用升级事件数判断「上次 tick 后出现过升级」
-        n_escalations = len(self.events.query(kinds=["escalate"]))
         found = []
-        if (self._last_scan is None or n_escalations > self._n_escalations
-                or now - self._last_scan >= timedelta(minutes=30)):
+        if self._last_scan is None or now - self._last_scan >= timedelta(minutes=30):
             found += self.scan(now)
-        for req in list(self._requirements.values()):
-            if req.status in ("draft", "pm_confirmed"):
-                found += self._ask_back(req, now)
-        self._n_escalations = n_escalations
         self.agents.dispatch()
         return [q.model_copy(deep=True) for q in found]

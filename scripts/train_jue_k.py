@@ -1,5 +1,9 @@
 """训练 Jue-K：一个 HistGradientBoostingClassifier（五类样本混在一起）+ 按 family 在验证集上拟合 isotonic 校准。
 做法参照 JUE-r2 qmodel/v0/train.py（梯度提升 + 验证集 isotonic），数据与特征为本项目重写。
+D20：每类在测试集（不参与训练与校准）的同一组合上与模板规则分比较，配对 bootstrap（500 次）下
+AUC 差的 95% 区间下界 > 0 且 Brier 差的上界 < 0 才算赢（回问测试集只有两百多条，0.53 对 0.50 在噪声内）；
+验证集同时用于拟合校准层，样本又少，不用来判胜负（回问在验证集上 0.60、测试集上 0.50）。只保存赢了的类的校准器，
+JueK 对没有校准器的类回落规则打分（huayan.jue.jue_k）。比较结果写进 metrics.json 与模型卡。
 
 uv run python scripts/train_jue_k.py [--samples data/jue_k/samples.csv --out models/jue_k]
 """
@@ -17,7 +21,9 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import brier_score_loss, roc_auc_score
 
 from huayan.contracts import JueObject
+from huayan.jue.expr import evaluate
 from huayan.jue.features import build, vectorize
+from huayan.jue.proto import load_templates
 
 META = ["family", "object_type", "object_id", "at", "source_id", "label", "split"]
 SOURCES = {"ask_slot": "程序轨迹（需求卡 + 随机追问策略 + 抽取噪声）", "ask_back": "程序轨迹结束时构造的需求单（应升级的卡）",
@@ -37,31 +43,75 @@ def features(df: pd.DataFrame) -> list[dict[str, float]]:
     return out
 
 
+def rule_scores(df: pd.DataFrame, templates_dir: str) -> np.ndarray:
+    """每行用同 family 模板的 rule_score 打分（截断到 [0,1]），即 jue_proto 规则模式在同一组合上的分数。"""
+    templates = {t.family: t for t in load_templates(templates_dir).values()}
+    attrs = [c for c in df.columns if c not in META]
+    return np.array([min(1.0, max(0.0, float(evaluate(templates[row["family"]].rule_score,
+                                                         {k: v for k, v in row.items() if k in attrs and pd.notna(v)}))))
+                     for row in df.to_dict("records")])
+
+
+def make_classifier() -> HistGradientBoostingClassifier:
+    """浅树 + 叶子最少样本 + L2：样本少（回问约千条）且有现象 × 槽位独热，默认深树会记住训练卡。学习曲线也用它。"""
+    return HistGradientBoostingClassifier(max_iter=150, max_depth=3, min_samples_leaf=30, l2_regularization=1.0,
+                                          random_state=0)
+
+
+def beats_rule(y: np.ndarray, model: np.ndarray, rule: np.ndarray, n: int = 500) -> tuple[bool, list[float]]:
+    """配对 bootstrap：返回是否显著胜出，以及 AUC 差的 95% 区间。"""
+    rng = np.random.default_rng(0)
+    d_auc, d_brier = [], []
+    for _ in range(n):
+        i = rng.integers(0, len(y), len(y))
+        if len(set(y[i])) < 2:
+            continue
+        d_auc.append(roc_auc_score(y[i], model[i]) - roc_auc_score(y[i], rule[i]))
+        d_brier.append(np.mean((model[i] - y[i]) ** 2) - np.mean((rule[i] - y[i]) ** 2))
+    ci = [round(float(np.percentile(d_auc, 2.5)), 3), round(float(np.percentile(d_auc, 97.5)), 3)]
+    return ci[0] > 0 and float(np.percentile(d_brier, 97.5)) < 0, ci
+
+
+def _auc(y: np.ndarray, p: np.ndarray) -> float | None:
+    return float(roc_auc_score(y, p)) if len(set(y)) == 2 else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--samples", default="data/jue_k/samples.csv")
+    ap.add_argument("--templates", default="config/templates")
     ap.add_argument("--out", default="models/jue_k")
     args = ap.parse_args()
 
     df = pd.read_csv(args.samples)
+    rule = rule_scores(df, args.templates)
     feats = features(df)
     columns = sorted({k for f, s in zip(feats, df.split) if s == "train" for k in f})
     x, y = np.asarray(vectorize(feats, columns)), df.label.to_numpy()
-    train, val = (df.split == "train").to_numpy(), (df.split == "val").to_numpy()
+    train, val, test = (df.split == "train").to_numpy(), (df.split == "val").to_numpy(), (df.split == "test").to_numpy()
 
-    classifier = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.1, random_state=0).fit(x[train], y[train])
+    classifier = make_classifier().fit(x[train], y[train])
     raw = classifier.predict_proba(x)[:, 1]
     calibrators, summary = {}, {}
     for family in sorted(df.family.unique()):
         fam = (df.family == family).to_numpy()
-        v = fam & val
-        calibrators[family] = IsotonicRegression(y_min=0, y_max=1, out_of_bounds="clip").fit(raw[v], y[v])
-        cal = calibrators[family].predict(raw[v])
+        v, t, h = fam & val, fam & test, fam & (df.split == "heldout").to_numpy()
+        calibrator = IsotonicRegression(y_min=0, y_max=1, out_of_bounds="clip").fit(raw[v], y[v])
+        cal = calibrator.predict(raw[v])
+        auc, rule_auc = _auc(y[t], raw[t]), _auc(y[t], rule[t])
+        cal_t = calibrator.predict(raw[t])
+        brier, rule_brier = float(brier_score_loss(y[t], cal_t)), float(brier_score_loss(y[t], rule[t]))
+        wins, auc_ci = beats_rule(y[t], cal_t, rule[t]) if auc is not None else (False, None)
+        if wins:
+            calibrators[family] = calibrator
         summary[family] = {
             "n": {s: int((fam & (df.split == s).to_numpy()).sum()) for s in ("train", "val", "test", "heldout")},
             "positives": {s: int(y[fam & (df.split == s).to_numpy()].sum()) for s in ("train", "val", "test", "heldout")},
-            "val_auc": float(roc_auc_score(y[v], raw[v])) if len(set(y[v])) == 2 else None,
-            "val_brier_raw": float(brier_score_loss(y[v], raw[v])), "val_brier_calibrated": float(brier_score_loss(y[v], cal))}
+            "val_auc": _auc(y[v], raw[v]), "val_brier_raw": float(brier_score_loss(y[v], raw[v])),
+            "val_brier_calibrated": float(brier_score_loss(y[v], cal)),
+            "test_auc": auc, "test_rule_auc": rule_auc, "test_auc_diff_ci95": auc_ci, "test_brier": brier, "test_rule_brier": rule_brier,
+            "heldout_auc": _auc(y[h], raw[h]) if h.any() else None, "heldout_rule_auc": _auc(y[h], rule[h]) if h.any() else None,
+            "scored_by": "jue_k" if wins else "rule"}
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -74,8 +124,11 @@ def main():
                                                  ensure_ascii=False, indent=2), encoding="utf-8")
     (out / "model_card.md").write_text(model_card(summary, len(columns)), encoding="utf-8")
     for family, s in summary.items():
-        print(f"{family:20s} train {s['n']['train']:5d}（正例 {s['positives']['train']:4d}）  val AUC {s['val_auc'] or float('nan'):.3f}"
-              f"  Brier 原始 {s['val_brier_raw']:.3f} → 校准 {s['val_brier_calibrated']:.3f}")
+        nan = float("nan")
+        print(f"{family:20s} train {s['n']['train']:5d}（正例 {s['positives']['train']:4d}）  test AUC {s['test_auc'] or nan:.3f}"
+              f" / 规则 {s['test_rule_auc'] or nan:.3f}  Brier {s['test_brier']:.3f} / 规则 {s['test_rule_brier']:.3f}"
+              f"  AUC 差 95% 区间 {s['test_auc_diff_ci95']}  heldout AUC {s['heldout_auc'] or nan:.3f} / 规则 {s['heldout_rule_auc'] or nan:.3f}"
+              f"  → {s['scored_by']}")
     print(f"产物写入 {out}（特征 {len(columns)} 个）")
 
 
@@ -83,12 +136,18 @@ def model_card(summary: dict, n_features: int) -> str:
     rows = "\n".join(f"| `{f}` | {SOURCES[f]} | {LABELS[f]} | {s['n']['train']} / {s['n']['val']} / {s['n']['test']} / {s['n']['heldout']} "
                      f"| {s['positives']['train']} / {s['positives']['val']} / {s['positives']['test']} / {s['positives']['heldout']} |"
                      for f, s in summary.items())
-    return f"""# Jue-K v0 模型卡
+    num = lambda x: "—" if x is None else f"{x:.3f}"
+    ci = lambda c: "—" if c is None else f"[{c[0]:+.3f}, {c[1]:+.3f}]"
+    choice = "\n".join(f"| `{f}` | {num(s['test_auc'])} | {num(s['test_rule_auc'])} | {ci(s['test_auc_diff_ci95'])} | {num(s['test_brier'])} "
+                       f"| {num(s['test_rule_brier'])} | {num(s['heldout_auc'])} / {num(s['heldout_rule_auc'])} "
+                       f"| {'Jue-K' if s['scored_by'] == 'jue_k' else '规则（回落）'} |"
+                       for f, s in summary.items())
+    return f"""# Jue-K v5 模型卡
 
 > 由 `scripts/train_jue_k.py` 生成。评估结果见 `docs/reports/jue_k/`。
 
 ## 是什么
-觉的训练版：**一个** `HistGradientBoostingClassifier`（300 轮、学习率 0.1、无超参数搜索），对「此刻 × 模板 × 对象」中前置条件通过的组合输出「需要决策」的概率；
+觉的训练版：**一个** `HistGradientBoostingClassifier`（150 轮、深度 3、叶子至少 30 条、L2 1.0，无超参数搜索），对「此刻 × 模板 × 对象」中前置条件通过的组合输出「需要决策」的概率；
 再按决策类型在验证集上各拟合一个 isotonic 校准层。特征 {n_features} 个，见 `features.json`（`huayan.jue.features.build`，训练与推理共用）。
 前置条件与紧急度沿用原型模板（紧急度是规则，不学习）。只做本地推理，不调用任何大模型。
 
@@ -101,6 +160,14 @@ def model_card(summary: dict, n_features: int) -> str:
 
 - 追问、回问按需求卡划分 70 / 15 / 15，另留 2 个现象（`crease_marks`、`low_whiteness`）为 heldout，不参与训练与校准；定时三类按业务周划分 28 / 6 / 6；`data/week/w1`（另一个种子）不参与训练，由 `scripts/run_week.py` 评估。
 - 回问样本另补了 3,000 张应升级的卡（只取回问样本）；种子 `tr:50`～`tr:57` 是为回问补的挂在槽位取值上的 L3 转化对照。
+
+## 打分来源（D20：新模型赢的用模型，输的回落规则）
+测试集上同一组合、配对 bootstrap 500 次：校准后 AUC 差的 95% 区间下界 > 0、且 Brier 差的上界 < 0 才算赢（heldout 为未见现象，只列出不判胜负）。只保存赢了的类的校准器；
+`JueK` 对没有校准器的类用模板 `rule_score` 打分，逐条标 `scored_by: rule`。规则分不是校准概率，Brier 对它偏严，如实列出。
+
+| 决策 | Jue-K AUC | 规则 AUC | AUC 差 95% 区间 | Jue-K Brier | 规则 Brier | 未见现象 AUC（Jue-K / 规则） | 最终 |
+|---|---|---|---|---|---|---|---|
+{choice}
 
 ## 适用范围
 占位种子下的追问、回问与三类定时发现的打分；链路沿用 `config/app.yaml`。换真实种子后用 `scripts/make_jue_k_data.py` 与本脚本重训。

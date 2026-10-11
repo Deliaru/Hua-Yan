@@ -2,14 +2,16 @@ import json
 from pathlib import Path
 
 import yaml
+import pytest
 
 from huayan.app import HuayanApp
 from huayan.clock import get_clock
 from huayan.contracts import KnowledgeUnit, Trial
+from huayan.knowledge import PermissionDenied
 
 
 def test_mainline_offline(tmp_path):
-    """演示主线 1～4 步离线跑通（直接调用门面），含第 3 步的一次回问：发布 → 回答 → 回填。"""
+    """真实觉提出 → Hub 离线准备 → 人签字；含合并后重派、回问与发布回流。"""
     config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
     config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"))
     path = tmp_path / "app.yaml"
@@ -23,43 +25,99 @@ def test_mainline_offline(tmp_path):
     assert all(s.level == 1 for s in app.view_session(s1, "sales:S01").card.sections)
     assert any(s.level == 3 for s in app.view_session(s1, "rd:R01").card.sections)
 
-    # 2 两位客户同类需求无产品可用 → 两次升级 → tick 发现机会汇聚
-    s2 = app.start_session("customer:C02", "sales:S01").id
-    s3 = app.start_session("customer:C03", "sales:S02").id
-    assert app.add_turn(s2, "customer", "深一块浅一块，锦氨的，气流缸").status == "escalated"
-    assert app.add_turn(s3, "customer", "尼龙弹力布在气流机里染，深一块浅一块").status == "escalated"
-    opportunity = next(q for q in app.tick() if q.family == "opportunity")
+    def prepared(family, object_id):
+        app.tick()
+        question = next(q for q in app.bus.list(family=family) if q.object_id == object_id)
+        assert question.prepared_at is not None
+        return question
 
-    # 3 L2 → L3；L3 转译取决于客户没说的环保要求 → 回问 → 回填
+    # 两位客户各自升级，Hub 查无复用并起草；人尚未接单。
+    sessions, reqs = [], []
+    for customer in ["customer:C02", "customer:C03"]:
+        sid = app.start_session(customer, "sales:S01").id
+        assert app.add_turn(sid, "customer", "深一块浅一块，锦氨的，气流缸").status == "open"
+        prepared("escalate_need", f"session:{sid}")
+        req = app.escalate(sid, "sales:S01")
+        prepared("accept_requirement", f"requirement:{req.id}")
+        sessions.append(sid)
+        reqs.append(req)
+    opportunity = app.bus.list(family="opportunity")[0]
+    assert opportunity.prepared_at is not None
+    main, member = reqs
+    draft = app.requirement_view(main.id, "pm:agent").requirement
+    assert draft.merge_from == [member.id] and "离线模式" in draft.merge_note
+    rd = main.assigned_rd
+    main = app.merge_requirements(opportunity.id, rd)
+    assert main.status == "draft" and not main.product_lang
+    assert set(main.session_ids) == set(sessions)
+    assert app.requirement_view(member.id, rd).requirement.status == "merged"
+    assert not any(q.refs.get("requirement_id") == member.id for q in app.bus.list())
+    accept = next(q for q in app.bus.list(family="accept_requirement") if q.refs["requirement_id"] == main.id)
+    assert accept.prepared_at is None
+    prepared("accept_requirement", f"requirement:{main.id}")
+    main = app.requirement_view(main.id, rd).requirement
+    refs = {ref for item in main.product_lang for ref in item.quote_refs}
+    assert all(any(t.id in refs for t in app.view_session(sid, rd).turns) for sid in sessions)
+    assert len([e for e in app.events.query(["question_prepared"]) if e.payload["question_id"] == accept.id]) == 2
+    app.accept_requirement(main.id, rd)
+
+    # L3 骨架引出回问；回答后重派同一个确认问题，保留研发改过的条目。
     app.kb.add(KnowledgeUnit(id="ku:translation:tr:e2e", level=3, kind="translation", title="无APEO",
         text="无APEO → （模拟）不得使用烷基酚聚氧乙烯醚类乳化组分", phenomenon_ids=["color_unlevel"],
         owner="rd:R02", created_at=get_clock().now()))
-    req = app.draft_requirement(opportunity.id, "pm:P01")
-    assert set(req.session_ids) == {s2, s3}
-    app.confirm_requirement(req.id, "pm:P01")
-    app.translate_requirement(req.id, "rd:R02")
-    ask = next(q for q in app.tick() if q.family == "ask_back")
-    assert ask.refs["slot"] == "constraint" and ask.refs["requirement_id"] == req.id and ask.owner_role == "sales"
-    app.add_turn(ask.refs["session_id"], "sales", "有没有环保方面的要求？")
-    app.add_turn(ask.refs["session_id"], "customer", "不要APEO")
-    assert app.bus.get(ask.id).resolution.action == "answered"
-    assert app.requirement_view(req.id, "rd:R02").requirement.known_slots["constraint"] == "无APEO"
-    req = app.translate_requirement(req.id, "rd:R02")
-    assert any("ku:translation:tr:e2e" in item.ku_refs for item in req.chem_lang)
-    app.contribute_translation(req.id, 0, "低浴比匀染", "（模拟）低浴比缓染稳定性", "rd:R02")
-    req = app.confirm_translation(req.id, "rd:R02")
-    assert req.product_id == "T-206"
+    confirm = prepared("confirm_translation", f"requirement:{main.id}")
+    req = app.requirement_view(main.id, rd).requirement
+    edited = req.chem_lang[0].model_copy(update={"text": req.chem_lang[0].text + "；验证低浴比稳定性"})
+    assert edited.edited_by is None
+    saved = app.edit_req_item(req.id, 0, edited, rd)
+    assert saved.chem_lang[0].edited_by == rd
+    event = app.events.query(["requirement_edited"])[-1]
+    assert event.actor == rd and event.payload["after"] == saved.chem_lang[0].model_dump()
+    ask = next(q for q in app.bus.list(family="ask_back") if q.refs["requirement_id"] == req.id)
+    assert ask.refs["slot"] == "constraint" and ask.refs["session_id"] == sessions[0]
+    assert ask.prepared_at is None
+    conv = app.agents.conversations("sales:S01")
+    assert any(c.session_id == sessions[0] and any(ask.id in m.text for m in c.messages) for c in conv)
+    app.add_turn(sessions[0], "sales", "有没有环保方面的要求？")
+    app.add_turn(sessions[0], "customer", "不要APEO")
+    assert app.bus.get(ask.id).resolution.action == "answered" and confirm.prepared_at is None
+    prepared("confirm_translation", f"requirement:{req.id}")
+    req = app.requirement_view(req.id, rd).requirement
+    assert req.known_slots["constraint"] == "无APEO"
+    assert saved.chem_lang[0] in req.chem_lang
+    assert any("ku:translation:tr:e2e" in i.ku_refs for i in req.chem_lang)
+    app.confirm_translation(req.id, rd)
 
-    # 4 回流：试样 → 对外要点 → 反向包装 → 发布 → 同类需求 L1 命中新品
-    app.record_trial(Trial(id="trial:e2e", product_id="T-206", requirement_id=req.id, rd="rd:R02",
+    # 试样、客户评价、两栏签字、包装发布；每次签字都有真实待签问题。
+    req = app.requirement_view(req.id, rd).requirement
+    app.record_trial(Trial(id="trial:e2e", product_id=req.product_id, requirement_id=req.id, rd=rd,
         conditions=req.known_slots, result="pass", cause="none", at=get_clock().now()))
-    app.set_public_points(req.id, "（模拟）低浴比气流缸中匀染性好；按推荐用量使用。", "rd:R02")
-    app.package_sheet(req.id, "pm:P01")
-    app.release_product(req.id, "pm:P01")
-    s4 = app.start_session("customer:C01", "sales:S02").id
-    assert app.add_turn(s4, "customer", "锦氨布气流缸里染，深一块浅一块").recommendation.product_id == "T-206"
-    owners = {r.owner for r in app.contributions("pm:P01") if req.id in r.used_by}
-    assert {"pm:P01", "rd:R01", "rd:R02"} <= owners
+    prepared("market_eval", f"requirement:{req.id}")
+    app.record_market_eval(req.id, "pass", "（模拟）客户试用通过", "sales:S01")
+    prepared("seal_points", f"requirement:{req.id}")
+    app.set_public_points(req.id, "（模拟）改善低浴比匀染；按工艺试样确认。", [], rd)
+    prepared("release", f"requirement:{req.id}")
+    app.release_product(req.id, rd)
+    s4 = app.start_session("customer:C01", "sales:S01").id
+    assert app.add_turn(s4, "customer", "锦氨布气流缸里染，深一块浅一块，不要APEO").recommendation.product_id == "T-206"
+    assert not app.events.query(["human_decision"])
+    before = len(app.events.query(["question_prepared"]))
+    app.tick()
+    assert len(app.events.query(["question_prepared"])) == before
+
+    timeline = app.jue_timeline(req.id, rd)
+    assert {"opportunity", "accept_requirement", "confirm_translation", "release"} <= {n.family for n in timeline.nodes}
+    assert {f"session:{sid}" for sid in sessions} <= {p.object_id for p in timeline.points}
+    assert f"requirement:{member.id}" in {p.object_id for p in timeline.points}
+    assert timeline.n_questions == len(timeline.nodes) and timeline.n_signatures > 0
+    sales = app.jue_timeline(sessions[0], "sales:S01")
+    assert {p.family for p in sales.points} <= {"ask_slot", "escalate_need", "reuse_product", "market_eval", "ask_back"}
+    assert all(p.object_id != f"session:{sessions[1]}" for p in sales.points)
+    assert sales.n_judgments < timeline.n_judgments and timeline.n_llm_calls == 0
+    with pytest.raises(PermissionDenied):
+        app.jue_timeline(req.id, "sales:S02")
+    app.meter.record(caller="jue:timeline-check", kind="s1")
+    assert app.jue_timeline(req.id, rd).n_llm_calls == 1
 
     meter = [json.loads(line) for line in (app.run_dir / "metering.jsonl").read_text(encoding="utf-8").splitlines()]
     assert any(r["caller"].startswith("jue:") for r in meter)

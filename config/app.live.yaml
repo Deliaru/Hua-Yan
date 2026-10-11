@@ -7,6 +7,7 @@ system1_impl: llm_fallback
 gateway_mock: false
 extractor: llm
 realtime_model: jue_proto
+scheduled_model: jue_proto
 jue_k_dir: models/jue_k
 llm_cache_dir: null          # 本配置强制新请求，用于验证真实服务
 replay: false

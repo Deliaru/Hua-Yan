@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
 from huayan.clock import get_clock
-from huayan.contracts import Actor, KUKind, ReqItem, Role, SheetDraft, ToolKind, ToolResult, ToolSpec, Trial
+from huayan.contracts import Actor, ContributionDraft, KUKind, ReqItem, Role, SheetDraft, ToolKind, ToolResult, ToolSpec, Trial
 from huayan.contracts._base import BaseModel
 from huayan.domain import match_candidates
 from huayan.escalation import translate
@@ -17,6 +17,7 @@ class ToolContext:
     principal: Actor
     conversation_id: str
     session_id: str | None = None
+    focus: str | None = None                  # 本轮工作面打开的对象，不改变委托人权限
 
 
 TOOLS: dict[str, tuple[ToolSpec, Callable[[ToolContext, BaseModel], ToolResult]]] = {}
@@ -36,23 +37,20 @@ def openai_schemas(role: Role) -> list[dict]:
             for spec, _ in TOOLS.values() if role in spec.roles]
 
 
-def _session(s) -> dict:
-    rec = s.recommendation
-    return {"session_id": s.id, "status": s.status, "phenomenon": s.need.phenomenon,
-            "slots": {k: f.value or "不清楚" for k, f in s.need.slots.items()},
-            "ask_hints": [{"slot": h.slot, "label": h.label, "ask_text": h.ask_text} for h in s.hints],
-            "product_id": rec.product_id if rec else None,
-            "escalation_question_id": rec.escalated_question_id if rec else None}
-
-
 def _items(items: list[ReqItem]) -> list[dict]:
-    return [{"index": i, "text": it.text, "quote_refs": it.quote_refs, "ku_refs": it.ku_refs} for i, it in enumerate(items)]
+    return [{"index": i, "text": it.text, "quote_refs": it.quote_refs, "ku_refs": it.ku_refs,
+             "edited_by": it.edited_by} for i, it in enumerate(items)]
 
 
 def _req(req) -> dict:
     return {"req_id": req.id, "status": req.status, "phenomenon": req.phenomenon, "known_slots": req.known_slots,
             "direction": req.direction, "product_lang": _items(req.product_lang), "chem_lang": _items(req.chem_lang),
-            "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id}
+            "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id,
+            "sheet": req.sheet and req.sheet.model_dump(), "return_notes": req.return_notes,
+            "reuse": req.reuse and req.reuse.model_dump(),
+            "session_ids": req.session_ids, "merge_from": req.merge_from, "merge_note": req.merge_note,
+            "sealed": req.sealed, "points_draft": req.points_draft and req.points_draft.model_dump(),
+            "contribution_drafts": [d.model_dump() for d in req.contribution_drafts]}
 
 
 class NoArgs(BaseModel):
@@ -110,28 +108,29 @@ def list_my_questions(ctx: ToolContext, args: NoArgs) -> ToolResult:
 
 # ---- 业务员（绑定当前客户会话） ----
 
-@tool("record_customer_turn", "draft", ["sales"], "把客户的一句原话记入当前会话；返回槽位、追问提示、推荐或升级状态", Text)
-def record_customer_turn(ctx: ToolContext, args: Text) -> ToolResult:
-    return ToolResult(data=_session(ctx.app.add_turn(ctx.session_id, "customer", args.text)))
+@tool("save_reply_draft", "draft", ["sales"], "将回复草稿写入当前会话，供业务员查看、修改后发送", Text)
+def save_reply_draft(ctx: ToolContext, args: Text) -> ToolResult:
+    session = ctx.app.save_reply_draft(ctx.session_id, args.text, ctx.principal.id)
+    return ToolResult(data={"session_id": session.id, "reply_draft": session.reply_draft})
 
 
-@tool("record_sales_turn", "draft", ["sales"], "把业务员说的一句话（如追问）记入当前会话", Text)
-def record_sales_turn(ctx: ToolContext, args: Text) -> ToolResult:
-    return ToolResult(data=_session(ctx.app.add_turn(ctx.session_id, "sales", args.text)))
+@tool("save_escalate_note", "draft", ["sales"], "将升级说明草稿写入当前会话，供业务员审查签字", Text)
+def save_escalate_note(ctx: ToolContext, args: Text) -> ToolResult:
+    session = ctx.app.save_escalate_note(ctx.session_id, args.text, ctx.principal.id)
+    return ToolResult(data={"session_id": session.id, "escalate_note": session.escalate_note})
 
 
 @tool("get_need_card", "read", ["sales"], "查看当前会话的场景需求卡：槽位与客户原话、追问提示、推荐卡", NoArgs)
 def get_need_card(ctx: ToolContext, args: NoArgs) -> ToolResult:
     v = ctx.app.view_session(ctx.session_id, ctx.principal.id)
     return ToolResult(data={"status": v.status, "slots": [{"slot": f.slot, "value": f.value, "quote": f.quote} for f in v.slots],
+                            "turns": [{"turn_id": t.id, "speaker": t.speaker, "text": t.text} for t in v.turns],
                             "ask_hints": [h.ask_text for h in v.hints], "escalation_question_id": v.escalation_question_id,
+                            "reply_draft": v.reply_draft, "escalate_note": v.escalate_note,
+                            "reuse": v.reuse and v.reuse.model_dump(),
                             "card": v.card and {"product_id": v.card.product_id, "version": v.card.version,
+                                                "note": v.card.note,
                                                 "sections": [f"{s.title}：{s.text}" for s in v.card.sections]}})
-
-
-@tool("recommend_now", "draft", ["sales"], "按当前已知条件立即推荐（信息不全时也给出结果或升级）", NoArgs)
-def recommend_now(ctx: ToolContext, args: NoArgs) -> ToolResult:
-    return ToolResult(data=_session(ctx.app.recommend_now(ctx.session_id)))
 
 
 @tool("request_decrypt", "effect", ["sales"], "客户懂化学且要求了解机理时，为当前会话的推荐产品申请解密（产品归属研发审批）",
@@ -195,9 +194,37 @@ def my_contributions(ctx: ToolContext, args: NoArgs) -> ToolResult:
 
 # ---- 需求单草稿（产品经理改 L2，研发改 L3；层的规则在门面） ----
 
-@tool("draft_product_need", "draft", ["pm"], "为一个升级 / 机会问题起草 L2 产品需求单（规则骨架，之后可逐条修改）", QuestionId)
-def draft_product_need(ctx: ToolContext, args: QuestionId) -> ToolResult:
-    return ToolResult(data=_req(ctx.app.draft_requirement(args.question_id, ctx.principal.id)))
+class ReuseArgs(BaseModel):
+    req_id: str
+    product_id: str | None
+    ku_refs: list[str]
+    customer_note: str
+    note: str
+
+
+@tool("propose_reuse", "draft", ["pm"], "保存复用建议；ku_refs 仅限 L2 案例/转化知识。查无产品时 product_id=null、ku_refs=[]、customer_note为空，note 写检索结果", ReuseArgs)
+def propose_reuse(ctx: ToolContext, args: ReuseArgs) -> ToolResult:
+    req = ctx.app.save_reuse_proposal(args.req_id, args.product_id, args.ku_refs,
+                                     args.customer_note, args.note, ctx.principal.id)
+    return ToolResult(data=_req(req))
+
+
+@tool("draft_product_need", "draft", ["pm"], "为已有需求单起草 L2 产品需求（规则骨架，之后可逐条修改）", ReqId)
+def draft_product_need(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.draft_requirement(args.req_id, ctx.principal.id)))
+
+
+class MergeArgs(BaseModel):
+    question_id: str
+    target_req_id: str
+    member_ids: list[str]
+    note: str
+
+
+@tool("propose_merge", "draft", ["pm"], "保存同类需求合并建议；不是同一需求时 member_ids 留空并写理由", MergeArgs)
+def propose_merge(ctx: ToolContext, args: MergeArgs) -> ToolResult:
+    req = ctx.app.save_merge_proposal(args.question_id, args.target_req_id, args.member_ids, args.note, ctx.principal.id)
+    return ToolResult(data=_req(req))
 
 
 LANG = {"pm": "product_lang", "rd": "chem_lang"}         # 编辑哪一层由门面按角色决定，这里只用来读原条目
@@ -241,6 +268,11 @@ def set_direction(ctx: ToolContext, args: DirectionArgs) -> ToolResult:
     return ToolResult(data=_req(ctx.app.set_direction(args.req_id, args.text, ctx.principal.id)))
 
 
+@tool("edit_reuse_note", "draft", ["pm", "rd"], "改写现成产品建议中给客户的说明；草稿经泄密检查，研发审定后才可对外", DirectionArgs)
+def edit_reuse_note(ctx: ToolContext, args: DirectionArgs) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.update_reuse_note(args.req_id, args.text, ctx.principal.id)))
+
+
 @tool("draft_chem_need", "draft", ["rd"], "为产品经理已确认的需求单起草 L3 化学语言条目与研发方向假设（规则骨架）", ReqId)
 def draft_chem_need(ctx: ToolContext, args: ReqId) -> ToolResult:
     return ToolResult(data=_req(ctx.app.translate_requirement(args.req_id, ctx.principal.id)))
@@ -257,34 +289,18 @@ class SheetArgs(BaseModel):
     usage: str
 
 
-@tool("edit_sheet", "draft", ["pm"], "修改 L1 说明书草稿（说明与用法）", SheetArgs)
+@tool("edit_sheet", "draft", ["pm", "rd"], "修改 L1 说明书草稿（说明与用法）；研发可改写泄密句", SheetArgs)
 def edit_sheet(ctx: ToolContext, args: SheetArgs) -> ToolResult:
     req = ctx.app.save_sheet(args.req_id, SheetDraft(sheet=args.sheet, usage=args.usage), ctx.principal.id)
     return ToolResult(data={"req_id": req.id, "sheet": req.sheet.model_dump()})
 
 
+@tool("leak_check", "read", ["pm", "rd"], "检查说明书与用法，仅返回命中句序号与类别", ReqId)
+def leak_check(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=[h.model_dump() for h in ctx.app.leak_check(args.req_id, ctx.principal.id)])
+
+
 # ---- 生效动作（只挂起为确认卡，委托人确认后才执行） ----
-
-@tool("confirm_requirement", "effect", ["pm"], "提议确认 L2 产品需求单并交研发", ReqId, "确认需求单 {req_id} 的产品需求，并交研发转译")
-def confirm_requirement(ctx: ToolContext, args: ReqId) -> ToolResult:
-    return ToolResult(data=_req(ctx.app.confirm_requirement(args.req_id, ctx.principal.id)))
-
-
-class DismissArgs(BaseModel):
-    question_id: str
-    note: str = ""
-
-
-@tool("dismiss_question", "effect", ["pm"], "提议忽略一个问题（写明理由）", DismissArgs, "忽略问题 {question_id}：{note}")
-def dismiss_question(ctx: ToolContext, args: DismissArgs) -> ToolResult:
-    q = ctx.app.resolve(args.question_id, "dismiss", ctx.principal.id, args.note)
-    return ToolResult(data={"question_id": q.id, "status": q.status})
-
-
-@tool("release_product", "effect", ["pm"], "提议按说明书草稿发布新产品，回到 L1", ReqId, "按需求单 {req_id} 的说明书发布新产品，L1 可直接推荐")
-def release_product(ctx: ToolContext, args: ReqId) -> ToolResult:
-    p = ctx.app.release_product(args.req_id, ctx.principal.id)
-    return ToolResult(data={"product_id": p.id, "name": p.name})
 
 
 @tool("confirm_translation", "effect", ["rd"], "提议确认 L3 化学语言需求单（关联研发中产品，给所引知识的归属人记分）", ReqId,
@@ -300,6 +316,17 @@ class ContributeArgs(BaseModel):
     chem_term: str
 
 
+class ContributionDraftArgs(ContributeArgs):
+    note: str = ""
+
+
+@tool("save_contribution_draft", "draft", ["rd"], "保存一条提炼后的沉淀草稿，含泛化说明与相近或冲突之处；不入库、不记分",
+      ContributionDraftArgs)
+def save_contribution_draft(ctx: ToolContext, args: ContributionDraftArgs) -> ToolResult:
+    draft = ContributionDraft(item_index=args.index, scene_phrase=args.scene_phrase, chem_term=args.chem_term, note=args.note)
+    return ToolResult(data=_req(ctx.app.save_contribution_draft(args.req_id, draft, ctx.principal.id)))
+
+
 @tool("contribute_translation", "effect", ["rd"], "提议把化学语言的一条沉淀为委托人自己的转化知识（场景说法 → 化学术语）",
       ContributeArgs, "把「{scene_phrase} → {chem_term}」沉淀为你的转化知识（需求单 {req_id} 第 {index} 条）")
 def contribute_translation(ctx: ToolContext, args: ContributeArgs) -> ToolResult:
@@ -310,12 +337,24 @@ def contribute_translation(ctx: ToolContext, args: ContributeArgs) -> ToolResult
 class PointsArgs(BaseModel):
     req_id: str
     text: str
+    sealed: list[str]
+
+
+class PointsDraftArgs(BaseModel):
+    req_id: str
+    public: str
+    sealed: list[str]
+
+
+@tool("save_points_draft", "draft", ["rd"], "起草封存／放出两栏，返回泄密自查结果；草稿不生效", PointsDraftArgs)
+def save_points_draft(ctx: ToolContext, args: PointsDraftArgs) -> ToolResult:
+    return ToolResult(data=_req(ctx.app.save_points_draft(args.req_id, args.public, args.sealed, ctx.principal.id)))
 
 
 @tool("set_public_points", "effect", ["rd"], "提议确认可以对外的要点（L3 内容流向下层的唯一出口，不写机理与配方）", PointsArgs,
-      "确认需求单 {req_id} 的对外要点：{text}")
+      "签字封存／放出需求单 {req_id} 的两栏内容")
 def set_public_points(ctx: ToolContext, args: PointsArgs) -> ToolResult:
-    return ToolResult(data=_req(ctx.app.set_public_points(args.req_id, args.text, ctx.principal.id)))
+    return ToolResult(data=_req(ctx.app.set_public_points(args.req_id, args.text, args.sealed, ctx.principal.id)))
 
 
 class TrialArgs(BaseModel):

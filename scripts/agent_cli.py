@@ -1,8 +1,9 @@
 """和某个人的角色助手对话（契约 ⑭）。助手需要大模型：本脚本总是以 gateway_mock=false 构建应用（密钥取自环境变量）。
 
-uv run python scripts/agent_cli.py --actor pm:P01 [--session sess:1] [--prelude]
-  --prelude：先用规则抽取放两段会升级的客户对话（sess:1 C02、sess:2 C03，锦纶氨纶 + 气流缸 + 色花），供产品经理处理。
+uv run python scripts/agent_cli.py --actor sales:S01 --session sess:1 --prelude
+  --prelude：录入两段待升级的客户对话（两位客户均由 S01 负责），不代签升级。
 命令：/pending 待确认动作  /approve act:1  /reject act:1 [理由]  /trace 本对话轨迹  /dispatch 把总线上的新问题派给助手
+      /questions 查看本人问题  /escalate sess:1  /merge q:1  /accept req:1（后三者由当前人显式签字）
       /as rd:R02 [sess:1] 切换到另一个人  /quit 退出（打印本次 agent:* 的计量）
 """
 import argparse
@@ -18,7 +19,7 @@ from huayan.app import HuayanApp
 from huayan.knowledge import PermissionDenied
 
 PRELUDE = [("customer:C02", "sales:S01", ["我们染完以后布面深一块浅一块，客户老投诉", "锦氨弹力布", "气流缸，浴比很低"]),
-           ("customer:C03", "sales:S02", ["锦氨布在气流机里染，颜色不匀，回修了好几次", "没什么环保要求"])]
+           ("customer:C03", "sales:S01", ["锦氨布在气流机里染，颜色不匀，回修了好几次", "没什么环保要求"])]
 
 
 def build(config_path: str, run_id: str | None) -> HuayanApp:
@@ -60,9 +61,11 @@ def metering(app: HuayanApp) -> None:
         r = json.loads(line)
         if r["caller"].startswith("agent:"):
             t = totals[r["caller"]]
-            t[0] += 1; t[1] += r["input_tokens"]; t[2] += r["output_tokens"]; t[3] += r.get("cost") or 0.0
+            t[0] += 1; t[1] += r["input_tokens"]; t[2] += r["output_tokens"]
+            t[3] = None if t[3] is None or r.get("cost") is None else t[3] + r["cost"]
     for caller, (n, i, o, cost) in sorted(totals.items()):
-        print(f"{caller}: {n} 步，输入 {i} / 输出 {o} tokens，费用 {cost:.4f}")
+        price = "未知（未配置单价）" if cost is None else f"{cost:.4f}"
+        print(f"{caller}: {n} 次调用，输入 {i} / 输出 {o} tokens，费用 {price}")
     print(f"运行目录 {app.run_dir}")
 
 
@@ -81,7 +84,8 @@ def main():
             session = app.start_session(customer, sales)
             for text in turns:
                 session = app.add_turn(session.id, "customer", text)
-            print(f"{session.id}（{customer}）{session.status}，问题 {session.recommendation.escalated_question_id}")
+            questions = [q.id for q in app.questions(sales) if q.refs.get("session_id") == session.id]
+            print(f"{session.id}（{customer}）{session.status}，待处理问题 {questions}；/dispatch 准备后由业务员 /escalate 签字")
     actor, session = args.actor, args.session
     print(f"和 {actor} 的助手对话（{app.actors[actor].name}）；/quit 退出")
     while True:
@@ -123,7 +127,20 @@ def handle(hub, app, actor, session, current, command, rest, text):
             print(f"{s.step} {s.tool or '回复'} {json.dumps(s.args, ensure_ascii=False)} → {s.result_summary}"
                   f"{'  越权：' + str(s.blocked) if s.blocked else ''}{'  ' + s.pending_action_id if s.pending_action_id else ''}")
     elif command == "/dispatch":
-        hub.dispatch()
+        app.tick()
+    elif command == "/questions":
+        for q in app.questions(actor):
+            print(f"{q.id} {q.family}，主人 {q.owner_id}，签字人 {q.signer_id}，"
+                  f"{'待签' if q.prepared_at else '准备中' if q.signer_id else '提示'}，引用 {q.refs}")
+    elif command == "/escalate":
+        print(app.escalate(rest[0], actor).model_dump_json())
+        app.tick()
+    elif command == "/merge":
+        print(app.merge_requirements(rest[0], actor).model_dump_json())
+        app.tick()
+    elif command == "/accept":
+        print(app.accept_requirement(rest[0], actor).model_dump_json())
+        app.tick()
     elif command == "/as":
         target = rest[0].split()[0]
         print(f"切换到 {target}（{app.actors[target].name}）")

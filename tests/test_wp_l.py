@@ -4,8 +4,9 @@ import pytest
 import yaml
 
 from huayan.app import HuayanApp
+from huayan.agent.tools import TOOLS
 from huayan.clock import get_clock
-from huayan.contracts import PointsDraft, ReqItem, Requirement, SheetDraft
+from huayan.contracts import PointsDraft, Question, ReqItem, Requirement, SheetDraft
 from huayan.knowledge import PermissionDenied
 
 
@@ -17,6 +18,7 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     app = HuayanApp.build(str(path))
     hub = app.agents
     pm = hub.context("pm:agent")
+    assert all(spec.kind != "effect" for spec, _ in TOOLS.values() if "pm" in spec.roles)
     l3_texts = [u.text for u in app.kb._units.values() if u.level == 3]
 
     # 越权检索只给归属人，读 L3 原文被拒；结果里没有任何 L3 原文
@@ -46,9 +48,38 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     assert [(h.index, h.source) for h in app.leak_check(req.id, "pm:agent")] == [
         (1, "sealed"), (2, "l3_term"), (3, "hypothesis")]
 
-    # 生效类工具只挂起确认卡，确认前不改状态；非委托人不能确认（委托人确认后生效由 WP-C 删除 _hand_over 后补回）
+    # 两栏草稿自查不生效；签字提议确认前不改状态，非委托人不能确认。
     rd = hub.context("rd:R01")
-    proposed = hub.call_tool(rd, "set_public_points", {"req_id": req.id, "text": "（模拟）低浴比下匀染好"})
+    points_before = app.ledger.list()
+    contribution = hub.call_tool(rd, "save_contribution_draft", {"req_id": req.id, "index": 0,
+        "scene_phrase": "（模拟）低浴比下色差", "chem_term": "（模拟）分阶段调节吸附速率", "note": "已去掉客户特定信息"})
+    assert contribution.ok and contribution.data["contribution_drafts"][0]["item_index"] == 0
+    assert app.ledger.list() == points_before and not app.events.query(["knowledge_contributed"])
+    assert hub.call_tool(pm, "get_requirement", {"req_id": req.id}).data["contribution_drafts"] == []
+    pending = hub.call_tool(rd, "contribute_translation", {"req_id": req.id, "index": 0,
+        "scene_phrase": "（模拟）低浴比下色差", "chem_term": "（模拟）分阶段调节吸附速率"})
+    assert pending.pending_action_id and not app.events.query(["knowledge_contributed"])
+    draft = hub.call_tool(rd, "save_points_draft", {"req_id": req.id, "public": req.sealed[0], "sealed": req.sealed})
+    assert draft.ok and draft.data["points_draft"]["self_check"] == [{"index": 0, "source": "sealed"}]
+    assert not req.public_points and not app.events.query(["points_set"])
+    proposed = hub.call_tool(rd, "set_public_points", {
+        "req_id": req.id, "text": "（模拟）低浴比下匀染好", "sealed": req.sealed})
     assert proposed.pending_action_id and not req.public_points
     with pytest.raises(PermissionDenied):
         hub.approve(proposed.pending_action_id, "rd:R02")
+
+    # 手工待处理问题只验准备权限：主人准备，签字人查看；准备不等于签字。
+    q = app.bus.publish(Question(id="", family="release", template_id="release", title="审定发布",
+        object_id=f"requirement:{req.id}", owner_role="pm", owner_id="pm:agent",
+        signer_role="rd", signer_id="rd:R01", scored_by="rule", discoverer="jue_proto",
+        dedup_key=f"release:{req.id}", created_at=get_clock().now()))
+    assert [x.id for x in app.questions("pm:agent")] == [q.id]
+    assert [x.id for x in app.questions("rd:R01") if x.family == "release"] == [q.id]
+    assert any(x.family == "seal_leak" for x in app.questions("rd:R01"))
+    assert not app.questions("rd:R02")
+    with pytest.raises(PermissionDenied):
+        app.mark_prepared(q.id, "rd:R01")
+    prepared = app.mark_prepared(q.id, "pm:agent")
+    assert prepared.prepared_at == get_clock().now() and prepared.status == "open"
+    assert req.status == "rd_confirmed" and prepared.resolution is None
+    assert app.events.query(["question_prepared"])[-1].actor == "pm:agent"

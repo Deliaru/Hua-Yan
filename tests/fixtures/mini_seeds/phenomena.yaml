@@ -16,3 +16,11 @@ items:
     causes: "（模拟）浮色未洗净或染料与纤维结合不牢。"
     slot_priors:
       fiber: {棉: 0.6, 涤纶: 0.3, 锦纶氨纶: 0.1}
+
+  - id: harsh_hand
+    label: 手感发硬
+    customer_phrases: [手感发硬, 摸起来硬邦邦]
+    required_slots: [fiber]
+    causes: "（模拟）纤维间摩擦较大，需要柔软整理。"
+    slot_priors:
+      fiber: {棉: 0.5, 涤纶: 0.5}
