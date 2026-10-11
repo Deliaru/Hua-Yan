@@ -15,6 +15,7 @@ import { Layers } from "./pages/Layers";
 import { Eval } from "./pages/Eval";
 import { Ledger } from "./pages/Ledger";
 import { Overview } from "./pages/Overview";
+import { Guide } from "./components/Guide";
 
 const PAGES = [
   ["overview", "架构总览", NavArch],
@@ -30,7 +31,7 @@ const ROLE_NAME: Record<string, string> = { sales: "业务员", rd: "研发", su
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
-  const fromHash = () => PAGES.find(([k]) => `#${k}` === location.hash)?.[0] ?? "desk";
+  const fromHash = () => PAGES.find(([k]) => `#${k}` === location.hash)?.[0] ?? "overview";
   const [page, setPageState] = useState<Page>(fromHash);
   const setPage = (p: Page) => { location.hash = p; setPageState(p); };
   useEffect(() => {
@@ -58,7 +59,7 @@ export default function App() {
   };
   const ctx = {
     meta, me: actor.id, role: actor.role, agentOnline: !meta.status.gateway_mock, version, side,
-    refresh: () => setVersion((v) => v + 1), fail,
+    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe,
   };
   const key = `${meta.status.run_id}:${actor.id}`;
 
@@ -66,6 +67,7 @@ export default function App() {
     <AppCtx.Provider value={ctx}>
       <header className="bar fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-3 border-b border-sep px-4">
         <div className="w-[200px]"><Logo /></div>
+        {page === "desk" && <div className="absolute left-1/2 -translate-x-1/2"><Guide /></div>}
         <div className="ml-auto flex items-center gap-1.5">
           <StatusMenu s={meta.status} />
           {FIXTURE && <SceneMenu onChange={() => setVersion((v) => v + 1)} />}

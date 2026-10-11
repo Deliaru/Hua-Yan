@@ -10,6 +10,7 @@ export interface Ctx {
   version: number;                  // 每次写操作后 +1，各处据此重新读取
   refresh: () => void;
   fail: (e: unknown) => void;
+  switchTo: (actor: string) => void;  // 演示导览一键切换到该做下一步的人
   side: HTMLElement | null;         // 侧栏下半部分：各页面把自己的 source list 放进来
 }
 
@@ -74,7 +75,8 @@ export function useLabels() {
     leak: (s: string) => LEAK_SOURCE[s] ?? s,
     // 模板标题、证据里的对象 id 换成人话（铁律：界面不暴露内部 id）
     scrub: (text: string) => text
-      .replace(/(?:requirement:)?req:[\w-]+/g, "需求单")
+      .replace(/(需求单\s*)?(?:requirement:)?req:[\w-]+/g, "需求单")
+      .replace(/\s*(?:ku:)?(?:case|tr|translation):[\w:-]+/g, "")
       .replace(/slot:(?:sess:)?[\w-]+\/(\w+)/g, (_, s) => slot(s))
       .replace(/(?:session:)?sess:[\w-]+/g, "会话")
       .replace(/theme:(\w+)/g, (_, p) => phen(p))

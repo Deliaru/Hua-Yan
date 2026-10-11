@@ -54,7 +54,7 @@ const LANES = [
 ] as const;
 
 // 播放一条需求（示例，模拟数据）
-const STEPS: { node: string; text: string; how: string }[] = [
+export const STEPS: { node: string; text: string; how: string }[] = [
   { node: "talk", text: "「染完以后，布面上深一块浅一块，怎么办？」", how: "客户只描述现象。今天这句话会被业务员按自己的理解转述，到研发手里已经走样。" },
   { node: "card", text: "面料：锦纶氨纶「锦纶氨纶混纺」· 设备：气流缸「我们是气流缸」", how: "觉判断缺面料、值得问，提示业务员趁客户还在就追问；每一格都绑定客户原话。" },
   { node: "match", text: "检索到 2 个候选产品，Jev：「都不合适」概率最高", how: "觉提出「是否转产品经理 Agent」，业务员的 Agent 起草升级说明，业务员签字。" },

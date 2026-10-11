@@ -40,7 +40,8 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const history = (conv?.messages ?? []).filter((m) => m.role !== "system" || !m.target);
+  // 系统消息是派单记录（带内部编号）；带 target 的批注已挂在工作面上，历史里只留人与 Agent 的对话
+  const history = (conv?.messages ?? []).filter((m) => m.role !== "system");
   const send = () => {
     const t = text.trim();
     if (!t || busy) return;
@@ -68,9 +69,7 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
           </button>
           {open && (
             <div className="anim-fade flex max-h-[240px] flex-col gap-1.5 overflow-y-auto border-b border-sep px-3.5 pb-2.5 pt-1">
-              {history.map((m, i) => m.role === "system" ? (
-                <p key={i} className="self-center text-[11px] text-ink-3">{m.text}</p>
-              ) : (
+              {history.map((m, i) => (
                 <p key={i} className={`max-w-[88%] rounded-[12px] px-2.5 py-1.5 text-[13px] leading-5 ${
                   m.role === "principal" ? "self-end bg-[#ececf0]" : "self-start bg-[#f6f6f8]"}`}>{m.text}</p>
               ))}

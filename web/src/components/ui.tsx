@@ -72,7 +72,7 @@ export function Disclosure({ label, children, initial = false }: { label: React.
   const [open, setOpen] = useState(initial);
   return (
     <div className="mt-1">
-      <button type="button" onClick={() => setOpen(!open)} className="link"><ChevronRight open={open} />{label}</button>
+      <button type="button" onClick={() => setOpen(!open)} className="link !items-start text-left"><span className="pt-[3px]"><ChevronRight open={open} /></span>{label}</button>
       {open && <div className="anim-fade mt-1.5 flex flex-col gap-1 pl-4">{children}</div>}
     </div>
   );

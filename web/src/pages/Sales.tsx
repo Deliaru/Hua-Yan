@@ -263,14 +263,15 @@ function Decisions({ v, questions, fill, escalateNotes }: {
       {by("escalate_need").map((q) => <EscalateCard key={q.id} q={q} v={v} notes={escalateNotes} />)}
       {v.reuse && <ReuseLine v={v} fill={fill} />}
       {by("ask_back").map((q) => (
-        <Group key={q.id} title={<span className="text-attn-ink">回问 · 研发需要知道</span>} foot="只给槽位与话术；点一下填进「发给客户」。">
-          <button type="button" onClick={() => fill(q.evidence[0]?.quote || L.scrub(q.title))} className="row row-btn attn-edge !items-start">
+        <Group key={q.id} title={<span className="text-attn-ink">回问 · 研发需要知道</span>}
+               foot={v.reply_draft ? "话术已由 Agent 填进「发给客户」，由你发出。" : "Agent 离线，没有话术：用你自己的话问客户，答复会回填需求单。"}>
+          <div className="row attn-edge !items-start">
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold">{L.scrub(q.title)}</p>
-              {q.evidence.map((e, i) => <p key={i} className="text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}{e.quote && `：${e.quote}`}</p>)}
+              <p className="text-[14px] font-semibold">{q.refs.slot ? `问客户：${L.slot(q.refs.slot)}` : L.scrub(q.title)}</p>
+              {q.evidence.map((e, i) => <p key={i} className="text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}</p>)}
             </div>
             <Score q={q} />
-          </button>
+          </div>
         </Group>
       ))}
       {by("market_eval").map((q) => <MarketEval key={q.id} q={q} />)}
