@@ -5,13 +5,17 @@ import type {
   RequirementView, SessionSummary, SessionView, SheetDraft, NextAction,
 } from "./types";
 
+// 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
+const SESSION = localStorage.getItem("huayan-session") ?? crypto.randomUUID();
+localStorage.setItem("huayan-session", SESSION);
+
 // 相对路径：页面可部署在子路径下（如 /huayan-demo/）
 async function call<T>(path: string, body?: object): Promise<T> {
   const r = await fetch(`api/${path}`, body ? {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Huayan-Session": SESSION },
     body: JSON.stringify(body),
-  } : undefined).catch(() => { throw new Error("连不上化言服务，请确认后端已启动"); });
+  } : { headers: { "X-Huayan-Session": SESSION } }).catch(() => { throw new Error("连不上化言服务，请确认后端已启动"); });
   const data = await r.json();
   if (!r.ok) throw new Error(data.error ?? `接口返回 ${r.status}`);
   // 草稿会用于编辑和签字，保留原文，确保界面与台词录制提交同一份内容。

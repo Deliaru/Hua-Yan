@@ -97,8 +97,8 @@ export default function App() {
               </div>
             ))}
           </Popover>
-          <button className="btn btn-plain gap-1.5" title="清空所有会话与需求单，从头开始"
-                  onClick={() => confirm("重置进度：清空所有客户会话、需求单和签字记录，从头开始。确定吗？") && restart("正在重置进度……", api.reset())}>
+          <button className="btn btn-plain gap-1.5" title="清空你这个浏览器里的会话与需求单，从头开始（其他试用者不受影响）"
+                  onClick={() => confirm("重置进度：清空你这个浏览器里的客户会话、需求单和签字记录，从头开始（其他试用者不受影响）。确定吗？") && restart("正在重置进度……", api.reset())}>
             <Refresh />重置进度</button>
         </div>
       </header>

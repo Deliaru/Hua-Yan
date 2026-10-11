@@ -1,10 +1,14 @@
 """演示界面后端：标准库 HTTP 服务，把门面方法一对一暴露为 JSON 接口（形式参考 JUE wp/e 的 src/jue/ui/server.py）。
 权限只在门面里执行；这里只做路由、序列化与错误映射。身份由界面的下拉框传入（演示无登录）。
 运行：uv run python -m huayan.ui.server（从仓库根目录）；开发时前端 `npm run dev` 经 Vite 代理 /api。
-web/dist 存在时同时提供构建后的前端页面。"""
+web/dist 存在时同时提供构建后的前端页面。
+会话隔离：界面每个浏览器带一个会话号（请求头 X-Huayan-Session），每个会话有自己的门面与业务时钟，
+多人同时试用互不干扰；不带会话号的调用（脚本、curl）共用 default。"""
 import importlib.util
 import json
 import os
+import re
+from collections import OrderedDict
 import traceback
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -28,8 +32,11 @@ REPORTS = Path("docs/reports")
 MAINLINE = Path("demo/mainline.yaml")
 REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week")   # 评测页只读这几份报告（WP-E）；300 张卡用于按「应升级」拆开；single_card 经门面按查看者读取
 
+MAX_SESSIONS = int(os.environ.get("HUAYAN_MAX_SESSIONS", "30"))   # 超出时淘汰最久未用的会话
+
 T0 = datetime(2026, 10, 12, 9, 0, tzinfo=SHANGHAI)
 lock = RLock()                                    # 载入检查点时，同一线程会再次调用 Api.call。
+SESSION_ID = re.compile(r"[0-9a-f-]{8,64}")
 
 
 def dump(x):
@@ -150,6 +157,7 @@ class Api:
 
     def __init__(self, app, config_path=CONFIG):
         self.app, self.config_path = app, config_path
+        self.clock = get_clock()   # 业务时钟是进程全局的：每次调用先换上本会话的时钟，调用后收回
         self.writes = 0     # 本轮成功的写操作数；回放部署里按它对齐台词的下一步
 
     def checkpoints(self):
@@ -202,31 +210,38 @@ class Api:
 
     def call(self, method, path, params):
         with lock:
-            if method == "GET" and path == "/api/demo/checkpoints":
-                return self.checkpoints()
-            if method == "GET" and path == "/api/demo/next-action":
-                return self.next_action()
-            if method == "POST" and path == "/api/demo/load":
-                return self.load_checkpoint(params["name"])
-            if method == "POST" and path == "/api/reset":
-                set_clock(SimClock(T0))
-                self.app, self.writes = HuayanApp.build(self.config_path), 0
-                return {"run_id": self.app.run_id}
-            route = {"GET": GET, "POST": POST}[method][path]
-            if method == "POST":
-                clock = get_clock()
-                before = clock.now()
-                clock.advance_to(before + timedelta(minutes=1))
+            set_clock(self.clock)
             try:
-                result = route(self.app, params)
-            except (PermissionDenied, ValueError, KeyError, StopIteration):
-                if method == "POST":            # 被门面拒绝的写操作不占业务时间：误点不会让回放台词的时刻错位
-                    set_clock(SimClock(before))
-                raise
-            if method == "POST":
-                self.app.tick()
-                self.writes += 1
-            return result
+                return self._call(method, path, params)
+            finally:
+                self.clock = get_clock()
+
+    def _call(self, method, path, params):
+        if method == "GET" and path == "/api/demo/checkpoints":
+            return self.checkpoints()
+        if method == "GET" and path == "/api/demo/next-action":
+            return self.next_action()
+        if method == "POST" and path == "/api/demo/load":
+            return self.load_checkpoint(params["name"])
+        if method == "POST" and path == "/api/reset":
+            set_clock(SimClock(T0))
+            self.app, self.writes = HuayanApp.build(self.config_path), 0
+            return {"run_id": self.app.run_id}
+        route = {"GET": GET, "POST": POST}[method][path]
+        if method == "POST":
+            clock = get_clock()
+            before = clock.now()
+            clock.advance_to(before + timedelta(minutes=1))
+        try:
+            result = route(self.app, params)
+        except (PermissionDenied, ValueError, KeyError, StopIteration):
+            if method == "POST":            # 被门面拒绝的写操作不占业务时间：误点不会让回放台词的时刻错位
+                set_clock(SimClock(before))
+            raise
+        if method == "POST":
+            self.app.tick()
+            self.writes += 1
+        return result
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -237,7 +252,7 @@ class Handler(SimpleHTTPRequestHandler):
         url = urlparse(self.path)
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
-            result = api.call(method, url.path, params)
+            result = session_api(self.headers.get("X-Huayan-Session", "default")).call(method, url.path, params)
             status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
@@ -283,8 +298,24 @@ class Handler(SimpleHTTPRequestHandler):
         self._api("POST", json.loads(self.rfile.read(length) or b"{}"))
 
 
+apis: OrderedDict[str, Api] = OrderedDict()
+
+
+def session_api(sid):
+    if sid != "default" and not SESSION_ID.fullmatch(sid):
+        raise ValueError("会话号格式不对")
+    with lock:
+        if sid not in apis:
+            set_clock(SimClock(T0))
+            apis[sid] = Api(HuayanApp.build(CONFIG))
+            if len(apis) > MAX_SESSIONS:
+                _, old = apis.popitem(last=False)
+                old.app.system1.close()
+        apis.move_to_end(sid)
+        return apis[sid]
+
+
 if __name__ == "__main__":
-    set_clock(SimClock(T0))
-    api = Api(HuayanApp.build(CONFIG))
-    print(f"化言界面后端：http://127.0.0.1:{PORT}（run {api.app.run_id}）")
+    session_api("default")
+    print(f"化言界面后端：http://127.0.0.1:{PORT}（每个浏览器一个会话，最多 {MAX_SESSIONS} 个）")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
