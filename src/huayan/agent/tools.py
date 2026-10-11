@@ -36,15 +36,6 @@ def openai_schemas(role: Role) -> list[dict]:
             for spec, _ in TOOLS.values() if role in spec.roles]
 
 
-def _session(s) -> dict:
-    rec = s.recommendation
-    return {"session_id": s.id, "status": s.status, "phenomenon": s.need.phenomenon,
-            "slots": {k: f.value or "不清楚" for k, f in s.need.slots.items()},
-            "ask_hints": [{"slot": h.slot, "label": h.label, "ask_text": h.ask_text} for h in s.hints],
-            "product_id": rec.product_id if rec else None,
-            "escalation_question_id": rec.escalated_question_id if rec else None}
-
-
 def _items(items: list[ReqItem]) -> list[dict]:
     return [{"index": i, "text": it.text, "quote_refs": it.quote_refs, "ku_refs": it.ku_refs} for i, it in enumerate(items)]
 
@@ -110,14 +101,16 @@ def list_my_questions(ctx: ToolContext, args: NoArgs) -> ToolResult:
 
 # ---- 业务员（绑定当前客户会话） ----
 
-@tool("record_customer_turn", "draft", ["sales"], "把客户的一句原话记入当前会话；返回槽位、追问提示、推荐或升级状态", Text)
-def record_customer_turn(ctx: ToolContext, args: Text) -> ToolResult:
-    return ToolResult(data=_session(ctx.app.add_turn(ctx.session_id, "customer", args.text)))
+@tool("save_reply_draft", "draft", ["sales"], "将回复草稿写入当前会话，供业务员查看、修改后发送", Text)
+def save_reply_draft(ctx: ToolContext, args: Text) -> ToolResult:
+    session = ctx.app.save_reply_draft(ctx.session_id, args.text, ctx.principal.id)
+    return ToolResult(data={"session_id": session.id, "reply_draft": session.reply_draft})
 
 
-@tool("record_sales_turn", "draft", ["sales"], "把业务员说的一句话（如追问）记入当前会话", Text)
-def record_sales_turn(ctx: ToolContext, args: Text) -> ToolResult:
-    return ToolResult(data=_session(ctx.app.add_turn(ctx.session_id, "sales", args.text)))
+@tool("save_escalate_note", "draft", ["sales"], "将升级说明草稿写入当前会话，供业务员审查签字", Text)
+def save_escalate_note(ctx: ToolContext, args: Text) -> ToolResult:
+    session = ctx.app.save_escalate_note(ctx.session_id, args.text, ctx.principal.id)
+    return ToolResult(data={"session_id": session.id, "escalate_note": session.escalate_note})
 
 
 @tool("get_need_card", "read", ["sales"], "查看当前会话的场景需求卡：槽位与客户原话、追问提示、推荐卡", NoArgs)
@@ -125,13 +118,9 @@ def get_need_card(ctx: ToolContext, args: NoArgs) -> ToolResult:
     v = ctx.app.view_session(ctx.session_id, ctx.principal.id)
     return ToolResult(data={"status": v.status, "slots": [{"slot": f.slot, "value": f.value, "quote": f.quote} for f in v.slots],
                             "ask_hints": [h.ask_text for h in v.hints], "escalation_question_id": v.escalation_question_id,
+                            "reply_draft": v.reply_draft, "escalate_note": v.escalate_note,
                             "card": v.card and {"product_id": v.card.product_id, "version": v.card.version,
                                                 "sections": [f"{s.title}：{s.text}" for s in v.card.sections]}})
-
-
-@tool("recommend_now", "draft", ["sales"], "按当前已知条件立即推荐（信息不全时也给出结果或升级）", NoArgs)
-def recommend_now(ctx: ToolContext, args: NoArgs) -> ToolResult:
-    return ToolResult(data=_session(ctx.app.recommend_now(ctx.session_id)))
 
 
 @tool("request_decrypt", "effect", ["sales"], "客户懂化学且要求了解机理时，为当前会话的推荐产品申请解密（产品归属研发审批）",

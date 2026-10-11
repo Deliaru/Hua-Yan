@@ -135,6 +135,27 @@ class HuayanApp:
             for req in self._requirements.values():
                 if req.status == "draft" and session_id in req.session_ids and req.id not in answered:
                     self._retire_draft(req)
+        if speaker == "sales":
+            session.reply_draft = ""
+        self._save_session(session)
+        return session.model_copy(deep=True)
+
+    def _sales_session(self, session_id, by):
+        self._actor(by, {"sales"})
+        session = _find(self._sessions, session_id, "会话")
+        if session.sales_id != by:
+            raise PermissionDenied("只能修改自己负责的会话草稿")
+        return session
+
+    def save_reply_draft(self, session_id, text, by):
+        session = self._sales_session(session_id, by)
+        session.reply_draft = text
+        self._save_session(session)
+        return session.model_copy(deep=True)
+
+    def save_escalate_note(self, session_id, text, by):
+        session = self._sales_session(session_id, by)
+        session.escalate_note = text
         self._save_session(session)
         return session.model_copy(deep=True)
 
@@ -188,7 +209,10 @@ class HuayanApp:
         return SessionView(session_id=session_id, viewer=viewer_id, viewer_level=level, turns=session.turns,
             slots=list(session.need.slots.values()), hints=session.hints, replies=session.replies,
             card=card, status=session.status, escalation_question_id=rec.escalated_question_id if rec else None,
-            requirement=req).model_copy(deep=True)
+            requirement=req,
+            reply_draft=session.reply_draft if viewer_id == session.sales_id else "",
+            escalate_note=session.escalate_note if viewer_id == session.sales_id or level > 1 else ""
+            ).model_copy(deep=True)
 
     def sessions(self):
         return [s.model_copy(deep=True) for s in self._sessions.values()]

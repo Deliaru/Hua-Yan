@@ -43,12 +43,26 @@ def test_l1_recommend_and_escalate(tmp_path):
     assert app.events.query(kinds=["match"])[-1].payload["p_none"] == 1.0
     assert not app.events.query(kinds=["escalate"]) and not app.requirements("rd:R01")
 
+    # 助手只写草稿；本人发送才产生发言并清空回复草稿。
+    ctx = app.agents.context("sales:S01", other.id)
+    reply = app.agents.call_tool(ctx, "save_reply_draft", {"text": "请再确认设备条件。"})
+    note = app.agents.call_tool(ctx, "save_escalate_note", {"text": "（模拟）气流缸匀染需求，待补充用量。"})
+    assert reply.ok and note.ok
+    assert len(app.view_session(other.id, "sales:S01").turns) == len(other.turns)
+    assert app.view_session(other.id, "sales:S01").reply_draft == "请再确认设备条件。"
+    assert not app.view_session(other.id, "customer:C02").reply_draft
+    with pytest.raises(PermissionDenied):
+        app.save_escalate_note(other.id, "越权修改", "sales:S02")
+    assert not app.add_turn(other.id, "sales", "请再确认设备条件。").reply_draft
+
     # 业务员发出含封存项的话被拦截，不写入；客户原话照常记录
     secret = "（模拟）先投甲料再降温静置十分钟"
     app._requirements["req:send"] = Requirement(id="req:send", question_id="q:send", session_ids=[other.id],
         phenomenon="color_unlevel", known_slots={}, assigned_rd="rd:R01", status="rd_confirmed",
         sealed=[secret], created_at=get_clock().now())
+    other = app.save_reply_draft(other.id, secret, "sales:S01")
     n = len(other.turns)
     with pytest.raises(ValueError):
         app.add_turn(other.id, "sales", f"请先试样。{secret}")
-    assert len(app.add_turn(other.id, "customer", secret).turns) == n + 1
+    other = app.add_turn(other.id, "customer", secret)
+    assert len(other.turns) == n + 1 and other.reply_draft == secret

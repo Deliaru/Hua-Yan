@@ -91,6 +91,18 @@ def turn(p):
     return session
 
 
+def reply_draft(p):
+    session = app.save_reply_draft(p["session_id"], p["text"], p["by"])
+    app.tick()
+    return session
+
+
+def escalate_note(p):
+    session = app.save_escalate_note(p["session_id"], p["text"], p["by"])
+    app.tick()
+    return session
+
+
 def chat(p):
     conv = app.agents.chat(p["actor"], p["text"], p.get("session_id"))
     app.tick()
@@ -125,6 +137,8 @@ POST = {
     "/api/offline-mainline": offline_mainline,
     "/api/sessions": lambda p: app.start_session(p["customer_id"], p["sales_id"]),
     "/api/turn": turn,
+    "/api/reply-draft": reply_draft,
+    "/api/escalate-note": escalate_note,
     "/api/agents/chat": chat,
     "/api/agents/approve": lambda p: decide(p, True),
     "/api/agents/reject": lambda p: decide(p, False),
