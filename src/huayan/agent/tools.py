@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
 from huayan.clock import get_clock
-from huayan.contracts import Actor, KUKind, ReqItem, Role, SheetDraft, ToolKind, ToolResult, ToolSpec, Trial
+from huayan.contracts import Actor, ContributionDraft, KUKind, ReqItem, Role, SheetDraft, ToolKind, ToolResult, ToolSpec, Trial
 from huayan.contracts._base import BaseModel
 from huayan.domain import match_candidates
 from huayan.escalation import translate
@@ -44,7 +44,8 @@ def _req(req) -> dict:
     return {"req_id": req.id, "status": req.status, "phenomenon": req.phenomenon, "known_slots": req.known_slots,
             "direction": req.direction, "product_lang": _items(req.product_lang), "chem_lang": _items(req.chem_lang),
             "hypotheses": req.hypotheses, "public_points": req.public_points, "product_id": req.product_id,
-            "sealed": req.sealed, "points_draft": req.points_draft and req.points_draft.model_dump()}
+            "sealed": req.sealed, "points_draft": req.points_draft and req.points_draft.model_dump(),
+            "contribution_drafts": [d.model_dump() for d in req.contribution_drafts]}
 
 
 class NoArgs(BaseModel):
@@ -283,6 +284,17 @@ class ContributeArgs(BaseModel):
     index: int
     scene_phrase: str
     chem_term: str
+
+
+class ContributionDraftArgs(ContributeArgs):
+    note: str = ""
+
+
+@tool("save_contribution_draft", "draft", ["rd"], "保存一条提炼后的沉淀草稿，含泛化说明与相近或冲突之处；不入库、不记分",
+      ContributionDraftArgs)
+def save_contribution_draft(ctx: ToolContext, args: ContributionDraftArgs) -> ToolResult:
+    draft = ContributionDraft(item_index=args.index, scene_phrase=args.scene_phrase, chem_term=args.chem_term, note=args.note)
+    return ToolResult(data=_req(ctx.app.save_contribution_draft(args.req_id, draft, ctx.principal.id)))
 
 
 @tool("contribute_translation", "effect", ["rd"], "提议把化学语言的一条沉淀为委托人自己的转化知识（场景说法 → 化学术语）",

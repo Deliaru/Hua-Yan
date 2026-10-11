@@ -48,6 +48,15 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
 
     # 两栏草稿自查不生效；签字提议确认前不改状态，非委托人不能确认。
     rd = hub.context("rd:R01")
+    points_before = app.ledger.list()
+    contribution = hub.call_tool(rd, "save_contribution_draft", {"req_id": req.id, "index": 0,
+        "scene_phrase": "（模拟）低浴比下色差", "chem_term": "（模拟）分阶段调节吸附速率", "note": "已去掉客户特定信息"})
+    assert contribution.ok and contribution.data["contribution_drafts"][0]["item_index"] == 0
+    assert app.ledger.list() == points_before and not app.events.query(["knowledge_contributed"])
+    assert hub.call_tool(pm, "get_requirement", {"req_id": req.id}).data["contribution_drafts"] == []
+    pending = hub.call_tool(rd, "contribute_translation", {"req_id": req.id, "index": 0,
+        "scene_phrase": "（模拟）低浴比下色差", "chem_term": "（模拟）分阶段调节吸附速率"})
+    assert pending.pending_action_id and not app.events.query(["knowledge_contributed"])
     draft = hub.call_tool(rd, "save_points_draft", {"req_id": req.id, "public": req.sealed[0], "sealed": req.sealed})
     assert draft.ok and draft.data["points_draft"]["self_check"] == [{"index": 0, "source": "sealed"}]
     assert not req.public_points and not app.events.query(["points_set"])

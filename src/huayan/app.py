@@ -8,7 +8,7 @@ import yaml
 from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
-from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionStat, DecryptGrant,
+from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
     Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, RunStatus, Session, SessionView, SheetDraft, Trial)
 from huayan.domain import consistent, load_seeds
@@ -511,16 +511,32 @@ class HuayanApp:
         self._after(req_ids=[req_id])
         return self.requirement_view(req_id, by).requirement
 
+    def save_contribution_draft(self, req_id, draft: ContributionDraft, by):
+        req, _ = self._requirement(req_id, by, {"rd"}, {"rd_accepted", "rd_confirmed"})
+        if not 0 <= draft.item_index < len(req.chem_lang) or not draft.scene_phrase.strip() or not draft.chem_term.strip():
+            raise ValueError("需要有效化学条目索引、场景说法与化学术语")
+        req.contribution_drafts = [d for d in req.contribution_drafts if d.item_index != draft.item_index]
+        req.contribution_drafts.append(draft.model_copy(deep=True))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
     def contribute_translation(self, req_id, item_index, scene_phrase, chem_term, by):
         req, actor = self._requirement(req_id, by, {"rd"}, {"rd_accepted", "rd_confirmed"})
         if not 0 <= item_index < len(req.chem_lang) or not scene_phrase.strip() or not chem_term.strip():
             raise ValueError("需要有效化学条目索引、原文与译文")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("contribution", "contribute_translation", state.objects[f"requirement:{req_id}"], by)
         unit = flow.contribute_translation(req, item_index, scene_phrase, chem_term,
             actor, self.kb, self.ledger, self.events, get_clock().now())
         if req.status == "rd_confirmed":
             self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=by, ku_id=unit.id, ref=req.id,
                                        points=self.config["points"]["cited"], reason="cited"))
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
         self._save_requirement(req)
+        self._after(req_ids=[req_id])
         return unit
 
     def save_points_draft(self, req_id, public, sealed, by):
