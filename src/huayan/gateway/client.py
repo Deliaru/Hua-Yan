@@ -17,12 +17,17 @@ class StructuredOutputError(ValueError):
     pass
 
 
+class ReplayMiss(RuntimeError):
+    """严格回放缺少录制结果，禁止转为真实请求。"""
+
+
 class OpenAICompatGateway:
     def __init__(self, config, meter=None, *, clients=None, cache_dir=None, trace=None, sleep=time.sleep):
         self.tiers = config["tiers"]
         self.meter, self.trace = meter, trace
         self.clients = {} if clients is None else dict(clients)
         self.cache_dir = Path(cache_dir) if cache_dir else None
+        self.replay = False
         self.sleep = sleep
 
     def _client(self, tier):
@@ -59,8 +64,11 @@ class OpenAICompatGateway:
         path = Path(self.cache_dir) / f"{cache_key}.json" if self.cache_dir else None
         if path and path.exists():
             response = LLMResponse.model_validate_json(path.read_text(encoding="utf-8"))
+            print(f"[cache:gateway] caller={req.caller}")
             self._record(req, response, cached=True)
             return response
+        if self.replay:
+            raise ReplayMiss(f"gateway 回放缓存未命中：caller={req.caller} key={cache_key}")
         messages = []
         for message in req.messages:
             item = {"role": message.role, "content": message.content}

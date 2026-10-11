@@ -1,0 +1,15 @@
+# WP-I2 现场与回放共用配置；运行器按 --record / --replay 设置 replay。
+seeds_dir: seeds
+templates_dir: config/templates
+run_root: runs
+system1_impl: onejev
+gateway_mock: false
+extractor: llm
+realtime_model: jue_k
+scheduled_model: jue_k
+jue_k_dir: models/jue_k
+llm_cache_dir: runs/demo_record/llm_cache_v5
+replay: false
+thresholds: {ask: 0.5, ask_jue_k: 0.15, max_asks: 2, match: 0.5, publish: 0.5}
+windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
+points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}

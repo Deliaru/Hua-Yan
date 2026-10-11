@@ -61,6 +61,7 @@ class HuayanApp:
         if not app.config["gateway_mock"]:
             cache = app.config.get("llm_cache_dir")
             app.gateway.cache_dir = Path(cache) if cache else None
+            app.gateway.replay = app.config["replay"]
         app.system1 = build_system1(app.config["system1_impl"], "config/system1.yaml", app.gateway, app.meter)
         app.jev = Jev(app.system1, app.config["thresholds"]["match"])
         app.extractor = (RuleExtractor(app.seeds) if app.config["extractor"] == "rule"

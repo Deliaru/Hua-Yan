@@ -2,9 +2,9 @@
 权限只在门面里执行；这里只做路由、序列化与错误映射。身份由界面的下拉框传入（演示无登录）。
 运行：uv run python -m huayan.ui.server（从仓库根目录）；开发时前端 `npm run dev` 经 Vite 代理 /api。
 web/dist 存在时同时提供构建后的前端页面。"""
-import importlib.util
 import json
 import os
+from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
@@ -13,17 +13,18 @@ from urllib.parse import parse_qs, urlparse
 from pydantic import BaseModel
 
 from huayan.app import HuayanApp
-from huayan.contracts import ReqItem, SheetDraft
+from huayan.clock import SimClock, get_clock, set_clock
+from huayan.contracts import ReqItem, SheetDraft, SHANGHAI
 from huayan.knowledge import PermissionDenied
+from huayan.gateway.client import ReplayMiss
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
 PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
 DIST = Path("web/dist")
-MAINLINE = Path("scripts/demo_mainline.py")      # WP-I 提供 run_offline(app)
 REPORTS = Path("docs/reports")
 REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）；single_card 经门面按查看者读取
 
-app = HuayanApp.build(CONFIG)
+T0 = datetime(2026, 10, 12, 9, 0, tzinfo=SHANGHAI)
 lock = Lock()                                     # 门面不是线程安全的，一次只处理一个请求
 
 
@@ -37,25 +38,19 @@ def dump(x):
     return x
 
 
-def reset(_):
-    global app
-    app = HuayanApp.build(CONFIG)
-    return {"run_id": app.run_id}
-
-
-def meta(_):
-    return {"status": app.status(), "actors": list(app.actors.values()), "mainline_available": MAINLINE.exists(),
+def meta(app, _):
+    return {"status": app.status(), "actors": list(app.actors.values()), "mainline_available": False,
             "slots": [{"id": s.id, "label": s.label} for s in app.seeds.slots],
             "phenomena": [{"id": p.id, "label": p.label} for p in app.seeds.phenomena],
             "products": [{"id": p.id, "name": p.name} for p in app.kb.products()]}
 
 
-def sessions(_):
+def sessions(app, _):
     return [{"id": s.id, "customer_id": s.customer_id, "sales_id": s.sales_id, "status": s.status,
              "phenomenon": s.need.phenomenon} for s in app.sessions()]
 
 
-def session(p):
+def session(app, p):
     s = next(s for s in app.sessions() if s.id == p["id"])
     return {"view": app.view_session(p["id"], p["viewer"]), "phenomenon": s.need.phenomenon,
             "phenomenon_quote": s.need.phenomenon_quote,
@@ -64,7 +59,7 @@ def session(p):
                                  if q.refs.get("session_id") == p["id"] and q.status != "open"]}
 
 
-def report(p):
+def report(app, p):
     name = p["name"]
     if name == "single_card":                         # 单卡明细按查看者裁剪，由门面决定（WP-E2）
         return app.single_card_report(p["viewer"])
@@ -73,83 +68,92 @@ def report(p):
     return json.loads((REPORTS / name / "metrics.json").read_text(encoding="utf-8"))
 
 
-def offline_mainline(_):
-    if not app.status().gateway_mock:
-        raise ValueError("载入离线主线只用于角色助手离线模式")
-    spec = importlib.util.spec_from_file_location("demo_mainline", MAINLINE)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    module.run_offline(app)
-    return {"ok": True}
-
-
 GET = {
-    "/api/status": lambda p: app.status(),
+    "/api/status": lambda app, p: app.status(),
     "/api/meta": meta,
     "/api/sessions": sessions,
     "/api/session": session,
-    "/api/questions": lambda p: app.questions(p["viewer"]),
-    "/api/requirements": lambda p: [{"id": r.id, "status": r.status, "phenomenon": r.phenomenon}
+    "/api/questions": lambda app, p: app.questions(p["viewer"]),
+    "/api/requirements": lambda app, p: [{"id": r.id, "status": r.status, "phenomenon": r.phenomenon}
                                     for r in app.requirements(p["viewer"])],
-    "/api/requirement": lambda p: app.requirement_view(p["id"], p["viewer"]),
-    "/api/leak": lambda p: app.leak_check(p["id"], p["viewer"]),
-    "/api/timeline": lambda p: app.jue_timeline(p["target_id"], p["viewer"]),
-    "/api/ledger": lambda p: app.ledger.totals(),
-    "/api/contributions": lambda p: app.contributions(p["viewer"]),
+    "/api/requirement": lambda app, p: app.requirement_view(p["id"], p["viewer"]),
+    "/api/leak": lambda app, p: app.leak_check(p["id"], p["viewer"]),
+    "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),
+    "/api/ledger": lambda app, p: app.ledger.totals(),
+    "/api/contributions": lambda app, p: app.contributions(p["viewer"]),
     "/api/report": report,
-    "/api/agents/conversation": lambda p: next((c for c in app.agents.conversations(p["actor"])
+    "/api/agents/conversation": lambda app, p: next((c for c in app.agents.conversations(p["actor"])
                                                 if c.session_id == p.get("session_id")), None),
-    "/api/agents/trace": lambda p: app.agents.trace(p["conversation_id"]),
-    "/api/agents/pending": lambda p: app.agents.pending(p["actor"]),
+    "/api/agents/trace": lambda app, p: app.agents.trace(p["conversation_id"]),
+    "/api/agents/pending": lambda app, p: app.agents.pending(p["actor"]),
 }
 POST = {
-    "/api/reset": reset,
-    "/api/offline-mainline": offline_mainline,
-    "/api/sessions": lambda p: app.start_session(p["customer_id"], p["sales_id"]),
-    "/api/turn": lambda p: app.add_turn(p["session_id"], p["speaker"], p["text"]),
-    "/api/recommend": lambda p: app.recommend_now(p["session_id"]),
-    "/api/resolve": lambda p: app.resolve(p["question_id"], p["action"], p["by"], p.get("note", "")),
-    "/api/escalate": lambda p: app.escalate(p["session_id"], p["by"]),
-    "/api/reuse/adopt": lambda p: app.adopt_reuse(p["req_id"], p["by"]),
-    "/api/reuse/decline": lambda p: app.decline_reuse(p["req_id"], p["reason"], p["by"]),
-    "/api/reuse-note": lambda p: app.update_reuse_note(p["req_id"], p["text"], p["by"]),
-    "/api/merge": lambda p: app.merge_requirements(p["question_id"], p["by"]),
-    "/api/accept": lambda p: app.accept_requirement(p["req_id"], p["by"]),
-    "/api/return": lambda p: app.return_requirement(p["req_id"], p["reason"], p["by"]),
-    "/api/req-item": lambda p: app.edit_req_item(p["req_id"], p["index"], ReqItem.model_validate(p["item"]), p["by"]),
-    "/api/confirm": lambda p: app.confirm_translation(p["req_id"], p["by"]),
-    "/api/contribute": lambda p: app.contribute_translation(p["req_id"], p["item_index"],
+    "/api/sessions": lambda app, p: app.start_session(p["customer_id"], p["sales_id"]),
+    "/api/turn": lambda app, p: app.add_turn(p["session_id"], p["speaker"], p["text"]),
+    "/api/recommend": lambda app, p: app.recommend_now(p["session_id"]),
+    "/api/resolve": lambda app, p: app.resolve(p["question_id"], p["action"], p["by"], p.get("note", "")),
+    "/api/escalate": lambda app, p: app.escalate(p["session_id"], p["by"]),
+    "/api/reuse/adopt": lambda app, p: app.adopt_reuse(p["req_id"], p["by"]),
+    "/api/reuse/decline": lambda app, p: app.decline_reuse(p["req_id"], p["reason"], p["by"]),
+    "/api/reuse-note": lambda app, p: app.update_reuse_note(p["req_id"], p["text"], p["by"]),
+    "/api/merge": lambda app, p: app.merge_requirements(p["question_id"], p["by"]),
+    "/api/accept": lambda app, p: app.accept_requirement(p["req_id"], p["by"]),
+    "/api/return": lambda app, p: app.return_requirement(p["req_id"], p["reason"], p["by"]),
+    "/api/req-item": lambda app, p: app.edit_req_item(p["req_id"], p["index"], ReqItem.model_validate(p["item"]), p["by"]),
+    "/api/confirm": lambda app, p: app.confirm_translation(p["req_id"], p["by"]),
+    "/api/contribute": lambda app, p: app.contribute_translation(p["req_id"], p["item_index"],
         p["scene_phrase"], p["chem_term"], p["by"]),
-    "/api/market-eval": lambda p: app.record_market_eval(p["req_id"], p["result"], p["note"], p["by"]),
-    "/api/points": lambda p: app.set_public_points(p["req_id"], p["text"], p["sealed"], p["by"]),
-    "/api/sheet": lambda p: app.save_sheet(p["req_id"], SheetDraft.model_validate(p["sheet"]), p["by"]),
-    "/api/release": lambda p: app.release_product(p["req_id"], p["by"]),
-    "/api/trial": lambda p: app.record_requirement_trial(p["req_id"], p["result"], p["by"]),
-    "/api/decrypt/request": lambda p: app.request_decrypt(p["session_id"], p["by"]),
-    "/api/decrypt/decide": lambda p: app.decide_decrypt(p["question_id"], p["by"], p["approve"], p.get("text", "")),
-    "/api/reply-draft": lambda p: app.save_reply_draft(p["session_id"], p["text"], p["by"]),
-    "/api/escalate-note": lambda p: app.save_escalate_note(p["session_id"], p["text"], p["by"]),
-    "/api/agents/chat": lambda p: app.agents.chat(p["actor"], p["text"], p.get("session_id"), focus=p.get("focus")),
-    "/api/agents/approve": lambda p: app.agents.approve(p["action_id"], p["by"]),
-    "/api/agents/reject": lambda p: app.agents.reject(p["action_id"], p["by"], p.get("note", "")),
+    "/api/market-eval": lambda app, p: app.record_market_eval(p["req_id"], p["result"], p["note"], p["by"]),
+    "/api/points": lambda app, p: app.set_public_points(p["req_id"], p["text"], p["sealed"], p["by"]),
+    "/api/sheet": lambda app, p: app.save_sheet(p["req_id"], SheetDraft.model_validate(p["sheet"]), p["by"]),
+    "/api/release": lambda app, p: app.release_product(p["req_id"], p["by"]),
+    "/api/trial": lambda app, p: app.record_requirement_trial(p["req_id"], p["result"], p["by"]),
+    "/api/decrypt/request": lambda app, p: app.request_decrypt(p["session_id"], p["by"]),
+    "/api/decrypt/decide": lambda app, p: app.decide_decrypt(p["question_id"], p["by"], p["approve"], p.get("text", "")),
+    "/api/reply-draft": lambda app, p: app.save_reply_draft(p["session_id"], p["text"], p["by"]),
+    "/api/escalate-note": lambda app, p: app.save_escalate_note(p["session_id"], p["text"], p["by"]),
+    "/api/agents/chat": lambda app, p: app.agents.chat(p["actor"], p["text"], p.get("session_id"), focus=p.get("focus")),
+    "/api/agents/approve": lambda app, p: app.agents.approve(p["action_id"], p["by"]),
+    "/api/agents/reject": lambda app, p: app.agents.reject(p["action_id"], p["by"], p.get("note", "")),
 }
+
+
+class Api:
+    """HTTP 与演示脚本共用入口；调用方先设置 SimClock，再构建门面。"""
+
+    def __init__(self, app, config_path=CONFIG):
+        self.app, self.config_path = app, config_path
+
+    def call(self, method, path, params):
+        with lock:
+            if method == "POST" and path == "/api/reset":
+                set_clock(SimClock(T0))
+                self.app = HuayanApp.build(self.config_path)
+                return {"run_id": self.app.run_id}
+            route = {"GET": GET, "POST": POST}[method][path]
+            if method == "POST":
+                clock = get_clock()
+                clock.advance_to(clock.now() + timedelta(minutes=1))
+            result = route(self.app, params)
+            if method == "POST":
+                self.app.tick()
+            return result
 
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(DIST), **kwargs)
 
-    def _api(self, routes, params):
+    def _api(self, method, params):
         url = urlparse(self.path)
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
-            with lock:
-                result = routes[url.path](params)
-                if routes is POST:
-                    app.tick()
-                status, body = 200, dump(result)
+            result = api.call(method, url.path, params)
+            status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
+        except ReplayMiss as e:
+            status, body = 409, {"error": str(e)}
         except ValueError as e:
             status, body = 400, {"error": str(e)}
         except (KeyError, StopIteration) as e:
@@ -163,7 +167,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/api/"):
-            self._api(GET, {})
+            self._api("GET", {})
         elif self.path.startswith("/reports/"):                # 评测页的图：docs/reports/<报告>/<图>.png
             _, _, name, file = self.path.split("?")[0].split("/", 3)
             path = REPORTS / name / file
@@ -181,9 +185,11 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
-        self._api(POST, json.loads(self.rfile.read(length) or b"{}"))
+        self._api("POST", json.loads(self.rfile.read(length) or b"{}"))
 
 
 if __name__ == "__main__":
-    print(f"化言界面后端：http://127.0.0.1:{PORT}（run {app.run_id}）")
+    set_clock(SimClock(T0))
+    api = Api(HuayanApp.build(CONFIG))
+    print(f"化言界面后端：http://127.0.0.1:{PORT}（run {api.app.run_id}）")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

@@ -14,6 +14,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 
 from huayan.contracts import LLMRequest, Message, S1Answer, S1Choice, S1Noul, S1Result, Tier
+from huayan.gateway.client import ReplayMiss
 
 
 def _distribution(raw, keys):
@@ -42,6 +43,7 @@ class OneJevClient:
         self.media_root = Path(media_root).resolve() if media_root else None
         self.deadline = deadline
         self.last_request = self.last_response = None
+        self.cache_dir, self.replay = None, False
 
     def close(self):
         self.http.close()
@@ -70,6 +72,19 @@ class OneJevClient:
                     raise ValueError("A score question needs at least two levels")
                 body["questions"][key]["criteria"] = question.levels
         self.last_request = body
+        cache_key = hashlib.sha256(json.dumps({"caller": caller, "request": body},
+            sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+        path = Path(self.cache_dir) / f"{cache_key}.json" if self.cache_dir else None
+        if path and path.exists():
+            cached = json.loads(path.read_text(encoding="utf-8"))
+            self.last_response = cached["response"]
+            result = S1Result.model_validate(cached["result"])
+            print(f"[cache:onejev] caller={caller}")
+            self.meter.record(caller=caller, kind="s1", model=self.model, impl="onejev", degraded=False,
+                              n_questions=len(questions), latency_ms=0, cost=0)
+            return result
+        if self.replay:
+            raise ReplayMiss(f"onejev 回放缓存未命中：caller={caller} key={cache_key}")
         started, ok, raw_text, error = time.monotonic(), False, None, None
         try:
             timeout = self.http.timeout.read
@@ -98,8 +113,13 @@ class OneJevClient:
                     by_index = _distribution(answer["probabilities"], [str(i) for i in range(len(question.levels))])
                     probabilities = {label: by_index[str(i)] for i, label in enumerate(question.levels)}
                     answers[key] = S1Answer(probabilities=probabilities, expected=_expected(probabilities, question.levels))
+            result = S1Result(answers=answers, latency_ms=(time.monotonic() - started) * 1000, impl="onejev", degraded=False)
+            if path:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps({"request": body, "response": raw,
+                    "result": result.model_dump(mode="json")}, ensure_ascii=False), encoding="utf-8")
             ok = True
-            return S1Result(answers=answers, latency_ms=(time.monotonic() - started) * 1000, impl="onejev", degraded=False)
+            return result
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             raise
@@ -160,6 +180,12 @@ def build_system1(impl, config_path, gateway, meter):
         raise ValueError(f"Unknown System 1 implementation: {impl}")
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     client = OneJevClient(cfg["base_url"], cfg["model"], meter, cfg["timeout_s"], cfg.get("gpu_price_per_hour"), media_root=cfg.get("media_root"))
+    # 独立探测脚本传 gateway=None；离线网关也没有录制缓存。
+    client.replay = getattr(gateway, "replay", False)
+    cache = getattr(gateway, "cache_dir", None)
+    client.cache_dir = Path(cache) / "s1" if cache else None
+    if client.replay:
+        return client
     try:
         client.http.get("/health").raise_for_status()
     except Exception:
