@@ -645,15 +645,24 @@ class HuayanApp:
         items = req.product_lang if actor.role == "pm" else req.chem_lang
         if not 0 <= index < len(items):
             raise ValueError("条目索引不存在")
-        items.pop(index)
-        return self._save_requirement(req, viewer_id=by)
+        before = items.pop(index).model_dump()
+        self.events.append("requirement_edited", by, {"requirement_id": req_id,
+            "layer": 2 if actor.role == "pm" else 3, "index": index, "before": before, "after": None})
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def set_direction(self, req_id, text, by):
         req, _ = self._requirement(req_id, by, {"pm"}, {"draft"})
         if not text.strip():
             raise ValueError("产品方向不能为空")
+        before = req.direction
         req.direction = text
-        return self._save_requirement(req, viewer_id=by)
+        self.events.append("requirement_edited", by, {"requirement_id": req_id, "layer": 2, "index": -1,
+            "before": {"direction": before}, "after": {"direction": text}})
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def translate_requirement(self, req_id, by):
         req, actor = self._requirement(req_id, by, {"rd"}, {"rd_accepted"})
