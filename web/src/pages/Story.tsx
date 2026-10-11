@@ -32,7 +32,7 @@ function Say({ from, children }: { from: "customer" | "sales"; children: React.R
   return (
     <div className={`flex ${c ? "" : "justify-end"}`}>
       <div className={`max-w-[85%] rounded-[12px] px-3 py-2 text-[13px] leading-5 ${c ? "bg-fill" : "bg-[rgba(10,108,223,.09)]"}`}>
-        <p className="mb-0.5 text-[11px] font-semibold text-ink-3">{c ? "客户" : "业务员（Agent 起草，业务员发出）"}</p>{children}
+        <p className="mb-0.5 text-[12px] font-semibold text-ink-2">{c ? "客户" : "业务员（Agent 起草，业务员发出）"}</p>{children}
       </div>
     </div>
   );
@@ -42,8 +42,8 @@ function Jue({ title, score, why, flow }: { title: string; score: string; why: s
   return (
     <div className="decision rounded-[10px] px-3.5 py-2.5">
       <p className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] font-semibold tracking-[.04em] text-attn-ink">觉提出</span>
-        <span className="num text-[11.5px] font-semibold text-attn-ink">{score}</span>
+        <span className="text-[12px] font-semibold tracking-[.04em] text-attn-ink">觉提出</span>
+        <span className="num text-[12.5px] font-semibold text-attn-ink">{score}</span>
       </p>
       <p className="mt-0.5 text-[13.5px] font-semibold leading-5">{title}</p>
       <p className="mt-1 text-[12px] leading-[18px] text-ink-2">依据：{why}</p>
@@ -68,7 +68,7 @@ function Item({ term, text, quote, owner, edited }: { term: string; text: string
   return (
     <div className="border-t border-sep pt-2 text-[13px] leading-5 first:border-t-0 first:pt-0">
       <p><b className="font-semibold">「{term}」</b>→ {text}{edited && <span className="rounded bg-[rgba(10,108,223,.1)] px-1 text-accent">{edited}</span>}</p>
-      <p className="mt-0.5 flex flex-wrap gap-1.5 text-[11.5px] text-ink-3">
+      <p className="mt-0.5 flex flex-wrap gap-1.5 text-[12.5px] text-ink-2">
         <span>原话「{quote}」</span><span>·</span><span>依据 {owner} 的转化知识</span>
       </p>
     </div>
@@ -78,7 +78,7 @@ function Item({ term, text, quote, owner, edited }: { term: string; text: string
 function Slots({ items }: { items: [string, string, string][] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {items.map(([k, v, q]) => <span key={k} className="tag" title={`原话「${q}」`}>{k}：{v}<span className="ml-1 font-normal text-ink-3">「{q}」</span></span>)}
+      {items.map(([k, v, q]) => <span key={k} className="tag" title={`原话「${q}」`}>{k}：{v}<span className="ml-1 font-normal text-ink-2">「{q}」</span></span>)}
     </div>
   );
 }
@@ -91,10 +91,10 @@ const CHAPTERS: Chapter[] = [
       <div className="flex flex-col gap-3">
         <Say from="customer">我们染完以后布面深一块浅一块，客户老投诉</Say>
         <div className="rounded-[10px] bg-fill px-3 py-2 text-[13px] leading-5">
-          <p className="mb-0.5 text-[11px] font-semibold text-ink-3">业务员转述给研发</p>客户说染色有问题，要个匀染剂。
+          <p className="mb-0.5 text-[12px] font-semibold text-ink-2">业务员转述给研发</p>客户说染色有问题，要个匀染剂。
         </div>
         <div className="rounded-[10px] bg-[rgba(215,0,21,.06)] px-3 py-2 text-[13px] leading-5">
-          <p className="mb-0.5 text-[11px] font-semibold text-danger">研发</p>什么布？什么设备？染浴 pH 多少？—— 退回，重新问。
+          <p className="mb-0.5 text-[12px] font-semibold text-danger">研发</p>什么布？什么设备？染浴 pH 多少？—— 退回，重新问。
         </div>
       </div>
     ),
@@ -113,7 +113,7 @@ const CHAPTERS: Chapter[] = [
         <Say from="sales">请问具体是什么面料材质的布？染色用的是哪种染缸（比如溢流缸还是气流缸）呢？</Say>
         <Say from="customer">锦氨弹力布，气流缸，浴比很低。上次你们推荐的那个匀染剂用了，回修了三次</Say>
         <div>
-          <p className="mb-1.5 text-[11.5px] font-semibold text-ink-3">场景需求卡：每一格都绑定客户原话</p>
+          <p className="mb-1.5 text-[12.5px] font-semibold text-ink-2">场景需求卡：每一格都绑定客户原话</p>
           <Slots items={[["现象", "色花", "深一块浅一块"], ["面料", "锦纶氨纶", "锦氨弹力布"], ["设备", "气流染色机", "气流缸"]]} />
         </div>
       </>
@@ -128,7 +128,7 @@ const CHAPTERS: Chapter[] = [
     screen: (
       <>
         <div className="rounded-[10px] bg-fill px-3 py-2 text-[13px] leading-5">
-          <p className="text-[11px] font-semibold text-ink-3">Jev 匹配（按业务员的 L1 权限检索）</p>
+          <p className="text-[12px] font-semibold text-ink-2">Jev 匹配（按业务员的 L1 权限检索）</p>
           锦纶氨纶 + 气流染色机 + 色花：现有产品都不合适，「都不合适」概率 100%
         </div>
         <Jue title="是否转产品经理 Agent？" score="规则 · 到点" why="最近一次匹配中「都不合适」概率 1.00，高于最好的候选产品 0.00；已了解 2 项信息"
@@ -147,10 +147,10 @@ const CHAPTERS: Chapter[] = [
     screen: (
       <>
         <div className="rounded-[10px] bg-fill px-3 py-2 text-[13px] leading-5">
-          <p className="text-[11px] font-semibold text-ink-3">检索「锦纶氨纶 气流染色机 匀染 色花」</p>
+          <p className="text-[12px] font-semibold text-ink-2">检索「锦纶氨纶 气流染色机 匀染 色花」</p>
           命中说明书 3 份、历史案例 2 个；另有 23 条研发知识越权，<b className="font-semibold">只返回归属</b>（是哪位研发、哪一层的知识），不返回内容。结论：无现成产品。
         </div>
-        <Say from="customer">锦氨布在气流机里染，颜色不匀，回修了好几次<span className="text-ink-3">　—— 第二位客户（某印染厂 B）</span></Say>
+        <Say from="customer">锦氨布在气流机里染，颜色不匀，回修了好几次<span className="text-ink-2">　—— 第二位客户（某印染厂 B）</span></Say>
         <Jue title="同类需求反复出现且无产品可用，是否合并立项？" score="Jue-K 打分 · 超过阈值"
              why="1 天内 2 次升级，涉及 2 个客户，同主题成功推荐 0 次，平均「都不合适」概率 1.00" flow="主人：产品经理 Agent（判断是否同一件事）→ 签字人：研发刘工" />
         <Draft label="产品经理 Agent 起草">两单现象均为色花，材质均为锦纶氨纶，设备均为低浴比气流染色机，且均诉求减少回修、保护弹力面料，确认为同类场景需求。建议以最早的一单为主单合并，统一立项研发。</Draft>
@@ -221,11 +221,11 @@ const CHAPTERS: Chapter[] = [
         <p className="flex flex-wrap gap-1.5"><span className="tag tag-accent">试样通过 · HY-LV206</span><span className="tag tag-accent">客户评价：小样确认，深浅一致</span></p>
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-[10px] bg-fill px-3 py-2 text-[12.5px] leading-[19px]">
-            <p className="mb-1 text-[11px] font-semibold text-ink-3">放出（对外要点）</p>
+            <p className="mb-1 text-[12px] font-semibold text-ink-2">放出（对外要点）</p>
             适用于锦纶氨纶弹力面料在气流染色机（低浴比 1:3–1:5）弱酸性浴条件下的酸性染料匀染，有效改善色花问题，一次成功率高，减少回修……
           </div>
           <div className="rounded-[10px] bg-[#1c1c1e] px-3 py-2 text-[12.5px] leading-[19px] text-white/85">
-            <p className="mb-1 text-[11px] font-semibold text-white/50">封存（只有研发可见）· 4 项</p>
+            <p className="mb-1 text-[12px] font-semibold text-white/50">封存（只有研发可见）· 4 项</p>
             缓染机理 · 可逆络合释放机理 · 组分配比与配方构成 · 阶梯加酸的控制诀窍
           </div>
         </div>
@@ -244,7 +244,7 @@ const CHAPTERS: Chapter[] = [
       <>
         <Say from="customer">锦氨布在气流缸里染，布面深一块浅一块</Say>
         <div className="rounded-[10px] bg-[rgba(10,108,223,.07)] px-3 py-2.5 text-[13px] leading-5">
-          <p className="text-[11px] font-semibold text-accent">推荐 · Jev（OneJev）97%</p>
+          <p className="text-[12px] font-semibold text-accent">推荐 · Jev（OneJev）97%</p>
           <p className="mt-0.5 font-semibold">HY-LV206</p>
           <p className="text-ink-2">适用于锦纶氨纶弹力面料在气流染色机弱酸性浴条件下的匀染……（按客户画像披露「产品」版本）</p>
         </div>
@@ -289,7 +289,7 @@ function Future() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <p className="text-[13px] text-ink-3">展望</p>
+        <p className="text-[13px] text-ink-2">展望</p>
         <h1 className="mt-2 text-[30px] font-semibold leading-[40px] tracking-[-0.01em]">嵌进企业现有系统，一套发现层管住更多「该有人决定」的时刻</h1>
         <p className="mt-3 max-w-[760px] text-[15px] leading-[25px] text-ink-2">当前 Demo 是架构与业务流程演示：网页工作面就是将来钉钉卡片和页面里的内容。下面是接入路径与代码接缝，不是已完成的功能。</p>
       </div>
@@ -333,9 +333,9 @@ function Ways({ c }: { c: Chapter }) {
     <div className="grid grid-cols-3 gap-3">
       {c.ways.map((text, n) => (
         <div key={n} className={`rounded-[12px] px-4 py-3.5 ${n === 2 ? "bg-white shadow-[inset_0_0_0_1.5px_var(--color-accent),0_6px_16px_-10px_rgba(10,108,223,.4)]" : "bg-[rgba(118,118,128,.07)]"}`}>
-          <p className={`text-[14px] font-semibold ${n === 2 ? "text-accent" : "text-ink-2"}`}>{WAYS[n][0]}</p>
-          <p className="mb-2 text-[11.5px] text-ink-3">{WAYS[n][1]}</p>
-          <p className={`text-[13.5px] leading-[22px] ${n === 2 ? "text-ink" : "text-ink-2"}`}>{text}</p>
+          <p className={`text-[15px] font-semibold ${n === 2 ? "text-accent" : "text-ink"}`}>{WAYS[n][0]}</p>
+          <p className="mb-2 text-[12.5px] text-ink-2">{WAYS[n][1]}</p>
+          <p className="text-[14px] leading-[23px] text-ink">{text}</p>
         </div>
       ))}
     </div>
@@ -356,11 +356,11 @@ function Why({ c }: { c: Chapter }) {
       </section>
       {c.data.length > 1 && (
         <section className="border-t border-sep pt-4">
-          <h3 className="mb-2 text-[12px] font-semibold text-ink-3">其他数据</h3>
+          <h3 className="mb-2 text-[14px] font-semibold text-ink">其他数据</h3>
           {c.data.slice(1).map(([num, label, src]) => (
             <p key={label} className="flex items-baseline gap-3 py-1 text-[13px]">
               <span className="num w-[108px] shrink-0 font-semibold">{num}</span>
-              <span className="text-ink-2">{label}<span className="ml-1.5 text-[11px] text-ink-3">{src}</span></span>
+              <span className="text-ink-2">{label}<span className="ml-1.5 text-[12px] text-ink-2">{src}</span></span>
             </p>
           ))}
         </section>
@@ -387,7 +387,7 @@ export function Story({ toDesk }: { toDesk: () => void }) {
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col px-10 pb-16 pt-6">
       <div className="flex items-baseline justify-between">
-        <p className="text-[13px] text-ink-3"><span className="font-semibold text-ink-2">演示工作面</span>　一条真实录制的需求，从客户的一句话到新品回流（大模型真实运行，数据为模拟）</p>
+        <p className="text-[13px] text-ink-2"><span className="font-semibold text-ink-2">演示工作面</span>　一条真实录制的需求，从客户的一句话到新品回流（大模型真实运行，数据为模拟）</p>
         <button className="link shrink-0" onClick={toDesk}>去沉浸工作面亲手操作 →</button>
       </div>
       {/* 步骤条：一行安静的文字，只有当前一步是黑字加下划线 */}
@@ -395,7 +395,7 @@ export function Story({ toDesk }: { toDesk: () => void }) {
         {names.map((t, n) => (
           <button key={t} onClick={() => go(n)}
                   className={`-mb-px border-b-2 px-3 py-2 text-[13px] transition-colors ${
-                    n === i ? "border-ink font-semibold text-ink" : `border-transparent hover:text-ink ${n < i ? "text-ink-2" : "text-ink-3"}`}`}>
+                    n === i ? "border-ink font-semibold text-ink" : `border-transparent hover:text-ink ${n < i ? "text-ink" : "text-ink-2"}`}`}>
             {t}
           </button>
         ))}
@@ -404,7 +404,7 @@ export function Story({ toDesk }: { toDesk: () => void }) {
         <div key={i} className="anim-fade mt-9 flex flex-col">
           <div className="grid grid-cols-[1fr_auto] items-end gap-10">
             <div>
-              <p className="flex items-center gap-2 text-[13px] text-ink-3">
+              <p className="flex items-center gap-2 text-[13px] text-ink-2">
                 第 {i} 步 / {total - 1}
                 {c.layer !== 0 && <><span>·</span><LayerChip layer={c.layer} /><span>{LAYER_WHO[c.layer]}</span></>}
               </p>
@@ -414,16 +414,16 @@ export function Story({ toDesk }: { toDesk: () => void }) {
             <div className="w-[300px] pb-1 text-right">
               <p className={`num whitespace-nowrap font-semibold tracking-[-0.02em] text-accent ${hero.length > 9 ? "text-[32px] leading-[40px]" : "text-[40px] leading-[46px]"}`}>{hero}</p>
               <p className="mt-1 text-[13px] leading-5 text-ink-2">{heroLabel}</p>
-              <p className="mt-0.5 text-[11px] text-ink-3">{heroSrc}</p>
+              <p className="mt-0.5 text-[12px] text-ink-2">{heroSrc}</p>
             </div>
           </div>
           <div className="mt-8">
-            <p className="mb-2 text-[12px] font-semibold text-ink-3">同一步，三种做法</p>
+            <p className="mb-2 text-[14px] font-semibold text-ink">同一步，三种做法</p>
             <Ways c={c} />
           </div>
           <div className="mt-9 grid grid-cols-[minmax(0,7fr)_minmax(0,5fr)] items-start gap-12">
             <div>
-              <p className="mb-2 text-[12px] font-semibold text-ink-3">{i === 0 ? "工作面上的样子（今天）" : "化言工作面上的样子（真实录制）"}</p>
+              <p className="mb-2 text-[14px] font-semibold text-ink">{i === 0 ? "工作面上的样子（今天）" : "化言工作面上的样子（真实录制）"}</p>
               <Screen who={c.who}>{c.screen}</Screen>
             </div>
             <Why c={c} />
