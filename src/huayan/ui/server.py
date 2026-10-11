@@ -20,7 +20,7 @@ PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
 DIST = Path("web/dist")
 MAINLINE = Path("scripts/demo_mainline.py")      # WP-I 提供 run_offline(app)
 REPORTS = Path("docs/reports")
-REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）
+REPORT_NAMES = ("distortion", "jue_k", "week")   # 评测页只读这三份报告（WP-E）；single_card 经门面按查看者读取
 
 app = HuayanApp.build(CONFIG)
 lock = Lock()                                     # 门面不是线程安全的，一次只处理一个请求
@@ -69,6 +69,8 @@ def questions(p):
 
 def report(p):
     name = p["name"]
+    if name == "single_card":                         # 单卡明细按查看者裁剪，由门面决定（WP-E2）
+        return app.single_card_report(p["viewer"])
     if name not in REPORT_NAMES:
         raise KeyError(name)
     return json.loads((REPORTS / name / "metrics.json").read_text(encoding="utf-8"))

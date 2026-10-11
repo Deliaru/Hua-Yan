@@ -12,6 +12,8 @@
     "swap_prob": 0.1
   },
   "jue": {
+    "model": "jue_proto",
+    "jue_k_dir": "models/jue_k",
     "ask_threshold": 0.5,
     "back_threshold": 0.5,
     "max_rounds": 8,

@@ -1,4 +1,5 @@
 """应用门面：负责身份与视图边界，界面只调用这里。"""
+import json
 from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -496,6 +497,12 @@ class HuayanApp:
         self._save_requirement(req)
         # 发布者为 L2；完整机理和配方保存在知识库，只返回公开产品字段。
         return released.model_copy(update={"mechanism": "", "formula": ""}, deep=True)
+
+    def single_card_report(self, viewer_id):
+        """WP-E2：只读已生成的单卡对照报告；L2/L3 看单卡明细，L1 只给模拟标注与三组统计。不跑评测、不读需求卡。"""
+        level = level_of(self._actor(viewer_id))
+        report = json.loads(Path("docs/reports/single_card/metrics.json").read_text(encoding="utf-8"))
+        return report if level > 1 else {"simulated": report["simulated"], "stats": report["stats"]}
 
     def contributions(self, viewer_id):
         viewer = self._actor(viewer_id)
