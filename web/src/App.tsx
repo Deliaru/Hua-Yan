@@ -1,11 +1,11 @@
-// 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list（工作面、觉视图、三层对照、评测、知识与积分）。
+// 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list（架构总览、工作面、觉视图、三层对照、评测、知识与积分）。
 // 没有产品经理页面：产品经理 Agent 的产出只在研发工作面、三层对照、觉视图上出现（REPLAN 3.2 第 5 条）。
 import { useEffect, useState } from "react";
 import { FIXTURE, api, fixtureScenes, scene } from "./api";
 import { AppCtx, useLabels } from "./ctx";
 import type { Meta, Role, RunStatus } from "./types";
 import { Popover } from "./components/Controls";
-import { ChevronDown, Close, NavDesk, NavEval, NavJue, NavLayers, NavLedger, Refresh } from "./components/Icons";
+import { ChevronDown, Close, NavArch, NavDesk, NavEval, NavJue, NavLayers, NavLedger, Refresh } from "./components/Icons";
 import { Logo } from "./components/Logo";
 import { Sales } from "./pages/Sales";
 import { Rd } from "./pages/Rd";
@@ -14,8 +14,10 @@ import { JuePage } from "./pages/Jue";
 import { Layers } from "./pages/Layers";
 import { Eval } from "./pages/Eval";
 import { Ledger } from "./pages/Ledger";
+import { Overview } from "./pages/Overview";
 
 const PAGES = [
+  ["overview", "架构总览", NavArch],
   ["desk", "工作面", NavDesk],
   ["jue", "觉视图", NavJue],
   ["layers", "三层对照", NavLayers],
@@ -106,6 +108,7 @@ export default function App() {
       </aside>
 
       <main className="ml-[232px] pt-[52px]">
+        {page === "overview" && <Overview />}
         {page === "desk" && (actor.role === "sales" ? <Sales key={key} /> : actor.role === "rd" ? <Rd key={key} /> : <Supervisor key={key} />)}
         {page === "jue" && <JuePage key={key} />}
         {page === "layers" && <Layers key={meta.status.run_id} />}
