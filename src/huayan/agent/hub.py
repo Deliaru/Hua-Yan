@@ -29,9 +29,11 @@ class AgentHub:
             self.app.view_session(session_id, actor_id)      # 由门面校验会话归属：只能绑定自己参与的会话
         return ToolContext(self.app, actor, f"conv:{actor_id}:{session_id or 'inbox'}", session_id)
 
-    def chat(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation:
+    def chat(self, actor_id: str, text: str, session_id: str | None = None,
+             focus: str | None = None) -> Conversation:
         ctx = self.context(actor_id, session_id)
-        return self._respond(ctx, AgentMessage(role="principal", text=text, at=get_clock().now()))
+        ctx.focus = focus
+        return self._respond(ctx, AgentMessage(role="principal", text=text, at=get_clock().now(), target=focus))
 
     def notify(self, actor_id: str, text: str, session_id: str | None = None) -> Conversation:
         ctx = self.context(actor_id, session_id)
@@ -41,7 +43,7 @@ class AgentHub:
         conv = self._conversation(ctx)
         conv.messages.append(message)
         if self.app.config["gateway_mock"]:
-            conv.messages.append(AgentMessage(role="system", text=OFFLINE, at=get_clock().now()))
+            conv.messages.append(AgentMessage(role="system", text=OFFLINE, at=get_clock().now(), target=ctx.focus))
         else:
             conv.messages += run_turn(conv, ctx, self, self.app.gateway)
         self._save(conv)

@@ -17,6 +17,7 @@ class ToolContext:
     principal: Actor
     conversation_id: str
     session_id: str | None = None
+    focus: str | None = None                  # 本轮工作面打开的对象，不改变委托人权限
 
 
 TOOLS: dict[str, tuple[ToolSpec, Callable[[ToolContext, BaseModel], ToolResult]]] = {}

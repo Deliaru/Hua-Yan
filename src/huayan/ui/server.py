@@ -104,7 +104,7 @@ def escalate_note(p):
 
 
 def chat(p):
-    conv = app.agents.chat(p["actor"], p["text"], p.get("session_id"))
+    conv = app.agents.chat(p["actor"], p["text"], p.get("session_id"), focus=p.get("focus"))
     app.tick()
     return conv
 

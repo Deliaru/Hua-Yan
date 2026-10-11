@@ -19,6 +19,8 @@ def system_prompt(ctx: ToolContext, pending: list) -> str:
              f"\n委托人：{me.name}（{me.id}，角色 {me.role}，可读知识层级 L1–L{level_of(me)}）。"]
     if ctx.session_id:
         lines.append(f"当前绑定的客户会话：{ctx.session_id}。")
+    lines.append(f"当前工作面对象（focus）：{ctx.focus or '未指定'}。"
+                 "理解本轮指代时以当前对象为准，历史消息的工作对象仅用于回看；对象不明确时先澄清。")
     if pending:
         lines.append("委托人尚未确认的动作：" + "；".join(f"{a.id} {a.summary}" for a in pending))
     return "\n".join(lines)
@@ -27,7 +29,8 @@ def system_prompt(ctx: ToolContext, pending: list) -> str:
 def history(conv: Conversation) -> list[Message]:
     """跨轮只保留文字消息；system 消息（派单、确认结果）作为带标记的用户消息传给模型。"""
     role = {"principal": "user", "assistant": "assistant", "system": "user"}
-    return [Message(role=role[m.role], content=m.text if m.role != "system" else f"【系统通知】{m.text}")
+    return [Message(role=role[m.role], content=(f"【工作对象 {m.target}】" if m.target else "")
+                    + (m.text if m.role != "system" else f"【系统通知】{m.text}"))
             for m in conv.messages]
 
 
@@ -54,4 +57,4 @@ def run_turn(conv: Conversation, ctx: ToolContext, hub, gateway) -> list[AgentMe
                                       pending_action_id=result.pending_action_id, at=get_clock().now()))
             created += [result.pending_action_id] if result.pending_action_id else []
             messages.append(Message(role="tool", content=encoded, tool_call_id=call.call_id))
-    return [AgentMessage(role="assistant", text=reply, at=get_clock().now(), pending_action_ids=created)]
+    return [AgentMessage(role="assistant", text=reply, at=get_clock().now(), pending_action_ids=created, target=ctx.focus)]
