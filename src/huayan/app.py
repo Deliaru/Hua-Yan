@@ -239,7 +239,8 @@ class HuayanApp:
         rec = session.recommendation
         card = None
         if rec and rec.product_id:
-            maximum = cap(viewer, session.customer_id, rec.product_id, self.grants)
+            maximum = "product_usage" if self.kb.is_frozen(viewer.id) else cap(
+                viewer, session.customer_id, rec.product_id, self.grants)
             version = maximum if level == 3 or maximum == "full_mechanism" else rec.version
             if VERSIONS.index(version) > VERSIONS.index(maximum):
                 version = maximum
@@ -290,7 +291,7 @@ class HuayanApp:
 
     def _requirement(self, req_id, by, roles, states):
         actor = self._actor(by, roles)
-        if self.kb.is_frozen(by):
+        if actor.role != "sales" and self.kb.is_frozen(by):
             raise PermissionDenied("高层级访问已冻结")
         req = _find(self._requirements, req_id, "需求单")
         if actor.role == "rd" and actor.id != req.assigned_rd:
@@ -460,7 +461,8 @@ class HuayanApp:
         state = requirement_state(req, session.need, self.seeds, self.kb, at, self.events)
         question = self._decision("reuse_product", "adopt_reuse", state.objects[f"requirement:{req_id}"], by)
         viewer = self.actors[session.sales_id]
-        maximum = cap(viewer, session.customer_id, proposal.product_id, self.grants)
+        maximum = "product_usage" if self.kb.is_frozen(viewer.id) else cap(
+            viewer, session.customer_id, proposal.product_id, self.grants)
         disclosure = self.jev.disclose(session.need, proposal.product_id, maximum)
         card = render(proposal.product_id, disclosure.choice, viewer, self.kb, session_id=session.id,
                       customer_id=session.customer_id, grants=self.grants)
@@ -806,6 +808,16 @@ class HuayanApp:
         # 用完整内部来源检查，返回值仅含句序号与类别；用法接续说明书编号。
         return leak_hits(f"{req.sheet.sheet}\n{req.sheet.usage}", req.sealed, req.hypotheses, self.kb)
 
+    def record_requirement_trial(self, req_id, result, by):
+        """工作面模拟 ELN 录入；关联信息与业务时间由后端生成。"""
+        req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
+        number = len(self._trials) + 1
+        while f"trial:{number}" in self._trials:
+            number += 1
+        return self.record_trial(Trial(id=f"trial:{number}", product_id=req.product_id,
+            requirement_id=req.id, rd=by, conditions=dict(req.known_slots), result=result,
+            cause="none", note="（模拟）工作面录入；未填写原因", at=get_clock().now()))
+
     def record_trial(self, trial: Trial):
         actor = self._actor(trial.rd, {"rd"})
         if self.kb.is_frozen(actor.id):
@@ -981,14 +993,14 @@ class HuayanApp:
 
     def questions(self, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
-        if self.kb.is_frozen(viewer.id):
+        if viewer.role != "sales" and self.kb.is_frozen(viewer.id):
             raise PermissionDenied("高层级访问已冻结")
         return [q.model_copy(deep=True) for q in self.bus.list()
                 if viewer_id in (q.owner_id, q.signer_id)]
 
     def jue_timeline(self, target_id, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
-        if self.kb.is_frozen(viewer_id):
+        if viewer.role != "sales" and self.kb.is_frozen(viewer_id):
             raise PermissionDenied("高层级访问已冻结")
         if target_id in self._sessions:
             session = self._sessions[target_id]
@@ -1065,9 +1077,7 @@ class HuayanApp:
 
     def mark_prepared(self, question_id, by):
         """由 hub 在主人准备完毕后调用；只标待签，不签字、不推进业务。"""
-        actor = self._actor(by, {"sales", "pm", "rd", "supervisor"})
-        if self.kb.is_frozen(actor.id):
-            raise PermissionDenied("高层级访问已冻结")
+        self._actor(by, {"sales", "pm", "rd", "supervisor"})
         question = _find(self.bus.questions, question_id, "问题")
         if question.owner_id != by:
             raise PermissionDenied("只有问题主人能标记准备完成")

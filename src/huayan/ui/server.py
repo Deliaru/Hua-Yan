@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 from pydantic import BaseModel
 
 from huayan.app import HuayanApp
-from huayan.contracts import ReqItem, SheetDraft, Trial
+from huayan.contracts import ReqItem, SheetDraft
 from huayan.knowledge import PermissionDenied
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
@@ -124,7 +124,7 @@ POST = {
     "/api/points": lambda p: app.set_public_points(p["req_id"], p["text"], p["sealed"], p["by"]),
     "/api/sheet": lambda p: app.save_sheet(p["req_id"], SheetDraft.model_validate(p["sheet"]), p["by"]),
     "/api/release": lambda p: app.release_product(p["req_id"], p["by"]),
-    "/api/trial": lambda p: app.record_trial(Trial.model_validate(p["trial"])),
+    "/api/trial": lambda p: app.record_requirement_trial(p["req_id"], p["result"], p["by"]),
     "/api/decrypt/request": lambda p: app.request_decrypt(p["session_id"], p["by"]),
     "/api/decrypt/decide": lambda p: app.decide_decrypt(p["question_id"], p["by"], p["approve"], p.get("text", "")),
     "/api/reply-draft": lambda p: app.save_reply_draft(p["session_id"], p["text"], p["by"]),
