@@ -57,8 +57,8 @@ steps:
       - customer: {session: s2, text: 锦氨布在气流机里染，颜色不匀，回修了好几次}
       - sign: {actor: sales:S01, action: escalate, args: {session: s2}, as: r2}
       # 产品经理 Agent 读两位客户的原话，判断是同一件事，起草合并（D19）
-      - expect: {inbox: {actor: rd:R02, families: [opportunity, accept_requirement]}}
-      - sign: {actor: rd:R02, action: merge, args: {}}
+      - expect: {inbox: {actor: pm:P01, families: [opportunity]}}   # v6：机会由产品经理签
+      - sign: {actor: pm:P01, action: merge, args: {}}
       - expect: {status: {req: r2, status: merged}}
       # 合并后 accept_requirement 重新派给产品经理 Agent，按两位客户的原话重写 L2
       - checkpoint: 研发待接单

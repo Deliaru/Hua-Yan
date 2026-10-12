@@ -6,8 +6,8 @@ from typing import Literal
 from ._base import BaseModel, datetime
 from .seeds import Level
 
-KUKind = Literal["sheet", "usage", "case", "translation", "requirement", "mechanism", "formula", "trial"]
-KIND_LEVEL: dict[KUKind, Level] = {"sheet": 1, "usage": 1, "case": 2, "requirement": 2,
+KUKind = Literal["sheet", "usage", "public_case", "report", "case", "translation", "requirement", "mechanism", "formula", "trial"]
+KIND_LEVEL: dict[KUKind, Level] = {"sheet": 0, "usage": 0, "public_case": 0, "report": 1, "case": 2, "requirement": 2,
                                     "mechanism": 3, "formula": 3, "trial": 3}   # translation 取种子中的 level
 
 

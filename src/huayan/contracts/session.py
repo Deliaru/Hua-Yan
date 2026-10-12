@@ -40,7 +40,7 @@ class CustomerProfile(BaseModel):
 class NeedState(BaseModel):
     session_id: str
     customer_id: str
-    sales_id: str
+    sales_id: str | None                      # v6：客户自助会话在交业务员前为 None
     phenomenon: str | None = None
     phenomenon_quote: str = ""
     slots: dict[str, SlotFill] = {}
@@ -102,7 +102,8 @@ class AssistantReply(BaseModel):
 class Session(BaseModel):
     id: str
     customer_id: str
-    sales_id: str
+    sales_id: str | None                      # v6：客户自助会话在交业务员前为 None
+    origin: Literal["sales", "customer"] = "sales"   # v6：会话来源；后续分配业务员不改变来源
     started_at: datetime
     turns: list[Turn] = []
     need: NeedState

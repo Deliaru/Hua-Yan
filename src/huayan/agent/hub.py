@@ -134,6 +134,15 @@ class AgentHub:
             for q in pending:
                 if q.status != "open" or q.prepared_at is not None:
                     continue
+                template = self.app.templates.get(q.template_id) if q.template_id else None
+                if q.signer_role is None and template and template.auto_action:
+                    self.app.auto_execute(q.id)      # v6 契约 6.1：低风险推进由觉自动执行
+                    self._dispatched.add((q.id, rounds.get(q.id, 0)))
+                    continue
+                if q.owner_id is None or (q.owner_role == "pm" and q.owner_id != "pm:agent"):
+                    # v6：自助会话没有业务员（回问由客户在对话里直接回答）；真人产品经理的问题留在待办，不派 Agent
+                    self._dispatched.add((q.id, rounds.get(q.id, 0)))
+                    continue
                 session_id = q.refs.get("session_id") if q.owner_role == "sales" else None
                 text = (f"{q.id}（{q.family}）：{q.title}。引用：{q.refs}。"
                         f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。请为此问题准备草稿，不签字。")

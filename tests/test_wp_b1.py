@@ -52,7 +52,7 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     at = t0 + timedelta(days=2)
     published = scan(events, at, model, mini_seeds, mini_seeds.products, load_templates(TEMPLATES), bus, 0.5)
     assert [(q.family, q.object_id, q.owner_id, q.signer_id, q.scored_by) for q in published] == [
-        ("opportunity", TARGET, "pm:agent", "rd:R01", "rule")]
+        ("opportunity", TARGET, "pm:agent", "pm:P01", "rule")]
     assert published[0].refs["session_ids"] == "sess:0,sess:1,sess:2,sess:3"
     assert published[0].refs["requirement_ids"] == "req:0,req:1,req:2,req:3"
     assert scan(events, at, model, mini_seeds, mini_seeds.products, load_templates(TEMPLATES), bus, 0.5) == []
@@ -76,9 +76,9 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     attrs = session_state(session, session_events, t0).objects["session:sess:20"].attrs
     assert attrs["escalated"] and not evaluate(templates_all["escalate_need"].precondition, attrs, boolean=True)
 
-    # 模板目录：15 个 family；基线三个目录也能加载
+    # 模板目录：17 个 family（v6 新增 route_rd、handoff_sales）；基线三个目录也能加载
     templates = load_templates(TEMPLATES)
-    assert len({t.family for t in templates.values()}) == 15
+    assert len({t.family for t in templates.values()}) == 17
     for name in ("b1_required", "b2_info_value", "rule_alert"):
         load_templates(ROOT / "config" / "baselines" / name)
 

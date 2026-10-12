@@ -49,6 +49,7 @@ class JueTemplate(BaseModel):
     signer_role: Role | None = None           # 签字人角色；None = 提示类（ask_slot、ask_back），不进待签
     bounty_points: int = 0
     urgency: str | None = None                # 数值表达式，截断到 [0,1]；为空时 1.0
+    auto_action: str | None = None            # v6：signer_role 为 None 时，问题发布后由 hub 调门面内部入口 auto_execute 执行
 
 
 class ScoredDecision(BaseModel):

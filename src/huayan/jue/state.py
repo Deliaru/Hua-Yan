@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 WINDOWS = {"theme_days": 7, "knowledge_days": 7, "actor_hours": 48}   # 与 config/app.yaml 的 windows 一致
 _PRODUCT_KU = {"sheet", "usage", "mechanism", "formula"}
 _INTERNAL = Actor(id="system:jue", role="rd", name="觉（内部身份，只用于属性计数）")
+_PURCHASE = re.compile("报价|价格|采购|下单|送样")   # v6：商务诉求，纯规则
 
 
 def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: datetime) -> JueState:
@@ -44,6 +46,8 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
         "recommended": sess.status == "recommended", "escalated": any(e.kind == "escalate" for e in relevant),
         "chem_savvy": need.profile.chem_savvy, "asked_mechanism": need.profile.asked_mechanism,
         "decrypt_requested": any(e.kind == "decrypt_request" for e in relevant),
+        "self_serve": sess.origin == "customer", "sales_assigned": sess.sales_id is not None,
+        "purchase_intent": any(t.speaker == "customer" and _PURCHASE.search(t.text) for t in sess.turns),
     })
     return JueState(at=at, mode="realtime", objects={oid: obj})
 

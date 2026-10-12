@@ -22,7 +22,7 @@ def test_mainline_offline(tmp_path):
     s1 = app.start_session("customer:C01", "sales:S01").id
     assert {h.slot for h in app.add_turn(s1, "customer", "深一块浅一块").hints} == {"fiber", "equipment"}
     assert app.add_turn(s1, "customer", "锦氨的，溢流缸").recommendation.product_id == "T-205"
-    assert all(s.level == 1 for s in app.view_session(s1, "sales:S01").card.sections)
+    assert all(s.level <= 1 for s in app.view_session(s1, "sales:S01").card.sections)
     assert any(s.level == 3 for s in app.view_session(s1, "rd:R01").card.sections)
 
     def prepared(family, object_id):
@@ -47,7 +47,7 @@ def test_mainline_offline(tmp_path):
     draft = app.requirement_view(main.id, "pm:agent").requirement
     assert draft.merge_from == [member.id] and "离线模式" in draft.merge_note
     rd = main.assigned_rd
-    main = app.merge_requirements(opportunity.id, rd)
+    main = app.merge_requirements(opportunity.id, "pm:P01")   # v6：机会由产品经理签
     assert main.status == "draft" and not main.product_lang
     assert set(main.session_ids) == set(sessions)
     assert app.requirement_view(member.id, rd).requirement.status == "merged"

@@ -79,7 +79,7 @@ class KnowledgeBase:
         self._units[ku.id] = ku.model_copy(deep=True)
 
     def _readable(self, actor, ku):
-        return can_read(actor, ku) and (not self.is_frozen(actor.id) or ku.level == 1)
+        return can_read(actor, ku) and (not self.is_frozen(actor.id) or ku.level <= 1)
 
     def list(self, actor: Actor, *, kinds: list[KUKind] | None = None,
              phenomenon: str | None = None) -> list[KnowledgeUnit]:

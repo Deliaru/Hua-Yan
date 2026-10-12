@@ -154,6 +154,7 @@ GET = {
     "/api/requirement": lambda app, p: app.requirement_view(p["id"], p["viewer"]),
     "/api/leak": lambda app, p: app.leak_check(p["id"], p["viewer"]),
     "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),
+    "/api/route": lambda app, p: app.route_of(p["id"], p["viewer"]),   # v6：需求轨迹条
     "/api/ledger": lambda app, p: app.ledger.totals(),
     "/api/contributions": lambda app, p: app.contributions(p["viewer"]),
     "/api/report": report,
@@ -163,7 +164,7 @@ GET = {
     "/api/agents/pending": lambda app, p: app.agents.pending(p["actor"]),
 }
 POST = {
-    "/api/sessions": lambda app, p: app.start_session(p["customer_id"], p["sales_id"]),
+    "/api/sessions": lambda app, p: app.start_session(p["customer_id"], p.get("sales_id")),
     "/api/turn": lambda app, p: app.add_turn(p["session_id"], p["speaker"], p["text"]),
     "/api/recommend": lambda app, p: app.recommend_now(p["session_id"]),
     "/api/resolve": lambda app, p: app.resolve(p["question_id"], p["action"], p["by"], p.get("note", "")),
@@ -173,6 +174,7 @@ POST = {
     "/api/reuse-note": lambda app, p: app.update_reuse_note(p["req_id"], p["text"], p["by"]),
     "/api/merge": lambda app, p: app.merge_requirements(p["question_id"], p["by"]),
     "/api/accept": lambda app, p: app.accept_requirement(p["req_id"], p["by"]),
+    "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id")),   # v6
     "/api/return": lambda app, p: app.return_requirement(p["req_id"], p["reason"], p["by"]),
     "/api/req-item": lambda app, p: app.edit_req_item(p["req_id"], p["index"], ReqItem.model_validate(p["item"]), p["by"]),
     "/api/confirm": lambda app, p: app.confirm_translation(p["req_id"], p["by"]),

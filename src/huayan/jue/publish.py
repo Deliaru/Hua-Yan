@@ -42,7 +42,9 @@ def _summary(family: str, a: dict) -> str:
     if family == "leak_risk":
         return (f"检索 {a['n_queries']} 次，被拦截的高层级命中 {a['n_blocked']} 条，"
                 f"最集中的产品占 {a['blocked_top_share']:.0%}，涉及 {a['n_distinct_products']} 个产品")
-    if family == "escalate_need":
+    if family == "handoff_sales":
+        return "客户原话中提出了报价、采购或送样等商务诉求，会话尚无业务员"
+    if family in ("escalate_need", "route_rd"):
         return f"最近一次匹配中「都不合适」概率 {a['p_none']:.2f}，高于最好的候选产品 {a['p_top']:.2f}；已了解 {a['n_filled']} 项信息"
     if family == "distortion":
         return f"本层有 {a['n_unmapped_constraints']} 项上层约束未承接，{a['n_unquoted_items']} 条条目缺少客户原话"
@@ -74,12 +76,12 @@ def _label(obj: JueObject, seeds: Seeds | None) -> str:
     return next((f"{x.name}（{x.id}）" for x in seeds.actors if x.id == actor), actor)
 
 
-def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None) -> str | None:
-    """契约 5.4 解析表：角色 × 对象 → 具体的人。"""
+def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None, signer: bool = False) -> str | None:
+    """契约 5.4 解析表：角色 × 对象 → 具体的人。v6：pm 作签字人为真人产品经理。"""
     if role is None:
         return None
     if role == "pm":
-        return "pm:agent"
+        return min(a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent") if signer else "pm:agent"
     if role == "sales":
         return ref["sales_id"]
     if role == "supervisor":
@@ -128,7 +130,7 @@ def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], 
         q = bus.publish(Question(
             id="", family=d.family, title=t.title.format(object=_label(obj, seeds), attrs=SimpleNamespace(**obj.attrs)),
             object_id=d.object_id, owner_role=owner_role, owner_id=_resolve(owner_role, obj, ref, seeds),
-            signer_role=t.signer_role, signer_id=_resolve(t.signer_role, obj, ref, seeds), template_id=t.id,
+            signer_role=t.signer_role, signer_id=_resolve(t.signer_role, obj, ref, seeds, signer=True), template_id=t.id,
             p_need=d.p_need, urgency=d.urgency, scored_by=d.scored_by or out.scored_by, discoverer=out.model,
             evidence=[Evidence(summary=_summary(d.family, obj.attrs), event_ids=ref.get("event_ids", []))],
             refs=_refs(d, ref), bounty_points=t.bounty_points, dedup_key=f"{d.family}:{d.object_id}",

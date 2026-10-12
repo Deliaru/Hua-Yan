@@ -13,12 +13,12 @@ def test_l1_knowledge_boundary(mini_seeds, sim_clock, tmp_path):
     kb = KnowledgeBase.from_seeds(mini_seeds, events, audit)
     context = dict(session_id="sess:1", customer_id="customer:C01", grants=[])
     for query in ("配方", "机理", "色花", "匀染 缓染 染座", "锦纶氨纶 色花"):
-        assert all(h.ku.level == 1 for h in kb.search(query, sales))
+        assert all(h.ku.level <= 1 for h in kb.search(query, sales))
     assert any(e.payload["n_blocked"] > 0 for e in events.query(kinds=["retrieve"]))
     for product in kb.products():
         card = render(product.id, cap(sales, "customer:C01", product.id, []), sales, kb, **context)
         assert card.session_id == "sess:1"
-        assert all(s.level == 1 for s in card.sections)
+        assert all(s.level <= 1 for s in card.sections)
     with pytest.raises(PermissionDenied):
         kb.get("ku:formula:T-205", sales)
     with pytest.raises(PermissionDenied):
