@@ -103,7 +103,7 @@ export function DemoPanel({ onExit, onView, side }: {
           <Part label="发生了什么">{step.happened}</Part>
           {step.before && <Part label="过去怎么做" muted>{step.before}</Part>}
           {step.freed && <Part label="解放了谁的什么" strong>{step.freed}</Part>}
-          {step.money && <Value mark="↑" label="增效" color={GAIN}>{step.money}</Value>}
+          {step.money && <Value mark="↑" label="降本增效" color={GAIN}>{step.money}</Value>}
           {step.fame && <Value mark="★" label="体验与影响力" color={FAME}>{step.fame}</Value>}
           {step.look && <Value mark="›" label="顺手看看" color={LOOK}>{step.look.text}</Value>}
         </section>
@@ -329,9 +329,9 @@ function Estimator() {
 }
 
 const FAME_ITEMS = [
-  ["行业需求语言", "「这类问题研发开工前必须知道什么」沉淀成功能化学上下游通用的需求描述，化言是第一个把它做成标准的。"],
+  ["行业需求语言", "「这类问题研发开工前必须知道什么」沉淀成功能化学上下游通用、可复用的需求描述。"],
   ["配方不出门，知识敢开放", "分层保密：客户只看说明书、用法与公开案例，机理与配方永不对外——所以敢把知识服务直接开给下游。"],
-  ["专家经验有署名有回报", "每条转化知识记在本人名下，被引用就记分；研发、产品经理的判断成了看得见的个人资产。"],
+  ["专家经验有署名有回报", "每条转化知识记在本人名下，被引用就记分；研发、产品经理的判断成为看得见的贡献。"],
   ["嵌进现有协作，上下游都能接", "嵌入钉钉 / 飞书，不替换现有系统；下游客户、业务员、研发在各自熟悉的入口里协作。"],
 ];
 
@@ -359,7 +359,7 @@ function Landing() {
         <p><b>不重做 RAG。</b>企业已有的向量知识库接在唯一检索入口 <code className="text-[12px]">KnowledgeBase.search</code> 的排序一步后面；权限、审计、引用记分照常生效。</p>
         <p><b>试样结果回流。</b>ELN 里的试样结果经门面的试样录入回到需求单与知识库。</p>
         <p><b>嵌入钉钉 / 飞书。</b>四个工作面就是四个角色在现有协作工具里的入口。</p>
-        <Value mark="↑" label="增效" color={GAIN}>不推翻已有 IT 投入；企业的 RAG 越强，化言越强。</Value>
+        <Value mark="↑" label="降本增效" color={GAIN}>不推翻已有 IT 投入；企业的 RAG 越强，化言越强。</Value>
         <p className="text-[11.5px] leading-[18px] text-ink-3">以上未实际对接，给出的是接入路径与代码接缝（与 README 第 6 节一致）。</p>
       </div>
     </section>

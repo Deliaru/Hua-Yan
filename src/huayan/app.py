@@ -1362,16 +1362,18 @@ class HuayanApp:
                  for q in self.bus.list(status=None) if q.object_id in objects or q.id in merges
                  or (inner and q in linked)]
         # 为什么直达研发：升级时那次匹配查过哪些现有产品、Jev 判「都不合适」的概率、由谁升级；
-        # 以及声明能解决这类现象、但按客户条件被排除的已发布产品（适用范围是说明书上的公开信息）
+        # 以及声明能解决这类现象、但按客户条件被排除的已发布产品（适用范围是说明书上的公开信息）；
+        # 与客户条件不冲突却不在候选里的，是升级之后才扩进这类现象的（如 C′ 扩范围），不算当时被排除
         esc = next((e for e in events if e.kind == "escalate"), None)
         match = next((e.payload for e in reversed(events) if e.kind == "match" and e.ts <= esc.ts), None) if esc else None
         why = None
         if match:
             known = match["known"]
-            excluded = [{"product_id": p.id, "mismatch": [{"slot": k, "value": known[k], "allowed": v}
-                                                          for k, v in p.applicable.items() if k in known and known[k] not in v]}
-                        for p in self.kb.products() if p.status == "released" and match["phenomenon"] in p.solves
-                        and p.id not in match["candidate_ids"]]
+            mismatches = {p.id: [{"slot": k, "value": known[k], "allowed": v}
+                                 for k, v in p.applicable.items() if k in known and known[k] not in v]
+                          for p in self.kb.products() if p.status == "released" and match["phenomenon"] in p.solves
+                          and p.id not in match["candidate_ids"]}
+            excluded = [{"product_id": pid, "mismatch": m} for pid, m in mismatches.items() if m]
             why = {"by": esc.actor, "phenomenon": match["phenomenon"], "p_none": match["p_none"],
                    "scored_by": match["scored_by"], "excluded": excluded,
                    "candidates": [{"product_id": pid, "p": match["p_choice"][pid]} for pid in match["candidate_ids"]]}

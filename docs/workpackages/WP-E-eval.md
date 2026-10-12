@@ -16,7 +16,7 @@ WP-I（门面完整）、WP-T（规则模式）、WP-B2（需求卡、模拟客�
 | 后半 | G3 加回问重跑与出图；业务周（真实链路，三种发现器）；三层对照页；评测页填数 | WP-I、WP-B3 第 ③ 段 |
 
 ## 必读
-`CONTRACTS.md` 第 ③、⑤ 5.5、⑦、⑨、⑫ 节；`ARCHITECTURE.md` 第 8、9 节（失真来源的定性描述）。
+`CONTRACTS.md` 第 ③、⑤ 5.5、⑦、⑨、⑫ 节；`ARCHITECTURE.md` 第 8、9 节。
 
 ## 允许修改的范围
 `src/huayan/eval/`、`config/eval/`、`scripts/run_distortion.py`、`scripts/run_week.py`、`docs/reports/distortion/`、`docs/reports/week/`、`src/huayan/ui/pages/4_三层对照.py`、`src/huayan/ui/pages/5_评测.py`、`src/huayan/ui/pages/6_觉视图.py`
@@ -29,7 +29,7 @@ WP-I（门面完整）、WP-T（规则模式）、WP-B2（需求卡、模拟客�
 - **卡**：`data/sim/cards.jsonl` 前 60 张，全部参与（问题是「需求信息到研发手里时还剩多少、对不对」，与 L1 能否直接推荐无关）。
 - **真值（关键信息）**：现象 + 该现象全部必问槽位的取值；`unknown_slots` 不计入分母（客户自己也说不清）。
 - **三组**，都用 `SimCustomer` 模板模式、同一个随机种子：
-  - **G1 业务员转述**：不用觉的提示；业务员只按习惯问 `relay.habit_slots` 中的槽位（默认只问面料）；然后按**转述噪声模型**写给研发：现象以 `relay.vague_prob` 的概率被说成笼统的「染色有问题」，每个已知槽位以 `relay.drop_prob` 的概率漏掉、以 `relay.swap_prob` 的概率被记成同槽位的另一个取值；没有原话、没有依据。参数放 `config/eval/distortion.yaml`，**在报告中标明是假设**，写出依据；企业数据到位后用真实转述样本替换。
+  - **G1 业务员转述**：不用觉的提示；业务员只按习惯问 `relay.habit_slots` 中的槽位（默认只问面料）；然后按**转述噪声模型**写给研发：现象以 `relay.vague_prob` 的概率被说成笼统的「染色有问题」，每个已知槽位以 `relay.drop_prob` 的概率漏掉、以 `relay.swap_prob` 的概率被记成同槽位的另一个取值；没有原话、没有依据。参数放 `config/eval/distortion.yaml`，**在报告中标明是假设**，写出依据的定性描述；企业数据到位后用真实转述样本替换。
   - **G2 一次性翻译**：不追问，只有客户开场白；规则抽取得到槽位，再用**全部**转化对照（L2、L3 混在一起、不按现象过滤）对开场白做一次匹配，直接产出化学语言条目。只有开场白一轮可回查，引用不记归属。
   - **G3 化言**：按觉的提示追问（取第一条提示的话术，最多 8 轮）→ `NeedState` → `translate.draft_product_need` → `draft_chem_need`（规则模式）→ **回问**（契约 v4）：对 L3 草稿调用一次 `requirement_state` + 觉（规则原型），`ask_back` 中 p ≥ 阈值的槽位（最多 2 个）让模拟客户各回答一次，回填后重新起草 L3。`Question` 由评测代码直接构造一个 `escalate_need`（不经过总线）。
 - **指标**（每组一行，写 `metrics.json` 与 `table.csv`）：

@@ -11,7 +11,7 @@
 WP-0、WP-S、WP-A1（`kb.list`）。A1 未合并前，在测试文件里写一个只实现 `list` 的最简替身，A1 合并后删除。
 
 ## 必读
-`CONTRACTS.md` 第 ①（1.4 转化对照）、②（2.1、2.2 的 `list`）、③（Turn、NeedState、Session）、⑦ 全节～4 节（L2、L3 各自的转述能力）。
+`CONTRACTS.md` 第 ①（1.4 转化对照）、②（2.1、2.2 的 `list`）、③（Turn、NeedState、Session）、⑦ 全节。
 
 ## 允许修改的范围
 `src/huayan/escalation/translate.py`、`scripts/translate_cli.py`、`tests/test_wp_t.py`
