@@ -27,3 +27,7 @@ models/**/*.pkl
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 本地预览与工具配置
+README.html
+.claude/

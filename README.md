@@ -1136,7 +1136,13 @@ flowchart LR
 | [`demo/story.yaml`](demo/story.yaml) | 五条路径的完整演示讲解与动作 |
 | [`AGENTS.md`](AGENTS.md) | 开发协作约束与工程原则 |
 
-**团队成员、分工与正式联系方式**：待补充。
+### 16.4 团队
+
+| 成员 | 分工 | 个人简历 |
+|---|---|---|
+| **李鸿宗** | 主要开发者 | [简历](docs/assets/team/li-hongzong-resume.jpg) |
+| **奚坚明** | 主要开发者 | [简历](docs/assets/team/xi-jianming-resume.png) |
+| **奚坚超** | 分析协助 | — |
 
 ---
 
