@@ -1,0 +1,18 @@
+# v6 公开演示部署：演示讲解（demo/story.yaml）的录制回放。录制由 scripts/record_story.py 以 replay: false 真实调用
+# config/models.yaml 的模型写入 llm_cache_v6；部署以本文件 replay: true 只读缓存，偏离讲解即缓存未命中，提示接入自己的模型（BYOK）。
+# 没有 OneJev：Jev 走大模型降级（界面标黄）；觉用本地 Jue-K。
+seeds_dir: seeds
+templates_dir: config/templates
+run_root: runs
+system1_impl: llm_fallback
+gateway_mock: false
+extractor: llm
+realtime_model: jue_k
+scheduled_model: jue_k
+jue_k_dir: models/jue_k
+llm_cache_dir: runs/demo_record/llm_cache_v6
+replay: true
+thresholds: {ask: 0.5, ask_jue_k: 0.15, max_asks: 2, match: 0.5, publish: 0.5}
+windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
+points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
+customer_sales: {"customer:C01": "sales:S01", "customer:C02": "sales:S01", "customer:C03": "sales:S01", "customer:C04": "sales:S02"}

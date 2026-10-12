@@ -18,6 +18,8 @@ items:
   - {id: tr:14, scene_phrase: 布变脆, chem_term: 需要在前处理中保护纤维强力的助剂, level: 2, owner: pm:P01, phenomenon_ids: [strength_loss]}
   - {id: tr:15, scene_phrase: 发黄, chem_term: 需要防黄变整理，避免存放和定形中变黄, level: 2, owner: pm:P01, phenomenon_ids: [yellowing]}
   - {id: tr:16, scene_phrase: 白地被染上颜色, chem_term: 需要防止浮色回沾的皂洗或防沾色助剂, level: 2, owner: pm:P01, phenomenon_ids: [bleeding_staining]}
+  - {id: tr:58, scene_phrase: 白地被沾色, chem_term: 需要防止浮色回沾的皂洗或防沾色助剂, level: 2, owner: pm:P01, phenomenon_ids: [bleeding_staining]}
+  - {id: tr:59, scene_phrase: 尼龙, chem_term: 尼龙即锦纶，常用酸性染料；需要适用于锦纶酸性染料体系的防沾色方案, level: 2, owner: pm:P01, phenomenon_ids: [bleeding_staining]}
 
   # ---- L3：产品需求说法 → 化学语言（研发 R01：染色过程化学；研发 R02：弹力面料与整理）----
   - {id: tr:17, scene_phrase: 匀染, chem_term: （模拟）对酸性染料有缓染作用、与染料竞争纤维染座的阴离子型组分, level: 3, owner: rd:R01, phenomenon_ids: [color_unlevel]}

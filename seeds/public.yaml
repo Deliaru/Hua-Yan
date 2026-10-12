@@ -1,0 +1,26 @@
+placeholder: true
+source: "占位：v6 新增的 L0 公开案例（由内部案例脱敏）与 L1 内部评价报告，客户与数据全部虚构"
+# 不属于契约 ① 的 Seeds（不改契约）：由门面在构建时读入知识库。
+# kind: public_case（L0，客户自助可见；id 用来源内部案例，归属人 = 该案例的归属人）
+#       report（L1，业务员可见的内部评价，客户看不到）
+items:
+  - kind: public_case
+    source_case: case:2
+    product_id: HY-LV205
+    title: 公开案例 · 锦氨弹力面料溢流缸色花
+    text: "（模拟，已脱敏）某弹力面料染厂用溢流染色机染锦纶氨纶浅色，布面发花、回修多次。改用 HY-LV205，染前加入并在 40 ℃ 运行 10 分钟后加染料，一次合格率明显提高。"
+  - kind: public_case
+    source_case: case:3
+    product_id: HY-CH310
+    title: 公开案例 · 硬水染棉布面色点
+    text: "（模拟，已脱敏）某棉布染厂使用地下水，布面出现细小色点，更换染料批次无改善。染前加入 HY-CH310 并取用量上限后，色点基本消除。"
+  - kind: report
+    product_id: HY-LV205
+    owner: rd:R01
+    title: 内部评价 · HY-LV205 近一季度客户反馈
+    text: "（模拟）近一季度 6 家锦氨面料客户试用，5 家反馈色花改善；1 家在气流染色机上效果不稳定（不在标注适用设备内）。报价可参考同类匀染剂中档。"
+  - kind: report
+    product_id: HY-CH310
+    owner: rd:R01
+    title: 内部评价 · HY-CH310 近一季度客户反馈
+    text: "（模拟）回用水客户复购率高；硬水客户用量多取上限，单耗略高于预期，报价时说明用量区间。"

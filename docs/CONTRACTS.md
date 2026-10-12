@@ -2,7 +2,9 @@
 
 > 跨模块的数据格式与接口契约。**冻结后只能由人修改**。代码实现在 `src/huayan/contracts/`，必须与本文件一致。
 > 下列代码是规格（Python / pydantic v2 风格），字段名、类型、枚举值必须一致；函数签名必须一致，内部实现自由。
-> 版本：v5.3｜2026-10-11
+> 版本：v6｜2026-10-12
+>
+> **v6 追加（让需求直达正确的责任人；依据 `workpackages/REPLAN-v6.md` 第 2 节，人已批准）**：新增 L0（客户自助）：`Level` 增加 0，客户 level 0，`sheet`、`usage` 改为 L0，新增知识种类 `public_case`（L0，脱敏对外案例）与 `report`（L1，业务员可看的内部评价）；客户自助会话 `sales_id` 可为 `None`，`Session.origin` 记录来源（分配业务员后不变）；模板增加 `auto_action`，`signer_role` 为空且带 `auto_action` 的问题由觉自动执行（见 6.1 节），`Resolution.action` 增加 `auto`；事件增加 `auto_executed`、`sales_assigned`、`project_declined`、`l2_contributed`、`scope_extended`；解析表中 `pm` 作主人为 `pm:agent`、作签字人为真人产品经理；`opportunity` 签字人改为产品经理。
 >
 > **v5.3 追加（现成产品建议由研发审定；`WP-0v5.md` C15）**：`customer_note` 是唯一一段由 L2 写成、流向 L1 的文本，改为升级给 L3 研发审定：`reuse_product` 的签字人由业务员改为 `assigned_rd`；新增草稿方法 `update_reuse_note` 与工具 `edit_reuse_note`；`adopt_reuse` / `decline_reuse` 由研发签字；业务员在审定前只看到状态与产品名，审定后收到说明并自行转述给客户。
 >
@@ -44,8 +46,8 @@
 
 ```python
 Role = Literal["customer", "sales", "pm", "rd", "supervisor"]
-Level = Literal[1, 2, 3]
-ROLE_LEVEL: dict[Role, Level] = {"customer": 1, "sales": 1, "pm": 2, "rd": 3, "supervisor": 2}
+Level = Literal[0, 1, 2, 3]                   # v6：0 = 客户自助可见
+ROLE_LEVEL: dict[Role, Level] = {"customer": 0, "sales": 1, "pm": 2, "rd": 3, "supervisor": 2}
 
 class Actor(BaseModel):
     id: str                  # "sales:S01"
@@ -166,8 +168,8 @@ def find_phenomenon(text: str, phenomena: list[Phenomenon]) -> tuple[str, str] |
 ### 2.1 知识单元
 
 ```python
-KUKind = Literal["sheet", "usage", "case", "translation", "requirement", "mechanism", "formula", "trial"]
-KIND_LEVEL: dict[KUKind, Level] = {"sheet": 1, "usage": 1, "case": 2, "requirement": 2,
+KUKind = Literal["sheet", "usage", "public_case", "report", "case", "translation", "requirement", "mechanism", "formula", "trial"]
+KIND_LEVEL: dict[KUKind, Level] = {"sheet": 0, "usage": 0, "public_case": 0, "report": 1, "case": 2, "requirement": 2,
                                     "mechanism": 3, "formula": 3, "trial": 3}   # translation 取种子中的 level
 
 class KnowledgeUnit(BaseModel):
@@ -342,7 +344,7 @@ class CustomerProfile(BaseModel):
 class NeedState(BaseModel):
     session_id: str
     customer_id: str
-    sales_id: str
+    sales_id: str | None                      # v6：客户自助会话在交业务员前为 None
     phenomenon: str | None = None
     phenomenon_quote: str = ""
     slots: dict[str, SlotFill] = {}
@@ -408,7 +410,8 @@ class AssistantReply(BaseModel):              # 问答类意图（product_questi
 class Session(BaseModel):
     id: str
     customer_id: str
-    sales_id: str
+    sales_id: str | None                      # v6：客户自助会话在交业务员前为 None
+    origin: Literal["sales", "customer"] = "sales"   # v6：会话来源；后续分配业务员不改变来源
     started_at: datetime
     turns: list[Turn] = []
     need: NeedState
@@ -634,6 +637,7 @@ class JueTemplate(BaseModel):
     signer_role: Role | None = None           # v5：签字人角色；None = 提示类（ask_slot、ask_back），不进待签
     bounty_points: int = 0
     urgency: str | None = None                # 数值表达式，截断到 [0,1]；为空时 1.0。紧急度是规则，不学习
+    auto_action: str | None = None            # v6：signer_role 为 None 时，问题发布后由觉自动执行（见 6.1 节）
 ```
 
 模板即**决策目录**，见 `config/templates/`，每个 family 一个文件。v4 已有：`ask_slot`（前置条件含 `attrs.layer == 1`）、`ask_back`（含 `attrs.layer >= 2`、未填、未答不清楚、`attrs.trans_splits >= 2`）、`opportunity`、`knowledge_conflict`、`leak_risk`；v5 新增 `escalate_need`、`reuse_product`（v5.1，主人 pm、签字人 rd（v5.3，原为 sales）；`accept_requirement` 的前置条件含 `attrs.reuse_checked and not attrs.reuse_pending`）、`accept_requirement`、`distortion`、`confirm_translation`、`contribution`、`market_eval`、`seal_points`、`seal_leak`、`release`（前置条件、主人、签字人见 `workpackages/REPLAN-v5.md` 第 4.3 节，均先用规则打分）。v5.2：`opportunity` 的 `decision_label` 为「同类需求是否合并立项」，签字人 rd，`refs` 含 `requirement_ids`（逗号分隔）与 `assigned_rd`。
@@ -691,7 +695,8 @@ def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], 
 | 角色 | 对象 | 解析为 |
 |---|---|---|
 | sales | session / requirement / slot | 会话的业务员（需求单取首个会话） |
-| pm | 任意 | `pm:agent` |
+| pm（主人） | 任意 | `pm:agent`（v6：需求单已被研发退回过时为真人产品经理，纠偏不走 Agent 起草） |
+| pm（签字人，v6） | 任意 | 真人产品经理（种子中 id 最小的非 Agent 产品经理，`pm:P01`） |
 | rd | requirement / slot（layer 2/3） | `req.assigned_rd` |
 | rd | knowledge | 产品归属研发 |
 | rd | theme（v5.2，机会汇聚） | `refs.assigned_rd`（候选需求单中最早一张的研发） |
@@ -730,7 +735,8 @@ class Evidence(BaseModel):
 
 class Resolution(BaseModel):
     action: Literal["sign", "accept", "return", "answered", "update_sheet", "freeze_access",
-                    "approve_decrypt", "reject_decrypt", "dismiss"]
+                    "approve_decrypt", "reject_decrypt", "dismiss", "auto"]
+    # v6：auto = 觉按模板 auto_action 自动执行，by = "jue:auto"；
     # v5：sign = 签字人在工作面签字（升级、确认转译、沉淀、客户评价、封存 / 放出、发布；v5.2：机会汇聚的合并）；
     # accept / return = 研发接单 / 退回（accept 同时关闭关联的 opportunity）；
     # answered = 回问已由客户回答，或异常类问题的前置条件不再成立；删除 draft_requirement、approve_project（立项 ≡ 接单）
@@ -775,6 +781,10 @@ class QuestionBus:
     def set_prepared(self, qid: str, at: datetime | None) -> Question: ...
         # v5：at 有值 → 进入待签，写 question_prepared 事件；None → 退回准备中（需求单已知条件变化时由门面调用）
 ```
+
+### 6.1 自动执行（v6）
+
+`signer_role: null` 且带 `auto_action` 的模板是**低风险推进**：问题发布后，hub 在派单时调用门面内部入口 `HuayanApp.auto_execute(question_id)`。该入口只按查表 `{escalate, assign_sales}` 调用对应方法的内部实现（执行者 `jue:auto`），**不经 HTTP 暴露**，外部请求无法以 `jue:auto` 身份调用任何方法；执行成功后写 `auto_executed` 事件并以 `action="auto"` 结案，防止重复触发。高影响动作（立项、技术确认、封存、发布、解密）不得配 `auto_action`。
 
 v5：删除路由配置。发布方按模板的 `owner_role` / `signer_role` 与第 5.4 节的解析表填写主人与签字人；`decrypt_request` 由门面发布，主人与签字人都是产品归属研发。界面据 `prepared_at` 区分「准备中 / 待签」。
 
@@ -961,7 +971,8 @@ EventKind = Literal["turn", "extraction", "ask_hint", "match", "recommend", "esc
                     "requirement_edited", "requirement_translated", "knowledge_contributed", "trial", "market_eval",
                     "points_set", "reuse_proposed", "reuse_adopted", "reuse_declined", "merge_proposed", "requirements_merged", "product_released", "sheet_updated",
                     "access_frozen", "human_decision",
-                    "agent_action_proposed", "agent_action_decided"]
+                    "agent_action_proposed", "agent_action_decided",
+                    "auto_executed", "sales_assigned", "project_declined", "l2_contributed", "scope_extended"]   # v6
 # v5：删除 requirement_confirmed
 
 class Event(BaseModel):
@@ -1248,7 +1259,29 @@ class HuayanApp:
     audit: AuditLog; ledger: Ledger; actors: dict[str, Actor]
 
     # L1（WP-A2）
-    def start_session(self, customer_id: str, sales_id: str) -> Session: ...
+    def start_session(self, customer_id: str, sales_id: str | None = None) -> Session: ...
+        # v6：sales_id 为 None = 客户自助会话（origin="customer"），只接受客户发言，升级由觉自动执行
+    # v6 路由（REPLAN-v6 V6-1）
+    def decline_project(self, req_id: str, reason: str, by: str, applicable_product: str | None = None) -> Requirement: ...
+        # assigned_rd，draft；status="rejected"，写 project_declined（reason、product_id）；accept_requirement resolve(dismiss)，
+        # 需求单其余 open 问题 resolve(answered)；给出 applicable_product 时各会话按公开版本推荐该产品，否则会话 closed
+    def route_of(self, object_id: str, viewer_id: str) -> dict: ...
+        # 只读：会话（或需求单所在会话）当前路径（自助解决 / 交业务员 / 入研 / 复用 / 产品机会 / 研发不立项 / 追问中）、
+        # 四个角色格的状态（human / auto / pending / none）与依据（觉的问题、分数、结案人）；全部由事件与状态推出
+    def auto_execute(self, question_id: str) -> Question: ...
+        # 内部入口（6.1 节），只由 hub 调用，不经 HTTP；查表 {escalate, assign_sales}，执行者 jue:auto，写 auto_executed，resolve(auto)
+        # assign_sales：按 config/app.yaml 的 customer_sales 写入会话业务员，写 sales_assigned；会话 origin 不变
+    # v6 产品经理协作（V6-3）；by 必须是真人产品经理（pm:agent 只能起草）
+    def extend_scope(self, question_id: str, note: str, by: str) -> KnowledgeUnit: ...
+        # scope_update 的签字人；把现象加进本门面内该产品的 solves（不改种子），生成本人名下 L2 知识
+        # ku:translation:scope:<pid>:<ph>，记 contributed；写 scope_extended；此后 L1 因它命中时给归属人记 cited
+    def contribute_l2(self, req_id: str, item_index: int, scene_phrase: str, product_term: str, by: str) -> KnowledgeUnit: ...
+        # 只能沉淀本人修正过的 L2 条目；生成 ku:translation:<req>:l2:<i>（L2），记 contributed；写 l2_contributed；resolve contribution_pm(sign)
+    def merge_requirements(self, question_id: str, by: str, note: str = "") -> Requirement: ...
+        # v6：签字人改为真人产品经理，note = 商业价值判断，写入结案备注与 requirements_merged
+    def readiness(self, req_id: str, viewer_id: str) -> dict: ...
+        # v6.1 开工门槛（只读，L2/L3）：必问条件逐项的取值、原话、是否出现在客户开场白、是否由觉追问得到；
+        # 未答回问、未处理失真数；ready = 必问条件齐全且无阻断
     def add_turn(self, session_id: str, speaker: Literal["customer", "sales"], text: str) -> Session: ...
         # v5：不再自动升级。业务员发言先过发送拦截：leak_hits(text, 全部需求单的 sealed, [], kb) 有命中则抛 ValueError
         # （消息只含命中句序号与类别），不写入；客户发言答复了 open 回问时：resolve(answered)，取值写入需求单 known_slots，

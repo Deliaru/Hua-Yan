@@ -33,13 +33,22 @@ const pct1 = (x: number) => `${(Math.round(x * 1000) / 10).toString()}%`;
 const fmt = (k: string, v: Num) => (v == null ? "—" : RATE.has(k) ? pct1(v) : v.toFixed(2));
 const groupName = (g: string) => g.replace(/^G\d\s*/, "");
 
+// V6-5 岗位对照（scripts/demo_routes.py）：同一批需求按传统定义、v5、v6 三种走法
+interface Cell { traditional: string | number; v5: string | number; v6: string | number }
+interface Routes {
+  batch: { route: string; customer: string; title: string }[]; jue_model: string; rd_tickets: Cell;
+  roles: (Cell & { role: string; duty: string; note?: string })[];
+  metrics: (Cell & { label: string; note: string })[];
+  definitions: Record<"traditional" | "v5" | "v6", string>;
+}
+
 // 单卡对照的结论数字（门面按研发视角返回整张卡）
 interface Single { one_shot: { missing: string[] }; huayan: { missing: string[]; rounds: { asked: string | null }[]; back_asks: unknown[] } }
 
 // 每块的结论：标题是一句结论，右侧一个关键数字；页首「四个结论」与各块标题用同一份
 interface Finding { id: string; topic: string; headline: string; hero: string; heroLabel: string }
 
-function findings(c: Single, d: Distortion, j: JueK, w: Week): Finding[] {
+function findings(c: Single, d: Distortion, j: JueK, w: Week, v: Routes): Finding[] {
   const e = d.by_route.escalate.metrics;
   const cut = Math.round((1 - e[G3].returned! / e[G1].returned!) * 10) * 10;
   const asks = c.huayan.rounds.filter((r) => r.asked).length;
@@ -47,6 +56,7 @@ function findings(c: Single, d: Distortion, j: JueK, w: Week): Finding[] {
   const wins = test.filter(([, x]) => x.jue_k.auc > x.jue_proto_rule.auc).length;
   const ask = j.calibration["ask_slot/test"];
   const k = w.detection.jue_k, rule = w.detection.rule_alert;
+  const relay = v.metrics[0];
   return [
     { id: "sec-card", topic: "同一个客户，两种做法",
       headline: `一次性翻译缺 ${c.one_shot.missing.length} 项必问信息被退回；化言追问 ${asks} 次、回问 ${c.huayan.back_asks.length} 次，研发拿到的信息是齐的`,
@@ -60,6 +70,9 @@ function findings(c: Single, d: Distortion, j: JueK, w: Week): Finding[] {
     { id: "sec-week", topic: "一周业务里能不能及时发现",
       headline: `命中 ${k.hits}/${k.positives} 个真情况，困难负样本误报 ${k.false_alarms} 次，发现环节调用大模型 ${k.jue_llm_calls} 次`,
       hero: `${k.false_alarms} / ${k.hard_negatives}`, heroLabel: `困难负样本误报 · 规则告警 ${rule.false_alarms} / ${rule.hard_negatives}` },
+    { id: "sec-roles", topic: "每个岗位还要不要做过去每单都做的事",
+      headline: `同一批 ${v.batch.length} 个需求：研发收到的需求单 ${v.rd_tickets.v5} → ${v.rd_tickets.v6} 张，业务员不再陪聊和签升级，产品经理开始管适用范围和机会`,
+      hero: `${relay.v5} → ${relay.v6}`, heroLabel: "人工中转节点 · v5 → v6" },
   ];
 }
 
@@ -240,6 +253,49 @@ function JueKSection({ f, j }: { f: Finding; j: JueK }) {
   );
 }
 
+function RolesSection({ f, v }: { f: Finding; v: Routes }) {
+  const cols = ["传统（按定义）", "v5 化言", "v6 化言"];
+  const cell = (x: string | number, strong?: boolean) => <td className={`py-2 pl-3 align-top ${strong ? "font-semibold" : "text-ink-2"}`}>{x}</td>;
+  return (
+    <Section f={f} n={5} bare
+             note={<>「传统」一列是按黑线流程定义出来的，不是测量；v5、v6 两列是同一套代码、同一批台词真实运行后由事件日志计出的。
+               岗位之间必要的协作都保留，拿掉的是因信息缺失、转述、重复才被迫发生的工作。研发因此多出多少中长期研发时间，需要企业试点验证。</>}
+             how={<>同一批 {v.batch.length} 个需求：{v.batch.map((b) => `${b.route}（${b.title}）`).join("；")}。
+               v6：{v.definitions.v6}。v5：{v.definitions.v5}。觉用 {v.jue_model}，离线运行（Jev 用桩、抽取用规则）。
+               来源 docs/reports/v6_routes/metrics.json，由 scripts/demo_routes.py 生成，脚本对每条路径的关键结果做了断言。全部为模拟数据。</>}
+             more={<div className="mt-3 flex flex-col gap-1.5">{v.metrics.map((m) => (
+               <p key={m.label} className="text-[12.5px] leading-[20px] text-ink-2"><b className="font-semibold text-ink">{m.label}</b>：{m.note}</p>))}
+               {v.roles.filter((x) => x.note).map((x) => (
+               <p key={x.duty} className="text-[12.5px] leading-[20px] text-ink-2"><b className="font-semibold text-ink">{x.duty}</b>：{x.note}</p>))}</div>}>
+      <div className="group overflow-x-auto px-5 py-3">
+        <p className="eyebrow pb-1">岗位判别：过去每张单都要做的事，现在还要不要做</p>
+        <table className="w-full text-[13px] leading-5">
+          <thead><tr className="text-left text-[12px] text-ink-2">
+            <th className="py-1.5 font-semibold">岗位 · 事</th>{cols.map((h) => <th key={h} className="py-1.5 pl-3 font-semibold">{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {v.roles.map((x) => (
+              <tr key={x.duty} className="border-t border-sep">
+                <td className="py-2 align-top"><span className="mr-1.5 text-ink-3">{x.role}</span>{x.duty}</td>
+                {cell(x.traditional)}{cell(x.v5)}{cell(x.v6, true)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-4 grid grid-cols-4 gap-3">
+        {v.metrics.map((m) => (
+          <div key={m.label} className="group px-4 py-3">
+            <p className="text-[12px] text-ink-2">{m.label}</p>
+            <p className="num mt-1 text-[22px] font-semibold leading-7">{m.v6}</p>
+            <p className="num text-[12px] text-ink-3">v5 {m.v5} · 传统 {m.traditional}</p>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 function WeekSection({ f, w }: { f: Finding; w: Week }) {
   const names = Object.keys(w.detection);
   const k = w.detection.jue_k;
@@ -284,8 +340,9 @@ export function Eval() {
   const d60 = useData(() => api.report<Distortion>("distortion"), []);
   const j = useData(() => api.report<JueK>("jue_k"), []);
   const w = useData(() => api.report<Week>("week"), []);
-  if (!c || !d || !d60 || !j || !w) return null;
-  const fs = findings(c, d, j, w);
+  const v = useData(() => api.report<Routes>("v6_routes"), []);
+  if (!c || !d || !d60 || !j || !w || !v) return null;
+  const fs = findings(c, d, j, w, v);
   return (
     <>
       <Side>
@@ -297,12 +354,12 @@ export function Eval() {
           ))}
         </nav>
         <p className="mt-4 px-[18px] text-[12px] leading-[18px] text-ink-3">
-          数字取自各报告的 metrics.json，同一种子重跑逐字节一致；结论与限制以各报告 README.md 为准。
+          数字取自各报告的 metrics.json，同一种子重跑逐字节一致；结论与限制以各报告 README.md 为准。评测按换入两个公开产品（TF-231A、TF-288B）之前的模拟产品表计算；这两个真实产品是后期找到、接入试用的，只改了产品种子，演示路线不变。
         </p>
       </Side>
       <div className="mx-auto flex max-w-[960px] flex-col gap-14 px-8 pb-24 pt-7">
         <div className="flex flex-col gap-4">
-          <PageHead title="评测" subtitle="全部基于模拟数据，是相对比较，不是真实业务验证。四个结论，点一行看怎么测出来的。" />
+          <PageHead title="研发开工前，需求被说清楚了吗" subtitle="全部基于模拟数据，是相对比较，不是真实业务验证。完整率与需退回比例是返工的前置指标，不是返工次数或工时。五个结论，点一行看怎么测出来的。" />
           <Summary fs={fs} />
         </div>
         <Section f={fs[0]} n={1} bare
@@ -312,6 +369,7 @@ export function Eval() {
         <DistortionSection f={fs[1]} d={d} d60={d60} />
         <JueKSection f={fs[2]} j={j} />
         <WeekSection f={fs[3]} w={w} />
+        <RolesSection f={fs[4]} v={v} />
       </div>
     </>
   );

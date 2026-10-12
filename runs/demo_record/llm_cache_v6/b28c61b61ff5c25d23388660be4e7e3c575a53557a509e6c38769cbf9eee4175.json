@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791792094963071176-1833","name":"search_knowledge","arguments":{"query":"色花 气流染色机 锦纶氨纶","kind":"translation"}}],"usage":{"input_tokens":4900,"output_tokens":33},"latency_ms":3948.480068000208,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

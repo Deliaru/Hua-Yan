@@ -41,3 +41,6 @@ class MockSystem1Client:
             self.meter.record(caller=caller, kind="s1", impl="mock", degraded=True,
                               n_questions=len(questions), latency_ms=0, cost=None, ok=True)
         return S1Result(answers=answers, latency_ms=0, impl="mock", degraded=True)
+
+    def close(self):
+        """与 OneJevClient 同接口：界面重置 / 淘汰会话时调用，桩没有连接要关。"""

@@ -1,87 +1,118 @@
-// 架构总览（默认首页）：首屏一句主张 + 问题与四个问题、三条主张、整条协作链的流程图（可逐步播放一条需求，下方进入演示工作面）、效率对照（数字取自 docs/reports/ 的真实运行）。
-// 流程图里的示例话术是模拟数据，只说明用法；橙色菱形是「觉提出 → 人签字」的决策点。
+// 架构总览（默认首页）：首屏一句主张 + 问题与四个问题、因果链与黑红泳道图、三条主张、四层知识边界图（可逐步播放一条需求）、效率对照（数字取自 docs/reports/ 的真实运行）。
+// 流程图里的示例话术是模拟数据，只说明用法；实心橙色菱形是「觉提出 → 人签字」的决策点，空心是觉按模板自动执行或直接问客户。
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { useData } from "../ctx";
+import { useApp, useData } from "../ctx";
 import { ReplayNote } from "../components/ui";
+import { CausalChain, Workflow } from "./Chain";
 
 const X = [250, 432, 614, 796, 978, 1160];
-const Y = { 1: 164, 2: 296, 3: 428 } as const;
+const Y = { 0: 164, 1: 296, 2: 428, 3: 560 } as const;
+type Lane = keyof typeof Y;
 type Kind = "human" | "agent" | "store";
-interface Node { id: string; col: number; lane: 1 | 2 | 3; title: string; sub: string; by: string; kind: Kind; step: number }
+interface Node { id: string; col: number; lane: Lane; title: string; sub: string; by: string; kind: Kind; step: number }
 
 const NODES: Node[] = [
-  { id: "talk", col: 0, lane: 1, title: "客户对话", sub: "只会描述宏观现象", by: "业务员直接面对客户", kind: "human", step: 0 },
-  { id: "card", col: 1, lane: 1, title: "场景需求卡", sub: "每一格绑定客户原话", by: "实时抽取", kind: "agent", step: 1 },
-  { id: "match", col: 2, lane: 1, title: "分级检索 + Jev", sub: "按权限检索、给匹配概率", by: "L1 知识", kind: "agent", step: 2 },
-  { id: "rec", col: 3, lane: 1, title: "推荐卡", sub: "按客户画像决定披露", by: "业务员发给客户", kind: "human", step: 9 },
-  { id: "kb", col: 5, lane: 1, title: "L1 知识库", sub: "新品说明书上架", by: "研发审定发布", kind: "store", step: 9 },
+  { id: "talk", col: 0, lane: 0, title: "客户自助对话", sub: "只会描述宏观现象", by: "客户本人", kind: "human", step: 0 },
+  { id: "card", col: 1, lane: 0, title: "场景需求卡", sub: "每一格绑定客户原话", by: "实时抽取", kind: "agent", step: 1 },
+  { id: "match", col: 2, lane: 0, title: "分级检索 + Jev", sub: "按权限检索、给匹配概率", by: "L0 知识", kind: "agent", step: 2 },
+  { id: "rec", col: 3, lane: 0, title: "推荐卡", sub: "说明书 + 公开案例", by: "能解决就当场闭合", kind: "agent", step: 2 },
+  { id: "kb", col: 5, lane: 0, title: "L0 知识库", sub: "说明书 · 适用范围 · 案例", by: "研发发布 · 产品经理扩范围", kind: "store", step: 9 },
+  { id: "report", col: 1, lane: 1, title: "内部评价报告", sub: "试样与客户反馈", by: "业务员可看", kind: "store", step: 0 },
+  { id: "biz", col: 3, lane: 1, title: "商务事项", sub: "报价 · 采购 · 客户评价", by: "业务员处理", kind: "human", step: 2 },
   { id: "case", col: 1, lane: 2, title: "历史案例 · L2 对照", sub: "说明书没写的用法", by: "归属到人", kind: "store", step: 3 },
   { id: "reuse", col: 2, lane: 2, title: "现成产品复用", sub: "先查，能复用就不立项", by: "产品经理 Agent", kind: "agent", step: 3 },
   { id: "l2", col: 3, lane: 2, title: "L2 转译", sub: "场景语言 → 产品需求", by: "产品经理 Agent 起草", kind: "agent", step: 4 },
+  { id: "scope", col: 4, lane: 2, title: "产品适用范围", sub: "研发判一次，变成边界", by: "产品经理签字", kind: "human", step: 10 },
   { id: "pack", col: 5, lane: 2, title: "反向包装", sub: "只用对外要点写说明书", by: "产品经理 Agent 起草", kind: "agent", step: 8 },
   { id: "ledger", col: 1, lane: 3, title: "转化知识 · 归属人", sub: "被引用即给归属人记分", by: "贡献账本", kind: "store", step: 5 },
-  { id: "accept", col: 3, lane: 3, title: "研发接单", sub: "= 立项", by: "研发签字", kind: "human", step: 5 },
+  { id: "accept", col: 3, lane: 3, title: "研发接单", sub: "= 立项；或不立项", by: "研发签字", kind: "human", step: 5 },
   { id: "l3", col: 4, lane: 3, title: "L3 转译", sub: "产品需求 → 化学语言", by: "研发 Agent 起草", kind: "agent", step: 6 },
   { id: "seal", col: 5, lane: 3, title: "试样 · 沉淀 · 封存", sub: "窗户纸只对 L3 可见", by: "研发审定", kind: "human", step: 7 },
 ];
 
-// 边：style = flow 主线 / branch 支线 / data 知识引用 / back 回问 / wheel 回流
-interface Edge { d: string; step: number; style: "flow" | "branch" | "data" | "back" | "wheel"; mark?: [number, number, string, "start" | "middle" | "end"] }
+// 边：style = flow 主线 / branch 支线 / data 知识引用 / back 回到客户 / wheel 回流 L0
+// mark：决策点菱形，sign = 觉提出、人签字（实心）；auto = 觉自动执行或直接问客户（空心）
+interface Edge {
+  d: string; step: number; style: "flow" | "branch" | "data" | "back" | "wheel";
+  mark?: [number, number, string, "start" | "middle" | "end", "sign" | "auto"];
+}
 const EDGES: Edge[] = [
   { d: "M316 164H366", step: 1, style: "flow" },
-  { d: "M400 134Q341 104 282 134", step: 1, style: "back", mark: [341, 119, "追问", "middle"] },
+  { d: "M400 134Q341 104 282 134", step: 1, style: "back", mark: [341, 119, "觉追问", "middle", "auto"] },
   { d: "M498 164H548", step: 2, style: "flow" },
-  { d: "M680 164H730", step: 9, style: "flow" },
-  { d: "M614 194V266", step: 3, style: "flow", mark: [614, 214, "升级", "start"] },
-  { d: "M650 266C650 230 760 230 760 194", step: 99, style: "branch", mark: [705, 230, "审定", "end"] },
-  { d: "M498 296H548", step: 3, style: "data" },
-  { d: "M680 296H730", step: 4, style: "flow" },
-  { d: "M796 326V398", step: 5, style: "flow", mark: [796, 344, "接单", "start"] },
-  { d: "M730 428H498", step: 5, style: "data" },
-  { d: "M862 428H912", step: 6, style: "flow" },
-  { d: "M978 398V362H250V194", step: 6, style: "back", mark: [380, 362, "回问 · 研发需要知道", "start"] },
-  { d: "M1044 428H1094", step: 7, style: "flow", mark: [1069, 428, "确认", "middle"] },
-  { d: "M1160 398V326", step: 8, style: "flow", mark: [1160, 362, "放出", "end"] },
-  { d: "M1160 266V194", step: 9, style: "flow", mark: [1160, 230, "发布", "end"] },
+  { d: "M680 164H730", step: 2, style: "flow" },
+  { d: "M796 194V266", step: 2, style: "branch", mark: [796, 230, "交业务员", "start", "auto"] },
+  { d: "M614 194V398", step: 3, style: "flow", mark: [614, 230, "升级 · 直达研发", "start", "auto"] },
+  { d: "M660 398C660 330 720 260 760 194", step: 3, style: "branch", mark: [670, 347, "复用 · 范围内自动", "start", "auto"] },
+  { d: "M498 428H548", step: 3, style: "data" },
+  { d: "M680 428H730", step: 4, style: "flow" },
+  { d: "M796 458V530", step: 5, style: "flow", mark: [796, 476, "接单", "start", "sign"] },
+  { d: "M730 560H498", step: 5, style: "data" },
+  { d: "M862 560H912", step: 6, style: "flow" },
+  { d: "M978 590V632H250V194", step: 6, style: "back", mark: [380, 632, "回问 · 研发需要知道", "start", "auto"] },
+  { d: "M1044 560H1094", step: 7, style: "flow", mark: [1069, 560, "确认", "middle", "sign"] },
+  { d: "M1160 530V458", step: 8, style: "flow", mark: [1160, 494, "放出", "end", "sign"] },
+  { d: "M1160 398V194", step: 9, style: "flow", mark: [1160, 230, "发布", "end", "sign"] },
   { d: "M1160 134V122Q1160 112 1148 112H626Q614 112 614 122V134", step: 9, style: "wheel" },
+  { d: "M846 530C846 494 930 500 930 462", step: 10, style: "branch", mark: [888, 497, "扩适用范围", "start", "sign"] },
+  { d: "M978 398V180Q978 164 994 164H1090", step: 10, style: "wheel" },
 ];
 
 const LANES = [
-  { lane: 1, name: "场景语言", who: "业务员 · 客户", see: "看不到 L2 / L3 原文" },
-  { lane: 2, name: "产品语言", who: "产品经理 Agent", see: "L3 知识只见归属" },
+  { lane: 0, name: "场景语言", who: "客户", see: "只看说明书、用法、公开案例" },
+  { lane: 1, name: "场景语言", who: "业务员", see: "多看内部评价；不见 L2 / L3 原文" },
+  { lane: 2, name: "产品语言", who: "产品经理 Agent · 产品经理", see: "L3 知识只见归属" },
   { lane: 3, name: "化学语言", who: "研发", see: "封存项只本层可见" },
 ] as const;
 
-// 播放一条需求（示例，模拟数据）
-export const STEPS: { node: string; text: string; how: string }[] = [
-  { node: "talk", text: "「染完以后，布面上深一块浅一块，怎么办？」", how: "客户只描述现象。今天这句话会被业务员按自己的理解转述，到研发手里已经走样。" },
-  { node: "card", text: "面料：锦纶氨纶「锦纶氨纶混纺」· 设备：气流缸「我们是气流缸」", how: "觉判断缺面料、值得问，提示业务员趁客户还在就追问；每一格都绑定客户原话。" },
-  { node: "match", text: "检索到 2 个候选产品，Jev：「都不合适」概率最高", how: "觉提出「是否转产品经理 Agent」，业务员的 Agent 起草升级说明，业务员签字。" },
-  { node: "reuse", text: "已查 3 个历史案例：无现成产品", how: "产品经理 Agent 先查 L2 知识；能复用就由研发审定后直接转给业务员，不必立项。" },
-  { node: "l2", text: "「需要在低浴比下仍能保持匀染效果的助剂」", how: "产品经理 Agent 把场景语言转成产品需求，每句标明依据了谁的历史案例。" },
-  { node: "accept", text: "研发接单 = 立项", how: "接单是 L2 的生效点；被引用的历史案例给归属人记分。" },
-  { node: "l3", text: "「对酸性染料有缓染作用、与染料竞争染座的组分；氨纶段亲和力低，需控制沾色」", how: "研发 Agent 起草、研发修改确认；觉发现缺染浴 pH，提出回问，业务员回头问客户，答复回填需求单。" },
+// 播放一条需求（C 入研 + C′ 扩范围，示例，模拟数据）
+const STEPS: { node: string; text: string; how: string }[] = [
+  { node: "talk", text: "「染完以后，布面上深一块浅一块，怎么办？」", how: "客户自己来问，只描述现象；不再先经业务员记录、转述一遍。" },
+  { node: "card", text: "面料：锦纶氨纶「锦纶氨纶混纺」· 设备：气流缸「我们是气流缸」", how: "觉判断缺面料、值得问，直接向客户追问研发开工需要的条件；每一格都绑定客户原话。" },
+  { node: "match", text: "按 L0 权限检索说明书与公开案例，Jev：「都不合适」概率最高", how: "能解决的当场给推荐卡（A，客户自助闭合）；客户要报价，觉自动交业务员（B）。这次现有产品都不合适。" },
+  { node: "reuse", text: "觉自动升级；已查 3 个历史案例：无现成产品", how: "「直达研发」是低风险推进，由觉按模板自动执行，不再要业务员签字；产品经理 Agent 先查 L2 知识，适用范围内的复用自动采用。" },
+  { node: "l2", text: "「需要在低浴比下仍能保持匀染效果的助剂」", how: "产品经理 Agent 在后台把场景语言转成产品需求，每句标明依据了谁的历史案例；真人产品经理不再逐单转述。" },
+  { node: "accept", text: "开工门槛已齐，研发接单 = 立项", how: "研发只收到带客户原话、必问条件已齐的需求单；接单是 L2 的生效点，被引用的历史案例给归属人记分。" },
+  { node: "l3", text: "「对酸性染料有缓染作用、与染料竞争染座的组分；氨纶段亲和力低，需控制沾色」", how: "研发 Agent 起草、研发修改确认；觉发现缺染浴 pH，提出回问，客户的答复带原话回填需求单。" },
   { node: "seal", text: "研发改过的转译沉淀为自己的知识；窗户纸封存，对外要点放出", how: "试样通过、业务员带回客户评价后，研发审定哪些封存、哪些放出。" },
   { node: "pack", text: "说明书只用产品需求与对外要点写成", how: "觉检查说明书是否命中封存项或 L3 术语；命中则研发 Agent 改写，产品经理 Agent 拿不到封存内容。" },
-  { node: "kb", text: "研发审定发布，新品回到 L1 知识库", how: "下一位客户同样描述，业务员在 L1 直接命中新品，不再升级——这一轮系统又多会了一件事。" },
+  { node: "kb", text: "研发审定发布，新品说明书回到 L0", how: "下一位客户同样描述，在自助阶段直接命中新品，不再进研发——这一轮系统又多会了一件事。" },
+  { node: "scope", text: "另一种结局：研发判「不立项：已有产品适用」", how: "觉提出扩适用范围，产品经理签字，写进产品边界；此后同类需求在 L0 自助命中，研发对这类用法只判断一次。" },
 ];
 
-export function Overview({ toStory }: { toStory: () => void }) {
+export function Overview() {
+  const { go, startDemo } = useApp();
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-14 px-8 pb-16 pt-10">
       <Hero />
-      <Pillars />
-      <section className="flex flex-col gap-5">
-        <h2 className="mx-auto max-w-[860px] text-center text-[26px] font-semibold leading-[38px] tracking-[-0.01em]">
-          化言重构的不是一次化学问答，<br />而是从客户需求到研发行动，再到知识回流的<span className="text-accent">整条企业协作链</span>。
-        </h2>
-        <FlowDiagram />
-        <div className="flex flex-col items-center gap-3 pt-2">
-          <p className="text-[15px] text-ink-2">让 AI 不只提供答案，更让企业有能力持续发现问题、协同决策、积累经验。</p>
-          <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]" onClick={toStory}>进入演示流程，进一步理解架构及其价值 →</button>
+      <CausalChain />
+      <Workflow />
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-[15px] text-ink-2">进入演示前，建议先往下看完架构：「觉」怎样推动流程、四层知识怎样隔开（下图可播放一条需求）。</p>
+        <div className="flex items-center gap-3">
+          <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]"
+                  onClick={() => document.getElementById("arch")?.scrollIntoView({ behavior: "smooth" })}>先看架构图 ↓</button>
+          <button className="btn btn-plain !h-11 !rounded-[10px] !px-5 !text-[14px]" onClick={startDemo}>直接看演示讲解 →</button>
         </div>
         <Status />
+      </div>
+      <div id="arch" className="scroll-mt-16"><Pillars /></div>
+      <section className="flex flex-col gap-5">
+        <h2 className="mx-auto max-w-[860px] text-center text-[26px] font-semibold leading-[38px] tracking-[-0.01em]">
+          知识边界（不是审批顺序）
+        </h2>
+        <p className="mx-auto max-w-[860px] text-center text-[14px] leading-[23px] text-ink-2">
+          L0 客户只看说明书、用法与公开案例；L1 业务员多看内部评价；L2、L3 的知识对下层只显示归属。
+          下图是一条需求穿过四层知识时，每一层用了谁的知识、对下层放出了什么——它说的是权限，不是谁签字的先后。</p>
+        <FlowDiagram />
+        <div className="mt-2 flex flex-col items-center gap-3">
+          <p className="text-[15px] text-ink-2">看完了？跟着讲解看一家企业的一个上午：左边讲解，右边是真实工作面在跑，每一步讲清解放了谁的什么生产力。</p>
+          <div className="flex items-center gap-3">
+            <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]" onClick={startDemo}>开始演示讲解 →</button>
+            <button className="btn btn-plain !h-11 !rounded-[10px] !px-5 !text-[14px]" onClick={() => go("customer")}>自己在四个工作面里操作</button>
+          </div>
+        </div>
       </section>
       <Efficiency />
       <ReplayNote />
@@ -209,11 +240,11 @@ function FlowDiagram() {
   return (
     <section>
       <div className="group-title flex items-baseline justify-between">
-        <span>业务流程 · 一条需求怎样走完三层</span>
+        <span>业务流程 · 一条需求怎样穿过四层知识</span>
         <span className="font-normal text-ink-3">示例话术为模拟数据</span>
       </div>
       <div className="group">
-        <div className="overflow-x-auto"><svg viewBox="0 0 1250 504" className="block w-full min-w-[980px] select-none" role="img" aria-label="化言分层转译流程图">
+        <div className="overflow-x-auto"><svg viewBox="0 0 1250 648" className="block w-full min-w-[980px] select-none" role="img" aria-label="化言分层转译流程图">
           <defs>
             {([["gray", "rgba(60,60,67,.55)"], ["attn", "#e07a00"], ["wheel", "#5b7cfa"]] as const).map(([k, c]) => (
               <marker key={k} id={`ar-${k}`} viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -230,7 +261,7 @@ function FlowDiagram() {
             const top = Y[lane] - 60;
             return (
               <g key={lane}>
-                <rect x={16} y={top} width={1218} height={120} rx={14} fill={lane === 1 ? "#fbfbfc" : lane === 2 ? "#f8f8fa" : "#f5f5f8"} />
+                <rect x={16} y={top} width={1218} height={120} rx={14} fill={["#fcfcfd", "#fafafb", "#f7f7f9", "#f4f4f7"][lane]} />
                 <text x={36} y={top + 34} fontSize={20} fontWeight={600} fill="var(--color-ink)">L{lane}</text>
                 <text x={36} y={top + 56} fontSize={13} fontWeight={600} fill="var(--color-ink)">{name}</text>
                 <text x={36} y={top + 74} fontSize={11} fill="var(--color-ink-2)">{who}</text>
@@ -241,9 +272,12 @@ function FlowDiagram() {
 
           {EDGES.map((e, i) => <EdgeView key={i} e={e} on={shown(e.step)} />)}
           {NODES.map((n) => <NodeView key={n.id} n={n} on={shown(n.step)} active={active === n.id} onClick={() => jump(n.id)} />)}
+          <g opacity={shown(10) ? 1 : .2} className="transition-opacity duration-500">
+            <text x={990} y={300} fontSize={11} fontWeight={600} fill="#4a5fd6">写进产品边界</text>
+          </g>
           <g opacity={shown(9) ? 1 : .2} className="transition-opacity duration-500">
             <rect x={808} y={102} width={158} height={20} rx={10} fill="#fff" stroke="url(#wheel)" strokeWidth={1} />
-            <text x={887} y={116} fontSize={11} fontWeight={600} textAnchor="middle" fill="#4a5fd6">下一位客户 L1 直接命中</text>
+            <text x={887} y={116} fontSize={11} fontWeight={600} textAnchor="middle" fill="#4a5fd6">下一位客户 L0 自助命中</text>
           </g>
         </svg></div>
 
@@ -271,9 +305,10 @@ function FlowDiagram() {
               <Legend kind="human" label="人签字生效" />
               <Legend kind="agent" label="Agent 起草" />
               <Legend kind="store" label="知识（带归属）" />
-              <span className="flex items-center gap-1.5"><Diamond />觉提出、人签字的决策点</span>
+              <span className="flex items-center gap-1.5"><Diamond />觉提出、人签字</span>
+              <span className="flex items-center gap-1.5"><Diamond hollow />觉自动执行 / 直接问客户</span>
               <span className="flex items-center gap-1.5"><i className="h-0 w-5 border-t-[1.5px] border-dashed border-[#e07a00]" />回到客户补信息</span>
-              <span className="flex items-center gap-1.5"><i className="h-[2px] w-5 rounded bg-gradient-to-r from-[#3fb8e8] via-[#5b7cfa] to-[#b25cf0]" />新品回流 L1</span>
+              <span className="flex items-center gap-1.5"><i className="h-[2px] w-5 rounded bg-gradient-to-r from-[#3fb8e8] via-[#5b7cfa] to-[#b25cf0]" />回流 L0</span>
               <span className="text-ink-3">点任一节点跳到那一步</span>
             </div>
           )}
@@ -284,7 +319,7 @@ function FlowDiagram() {
 }
 
 function JueBand() {
-  const chips = ["状态改变", "觉提出决策", "主人准备 · Agent 起草", "签字人签字 · 按钮"];
+  const chips = ["状态改变", "觉提出决策", "主人准备 · Agent 起草", "人签字 / 觉自动执行"];
   const widths = chips.map((c) => 26 + c.length * 12.5);
   const gap = 34;
   const start = 330;
@@ -305,8 +340,8 @@ function JueBand() {
       <path d={`M${mid(3)} 52V70H${mid(0)}V56`} fill="none" stroke="#e07a00" strokeWidth={1.2} strokeDasharray="3 3" markerEnd="url(#ar-attn)" />
       <text x={(mid(0) + mid(3)) / 2} y={67} fontSize={10.5} textAnchor="middle" fill="var(--color-attn-ink)" style={{ paintOrder: "stroke" }}
             stroke="var(--color-attn-bg)" strokeWidth={6}>觉再看一遍</text>
-      <text x={1214} y={44} fontSize={11.5} textAnchor="end" fill="var(--color-ink-2)">流程不写死在代码里：</text>
-      <text x={1214} y={62} fontSize={11.5} textAnchor="end" fill="var(--color-ink-2)">每一步都是觉提出、人签字</text>
+      <text x={1214} y={44} fontSize={11.5} textAnchor="end" fill="var(--color-ink-2)">低风险推进：觉自动执行</text>
+      <text x={1214} y={62} fontSize={11.5} textAnchor="end" fill="var(--color-ink-2)">立项、确认、封存、发布：人签</text>
     </g>
   );
 }
@@ -320,12 +355,13 @@ function EdgeView({ e, on }: { e: Edge; on: boolean }) {
       <path d={e.d} fill="none" stroke={stroke} strokeWidth={e.style === "wheel" ? 2 : 1.3} strokeDasharray={dash}
             strokeLinecap="round" markerEnd={`url(#${marker})`} />
       {e.mark && (() => {
-        const [x, y, label, anchor] = e.mark;
+        const [x, y, label, anchor, kind] = e.mark;
         const tx = anchor === "start" ? x + 10 : anchor === "end" ? x - 10 : x;
         const ty = anchor === "middle" ? y - 10 : y + 4;
         return (
           <g>
-            <rect x={x - 4.5} y={y - 4.5} width={9} height={9} transform={`rotate(45 ${x} ${y})`} fill="var(--color-attn)" stroke="#fff" strokeWidth={1.5} />
+            <rect x={x - 4.5} y={y - 4.5} width={9} height={9} transform={`rotate(45 ${x} ${y})`}
+                  fill={kind === "sign" ? "var(--color-attn)" : "#fff"} stroke={kind === "sign" ? "#fff" : "var(--color-attn)"} strokeWidth={1.5} />
             <text x={tx} y={ty} fontSize={11.5} fontWeight={600} textAnchor={anchor} fill="var(--color-attn-ink)"
                   stroke="#fafafb" strokeWidth={4} style={{ paintOrder: "stroke" }}>{label}</text>
           </g>
@@ -358,8 +394,8 @@ function Legend({ kind, label }: { kind: Kind; label: string }) {
   return <span className="flex items-center gap-1.5"><i className={`h-3 w-5 rounded-[4px] ${cls}`} />{label}</span>;
 }
 
-function Diamond() {
-  return <i className="inline-block h-2 w-2 rotate-45 bg-attn" />;
+function Diamond({ hollow }: { hollow?: boolean }) {
+  return <i className={`inline-block h-2 w-2 rotate-45 ${hollow ? "border-[1.5px] border-attn bg-white" : "bg-attn"}`} />;
 }
 
 // ── 效率对照（真实运行）───────────────────────────────────

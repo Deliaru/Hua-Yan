@@ -6,8 +6,8 @@ from typing import Literal
 from ._base import BaseModel
 
 Role = Literal["customer", "sales", "pm", "rd", "supervisor"]
-Level = Literal[1, 2, 3]
-ROLE_LEVEL: dict[Role, Level] = {"customer": 1, "sales": 1, "pm": 2, "rd": 3, "supervisor": 2}
+Level = Literal[0, 1, 2, 3]                   # v6：0 = 客户自助可见（说明书、用法、公开案例）
+ROLE_LEVEL: dict[Role, Level] = {"customer": 0, "sales": 1, "pm": 2, "rd": 3, "supervisor": 2}
 
 
 class Actor(BaseModel):

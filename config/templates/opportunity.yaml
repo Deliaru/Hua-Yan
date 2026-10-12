@@ -7,10 +7,11 @@ decision_label: 同类需求是否合并立项
 precondition: "attrs.n_escalations >= 2 and not attrs.open_project"
 # 规则：至少两个不同客户才算机会
 rule_score: "(attrs.n_customers >= 2) * (0.1 * attrs.n_escalations + 0.15 * attrs.n_customers + 0.3 * attrs.mean_p_none)"
-worth_prompt: "需求主题 {object}：「升级」表示业务员已签字转给产品经理 Agent；这里仅统计已查无现成产品或复用建议被拒的需求。该主题 {attrs.days_active} 天内升级 {attrs.n_escalations} 次，来自 {attrs.n_customers} 个不同客户，同主题被现有产品成功解决 {attrs.n_matched} 次，系统判断「现有产品都不合适」的平均概率 {attrs.mean_p_none}，目前没有在途的立项。是否需要产品经理 Agent 判断这些需求是不是同一件事、起草合并建议，交研发审定是否合并立项？"
+worth_prompt: "需求主题 {object}：「升级」表示业务员已签字转给产品经理 Agent；这里仅统计已查无现成产品或复用建议被拒的需求。该主题 {attrs.days_active} 天内升级 {attrs.n_escalations} 次，来自 {attrs.n_customers} 个不同客户，同主题被现有产品成功解决 {attrs.n_matched} 次，系统判断「现有产品都不合适」的平均概率 {attrs.mean_p_none}，目前没有在途的立项。是否需要产品经理 Agent 判断这些需求是不是同一件事、起草合并建议，由产品经理判断商业价值后合并交研发？"
 title: "{object}需求反复出现且无产品可用，同类需求是否合并立项？"
 owner_role: pm
-signer_role: rd
+# v6：机会判断是产品经理的商业判断，签字人由研发改为真人产品经理
+signer_role: pm
 # 涉及客户越多越紧急
 urgency: "min(1, attrs.n_customers / 4)"
 bounty_points: 10

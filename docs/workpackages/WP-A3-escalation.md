@@ -11,7 +11,7 @@
 WP-A2、WP-T（规则骨架）。
 
 ## 必读
-`CONTRACTS.md` 第 ②（2.4、2.5 积分规则）、⑥、⑦ 全节、⑫、⑭ 节；`ARCHITECTURE.md` 第 3 节（可见性与解密例外）、7.2 节～5 节。
+`CONTRACTS.md` 第 ②（2.4、2.5 积分规则）、⑥、⑦ 全节、⑫、⑭ 节；`ARCHITECTURE.md` 第 3 节（可见性与解密例外）、7.2 节。
 
 ## 允许修改的范围
 `src/huayan/escalation/flow.py`、`src/huayan/escalation/__init__.py`、`src/huayan/app.py`（只增加 L2/L3 方法）、`scripts/demo_escalation.py`、`tests/test_wp_a3.py`

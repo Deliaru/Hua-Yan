@@ -6,8 +6,21 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
 import { useApp, useData, useLabels } from "../ctx";
 import type { NextAction, Question, RequirementView, SessionSummary, SessionView } from "../types";
-import { STEPS } from "../pages/Overview";
 import { ChevronDown } from "./Icons";
+
+// v5 主线每一步的说明（原架构总览流程图的播放文案，随旧主线回放原样保留）
+const V5_HOW = [
+  "客户只描述现象。今天这句话会被业务员按自己的理解转述，到研发手里已经走样。",
+  "觉判断缺面料、值得问，提示业务员趁客户还在就追问；每一格都绑定客户原话。",
+  "觉提出「是否转产品经理 Agent」，业务员的 Agent 起草升级说明，业务员签字。",
+  "产品经理 Agent 先查 L2 知识；能复用就由研发审定后直接转给业务员，不必立项。",
+  "产品经理 Agent 把场景语言转成产品需求，每句标明依据了谁的历史案例。",
+  "接单是 L2 的生效点；被引用的历史案例给归属人记分。",
+  "研发 Agent 起草、研发修改确认；觉发现缺染浴 pH，提出回问，业务员回头问客户，答复回填需求单。",
+  "试样通过、业务员带回客户评价后，研发审定哪些封存、哪些放出。",
+  "觉检查说明书是否命中封存项或 L3 术语；命中则研发 Agent 改写，产品经理 Agent 拿不到封存内容。",
+  "下一位客户同样描述，业务员在 L1 直接命中新品，不再升级——这一轮系统又多会了一件事。",
+];
 
 const SHORT = ["客户描述", "追问补全", "推荐或升级", "查现成产品", "转产品需求", "研发接单", "化学转译", "试样与沉淀", "说明书", "发布回流"];
 
@@ -36,9 +49,12 @@ const DO: Record<string, [number, string]> = {
 // arg 是台词要填的内容（客户 id、对 Agent 说的话、要补的文字），由对应输入处的「演示自动填入」使用。只在轮到当前身份时高亮。
 // customer：这一步发生在哪位客户的会话里（回放部署按台词给出），业务员工作面据此选中、高亮那段会话。
 type Target = { who: string | null; target: string | null; arg: string | null; customer: string | null };
-let current: Target = { who: null, target: null, arg: null, customer: null };
+// v6 演示讲解栏也经这里指按钮：target 为 say / quote / decline / scope / merge / sign:accept_requirement，
+// 或 route:<角色>（需求轨迹上的角色格，不限当前身份）。
+export const NO_GUIDE: Target = { who: null, target: null, arg: null, customer: null };
+let current: Target = NO_GUIDE;
 const subs = new Set<() => void>();
-function publish(t: Target) {
+export function publish(t: Target) {
   if (t.who === current.who && t.target === current.target && t.arg === current.arg && t.customer === current.customer) return;
   current = t;
   subs.forEach((f) => f());
@@ -88,7 +104,7 @@ export function Guide() {
     const last = reqs[reqs.length - 1];
     const view = last ? await api.requirement(last.id, rd) : null;
     const s = sessions[sessions.length - 1];
-    const session = s ? await api.session(s.id, s.sales_id) : null;
+    const session = s ? await api.session(s.id, s.sales_id ?? s.customer_id) : null;
     const script = meta.status.replay ? await api.nextAction() : null;
     return { sessions, reqs, view, session, script, open: [...open.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)) };
   }, [me, version]);
@@ -132,7 +148,7 @@ export function Guide() {
                   <Dot i={i} step={step} />{name}<span className="ml-auto font-normal text-ink-2">{whoText}</span>
                 </p>
                 <p className="mt-1.5 pl-7 text-[13px] leading-[20px]">{todo}</p>
-                <p className="mt-1 pl-7 text-[12px] leading-[18px] text-ink-2">{STEPS[i].how}</p>
+                <p className="mt-1 pl-7 text-[12px] leading-[18px] text-ink-2">{V5_HOW[i]}</p>
                 {who && !mine && (
                   <div className="mt-2 pl-7">
                     <button className="btn btn-primary glow" onClick={() => { switchTo(who!); setOpen(false); }}>切换到 {L.name(who)}</button>

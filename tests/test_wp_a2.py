@@ -38,7 +38,7 @@ def test_l1_recommend_and_escalate(tmp_path):
     # 冻结只收回高层访问；已有解密授权的会话仍能查看和重新推荐 L1 卡片。
     app.kb.freeze("sales:S01", "supervisor:M01", get_clock().now())
     frozen_card = app.view_session(session.id, "sales:S01").card
-    assert frozen_card.version == "product_usage" and all(s.level == 1 for s in frozen_card.sections)
+    assert frozen_card.version == "product_usage" and all(s.level <= 1 for s in frozen_card.sections)
     assert app.recommend_now(session.id).recommendation.version in {"product", "product_usage"}
 
     # 无解：只写 match，不自动升级、不建需求单

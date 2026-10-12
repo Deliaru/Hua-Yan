@@ -12,3 +12,5 @@ replay: false                 # true = 记录回放模式，界面标明
 thresholds: {ask: 0.5, ask_jue_k: 0.15, max_asks: 2, match: 0.5, publish: 0.5}  # ask_jue_k：Jue-K 输出校准概率，漏问代价高，实时追问阈值取 0.15（见 models/jue_k/model_card.md）
 windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
 points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
+# v6：客户归属业务员（模拟），客户自助会话有商务诉求时由觉自动交给归属业务员
+customer_sales: {"customer:C01": "sales:S01", "customer:C02": "sales:S01", "customer:C03": "sales:S01", "customer:C04": "sales:S02"}

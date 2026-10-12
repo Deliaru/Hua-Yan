@@ -1,0 +1,13 @@
+id: route_rd
+family: route_rd
+kind: advance
+object_type: session
+decision_label: 是否直达研发（自动升级）
+# v6：客户自助会话里觉已判定现有产品都不合适，业务员签字只是搬运，改为觉自动执行升级（契约 6.1）
+precondition: "attrs.phenomenon_known and attrs.top_is_none and not attrs.escalated and attrs.self_serve"
+rule_score: "1"
+worth_prompt: "客户自助会话 {object} 已明确现象，当前匹配结果倾向于现有产品都不合适，尚未升级。是否不经业务员签字，直接转产品经理 Agent 转译后交研发？"
+title: "{object}：现有产品都不合适，直达研发"
+owner_role: pm
+signer_role: null
+auto_action: escalate

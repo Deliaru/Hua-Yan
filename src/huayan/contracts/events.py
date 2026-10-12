@@ -10,7 +10,8 @@ EventKind = Literal["turn", "extraction", "ask_hint", "match", "recommend", "esc
                     "question_resolved", "requirement_created", "requirement_accepted", "requirement_returned",
                     "requirement_edited", "requirement_translated", "knowledge_contributed", "trial", "market_eval",
                     "points_set", "reuse_proposed", "reuse_adopted", "reuse_declined", "merge_proposed", "requirements_merged", "product_released", "sheet_updated", "access_frozen", "human_decision",
-                    "agent_action_proposed", "agent_action_decided"]
+                    "agent_action_proposed", "agent_action_decided",
+                    "auto_executed", "sales_assigned", "project_declined", "l2_contributed", "scope_extended"]   # v6
 
 
 class Event(BaseModel):

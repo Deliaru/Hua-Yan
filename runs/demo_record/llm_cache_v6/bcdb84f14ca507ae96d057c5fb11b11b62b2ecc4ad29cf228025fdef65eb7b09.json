@@ -1,0 +1,1 @@
+{"content":"```json\n{\"answers\": {\"match\": {\"HY-LV205\": 0.98, \"none\": 0.02}}}\n```","tool_calls":[],"usage":{"input_tokens":443,"output_tokens":34},"latency_ms":4259.918051997374,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

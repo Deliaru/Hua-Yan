@@ -46,7 +46,12 @@ def test_translation_release_and_ownership(tmp_path):
     prepare("accept_requirement", f"requirement:{req.id}")
     returned = app.return_requirement(req.id, "请突出客户的无APEO要求", rd)
     assert returned.status == "draft" and returned.return_notes == ["请突出客户的无APEO要求"]
-    app.draft_requirement(req.id, "pm:agent")
+    # v6：退回后的纠偏派给真人产品经理（不走 Agent 起草），改完标记准备、回到研发接单
+    accept = next(q for q in app.bus.list(family="accept_requirement") if q.object_id == f"requirement:{req.id}")
+    assert accept.owner_id == "pm:P01"
+    fixed = app.edit_req_item(req.id, 0, returned.product_lang[0].model_copy(
+        update={"text": returned.product_lang[0].text + "；突出无APEO"}), "pm:P01")
+    assert fixed.product_lang[0].edited_by == "pm:P01"
     prepare("accept_requirement", f"requirement:{req.id}")
     app.accept_requirement(req.id, rd)
     req = app.translate_requirement(req.id, rd)

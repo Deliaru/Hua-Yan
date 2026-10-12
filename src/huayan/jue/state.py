@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 WINDOWS = {"theme_days": 7, "knowledge_days": 7, "actor_hours": 48}   # 与 config/app.yaml 的 windows 一致
 _PRODUCT_KU = {"sheet", "usage", "mechanism", "formula"}
 _INTERNAL = Actor(id="system:jue", role="rd", name="觉（内部身份，只用于属性计数）")
+_PURCHASE = re.compile("报价|价格|采购|下单|送样")   # v6：商务诉求，纯规则
 
 
 def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: datetime) -> JueState:
@@ -44,6 +46,8 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
         "recommended": sess.status == "recommended", "escalated": any(e.kind == "escalate" for e in relevant),
         "chem_savvy": need.profile.chem_savvy, "asked_mechanism": need.profile.asked_mechanism,
         "decrypt_requested": any(e.kind == "decrypt_request" for e in relevant),
+        "self_serve": sess.origin == "customer", "sales_assigned": sess.sales_id is not None,
+        "purchase_intent": any(t.speaker == "customer" and _PURCHASE.search(t.text) for t in sess.turns),
     })
     return JueState(at=at, mode="realtime", objects={oid: obj})
 
@@ -79,6 +83,7 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
         "n_unmapped_constraints": len(upstream - {i.slot for i in items if i.slot}),
         "n_unquoted_items": sum(not i.quote_refs for i in items),
         "n_edited_uncovered": _edited_uncovered(req, seeds, kb),
+        "n_pm_edited_uncovered": _pm_edited_uncovered(req, seeds, kb),
         "n_contributed": len({e.payload["ku_id"] for e in own if e.kind == "knowledge_contributed"}),
         **_trial_attrs(req, kb, own),
         "points_set": any(e.kind == "points_set" for e in own),
@@ -110,6 +115,13 @@ def _edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase) -> int:
             text = text.replace(term, "")
         uncovered += bool(text.strip(" \t\r\n，。；、：:！？!?/"))
     return uncovered
+
+
+def _pm_edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase) -> int:
+    """v6：真人产品经理改过的 L2 条目，尚未从该条目沉淀过 L2 知识（ku:translation:<req>:l2:<i>）。"""
+    pm_ids = {a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent"}
+    return sum(item.edited_by in pm_ids and f"ku:translation:{req.id}:l2:{i}" not in kb._units
+               for i, item in enumerate(req.product_lang))
 
 
 def _trial_attrs(req: Requirement, kb: KnowledgeBase, own: list) -> dict:
@@ -198,6 +210,7 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
     objects, refs = {}, {}
     for obj, ref in [*_themes(events, at, seeds, at - timedelta(days=w["theme_days"])),
                      *_knowledge(events, at, products, at - timedelta(days=w["knowledge_days"])),
+                     *_scope(events, at, products),
                      *_actors(events, at, at - timedelta(hours=w["actor_hours"]))]:
         objects[obj.object_id], refs[obj.object_id] = obj, ref
     return JueState(at=at, mode="scheduled", objects=objects), refs
@@ -206,7 +219,8 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
 def _themes(events, at, seeds, since):
     # 立项、合并、发布不限窗口；复用状态取最后一次决定。
     history = events.query(["requirement_created", "escalate", "recommend", "reuse_proposed", "reuse_declined",
-                            "reuse_adopted", "requirement_accepted", "requirements_merged", "product_released"], until=at)
+                            "reuse_adopted", "requirement_accepted", "requirements_merged", "product_released",
+                            "project_declined"], until=at)
     req_theme, req_rd, handled, reuse_closed, projects = {}, {}, {}, set(), set()
     for e in history:
         p = e.payload
@@ -218,7 +232,7 @@ def _themes(events, at, seeds, since):
             (reuse_closed.add if p["product_id"] is None else reuse_closed.discard)(p["requirement_id"])
         elif e.kind == "reuse_declined":
             reuse_closed.add(p["requirement_id"])
-        elif e.kind == "reuse_adopted":
+        elif e.kind in ("reuse_adopted", "project_declined"):     # v6：研发不立项的单不再是合并候选
             reuse_closed.discard(p["requirement_id"])
         elif e.kind == "requirement_accepted":
             handled[req_theme[p["requirement_id"]]] = e.ts
@@ -272,6 +286,21 @@ def _knowledge(events, at, products, since):
             "n_fail_product": sum(e.payload["cause"] == "product" for e in fails),
             "fail_ratio": len(fails) / len(evs), "n_recommended": recs[(pid, slot, value)],
         }), {"event_ids": [e.id for e in fails], "session_ids": []}
+
+
+def _scope(events, at, products):
+    """v6：研发判定「已有产品适用」的次数（不立项时指定产品、审定采用复用建议），按 产品 × 现象 聚合。"""
+    by_id = {p.id: p for p in products}
+    groups = defaultdict(list)
+    for e in events.query(["project_declined", "reuse_adopted"], until=at):
+        if e.payload.get("product_id") and e.payload.get("phenomenon"):
+            groups[(e.payload["product_id"], e.payload["phenomenon"])].append(e)
+    for (pid, ph), evs in groups.items():
+        yield JueObject(object_id=f"knowledge:{pid}|phenomenon={ph}", object_type="knowledge", attrs={
+            "product_id": pid, "slot": "phenomenon", "value": ph, "n_applicable": len(evs),
+            "solves": pid in by_id and ph in by_id[pid].solves,
+        }), {"event_ids": [e.id for e in evs], "session_ids": sorted({s for e in evs for s in e.payload.get("session_ids", [])}),
+             "requirement_ids": [e.payload["requirement_id"] for e in evs]}
 
 
 def _actors(events, at, since):

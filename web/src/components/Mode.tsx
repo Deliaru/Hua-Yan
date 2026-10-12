@@ -2,17 +2,19 @@
 // 密钥只提交给本服务，服务端只存在本会话的内存里；表单不保存密钥，关掉就没了。
 import { useState } from "react";
 import { api } from "../api";
-import type { RunMode } from "../types";
+import type { Probe, RunMode } from "../types";
 import { Close } from "./Icons";
 
 const EMPTY = { llm_base_url: "", llm_model: "", llm_key: "", jev_base_url: "", jev_model: "OneJev-9B", jev_key: "" };
 
-export function ModeDialog({ mode, onClose, onDone }: { mode: RunMode; onClose: () => void; onDone: () => void }) {
+// 接入成功后先给体检结果，再选从哪里开始；onDone 带讲解栏的页签（看讲解 / 自己试）
+export function ModeDialog({ mode, onClose, onDone }: { mode: RunMode; onClose: () => void; onDone: (demoTab?: "day" | "try") => void }) {
   const [kind, setKind] = useState<"replay" | "byok">(mode.kind === "byok" ? "byok" : "replay");
   const [f, setF] = useState(EMPTY);
   const [fallback, setFallback] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [probe, setProbe] = useState<Probe[] | null>(null);
   const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
   const ready = kind === "replay" || (f.llm_base_url.trim() && f.llm_model.trim() && f.llm_key.trim());
 
@@ -20,10 +22,11 @@ export function ModeDialog({ mode, onClose, onDone }: { mode: RunMode; onClose: 
     setBusy(true);
     setError(null);
     api.setMode(kind === "replay" ? { mode: "replay" } : { mode: "byok", ...f, jev_fallback: fallback })
-      .then(onDone, (e) => setError(e instanceof Error ? e.message : String(e)))
+      .then((m) => (m.probe ? setProbe(m.probe) : onDone()), (e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setBusy(false));
   };
 
+  if (probe) return <ProbeResult probe={probe} model={f.llm_model} jev={!!f.jev_base_url.trim()} onDone={onDone} />;
   return (
     <div className="anim-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/25 py-[6vh]" onClick={busy ? undefined : onClose}>
       <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); submit(); }}
@@ -104,5 +107,38 @@ function Field({ label, value, onChange, placeholder, secret }: {
       <input className="field !py-1.5 !text-[13px]" value={value} onChange={onChange} placeholder={placeholder}
              type={secret ? "password" : "text"} autoComplete={secret ? "new-password" : "off"} spellCheck={false} />
     </label>
+  );
+}
+
+// 体检结果：哪些环节用你的模型真实运行、哪些会降级；觉不调用模型
+function ProbeResult({ probe, model, jev, onDone }: { probe: Probe[]; model: string; jev: boolean; onDone: (demoTab?: "day" | "try") => void }) {
+  const bad = probe.filter((p) => !p.ok);
+  return (
+    <div className="anim-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/25 py-[6vh]" onClick={() => onDone()}>
+      <div onClick={(e) => e.stopPropagation()} className="w-[560px] rounded-[14px] bg-white p-5 shadow-[0_20px_60px_rgba(0,0,0,.25)]">
+        <h2 className="text-[17px] font-semibold">已接入 {model}</h2>
+        <p className="mt-0.5 text-[13px] text-ink-2">体检结果{bad.length ? `：${bad.length} 项不支持，相关环节可能在半路失败` : "：三项都支持，可以完整真实运行"}。</p>
+        <div className="mt-4 overflow-hidden rounded-[10px] shadow-[inset_0_0_0_1px_rgba(0,0,0,.1)]">
+          {probe.map((p) => (
+            <div key={p.item} className="flex gap-3 border-b border-sep px-3.5 py-2.5 last:border-0">
+              <span className={`mt-px w-4 text-[13px] font-semibold ${p.ok ? "text-[#248a3d]" : "text-danger"}`}>{p.ok ? "✓" : "✕"}</span>
+              <div className="min-w-0 flex-1 text-[13px] leading-5">
+                <p><b>{p.item}</b><span className="ml-2 text-ink-2">{p.affects}</span></p>
+                {p.detail && <p className="mt-0.5 break-all text-[12px] text-danger">{p.detail}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 space-y-1.5 text-[13px] leading-[21px]">
+          <p><b>你的模型负责</b>：听懂客户原话、L1 回答、{jev ? "" : "Jev 推荐（没接 OneJev，由你的模型降级回答，界面标黄）、"}产品经理与研发 Agent 起草。</p>
+          <p><b>觉不调用你的模型</b>：什么时候追问、什么时候直达研发、什么时候提出合并，由本地 Jue-K 决定。换任何模型，流程骨架不变，变的是听懂与起草的质量。</p>
+          <p className="text-ink-2">真实运行每一步约 5 秒到 1 分多钟；一个上午走完约 8 分钟、约 70 次模型调用、约 30 万 token（实测 gemini-3.8-flash-high）。真实模型的判断可能和录制时不同，讲解栏会如实标出。</p>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="btn btn-plain" onClick={() => onDone("try")}>自己试</button>
+          <button className="btn btn-primary" onClick={() => onDone("day")}>用你的模型跑一遍演示讲解</button>
+        </div>
+      </div>
+    </div>
   );
 }

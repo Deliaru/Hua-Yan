@@ -1,8 +1,21 @@
-# v5 演示录制
+# 演示录制
 
-v5 使用 `config/app.demo.yaml`，网关缓存写入 `llm_cache_v5/`，OneJev 请求与响应写入其 `s1/` 子目录。
+## 全路径讲解录制（公开部署默认）
 
-旧 `llm_cache/` 与旧版对话仅保留作对照，不用于 v5 验收；调用时机与请求内容已经改变。
+`config/app.demo.v6.yaml`（`replay: true`）回放 `demo/story.yaml` 的 16 步，缓存在 `llm_cache_v6/`（gemini-3.8-flash-high，无 OneJev：Jev 为大模型降级）。录制一次约 6–8 分钟、65–72 次模型调用、约 26–30 万 token（真实模型每次略有不同）。2026-10-12 换入两个公开产品（TF-231A、TF-288B）后重录：65 次、约 25.6 万 token、370 秒，16 步无偏离。
+
+```bash
+BACKUP_API_KEY=... uv run python scripts/record_story.py record   # 清空 llm_cache_v6 后真实录制；偏离剧本即停，重录
+uv run python scripts/record_story.py replay                      # 只读缓存走完，并快进到每一章开头
+```
+
+提示词、种子、台词（`demo/routes.yaml`）或模板改动都会改变缓存键，改完须重录。偏离讲解的操作在回放下缓存未命中，界面提示接入自己的模型（BYOK）。
+
+## 专业深链路录制
+
+专业深链路录制使用 `config/app.demo.yaml`，网关缓存写入 `llm_cache_v5/`，OneJev 请求与响应写入其 `s1/` 子目录。
+
+旧 `llm_cache/` 与旧版对话仅保留作对照，不用于本录制验收；调用时机与请求内容已经改变。
 
 `replay: true` 时两种客户端只读缓存，未命中抛出带 caller 的 `ReplayMiss`；OneJev 初始化跳过健康检查。缓存命中在终端打印来源与 caller。Jue-K 在本地推理，不经过缓存。
 

@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"find_products-1791791955423287933-1812","name":"find_products","arguments":{"slots":{},"phenomenon":"bleeding_staining"}}],"usage":{"input_tokens":4054,"output_tokens":25},"latency_ms":2961.7607299987867,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

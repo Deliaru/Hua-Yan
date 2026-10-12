@@ -3,7 +3,8 @@ family: escalate_need
 kind: advance
 object_type: session
 decision_label: 是否转产品经理 Agent
-precondition: "attrs.phenomenon_known and attrs.top_is_none and not attrs.escalated"
+# v6：客户自助会话由 route_rd 自动执行，这里只管业务员陪同的会话
+precondition: "attrs.phenomenon_known and attrs.top_is_none and not attrs.escalated and not attrs.self_serve"
 rule_score: "1"
 worth_prompt: "会话 {object} 已明确客户反映的现象，当前匹配结果倾向于现有产品都不合适，业务员尚未签字升级。是否转交产品经理 Agent 查找其他方案？"
 title: "{object}：是否转产品经理 Agent？"

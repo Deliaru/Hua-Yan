@@ -1,12 +1,14 @@
-// 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list（架构总览、演示工作面、沉浸工作面、觉视图、三层对照、评测、知识与积分）。
-// 演示工作面是只读的讲解页；沉浸工作面是真实的工作面，导览带着走演示主线。
-// 没有产品经理页面：产品经理 Agent 的产出只在研发工作面、三层对照、觉视图上出现（REPLAN 3.2 第 5 条）。
+// 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list。
+// v6：四个角色子工作面（客户 / 业务员 / 产品经理 / 研发）是侧栏二级项，进入即以该角色身份请求；不再靠导览线性走主线，
+// 看的人在四个角色之间自由切换，靠「同一份需求在哪些工作面出现、在哪些没出现」看流程被缩短。
+// 旧主线（v5 演示故事 + 带导览的沉浸工作面）沿 v5 流程，与 v6 冲突，V6-5.5 起不在侧栏出现；代码与 #story / #desk 地址保留。
+// V6-5.5「演示讲解」：左侧导航换成讲解栏（components/Demo.tsx），中、右两栏仍是真实工作面。
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
 import type { Meta, Role, RunMode, RunStatus } from "./types";
 import { Popover } from "./components/Controls";
-import { ChevronDown, Close, NavArch, NavDesk, NavEval, NavJue, NavLayers, NavLedger, NavStory, Refresh } from "./components/Icons";
+import { ChevronDown, Close, NavArch, NavCustomer, NavDesk, NavEval, NavJue, NavLayers, NavLedger, NavPm, NavRd, NavSales, NavStory, Refresh } from "./components/Icons";
 import { Logo } from "./components/Logo";
 import { Sales } from "./pages/Sales";
 import { Rd } from "./pages/Rd";
@@ -17,23 +19,34 @@ import { Eval } from "./pages/Eval";
 import { Ledger } from "./pages/Ledger";
 import { Overview } from "./pages/Overview";
 import { Story } from "./pages/Story";
+import { Customer } from "./pages/Customer";
+import { Pm } from "./pages/Pm";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
 import { ActivityMenu } from "./components/Process";
+import { DemoPanel } from "./components/Demo";
 
+// [页面, 标题, 图标, 分组]：分组 null 为一级项
 const PAGES = [
-  ["overview", "架构总览", NavArch],
-  ["story", "演示工作面", NavStory],
-  ["desk", "沉浸工作面", NavDesk],
-  ["jue", "觉视图", NavJue],
-  ["layers", "三层对照", NavLayers],
-  ["eval", "评测", NavEval],
-  ["ledger", "知识与积分", NavLedger],
+  ["overview", "架构总览", NavArch, null],
+  ["customer", "客户", NavCustomer, "工作面"],
+  ["sales", "业务员", NavSales, "工作面"],
+  ["pm", "产品经理", NavPm, "工作面"],
+  ["rd", "研发", NavRd, "工作面"],
+  ["jue", "觉视图", NavJue, null],
+  ["layers", "三层对照", NavLayers, null],
+  ["eval", "评测", NavEval, null],
+  ["ledger", "知识与积分", NavLedger, null],
+  ["story", "演示故事", NavStory, "旧主线回放（v5）"],
+  ["desk", "沉浸工作面", NavDesk, "旧主线回放（v5）"],
 ] as const;
 type Page = (typeof PAGES)[number][0];
-const HUMANS: Role[] = ["sales", "rd", "supervisor"];
-const ROLE_NAME: Record<string, string> = { sales: "业务员", rd: "研发", supervisor: "主管" };
+const HIDDEN: Page[] = ["story", "desk"];   // 不在侧栏出现的旧页面
+const HUMANS: Role[] = ["sales", "pm", "rd", "supervisor"];   // 觉视图、三层对照、知识与积分、旧沉浸工作面可选的身份（产品经理为真人 P01，不含 Agent）
+const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd" };
+const ROLE_NAME: Record<string, string> = { customer: "客户", sales: "业务员", pm: "产品经理", rd: "研发", supervisor: "主管" };
+const DEFAULT_WHO: Record<Role, string> = { customer: "customer:C03", sales: "sales:S01", pm: "pm:P01", rd: "rd:R01", supervisor: "supervisor:M01" };
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -45,12 +58,16 @@ export default function App() {
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, []);
-  const [me, setMe] = useState<string | null>(() => new URLSearchParams(location.search).get("as"));   // ?as=rd:R02 直接以某人身份打开
+  const [me, setMe] = useState<string | null>(() => new URLSearchParams(location.search).get("as"));   // ?as=rd:R02 直接以某人身份打开（觉视图等通用页）
+  const [who, setWho] = useState<Record<string, string>>({});   // v6：每个角色子工作面当前是哪个人
+  const [focus, setFocus] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [side, setSide] = useState<HTMLElement | null>(null);
   const [modeOpen, setModeOpen] = useState(false);
+  const [demo, setDemoState] = useState(() => localStorage.getItem("huayan-demo") === "1");   // 讲解模式，刷新不丢
+  const setDemo = (on: boolean) => { localStorage.setItem("huayan-demo", on ? "1" : "0"); setDemoState(on); };
   const guide = useGuide();
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
@@ -58,18 +75,38 @@ export default function App() {
   if (busy) return <p role="status" className="p-10 text-ink-2">{busy}</p>;
   if (!meta) return error ? <p className="p-10 text-danger">{error}</p> : null;
 
-  const people = meta.actors.filter((a) => HUMANS.includes(a.role));
-  const actor = people.find((a) => a.id === me) ?? people[0];
+  const pageRole = ROLE_PAGES[page];
+  const human = (r: Role) => meta.actors.filter((a) => a.role === r && a.id !== "pm:agent");
+  const people = pageRole ? human(pageRole) : meta.actors.filter((a) => HUMANS.includes(a.role) && a.id !== "pm:agent");
+  const actor = pageRole ? people.find((a) => a.id === (who[pageRole] ?? DEFAULT_WHO[pageRole])) ?? people[0]
+    : people.find((a) => a.id === me) ?? people[0];
+  const pick = (id: string) => (pageRole ? setWho((w) => ({ ...w, [pageRole]: id })) : setMe(id));
   const restart = (label: string, p: Promise<unknown>) => {
     setError(null);
+    setFocus(null);   // 重建后旧会话、旧需求单都不在了
     setBusy(label);
     p.then(() => api.meta()).then((m) => { setMeta(m); setVersion((v) => v + 1); }).catch(fail).finally(() => setBusy(null));
   };
   const ctx = {
     meta, me: actor.id, role: actor.role, agentOnline: !meta.status.gateway_mock, version, side,
-    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe,
+    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, focus, startDemo: () => setDemo(true), openMode: () => setModeOpen(true),
+    go: (p: string, f?: string | null, id?: string) => {
+      const role = ROLE_PAGES[p as Page];
+      if (role && id && id.startsWith(`${role}:`)) setWho((w) => ({ ...w, [role]: id }));
+      if (!role && id) setMe(id);
+      setFocus(f ?? null);
+      setPage(p as Page);
+      window.scrollTo(0, 0);
+    },
   };
   const key = `${meta.status.run_id}:${actor.id}`;
+  const sideW = demo ? 400 : 232;
+  // 讲解每执行一步：从头重建过的要重读 meta（run_id 变了），再切到该看的工作面与对象
+  const onView = async (v: { page: string; focus: string | null; who: string | null } | null, rebuilt: boolean) => {
+    if (rebuilt) setMeta(await api.meta());
+    setVersion((n) => n + 1);
+    if (v) ctx.go(v.page, v.focus, v.who ?? undefined);
+  };
 
   return (
     <AppCtx.Provider value={ctx}>
@@ -91,11 +128,11 @@ export default function App() {
               <span className="text-ink-2"><ChevronDown /></span>
             </button>
           )}>
-            {(close) => HUMANS.map((r) => (
+            {(close) => (pageRole ? [pageRole] : HUMANS).map((r) => (
               <div key={r}>
                 <p className="px-2.5 pb-0.5 pt-1.5 text-[12px] text-ink-2">{ROLE_NAME[r]}</p>
                 {people.filter((a) => a.role === r).map((a) => (
-                  <button key={a.id} className={`menu-item ${a.id === guide.who && a.id !== actor.id ? "font-semibold text-accent" : ""}`} onClick={() => { setMe(a.id); close(); }}>
+                  <button key={a.id} className={`menu-item ${a.id === guide.who && a.id !== actor.id ? "font-semibold text-accent" : ""}`} onClick={() => { pick(a.id); close(); }}>
                     <span className="w-3">{a.id === actor.id ? "✓" : ""}</span><Name id={a.id} />
                   </button>
                 ))}
@@ -108,21 +145,33 @@ export default function App() {
         </div>
       </header>
 
-      <aside className="sidebar fixed bottom-0 left-0 top-[52px] z-20 flex w-[232px] flex-col overflow-y-auto border-r border-sep pb-4 pt-2">
-        {PAGES.map(([k, label, Icon]) => (
-          <button key={k} onClick={() => setPage(k)} className={`side-row nav-row ${page === k ? "on" : ""}`}>
-            <Icon /><span className="text-[13px] font-semibold">{label}</span>
-          </button>
+      <aside style={{ width: sideW }} className="sidebar fixed bottom-0 left-0 top-[52px] z-20 flex flex-col overflow-y-auto border-r border-sep pb-4 pt-2">
+        {demo ? <DemoPanel onExit={() => setDemo(false)} onView={onView} side={setSide} /> : <>
+        <button onClick={() => setDemo(true)} className="side-row nav-row">
+          <NavStory /><span className="text-[13px] font-semibold">演示讲解</span><span className="tag tag-accent ml-auto !h-[18px] !text-[11px]">推荐</span>
+        </button>
+        {PAGES.filter(([k]) => !HIDDEN.includes(k)).map(([k, label, Icon, group], i, shown) => (
+          <div key={k}>
+            {group && shown[i - 1][3] !== group && <p className="side-head !pb-1 !pt-3">{group}</p>}
+            <button onClick={() => { setFocus(null); setPage(k); }} className={`side-row nav-row ${page === k ? "on" : ""} ${group ? "!pl-[30px]" : ""}`}>
+              <Icon /><span className="text-[13px] font-semibold">{label}</span>
+            </button>
+          </div>
         ))}
         <div ref={setSide} className="flex-1" />
+        </>}
         <p className="mx-[18px] mt-4 flex items-center gap-1.5 text-[11px] leading-4 text-ink-3"
            title="占位种子与程序生成的对话，不含任何真实客户、企业与配方">
           <i className="h-1.5 w-1.5 rounded-full bg-ink-3" />全部为模拟数据
         </p>
       </aside>
 
-      <main className="ml-[232px] pt-[52px]">
-        {page === "overview" && <Overview toStory={() => { setPage("story"); window.scrollTo(0, 0); }} />}
+      <main style={{ marginLeft: sideW, ["--side-w" as string]: `${sideW}px` }} className="pt-[52px]">
+        {page === "overview" && <Overview />}
+        {page === "customer" && <Customer key={key} />}
+        {page === "sales" && <Sales key={key} />}
+        {page === "pm" && <Pm key={key} />}
+        {page === "rd" && <Rd key={key} />}
         {page === "story" && <Story toDesk={() => setPage("desk")} />}
         {page === "desk" && (actor.role === "sales" ? <Sales key={key} /> : actor.role === "rd" ? <Rd key={key} /> : <Supervisor key={key} />)}
         {page === "jue" && <JuePage key={key} />}
@@ -132,7 +181,11 @@ export default function App() {
       </main>
 
       {modeOpen && <ModeDialog mode={meta.mode} onClose={() => setModeOpen(false)}
-                               onDone={() => { setModeOpen(false); restart("正在切换运行方式……", Promise.resolve()); }} />}
+                               onDone={(demoTab) => {
+                                 setModeOpen(false);
+                                 if (demoTab) { localStorage.setItem("huayan-demo-tab", demoTab); setDemo(true); }
+                                 restart("正在切换运行方式……", Promise.resolve());
+                               }} />}
       {error && (
         <div className="popover anim-fade fixed right-4 top-[60px] flex max-w-[360px] items-start gap-2 px-3 py-2.5 text-[13px]">
           <span className="flex-1 text-danger">{error}</span>
