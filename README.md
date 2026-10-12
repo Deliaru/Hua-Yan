@@ -14,7 +14,7 @@ AI＋功能化学赛道 · 项目总览、技术论证、业务证据与可复�
 
 <div align="center">
 
-**[在线交互演示 · HuaYan Demo](https://www.soranori.com/huayan-demo/)** · [完整价值论证](docs/PITCH.md) · [技术架构](docs/ARCHITECTURE.md)
+**[▶ 业务过程流介绍视频](docs/assets/intro.mp4)** · **[在线交互演示 · HuaYan Demo](https://www.soranori.com/huayan-demo/)** · [完整价值论证](docs/PITCH.md) · [技术架构](docs/ARCHITECTURE.md)
 
 <sub>无需先安装项目即可观看业务流程；可按演示路径查看完整工作面，也可接入自己的兼容模型进行实时试用。</sub>
 
