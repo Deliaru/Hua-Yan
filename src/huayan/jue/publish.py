@@ -83,11 +83,12 @@ def _label(obj: JueObject, seeds: Seeds | None) -> str:
 
 def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None, signer: bool = False) -> str | None:
     """契约 5.4 解析表：角色 × 对象 → 具体的人。v6：pm 作签字人为真人产品经理；
-    需求单被研发退回过以后，pm 作主人也解析为真人产品经理（例外纠偏不走 Agent 起草）。"""
+    需求单被研发退回过、尚未接单时，pm 作主人也解析为真人产品经理（例外纠偏不走 Agent 起草）。"""
     if role is None:
         return None
     if role == "pm":
-        human = signer or (obj.object_type == "requirement" and obj.attrs.get("n_returns", 0) >= 1)
+        human = signer or (obj.object_type == "requirement" and obj.attrs.get("n_returns", 0) >= 1
+                           and obj.attrs["status"] == "draft")
         return min(a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent") if human else "pm:agent"
     if role == "sales":
         return ref["sales_id"]

@@ -570,8 +570,10 @@ class HuayanApp:
         req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
         if not reason.strip():
             raise ValueError("请填写不立项的原因")
-        if applicable_product is not None:
-            self.kb.product(applicable_product)
+        if leak_hits(reason, [], [], self.kb):
+            raise ValueError("不立项原因含研发术语，请改写为产品需求说明")
+        if applicable_product is not None and not consistent(self.kb.product(applicable_product), req.known_slots):
+            raise ValueError("该产品的适用条件与客户已知条件不符，不能判为已有产品适用")
         at = get_clock().now()
         state = requirement_state(req, self._sessions[req.session_ids[0]].need, self.seeds, self.kb, at, self.events)
         question = self._decision("accept_requirement", "decline_project", state.objects[f"requirement:{req_id}"], by)
@@ -1322,13 +1324,14 @@ class HuayanApp:
                 "研发不立项" if main and main.status == "rejected" else "入研" if main else
                 "交业务员" if session.origin == "customer" and session.sales_id else
                 "自助解决" if session.status == "recommended" else "追问中")
-        objects = {f"session:{session.id}"} | {f"requirement:{rid}" for rid in rids}
-        merges = {e.payload["question_id"] for e in events if e.kind == "requirements_merged"}
+        inner = level_of(viewer) >= 2      # L0/L1 只看会话上的决策，不看研发、产品经理的结案备注
+        objects = {f"session:{session.id}"} | ({f"requirement:{rid}" for rid in rids} if inner else set())
+        merges = {e.payload["question_id"] for e in events if e.kind == "requirements_merged"} if inner else set()
         basis = [{"question_id": q.id, "family": q.family, "title": q.title, "p_need": q.p_need,
                   "scored_by": q.scored_by, "status": q.status,
                   "action": q.resolution.action if q.resolution else None,
                   "by": q.resolution.by if q.resolution else None,
-                  "note": q.resolution.note if q.resolution else ""}
+                  "note": q.resolution.note if q.resolution and inner else ""}
                  for q in self.bus.list(status=None) if q.object_id in objects or q.id in merges]
         return {"session_id": session.id, "requirement_id": main.id if main else None, "origin": session.origin,
                 "path": path, "roles": roles, "basis": basis,

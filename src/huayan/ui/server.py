@@ -177,6 +177,7 @@ POST = {
     "/api/scope/extend": lambda app, p: app.extend_scope(p["question_id"], p["note"], p["by"]),   # v6
     "/api/contribute_l2": lambda app, p: app.contribute_l2(p["req_id"], p["item_index"], p["scene_phrase"],
                                                            p["product_term"], p["by"]),   # v6
+    "/api/prepared": lambda app, p: app.mark_prepared(p["question_id"], p["by"]),   # v6 退回纠偏：修改完成，交研发
     "/api/accept": lambda app, p: app.accept_requirement(p["req_id"], p["by"]),
     "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id")),   # v6
     "/api/return": lambda app, p: app.return_requirement(p["req_id"], p["reason"], p["by"]),

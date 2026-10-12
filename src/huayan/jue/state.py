@@ -219,7 +219,8 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
 def _themes(events, at, seeds, since):
     # 立项、合并、发布不限窗口；复用状态取最后一次决定。
     history = events.query(["requirement_created", "escalate", "recommend", "reuse_proposed", "reuse_declined",
-                            "reuse_adopted", "requirement_accepted", "requirements_merged", "product_released"], until=at)
+                            "reuse_adopted", "requirement_accepted", "requirements_merged", "product_released",
+                            "project_declined"], until=at)
     req_theme, req_rd, handled, reuse_closed, projects = {}, {}, {}, set(), set()
     for e in history:
         p = e.payload
@@ -231,7 +232,7 @@ def _themes(events, at, seeds, since):
             (reuse_closed.add if p["product_id"] is None else reuse_closed.discard)(p["requirement_id"])
         elif e.kind == "reuse_declined":
             reuse_closed.add(p["requirement_id"])
-        elif e.kind == "reuse_adopted":
+        elif e.kind in ("reuse_adopted", "project_declined"):     # v6：研发不立项的单不再是合并候选
             reuse_closed.discard(p["requirement_id"])
         elif e.kind == "requirement_accepted":
             handled[req_theme[p["requirement_id"]]] = e.ts
