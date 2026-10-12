@@ -201,7 +201,7 @@ function Composer({ v, reply, setReply, replyNotes }: {
       (e) => setErr(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
   };
   return (
-    <div className="pointer-events-none fixed bottom-0 left-[232px] right-[372px] z-10 bg-gradient-to-t from-bg from-60% to-transparent pt-12">
+    <div className="pointer-events-none fixed bottom-0 left-[var(--side-w)] right-[372px] z-10 bg-gradient-to-t from-bg from-60% to-transparent pt-12">
       <div className="pointer-events-auto mx-auto max-w-[1000px] px-8 pb-5">
         {!!v.hints.length && (
           <div className="mb-2.5 flex flex-wrap items-center gap-2">

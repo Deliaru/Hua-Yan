@@ -1,7 +1,8 @@
 // 外壳：工具栏（身份切换、新开一轮、状态条）+ 侧栏 source list。
 // v6：四个角色子工作面（客户 / 业务员 / 产品经理 / 研发）是侧栏二级项，进入即以该角色身份请求；不再靠导览线性走主线，
 // 看的人在四个角色之间自由切换，靠「同一份需求在哪些工作面出现、在哪些没出现」看流程被缩短。
-// 旧主线（v5 演示故事 + 带导览的沉浸工作面）收进「旧主线回放（v5）」，原样保留，标注历史能力。
+// 旧主线（v5 演示故事 + 带导览的沉浸工作面）沿 v5 流程，与 v6 冲突，V6-5.5 起不在侧栏出现；代码与 #story / #desk 地址保留。
+// V6-5.5「演示讲解」：左侧导航换成讲解栏（components/Demo.tsx），中、右两栏仍是真实工作面。
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
@@ -24,6 +25,7 @@ import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
 import { ActivityMenu } from "./components/Process";
+import { DemoPanel } from "./components/Demo";
 
 // [页面, 标题, 图标, 分组]：分组 null 为一级项
 const PAGES = [
@@ -40,7 +42,8 @@ const PAGES = [
   ["desk", "沉浸工作面", NavDesk, "旧主线回放（v5）"],
 ] as const;
 type Page = (typeof PAGES)[number][0];
-const HUMANS: Role[] = ["sales", "rd", "supervisor"];   // 觉视图、三层对照、知识与积分、旧沉浸工作面可选的身份
+const HIDDEN: Page[] = ["story", "desk"];   // 不在侧栏出现的旧页面
+const HUMANS: Role[] = ["sales", "pm", "rd", "supervisor"];   // 觉视图、三层对照、知识与积分、旧沉浸工作面可选的身份（产品经理为真人 P01，不含 Agent）
 const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd" };
 const ROLE_NAME: Record<string, string> = { customer: "客户", sales: "业务员", pm: "产品经理", rd: "研发", supervisor: "主管" };
 const DEFAULT_WHO: Record<Role, string> = { customer: "customer:C03", sales: "sales:S01", pm: "pm:P01", rd: "rd:R01", supervisor: "supervisor:M01" };
@@ -63,6 +66,8 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [side, setSide] = useState<HTMLElement | null>(null);
   const [modeOpen, setModeOpen] = useState(false);
+  const [demo, setDemoState] = useState(() => localStorage.getItem("huayan-demo") === "1");   // 讲解模式，刷新不丢
+  const setDemo = (on: boolean) => { localStorage.setItem("huayan-demo", on ? "1" : "0"); setDemoState(on); };
   const guide = useGuide();
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
@@ -72,7 +77,7 @@ export default function App() {
 
   const pageRole = ROLE_PAGES[page];
   const human = (r: Role) => meta.actors.filter((a) => a.role === r && a.id !== "pm:agent");
-  const people = pageRole ? human(pageRole) : meta.actors.filter((a) => HUMANS.includes(a.role));
+  const people = pageRole ? human(pageRole) : meta.actors.filter((a) => HUMANS.includes(a.role) && a.id !== "pm:agent");
   const actor = pageRole ? people.find((a) => a.id === (who[pageRole] ?? DEFAULT_WHO[pageRole])) ?? people[0]
     : people.find((a) => a.id === me) ?? people[0];
   const pick = (id: string) => (pageRole ? setWho((w) => ({ ...w, [pageRole]: id })) : setMe(id));
@@ -83,16 +88,24 @@ export default function App() {
   };
   const ctx = {
     meta, me: actor.id, role: actor.role, agentOnline: !meta.status.gateway_mock, version, side,
-    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, focus,
+    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, focus, startDemo: () => setDemo(true),
     go: (p: string, f?: string | null, id?: string) => {
       const role = ROLE_PAGES[p as Page];
       if (role && id && id.startsWith(`${role}:`)) setWho((w) => ({ ...w, [role]: id }));
+      if (!role && id) setMe(id);
       setFocus(f ?? null);
       setPage(p as Page);
       window.scrollTo(0, 0);
     },
   };
   const key = `${meta.status.run_id}:${actor.id}`;
+  const sideW = demo ? 400 : 232;
+  // 讲解每执行一步：从头重建过的要重读 meta（run_id 变了），再切到该看的工作面与对象
+  const onView = async (v: { page: string; focus: string | null; who: string | null } | null, rebuilt: boolean) => {
+    if (rebuilt) setMeta(await api.meta());
+    setVersion((n) => n + 1);
+    if (v) ctx.go(v.page, v.focus, v.who ?? undefined);
+  };
 
   return (
     <AppCtx.Provider value={ctx}>
@@ -131,23 +144,28 @@ export default function App() {
         </div>
       </header>
 
-      <aside className="sidebar fixed bottom-0 left-0 top-[52px] z-20 flex w-[232px] flex-col overflow-y-auto border-r border-sep pb-4 pt-2">
-        {PAGES.map(([k, label, Icon, group], i) => (
+      <aside style={{ width: sideW }} className="sidebar fixed bottom-0 left-0 top-[52px] z-20 flex flex-col overflow-y-auto border-r border-sep pb-4 pt-2">
+        {demo ? <DemoPanel onExit={() => setDemo(false)} onView={onView} side={setSide} /> : <>
+        <button onClick={() => setDemo(true)} className="side-row nav-row">
+          <NavStory /><span className="text-[13px] font-semibold">演示讲解</span><span className="tag tag-accent ml-auto !h-[18px] !text-[11px]">推荐</span>
+        </button>
+        {PAGES.filter(([k]) => !HIDDEN.includes(k)).map(([k, label, Icon, group], i, shown) => (
           <div key={k}>
-            {group && PAGES[i - 1][3] !== group && <p className="side-head !pb-1 !pt-3">{group}</p>}
+            {group && shown[i - 1][3] !== group && <p className="side-head !pb-1 !pt-3">{group}</p>}
             <button onClick={() => { setFocus(null); setPage(k); }} className={`side-row nav-row ${page === k ? "on" : ""} ${group ? "!pl-[30px]" : ""}`}>
               <Icon /><span className="text-[13px] font-semibold">{label}</span>
             </button>
           </div>
         ))}
         <div ref={setSide} className="flex-1" />
+        </>}
         <p className="mx-[18px] mt-4 flex items-center gap-1.5 text-[11px] leading-4 text-ink-3"
            title="占位种子与程序生成的对话，不含任何真实客户、企业与配方">
           <i className="h-1.5 w-1.5 rounded-full bg-ink-3" />全部为模拟数据
         </p>
       </aside>
 
-      <main className="ml-[232px] pt-[52px]">
+      <main style={{ marginLeft: sideW, ["--side-w" as string]: `${sideW}px` }} className="pt-[52px]">
         {page === "overview" && <Overview />}
         {page === "customer" && <Customer key={key} />}
         {page === "sales" && <Sales key={key} />}

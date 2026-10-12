@@ -82,7 +82,7 @@ const STEPS: { node: string; text: string; how: string }[] = [
 ];
 
 export function Overview() {
-  const { go } = useApp();
+  const { go, startDemo } = useApp();
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-14 px-8 pb-16 pt-10">
       <Hero />
@@ -93,7 +93,7 @@ export function Overview() {
         <div className="flex items-center gap-3">
           <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]"
                   onClick={() => document.getElementById("arch")?.scrollIntoView({ behavior: "smooth" })}>先看架构图 ↓</button>
-          <button className="btn btn-plain !h-11 !rounded-[10px] !px-5 !text-[14px]" onClick={() => go("customer")}>直接进入演示 →</button>
+          <button className="btn btn-plain !h-11 !rounded-[10px] !px-5 !text-[14px]" onClick={startDemo}>直接看演示讲解 →</button>
         </div>
         <Status />
       </div>
@@ -107,8 +107,11 @@ export function Overview() {
           下图是一条需求穿过四层知识时，每一层用了谁的知识、对下层放出了什么——它说的是权限，不是谁签字的先后。</p>
         <FlowDiagram />
         <div className="mt-2 flex flex-col items-center gap-3">
-          <p className="text-[15px] text-ink-2">看完了？进入演示：在四个角色子工作面里随时切换，看同一份需求出现在谁那里、没出现在谁那里。</p>
-          <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]" onClick={() => go("customer")}>从客户子工作面开始：新开一个需求 →</button>
+          <p className="text-[15px] text-ink-2">看完了？跟着讲解看一家企业的一个上午：左边讲解，右边是真实工作面在跑，每一步讲清解放了谁的什么生产力。</p>
+          <div className="flex items-center gap-3">
+            <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]" onClick={startDemo}>开始演示讲解 →</button>
+            <button className="btn btn-plain !h-11 !rounded-[10px] !px-5 !text-[14px]" onClick={() => go("customer")}>自己在四个工作面里操作</button>
+          </div>
         </div>
       </section>
       <Efficiency />

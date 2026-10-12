@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urlparse
 from pydantic import BaseModel
 import yaml
 
-from huayan.app import HuayanApp
+from huayan.app import HuayanApp, _human_events
 from huayan.clock import SimClock, get_clock, set_clock
 from huayan.contracts import ReqItem, SheetDraft, SHANGHAI
 from huayan.knowledge import PermissionDenied
@@ -35,7 +35,8 @@ DIST = Path("web/dist")
 REPORTS = Path("docs/reports")
 MAINLINE = Path("demo/mainline.yaml")
 ROUTES = Path("demo/routes.yaml")     # v6 开场入口 A–D、C′
-REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week")   # 评测页只读这几份报告（WP-E）；300 张卡用于按「应升级」拆开；single_card 经门面按查看者读取
+STORY = Path("demo/story.yaml")       # V6-5.5 演示讲解：一个上午 / 按路径看
+REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week", "v6_routes")   # 评测页只读这几份报告（WP-E；v6_routes 为 V6-5 岗位对照）；300 张卡用于按「应升级」拆开；single_card 经门面按查看者读取
 
 MAX_SESSIONS = int(os.environ.get("HUAYAN_MAX_SESSIONS", "30"))   # 超出时淘汰最久未用的会话
 
@@ -164,7 +165,32 @@ def route_next(app, p):
     return {"text": routes[0]["lines"][len(sent)] if routes else None}
 
 
+def demo_story():
+    return yaml.safe_load(STORY.read_text(encoding="utf-8"))
+
+
+def demo_ledger(app, p):
+    """V6-5.5 生产力账本：按本会话此刻的事件日志计数，口径同 scripts/demo_routes.py 的 v6 列；传统按黑线流程定义（每个需求 5 个人工节点、一张研发单），不是测量。"""
+    sessions = app.sessions()
+    n = len(sessions)
+    reqs = app.requirements("rd:R01")
+    tickets = sum(r.status != "merged" for r in reqs)
+    events = app.events.query()
+    kinds = [e.kind for e in events]
+    handed = sum(s.origin == "sales" or app.route_of(s.id, "rd:R01")["path"] == "交业务员" for s in sessions)
+    return [
+        {"label": "研发少收的单", "value": n - tickets, "note": f"{n} 个需求，进研发 {tickets} 张；传统每个需求一张"},
+        {"label": "业务员少做的技术问答", "value": sum(s.origin == "customer" for s in sessions), "note": "客户自己来问，化言在客户这一层答"},
+        {"label": "无需人转述的需求单", "value": sum(r.drafted_by == "pm:agent" for r in reqs), "note": "产品经理 Agent 起草，带着客户原话"},
+        {"label": "老产品新增适用场景", "value": kinds.count("scope_extended"), "note": "研发判一次，产品经理签字写进产品边界"},
+        {"label": "觉自动推进", "value": kinds.count("auto_executed"), "note": "低风险推进按模板自动执行，不占人签字"},
+        {"label": "人工中转节点", "value": len(_human_events(events)) + handed, "base": n * 5,
+         "note": f"传统按定义 {n} × 5 = {n * 5} 个：业务员记录、产品经理转述、研发接收、产品经理评价、业务员开单"},
+    ]
+
+
 GET = {
+    "/api/demo/ledger": demo_ledger,
     "/api/demo/route-next": route_next,
     "/api/demo/next": next_line,
     "/api/status": lambda app, p: app.status(),
@@ -238,6 +264,7 @@ class Api:
         self.writes = 0     # 本轮成功的写操作数；回放部署里按它对齐台词的下一步
         self.activity = None                # 正在进行或最近一次写操作的处理过程
         self.agent_runs = {}                # (对话 id, 回复序号) → 这一轮 Agent 的过程，供对话里展开
+        self.story_done, self.story_handles = 0, {}   # V6-5.5 讲解已执行到第几步；句柄 → 会话、开场、已说几句
         if app is not None:
             self.attach(app)
 
@@ -332,7 +359,83 @@ class Api:
         use_clock(self.clock)
         self.app, self.writes = HuayanApp.build(self.config_path, byok=self.byok), 0
         self.activity, self.agent_runs = None, {}
+        self.story_done, self.story_handles = 0, {}
         self.attach(self.app)
+
+    def story_state(self):
+        story = demo_story()
+        view = self._story_view(story["steps"][self.story_done - 1]["view"]) if self.story_done else None
+        return story | {"done": self.story_done, "view": view}
+
+    def story_next(self):
+        """讲解的下一步：真的执行 do 里的写操作（经 _call，与浏览器里点按钮、scripts/demo_routes.py 同一个入口）。
+        看的人已经在工作面上自己做过的动作（发过这句、签过、接过）跳过，接着往下讲。"""
+        step = demo_story()["steps"][self.story_done]
+        try:
+            for action in step.get("do", []):
+                self._story_do(action)
+        except (PermissionDenied, ValueError, KeyError, StopIteration) as e:
+            raise ValueError(f"这一步没能执行（{type(e).__name__}: {e}）。刚才在工作面上的操作改变了这一章的走向，"
+                             "可以在目录里点这一章，从头快进到它的开头重新看。") from e
+        self.story_done += 1
+        return self.story_state()
+
+    def story_goto(self, index):
+        """从头重建，再执行到第 index 步（目录里点某一步 / 某一章）。"""
+        self.app.system1.close()
+        self.build()
+        for _ in range(index):
+            self.story_next()
+        return self.story_state()
+
+    def _story_do(self, a):
+        h = self.story_handles
+        if "open" in a:
+            opened = self._call("POST", "/api/demo/open", {"route": a["open"], "customer": a.get("customer")})
+            h[a["as"]] = {"session": opened["session_id"], "route": a["open"], "said": 1}
+        elif "say" in a:
+            s = h[a["say"]]
+            session = next(x for x in self.app.sessions() if x.id == s["session"])
+            if sum(t.speaker == "customer" for t in session.turns) <= s["said"]:
+                line = next(r for r in demo_routes() if r["id"] == s["route"])["lines"][s["said"]]
+                self._call("POST", "/api/turn", {"session_id": s["session"], "speaker": "customer", "text": line})
+            s["said"] += 1
+        elif "decline" in a:
+            req = self._story_req(a["decline"])
+            if req.status == "draft":
+                self._call("POST", "/api/decline", {"req_id": req.id, "by": req.assigned_rd, "product_id": a["product"], "reason": a["reason"]})
+        elif "scope" in a:
+            if q := self._story_question("scope_update", product_id=a["scope"]):
+                self._call("POST", "/api/scope/extend", {"question_id": q.id, "by": "pm:P01", "note": a["note"]})
+        elif "merge" in a:
+            if q := self._story_question("opportunity"):
+                self._call("POST", "/api/merge", {"question_id": q.id, "by": "pm:P01", "note": a["merge"]})
+        else:
+            req = self._story_req(a["accept"])
+            if req.status == "draft":
+                self._call("POST", "/api/accept", {"req_id": req.id, "by": req.assigned_rd})
+
+    def _story_req(self, handle):
+        sid = self.story_handles[handle]["session"]
+        return next(r for r in self.app.requirements("rd:R01") if sid in r.session_ids and r.status != "merged")
+
+    def _story_question(self, family, **refs):
+        self.app.tick()
+        return next((q for q in self.app.questions("pm:P01") if q.family == family and q.status == "open"
+                     and q.prepared_at is not None and all(q.refs.get(k) == v for k, v in refs.items())), None)
+
+    def _story_view(self, v):
+        """执行后切到哪个工作面看哪个对象：研发页的身份取需求单的指派研发，客户页取会话的客户；看的人自己操作过、对象对不上时只切页面。"""
+        try:
+            if v.get("focus", "").startswith("req:"):
+                req = self._story_req(v["focus"][4:])
+                return {"page": v["page"], "focus": req.id, "who": v.get("who") or req.assigned_rd}
+            if v.get("focus"):
+                sid = self.story_handles[v["focus"]]["session"]
+                return {"page": v["page"], "focus": sid, "who": v.get("who") or next(s.customer_id for s in self.app.sessions() if s.id == sid)}
+        except (KeyError, StopIteration):
+            pass
+        return {"page": v["page"], "focus": None, "who": v.get("who")}
 
     def _call(self, method, path, params):
         if method == "GET" and path == "/api/demo/checkpoints":
@@ -345,6 +448,12 @@ class Api:
             self.app.system1.close()
             self.build()
             return {"run_id": self.app.run_id}
+        if method == "GET" and path == "/api/demo/story":
+            return self.story_state()
+        if method == "POST" and path == "/api/demo/story/next":
+            return self.story_next()
+        if method == "POST" and path == "/api/demo/story/goto":
+            return self.story_goto(int(params["index"]))
         if method == "GET" and path == "/api/meta":
             return meta(self.app, params) | {"mode": self.mode()}
         route = {"GET": GET, "POST": POST}[method][path]

@@ -39,6 +39,13 @@ _HUMAN_STEPS = {"escalate", "requirement_accepted", "requirement_returned", "pro
                 "requirement_translated", "points_set", "product_released", "knowledge_contributed", "l2_contributed"}
 
 
+def _human_events(events):
+    """业务员 / 产品经理 / 研发本人的处理事件（不含产品经理 Agent）；合并需求单时随之写下的整单改写不另计一次。"""
+    merges = {(e.actor, e.ts) for e in events if e.kind == "requirements_merged"}
+    return [e for e in events if e.kind in _HUMAN_STEPS and e.actor.split(":")[0] in {"sales", "pm", "rd"}
+            and e.actor != "pm:agent" and not (e.kind == "requirement_edited" and (e.actor, e.ts) in merges)]
+
+
 def _find(table, key, what):
     # 调用方（助手工具的参数来自大模型）给的 id 不存在时抛 ValueError，工具层统一回给模型。
     if key not in table:
@@ -1323,8 +1330,8 @@ class HuayanApp:
                   or rids & set(e.payload.get("requirement_ids", []))]
         linked = [q for q in self.bus.list(status=None)        # 挂在知识对象上、由这张单引出的决策（扩适用范围）
                   if rids & set(q.refs.get("requirement_ids", "").split(","))]
-        humans = lambda role: sorted({e.actor for e in events if e.kind in _HUMAN_STEPS
-                                      and e.actor.startswith(f"{role}:") and e.actor != "pm:agent"})
+        steps = _human_events(events)
+        humans = lambda role: sorted({e.actor for e in steps if e.actor.startswith(f"{role}:")})
         sales, pm, rd = humans("sales"), humans("pm"), humans("rd")
         if any(t.speaker == "sales" for t in session.turns) and session.sales_id not in sales:
             sales = sorted([*sales, session.sales_id])
@@ -1371,8 +1378,7 @@ class HuayanApp:
         return {"session_id": session.id, "requirement_id": main.id if main else None, "origin": session.origin,
                 "path": path, "roles": roles, "basis": basis, "why": why,
                 "quote": next((t.text for t in session.turns if t.speaker == "customer"), ""),
-                "n_human_steps": sum(e.kind in _HUMAN_STEPS and e.actor.split(":")[0] in {"sales", "pm", "rd"}
-                                     and e.actor != "pm:agent" for e in events)}
+                "n_human_steps": len(steps)}
 
     def workload(self, viewer_id):
         """v6.1 E6：本人的工作分两组——被系统拿掉的无效工作（因信息缺失、转述、重复而被迫发生的）与保留的专业判断。

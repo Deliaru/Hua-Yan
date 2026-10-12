@@ -1,0 +1,18 @@
+# v6 公开演示部署（无大模型密钥、无 OneJev）：A–D、C′ 是新台词，v5 录制缓存会未命中，所以改为离线运行——
+# 抽取用规则、Jev 用桩、助手不运行（界面状态条标注降级），觉用本地 Jue-K。其余同 app.yaml。
+seeds_dir: seeds
+templates_dir: config/templates
+run_root: runs
+system1_impl: mock            # mock | llm_fallback | onejev
+gateway_mock: true            # true 时用 MockGateway（离线），角色助手不运行；现场演示设 false
+extractor: rule               # rule | llm
+realtime_model: jue_k         # jue_proto | jue_k
+scheduled_model: jue_k        # jue_proto | jue_k
+jue_k_dir: models/jue_k
+llm_cache_dir: runs/llm_cache # 录制/回放缓存；为空则不缓存
+replay: false                 # true = 记录回放模式，界面标明
+thresholds: {ask: 0.5, ask_jue_k: 0.15, max_asks: 2, match: 0.5, publish: 0.5}  # ask_jue_k：Jue-K 输出校准概率，漏问代价高，实时追问阈值取 0.15（见 models/jue_k/model_card.md）
+windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
+points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
+# v6：客户归属业务员（模拟），客户自助会话有商务诉求时由觉自动交给归属业务员
+customer_sales: {"customer:C01": "sales:S01", "customer:C02": "sales:S01", "customer:C03": "sales:S01", "customer:C04": "sales:S02"}

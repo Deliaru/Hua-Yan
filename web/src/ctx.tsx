@@ -14,6 +14,7 @@ export interface Ctx {
   go: (page: string, focus?: string | null, who?: string) => void;   // v6：跳到某个角色子工作面（可指定那个人）并打开同一对象
   focus: string | null;             // 跳转时带来的对象 id，子工作面据此选中
   side: HTMLElement | null;         // 侧栏下半部分：各页面把自己的 source list 放进来
+  startDemo: () => void;            // V6-5.5：进入演示讲解（左侧换成讲解栏）
 }
 
 export const AppCtx = createContext<Ctx>(null!);

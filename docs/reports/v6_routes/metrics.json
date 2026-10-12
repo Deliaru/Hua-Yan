@@ -1,0 +1,1101 @@
+{
+  "generated_by": "scripts/demo_routes.py",
+  "simulated": true,
+  "batch": [
+    {
+      "route": "A",
+      "customer": "customer:C01",
+      "title": "常规问题，客户自助解决"
+    },
+    {
+      "route": "B",
+      "customer": "customer:C02",
+      "title": "有商务诉求，交给业务员"
+    },
+    {
+      "route": "C",
+      "customer": "customer:C03",
+      "title": "现有产品不合适，需求直达研发"
+    },
+    {
+      "route": "C′",
+      "customer": "customer:C04",
+      "title": "同类需求再来一次（研发判过「已有产品适用」之后）"
+    },
+    {
+      "route": "D",
+      "customer": "customer:C01",
+      "title": "重复的短平快需求，汇成一个课题"
+    },
+    {
+      "route": "D",
+      "customer": "customer:C02",
+      "title": "重复的短平快需求，汇成一个课题"
+    }
+  ],
+  "jue_model": "jue_proto",
+  "roles": [
+    {
+      "role": "业务员",
+      "duty": "回答技术问题、记录需求",
+      "traditional": "每单",
+      "v5": "每单（陪同 6/6）",
+      "v6": "不再做（陪同 0/6；A 客户自助）"
+    },
+    {
+      "role": "业务员",
+      "duty": "签字升级",
+      "traditional": "每单",
+      "v5": "每单（4/4 次）",
+      "v6": "不再做（0/3 次，觉自动升级 3 次）"
+    },
+    {
+      "role": "产品经理",
+      "duty": "把需求转述成产品语言",
+      "traditional": "每单",
+      "v5": "Agent（4/4 张）",
+      "v6": "Agent（3/3 张），例外才纠偏（0 次）"
+    },
+    {
+      "role": "产品经理",
+      "duty": "判断产品机会、维护适用范围",
+      "traditional": "没空做",
+      "v5": "无（0 次）",
+      "v6": "做（2 次：C′ 扩范围、D 签机会）"
+    },
+    {
+      "role": "研发",
+      "duty": "补问信息、纠正需求",
+      "traditional": "每单",
+      "v5": "退回 + 回问 4 次 / 4 张单",
+      "v6": "退回 + 回问 1 次 / 2 张单",
+      "note": "v6 的 C 在研发转译前就判为不立项，没走到回问那一步，这一行两列不能直接比大小"
+    },
+    {
+      "role": "研发",
+      "duty": "对同一类超范围用法做判断（C、C′）",
+      "traditional": "每单",
+      "v5": "每单（2 次）",
+      "v6": "只判一次（1 次）"
+    },
+    {
+      "role": "研发",
+      "duty": "逐张处理重复需求（D）",
+      "traditional": "每张",
+      "v5": "每张（2 张）",
+      "v6": "合并后一张（1 张）"
+    }
+  ],
+  "metrics": [
+    {
+      "label": "人工中转节点数",
+      "traditional": 30,
+      "v5": 14,
+      "v6": 5,
+      "note": "传统按定义：每个需求经过 业务员记录、产品经理转述、研发接收、产品经理评价、业务员开单 5 个人工节点；v5 / v6 为事件日志里业务员、产品经理、研发本人的处理事件，业务员接手的会话（陪同，或客户的商务诉求交给业务员）另计 1"
+    },
+    {
+      "label": "客户自助解决",
+      "traditional": "0/6",
+      "v5": "0/6",
+      "v6": "2/6",
+      "note": "客户自助会话里拿到推荐、没有产生需求单、没有交业务员"
+    },
+    {
+      "label": "研发介入次数 / 进研发的需求单",
+      "traditional": "6 / 6",
+      "v5": "4 / 4",
+      "v6": "2 / 2",
+      "note": "介入 = 研发本人的接单、不立项等处理事件；需求单不含被合并的单"
+    },
+    {
+      "label": "人工签字次数（其中低风险）",
+      "traditional": "—",
+      "v5": "8（4）",
+      "v6": "4（0）",
+      "note": "签字 = 人对觉提出的决策签字、接单或驳回；低风险 = 业务员签升级、研发审定已有产品复用，v6 改由觉自动执行"
+    }
+  ],
+  "rd_tickets": {
+    "traditional": 6,
+    "v5": 4,
+    "v6": 2
+  },
+  "routes": {
+    "v6": [
+      {
+        "route": "A",
+        "session_id": "sess:1",
+        "customer": "customer:C01",
+        "origin": "customer",
+        "path": "自助解决",
+        "human": [],
+        "rd_touches": 0,
+        "events": [
+          [
+            "turn",
+            "customer:C01"
+          ],
+          [
+            "extraction",
+            "customer:C01"
+          ],
+          [
+            "ask_hint",
+            "customer:C01"
+          ],
+          [
+            "turn",
+            "customer:C01"
+          ],
+          [
+            "extraction",
+            "customer:C01"
+          ],
+          [
+            "ask_hint",
+            "customer:C01"
+          ],
+          [
+            "match",
+            "customer:C01"
+          ],
+          [
+            "recommend",
+            "customer:C01"
+          ]
+        ]
+      },
+      {
+        "route": "B",
+        "session_id": "sess:2",
+        "customer": "customer:C02",
+        "origin": "customer",
+        "path": "交业务员",
+        "human": [],
+        "rd_touches": 0,
+        "events": [
+          [
+            "turn",
+            "customer:C02"
+          ],
+          [
+            "extraction",
+            "customer:C02"
+          ],
+          [
+            "ask_hint",
+            "customer:C02"
+          ],
+          [
+            "turn",
+            "customer:C02"
+          ],
+          [
+            "extraction",
+            "customer:C02"
+          ],
+          [
+            "ask_hint",
+            "customer:C02"
+          ],
+          [
+            "match",
+            "customer:C02"
+          ],
+          [
+            "recommend",
+            "customer:C02"
+          ],
+          [
+            "turn",
+            "customer:C02"
+          ],
+          [
+            "extraction",
+            "customer:C02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "sales_assigned",
+            "jue:auto"
+          ],
+          [
+            "question_resolved",
+            "jue:auto"
+          ],
+          [
+            "auto_executed",
+            "jue:auto"
+          ]
+        ]
+      },
+      {
+        "route": "C",
+        "session_id": "sess:3",
+        "customer": "customer:C03",
+        "origin": "customer",
+        "path": "研发不立项",
+        "human": [
+          {
+            "kind": "project_declined",
+            "actor": "rd:R02"
+          },
+          {
+            "kind": "scope_extended",
+            "actor": "pm:P01"
+          }
+        ],
+        "rd_touches": 1,
+        "events": [
+          [
+            "turn",
+            "customer:C03"
+          ],
+          [
+            "extraction",
+            "customer:C03"
+          ],
+          [
+            "ask_hint",
+            "customer:C03"
+          ],
+          [
+            "turn",
+            "customer:C03"
+          ],
+          [
+            "extraction",
+            "customer:C03"
+          ],
+          [
+            "ask_hint",
+            "customer:C03"
+          ],
+          [
+            "match",
+            "customer:C03"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "escalate",
+            "jue:auto"
+          ],
+          [
+            "requirement_created",
+            "jue:auto"
+          ],
+          [
+            "question_resolved",
+            "jue:auto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "auto_executed",
+            "jue:auto"
+          ],
+          [
+            "reuse_proposed",
+            "pm:agent"
+          ],
+          [
+            "question_resolved",
+            "pm:agent"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "project_declined",
+            "rd:R02"
+          ],
+          [
+            "question_resolved",
+            "rd:R02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "sheet_updated",
+            "pm:P01"
+          ],
+          [
+            "scope_extended",
+            "pm:P01"
+          ],
+          [
+            "question_resolved",
+            "pm:P01"
+          ]
+        ]
+      },
+      {
+        "route": "C′",
+        "session_id": "sess:4",
+        "customer": "customer:C04",
+        "origin": "customer",
+        "path": "自助解决",
+        "human": [],
+        "rd_touches": 0,
+        "events": [
+          [
+            "turn",
+            "customer:C04"
+          ],
+          [
+            "extraction",
+            "customer:C04"
+          ],
+          [
+            "ask_hint",
+            "customer:C04"
+          ],
+          [
+            "turn",
+            "customer:C04"
+          ],
+          [
+            "extraction",
+            "customer:C04"
+          ],
+          [
+            "ask_hint",
+            "customer:C04"
+          ],
+          [
+            "match",
+            "customer:C04"
+          ],
+          [
+            "recommend",
+            "customer:C04"
+          ]
+        ]
+      },
+      {
+        "route": "D",
+        "session_id": "sess:5",
+        "customer": "customer:C01",
+        "origin": "customer",
+        "path": "入研",
+        "human": [],
+        "rd_touches": 0,
+        "events": [
+          [
+            "turn",
+            "customer:C01"
+          ],
+          [
+            "extraction",
+            "customer:C01"
+          ],
+          [
+            "ask_hint",
+            "customer:C01"
+          ],
+          [
+            "match",
+            "customer:C01"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "escalate",
+            "jue:auto"
+          ],
+          [
+            "requirement_created",
+            "jue:auto"
+          ],
+          [
+            "question_resolved",
+            "jue:auto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "auto_executed",
+            "jue:auto"
+          ],
+          [
+            "reuse_proposed",
+            "pm:agent"
+          ],
+          [
+            "question_resolved",
+            "pm:agent"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ]
+        ]
+      },
+      {
+        "route": "D",
+        "session_id": "sess:6",
+        "customer": "customer:C02",
+        "origin": "customer",
+        "path": "产品机会",
+        "human": [
+          {
+            "kind": "requirements_merged",
+            "actor": "pm:P01"
+          },
+          {
+            "kind": "requirement_accepted",
+            "actor": "rd:R02"
+          }
+        ],
+        "rd_touches": 1,
+        "events": [
+          [
+            "turn",
+            "customer:C02"
+          ],
+          [
+            "extraction",
+            "customer:C02"
+          ],
+          [
+            "ask_hint",
+            "customer:C02"
+          ],
+          [
+            "match",
+            "customer:C02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "escalate",
+            "jue:auto"
+          ],
+          [
+            "requirement_created",
+            "jue:auto"
+          ],
+          [
+            "question_resolved",
+            "jue:auto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "auto_executed",
+            "jue:auto"
+          ],
+          [
+            "reuse_proposed",
+            "pm:agent"
+          ],
+          [
+            "question_resolved",
+            "pm:agent"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "merge_proposed",
+            "pm:agent"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "question_resolved",
+            "pm:P01"
+          ],
+          [
+            "requirement_edited",
+            "pm:P01"
+          ],
+          [
+            "requirements_merged",
+            "pm:P01"
+          ],
+          [
+            "question_resolved",
+            "pm:P01"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "requirement_accepted",
+            "rd:R02"
+          ],
+          [
+            "question_resolved",
+            "rd:R02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "rd:R02"
+          ]
+        ]
+      }
+    ],
+    "v5": [
+      {
+        "route": "A",
+        "session_id": "sess:1",
+        "customer": "customer:C01",
+        "origin": "sales",
+        "path": "自助解决",
+        "human": [],
+        "rd_touches": 0,
+        "events": [
+          [
+            "turn",
+            "customer:C01"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ],
+          [
+            "ask_hint",
+            "sales:S01"
+          ],
+          [
+            "turn",
+            "customer:C01"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ],
+          [
+            "ask_hint",
+            "sales:S01"
+          ],
+          [
+            "match",
+            "sales:S01"
+          ],
+          [
+            "recommend",
+            "sales:S01"
+          ]
+        ]
+      },
+      {
+        "route": "B",
+        "session_id": "sess:2",
+        "customer": "customer:C02",
+        "origin": "sales",
+        "path": "自助解决",
+        "human": [],
+        "rd_touches": 0,
+        "events": [
+          [
+            "turn",
+            "customer:C02"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ],
+          [
+            "ask_hint",
+            "sales:S01"
+          ],
+          [
+            "turn",
+            "customer:C02"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ],
+          [
+            "ask_hint",
+            "sales:S01"
+          ],
+          [
+            "match",
+            "sales:S01"
+          ],
+          [
+            "recommend",
+            "sales:S01"
+          ],
+          [
+            "turn",
+            "customer:C02"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ]
+        ]
+      },
+      {
+        "route": "C",
+        "session_id": "sess:3",
+        "customer": "customer:C03",
+        "origin": "sales",
+        "path": "入研",
+        "human": [
+          {
+            "kind": "escalate",
+            "actor": "sales:S01"
+          },
+          {
+            "kind": "requirement_accepted",
+            "actor": "rd:R02"
+          }
+        ],
+        "rd_touches": 1,
+        "events": [
+          [
+            "turn",
+            "customer:C03"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ],
+          [
+            "ask_hint",
+            "sales:S01"
+          ],
+          [
+            "turn",
+            "customer:C03"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ],
+          [
+            "ask_hint",
+            "sales:S01"
+          ],
+          [
+            "match",
+            "sales:S01"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "sales:S01"
+          ],
+          [
+            "escalate",
+            "sales:S01"
+          ],
+          [
+            "requirement_created",
+            "sales:S01"
+          ],
+          [
+            "question_resolved",
+            "sales:S01"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "reuse_proposed",
+            "pm:agent"
+          ],
+          [
+            "question_resolved",
+            "pm:agent"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "requirement_accepted",
+            "rd:R02"
+          ],
+          [
+            "question_resolved",
+            "rd:R02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "rd:R02"
+          ]
+        ]
+      },
+      {
+        "route": "C′",
+        "session_id": "sess:4",
+        "customer": "customer:C04",
+        "origin": "sales",
+        "path": "入研",
+        "human": [
+          {
+            "kind": "escalate",
+            "actor": "sales:S02"
+          },
+          {
+            "kind": "requirement_accepted",
+            "actor": "rd:R02"
+          }
+        ],
+        "rd_touches": 1,
+        "events": [
+          [
+            "turn",
+            "customer:C04"
+          ],
+          [
+            "extraction",
+            "sales:S02"
+          ],
+          [
+            "ask_hint",
+            "sales:S02"
+          ],
+          [
+            "turn",
+            "customer:C04"
+          ],
+          [
+            "extraction",
+            "sales:S02"
+          ],
+          [
+            "ask_hint",
+            "sales:S02"
+          ],
+          [
+            "match",
+            "sales:S02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "sales:S02"
+          ],
+          [
+            "escalate",
+            "sales:S02"
+          ],
+          [
+            "requirement_created",
+            "sales:S02"
+          ],
+          [
+            "question_resolved",
+            "sales:S02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "reuse_proposed",
+            "pm:agent"
+          ],
+          [
+            "question_resolved",
+            "pm:agent"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "requirement_accepted",
+            "rd:R02"
+          ],
+          [
+            "question_resolved",
+            "rd:R02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "rd:R02"
+          ]
+        ]
+      },
+      {
+        "route": "D",
+        "session_id": "sess:5",
+        "customer": "customer:C01",
+        "origin": "sales",
+        "path": "入研",
+        "human": [
+          {
+            "kind": "escalate",
+            "actor": "sales:S01"
+          },
+          {
+            "kind": "requirement_accepted",
+            "actor": "rd:R02"
+          }
+        ],
+        "rd_touches": 1,
+        "events": [
+          [
+            "turn",
+            "customer:C01"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ],
+          [
+            "ask_hint",
+            "sales:S01"
+          ],
+          [
+            "match",
+            "sales:S01"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "sales:S01"
+          ],
+          [
+            "escalate",
+            "sales:S01"
+          ],
+          [
+            "requirement_created",
+            "sales:S01"
+          ],
+          [
+            "question_resolved",
+            "sales:S01"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "reuse_proposed",
+            "pm:agent"
+          ],
+          [
+            "question_resolved",
+            "pm:agent"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "requirement_accepted",
+            "rd:R02"
+          ],
+          [
+            "question_resolved",
+            "rd:R02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "rd:R02"
+          ]
+        ]
+      },
+      {
+        "route": "D",
+        "session_id": "sess:6",
+        "customer": "customer:C02",
+        "origin": "sales",
+        "path": "入研",
+        "human": [
+          {
+            "kind": "escalate",
+            "actor": "sales:S01"
+          },
+          {
+            "kind": "requirement_accepted",
+            "actor": "rd:R02"
+          }
+        ],
+        "rd_touches": 1,
+        "events": [
+          [
+            "turn",
+            "customer:C02"
+          ],
+          [
+            "extraction",
+            "sales:S01"
+          ],
+          [
+            "ask_hint",
+            "sales:S01"
+          ],
+          [
+            "match",
+            "sales:S01"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "sales:S01"
+          ],
+          [
+            "escalate",
+            "sales:S01"
+          ],
+          [
+            "requirement_created",
+            "sales:S01"
+          ],
+          [
+            "question_resolved",
+            "sales:S01"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "reuse_proposed",
+            "pm:agent"
+          ],
+          [
+            "question_resolved",
+            "pm:agent"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "pm:agent"
+          ],
+          [
+            "requirement_accepted",
+            "rd:R02"
+          ],
+          [
+            "question_resolved",
+            "rd:R02"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_published",
+            "jue_proto"
+          ],
+          [
+            "question_prepared",
+            "rd:R02"
+          ]
+        ]
+      }
+    ]
+  },
+  "definitions": {
+    "traditional": "按黑线流程定义计数，不是测量",
+    "v5": "同一套代码以业务员陪同会话运行：业务员签升级、研发逐张接单，不使用不立项、扩适用范围、产品经理签机会",
+    "v6": "客户自助会话按 demo/routes.yaml 台词运行；研发在 C 选「不立项：已有产品适用」"
+  }
+}

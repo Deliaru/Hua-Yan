@@ -101,6 +101,17 @@ export interface Readiness {
 // v6.1 E6：被拿掉的无效工作 / 保留的专业判断（事件日志计数）
 export interface Workload { removed: { label: string; n: number; note: string }[]; kept: { label: string; n: number }[] }
 export interface DemoRoute { id: string; title: string; customer: string; lines: string[]; hint: string }
+// V6-5.5 演示讲解：讲解五段 happened / before / freed / money（$）/ fame（★），没有的不写
+export interface StoryStep {
+  chapter: string; title: string; do?: object[]; view: { page: string };
+  happened: string; before?: string; freed?: string; money?: string; fame?: string;
+}
+export interface StoryState {
+  chapters: { id: string; title: string }[]; steps: StoryStep[];
+  done: number;                                  // 已执行到第几步（0 = 还没开始）
+  view: { page: string; focus: string | null; who: string | null } | null;
+}
+export interface LedgerItem { label: string; value: number; base?: number; note: string }
 
 // ⑥ 问题总线
 export interface Evidence { summary: string; event_ids: string[]; quote: string }
