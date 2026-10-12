@@ -10,7 +10,7 @@ import yaml
 from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
-from huayan.contracts import (AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
+from huayan.contracts import (KIND_LEVEL, AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
     Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
     JueTimeline, TimelineNode, TimelinePoint)
@@ -67,6 +67,7 @@ class HuayanApp:
         app.ledger = Ledger(app.run_dir / "ledger.jsonl", points=app.config["points"])
         app.bus = QuestionBus(app.events, app.run_dir / "questions.jsonl")
         app.kb = KnowledgeBase.from_seeds(app.seeds, app.events, app.audit)
+        app._load_public(Path(app.config["seeds_dir"]) / "public.yaml")
         if byok:
             app.gateway = byok.gateway(app.meter)
             app.system1 = byok.system1(app.gateway, app.meter)
@@ -91,6 +92,19 @@ class HuayanApp:
         app.progress = None          # 界面过程面板的进度回调（ui.server 设置）；只报「谁在做什么、用时」
         app.agents = AgentHub(app)
         return app
+
+    def _load_public(self, path):
+        """v6：L0 公开案例与 L1 内部评价（seeds/public.yaml，不属于 Seeds 契约）；测试夹具没有该文件。"""
+        if not path.exists():
+            return
+        cases = {c.id: c for c in self.seeds.cases}
+        for item in yaml.safe_load(path.read_text(encoding="utf-8"))["items"]:
+            source = cases.get(item.get("source_case"))
+            ref = item["source_case"] if source else item["product_id"]
+            self.kb.add(KnowledgeUnit(id=f"ku:{item['kind']}:{ref}", level=KIND_LEVEL[item["kind"]], kind=item["kind"],
+                title=item["title"], text=item["text"], product_id=item["product_id"],
+                phenomenon_ids=[source.phenomenon] if source else [], owner=source.owner if source else item["owner"],
+                created_at=get_clock().now()))
 
     def _jue_model(self, name, mode):
         # 原型在 system1 为 OneJev 时用它打分，否则规则模式；Jue-K 只做本地推理。

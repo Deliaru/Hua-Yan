@@ -7,6 +7,7 @@ VERSIONS = ("product", "product_usage", "full_mechanism", "internal")
 
 
 def cap(viewer: Actor, customer_id: str, product_id: str, grants: list[DecryptGrant]) -> Version:
+    """L0 客户自己看固定 product_usage（解密走业务员，见 v6）。"""
     if level_of(viewer) == 3:
         return "internal"
     if level_of(viewer) == 1 and any(g.customer_id == customer_id and g.product_id == product_id for g in grants):
@@ -34,6 +35,8 @@ def render(product_id: str, version: Version, viewer: Actor, kb: KnowledgeBase, 
         kinds.append("formula")
     # 读取位于知识层内部；只有通过上述授权校验的机理可以跨层披露。
     units = [kb._units[f"ku:{kind}:{product_id}"] for kind in kinds]
+    if level_of(viewer) <= 1:      # v6：L0 公开案例（客户与业务员）、L1 内部评价（仅业务员）
+        units += [u for u in kb.list(viewer, kinds=["public_case", "report"]) if u.product_id == product_id]
     if level_of(viewer) == 2:
         units += [u for u in kb.list(viewer, kinds=["case"])
                   if set(u.phenomenon_ids) & set(product.solves)]
