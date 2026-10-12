@@ -52,6 +52,7 @@ function Desk({ sid }: { sid: string }) {
           <p className="text-[12.5px] leading-5 text-ink-2">
             <span className="tag mr-2">L0 · 客户</span>你只看得到说明书、用法和公开案例；化言只问会改变推荐或研发判断的条件。</p>
           <RouteStrip objectId={sid} />
+          {route?.why && <WhyRd r={route} sid={sid} />}
           <div className="grid grid-cols-[minmax(320px,6fr)_minmax(280px,5fr)] items-start gap-5">
             <Chat v={v} route={route} />
             <SessionConditions sessionId={sid} />
@@ -127,6 +128,74 @@ function Chat({ v, route }: { v: SessionView; route: Route | null }) {
           </div>
         )}
         {err && <p role="alert" className="px-4 pb-2 text-[12px] text-danger">{err}</p>}
+      </div>
+    </section>
+  );
+}
+
+// 为什么这份需求能直达研发：三个条件逐条摆出依据（客户原话、开工条件、被排除的现有产品与 Jev 概率），再说明中间为什么不需要人签字
+function WhyRd({ r, sid }: { r: Route; sid: string }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const ready = useData(() => api.sessionReadiness(sid, me), [sid, me]);
+  const w = r.why!;
+  const auto = w.by === "jue:auto";
+  const n = w.excluded.length + w.candidates.length;
+  const pct = (p: number) => `${Math.round(p * 100)}%`;
+  const Step = ({ i, title, children }: { i: number; title: string; children: React.ReactNode }) => (
+    <div className="flex gap-3 px-5 py-3">
+      <span className="mt-[1px] flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-[#30c25b] text-[11px] font-semibold text-white">✓</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-semibold">{i}. {title}</p>
+        <div className="mt-1 text-[13px] leading-[21px] text-ink-2">{children}</div>
+      </div>
+    </div>
+  );
+  return (
+    <section className="group">
+      <div className="border-b border-sep px-5 py-3">
+        <p className="text-[16px] font-semibold">为什么这份需求可以直接交给研发？</p>
+        <p className="mt-0.5 text-[13px] text-ink-2">三个条件同时满足，{auto ? "觉按决策模板自动交给研发，中间不需要任何人签字或转述" : `业务员 ${L.name(w.by)} 签字后交给研发`}。</p>
+      </div>
+      <div className="divide-y divide-[var(--color-sep)]">
+        <Step i={1} title="你说清楚了是什么问题">
+          化言把你的原话「{r.quote}」识别为「{L.phen(w.phenomenon)}」类问题，原话会原样跟着需求走到研发。
+        </Step>
+        <Step i={2} title="研发开工需要的条件已经齐了">
+          {ready ? <>这类问题研发开工前必须知道 {ready.n_required} 项，现在 {ready.n_known} 项都已明确
+            {ready.n_asked_by_jue ? `，其中 ${ready.n_asked_by_jue} 项是觉直接向你追问所得` : ""}（见下方「研发开工需要的条件」）。研发拿到后不用再回头找人补问。</> : "……"}
+        </Step>
+        <Step i={3} title="现有产品都解决不了">
+          {n ? <>声明能处理「{L.phen(w.phenomenon)}」的已发布产品有 {n} 个，按你的条件逐一核对：</> : <>按你的现象和条件，现有产品里没有一个声明能处理。</>}
+          {!!n && (
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {w.excluded.map((x) => (
+                <li key={x.product_id} className="rounded-[8px] bg-bg px-3 py-1.5">
+                  <span className="font-semibold text-ink">{L.product(x.product_id)}</span>
+                  <span className="ml-2 text-danger">不适用</span>
+                  {x.mismatch.map((m) => (
+                    <span key={m.slot} className="block text-[12.5px]">
+                      {L.slot(m.slot)}：说明书写明只适用于 {m.allowed.join("、")}，你的是 <b className="font-semibold text-ink">{m.value}</b></span>
+                  ))}
+                </li>
+              ))}
+              {w.candidates.map((c) => (
+                <li key={c.product_id} className="rounded-[8px] bg-bg px-3 py-1.5">
+                  <span className="font-semibold text-ink">{L.product(c.product_id)}</span>
+                  <span className="ml-2">条件不冲突，但 Jev 判断适合的概率只有 {pct(c.p)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-1.5">Jev 判断「现有产品都不合适」的概率 <b className="num font-semibold text-ink">{pct(w.p_none)}</b>
+            {w.scored_by !== "onejev" && <span className="tag tag-warn ml-2">{L.scorer(w.scored_by)} · 降级</span>}</p>
+        </Step>
+      </div>
+      <div className="border-t border-sep bg-[#fafafb] px-5 py-3 text-[13px] leading-[21px] text-ink-2">
+        <p className="font-semibold text-ink">中间为什么不需要人？</p>
+        <p>· <b className="font-semibold text-ink">不经业务员</b>：过去业务员签字升级，只是把上面这三条判断再搬运一遍；转述还会丢信息。</p>
+        <p>· <b className="font-semibold text-ink">不用产品经理逐单转述</b>：产品经理 Agent 在后台把你的原话转成产品需求，每一句都带着你的原话。</p>
+        <p>· <b className="font-semibold text-ink">真正的判断留给研发</b>：是否立项由研发决定；若研发判断某个现有产品其实适用，产品经理会扩展它的适用范围，下次同类问题你在这里就能直接拿到推荐。</p>
       </div>
     </section>
   );

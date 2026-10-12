@@ -83,7 +83,13 @@ export interface RouteBasis { question_id: string; family: string; title: string
 export interface Route {
   session_id: string; requirement_id: string | null; origin: "sales" | "customer"; path: string;
   roles: Record<"customer" | "sales" | "pm" | "rd", { state: RouteState; by: string[] }>;
-  basis: RouteBasis[]; quote: string; n_human_steps: number;
+  basis: RouteBasis[]; quote: string; n_human_steps: number; why: RouteWhy | null;
+}
+// 为什么直达研发：升级时查过的现有产品、按客户条件被排除的原因、Jev 判「都不合适」的概率
+export interface RouteWhy {
+  by: string; phenomenon: string; p_none: number; scored_by: string;
+  candidates: { product_id: string; p: number }[];
+  excluded: { product_id: string; mismatch: { slot: string; value: string; allowed: string[] }[] }[];
 }
 // v6.1 开工条件（E1 会话视角 / E2 需求单视角）
 export interface Condition { slot: string; label: string; value: string | null; quote: string; in_opening: boolean; asked_by_jue: boolean }

@@ -29,8 +29,8 @@ const TAGS: Tag[] = [
   { x: 594, y: 136, label: "开工门槛", page: "rd", focusNote: "E2" },
   { x: 700, y: 136, label: "回问", page: "rd", focusNote: "" },
   { x: 645, y: 262, label: "退回归产品经理纠偏", page: "pm", focusNote: "" },
-  { x: 578, y: 388, label: "C′ 扩适用范围", page: "pm", focusNote: "E4" },
-  { x: 676, y: 388, label: "D 汇成课题", page: "pm", focusNote: "E5" },
+  { x: 584, y: 388, label: "C′ 扩适用范围", page: "pm", focusNote: "E4" },
+  { x: 706, y: 388, label: "D 汇成课题", page: "pm", focusNote: "E5" },
   { x: 911, y: 262, label: "研发的时间卡", page: "rd", focusNote: "E6" },
 ];
 

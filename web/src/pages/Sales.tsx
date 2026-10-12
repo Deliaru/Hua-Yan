@@ -22,7 +22,7 @@ function SalesSidebar({ mine, current, guided, choose }: {
   return (
     <>
       <SideHead aside={
-        <Popover align="right" trigger={(toggle) => <button onClick={toggle} className={`icon-btn !h-6 !w-6 ${glow ? "glow" : ""}`} title="新建客户会话"><Plus /></button>}>
+        <Popover trigger={(toggle) => <button onClick={toggle} className={`icon-btn !h-6 !w-6 ${glow ? "glow" : ""}`} title="新建客户会话"><Plus /></button>}>
           {(close) => (
             <>
               <p className="px-2.5 pb-1 pt-0.5 text-[12px] text-ink-2">新建客户会话</p>

@@ -190,7 +190,7 @@ export function OpenRouteMenu({ customer, onOpened }: { customer?: string; onOpe
   const routes = useData(() => api.demoRoutes(), []) ?? [];
   const open = (id: string) => api.openRoute(id, customer).then((o) => { onOpened(o.session_id, o.customer_id); refresh(); }, fail);
   return (
-    <Popover align="right" trigger={(toggle) => (
+    <Popover trigger={(toggle) => (
       <button onClick={toggle} className="icon-btn !h-6 !w-6" title="新开一个需求"><Plus /></button>
     )}>
       {(close) => (
