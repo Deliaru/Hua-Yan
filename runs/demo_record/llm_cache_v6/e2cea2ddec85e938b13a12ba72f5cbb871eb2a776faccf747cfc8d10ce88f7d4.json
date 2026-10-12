@@ -1,0 +1,1 @@
+{"content":"```json\n{\"answers\": {\"match\": {\"HY-FX350\": 0.95, \"none\": 0.05}}}\n```","tool_calls":[],"usage":{"input_tokens":488,"output_tokens":34},"latency_ms":4838.145173998782,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}
