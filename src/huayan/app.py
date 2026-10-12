@@ -663,38 +663,52 @@ class HuayanApp:
         未答回问与未处理失真数。E3「如果只靠开场白」= 客户第一句话里已有的必问条件。全部由现有数据推出。"""
         self._actor(viewer_id, {"pm", "rd", "supervisor"})
         req = _find(self._requirements, req_id, "需求单")
-        required = next(p.required_slots for p in self.seeds.phenomena if p.id == req.phenomenon)
-        slots = {s.id: s for s in self.seeds.slots}
-        turns = {t.id: t for sid in req.session_ids for t in self._sessions[sid].turns}
-        fills = {}
-        for sid in req.session_ids:
-            fills.update({k: v for k, v in self._sessions[sid].need.slots.items() if v.status == "filled"})
-        asked = {}
-        for e in self.events.query(["ask_hint"]):
-            if e.session_id in req.session_ids:
-                for slot in e.payload["slots"]:
-                    asked.setdefault(slot, e.id)
-        first = {sid: next((t.id for t in self._sessions[sid].turns if t.speaker == "customer"), None)
-                 for sid in req.session_ids}
-        items = []
-        for slot in required:
-            fill = fills.get(slot)
-            value = req.known_slots.get(slot)
-            items.append({"slot": slot, "label": slots[slot].label, "value": value,
-                          "quote": turns[fill.turn_id].text if fill and fill.turn_id in turns else "",
-                          "in_opening": bool(fill) and fill.turn_id in first.values(),
-                          "asked_by_jue": slot in asked and not (fill and fill.turn_id in first.values())})
+        items = self._conditions(req.session_ids, req.phenomenon, req.known_slots)
         blockers = [q for q in self.bus.list() if q.refs.get("requirement_id") == req_id
                     and q.family in {"ask_back", "distortion"}]
         n_known = sum(i["value"] is not None for i in items)
-        return {"requirement_id": req_id, "items": items, "n_required": len(required), "n_known": n_known,
+        return {"requirement_id": req_id, "items": items, "n_required": len(items), "n_known": n_known,
                 "n_in_opening": sum(i["in_opening"] for i in items),
                 "n_asked_by_jue": sum(i["asked_by_jue"] and i["value"] is not None for i in items),
                 "n_open_ask_back": sum(q.family == "ask_back" for q in blockers),
                 "n_open_distortion": sum(q.family == "distortion" for q in blockers),
                 "n_items_with_quote": sum(bool(i.quote_refs) for i in req.product_lang + req.chem_lang),
                 "n_items": len(req.product_lang) + len(req.chem_lang),
-                "ready": n_known == len(required) and not blockers}
+                "ready": n_known == len(items) and not blockers}
+
+    def session_readiness(self, session_id, viewer_id):
+        """v6.1 E1：会话上「研发开工需要的条件」，按会话裁剪：只含条件名、取值、本会话客户原话、是否觉追问所得。
+        客户与业务员只能看自己参与的会话；不含需求单、回问与失真（那些属于 L2/L3 视图）。"""
+        viewer, session = self._actor(viewer_id), _find(self._sessions, session_id, "会话")
+        if level_of(viewer) <= 1 and viewer_id not in (session.customer_id, session.sales_id):
+            raise PermissionDenied("只能查看自己参与的会话")
+        phen = session.need.phenomenon
+        items = self._conditions([session.id], phen, session.need.known()) if phen else []
+        return {"session_id": session.id, "phenomenon": phen, "items": items, "n_required": len(items),
+                "n_known": sum(i["value"] is not None for i in items),
+                "n_in_opening": sum(i["in_opening"] for i in items),
+                "n_asked_by_jue": sum(i["asked_by_jue"] and i["value"] is not None for i in items)}
+
+    def _conditions(self, session_ids, phenomenon, known):
+        """该现象的必问条件逐项：取值、出自哪句原话、是客户开场就说了还是觉追问所得。"""
+        required = next(p.required_slots for p in self.seeds.phenomena if p.id == phenomenon)
+        slots = {s.id: s for s in self.seeds.slots}
+        turns = {t.id: t for sid in session_ids for t in self._sessions[sid].turns}
+        fills, asked = {}, set()
+        for sid in session_ids:
+            fills.update({k: v for k, v in self._sessions[sid].need.slots.items() if v.status == "filled"})
+        for e in self.events.query(["ask_hint"]):
+            if e.session_id in session_ids:
+                asked.update(e.payload["slots"])
+        first = {next((t.id for t in self._sessions[sid].turns if t.speaker == "customer"), None) for sid in session_ids}
+        items = []
+        for slot in required:
+            fill = fills.get(slot)
+            opening = bool(fill) and fill.turn_id in first
+            items.append({"slot": slot, "label": slots[slot].label, "value": known.get(slot),
+                          "quote": turns[fill.turn_id].text if fill and fill.turn_id in turns else "",
+                          "in_opening": opening, "asked_by_jue": slot in asked and not opening})
+        return items
 
     def save_merge_proposal(self, question_id, target_req_id, member_ids, note, by):
         if by != "pm:agent":
@@ -1283,13 +1297,13 @@ class HuayanApp:
         if q.status != "open" or q.signer_role is not None or action not in self._AUTO:
             raise ValueError("只能自动执行待处理、无签字人且带 auto_action 的问题")
         session = self._sessions[q.refs["session_id"]]
-        self.events.append("auto_executed", "jue:auto", {"question_id": q.id, "family": q.family, "action": action,
-            "p_need": q.p_need, "scored_by": q.scored_by}, session_id=session.id)
         if action == "escalate":
             self._escalate(session, "jue:auto", q)   # 内部以 action="auto" 结案
         else:
             self._assign_sales(session, "jue:auto")
             self.bus.resolve(q.id, Resolution(action="auto", by="jue:auto"), get_clock().now())
+        self.events.append("auto_executed", "jue:auto", {"question_id": q.id, "family": q.family, "action": action,
+            "p_need": q.p_need, "scored_by": q.scored_by}, session_id=session.id)
         return self.bus.get(q.id).model_copy(deep=True)
 
     def route_of(self, object_id, viewer_id):
@@ -1305,17 +1319,23 @@ class HuayanApp:
         main = next((r for r in reversed(reqs) if r.status != "merged"), None)
         rids = {r.id for r in reqs}
         events = [e for e in self.events.query() if e.session_id == session.id
-                  or e.payload.get("requirement_id") in rids or e.payload.get("target") in rids]
+                  or e.payload.get("requirement_id") in rids or e.payload.get("target") in rids
+                  or rids & set(e.payload.get("requirement_ids", []))]
+        linked = [q for q in self.bus.list(status=None)        # 挂在知识对象上、由这张单引出的决策（扩适用范围）
+                  if rids & set(q.refs.get("requirement_ids", "").split(","))]
         humans = lambda role: sorted({e.actor for e in events if e.kind in _HUMAN_STEPS
                                       and e.actor.startswith(f"{role}:") and e.actor != "pm:agent"})
         sales, pm, rd = humans("sales"), humans("pm"), humans("rd")
+        if any(t.speaker == "sales" for t in session.turns) and session.sales_id not in sales:
+            sales = sorted([*sales, session.sales_id])
         open_rd = main is not None and main.status == "draft"
         roles = {
             "customer": {"state": "human" if any(t.speaker == "customer" for t in session.turns) else "none",
                          "by": [session.customer_id]},
             "sales": {"state": "human" if sales else "pending" if session.sales_id else "none",
                       "by": sales or ([session.sales_id] if session.sales_id else [])},
-            "pm": {"state": "human" if pm else "auto" if main else "none", "by": pm or (["pm:agent"] if main else [])},
+            "pm": {"state": "human" if pm else "pending" if any(q.status == "open" for q in linked) else "auto" if main else "none",
+                   "by": pm or sorted({q.signer_id for q in linked if q.signer_id}) or (["pm:agent"] if main else [])},
             "rd": {"state": "human" if rd else "pending" if open_rd else "none",
                    "by": rd or ([main.assigned_rd] if open_rd else [])},
         }
@@ -1332,12 +1352,61 @@ class HuayanApp:
                   "action": q.resolution.action if q.resolution else None,
                   "by": q.resolution.by if q.resolution else None,
                   "note": q.resolution.note if q.resolution and inner else ""}
-                 for q in self.bus.list(status=None) if q.object_id in objects or q.id in merges]
+                 for q in self.bus.list(status=None) if q.object_id in objects or q.id in merges
+                 or (inner and q in linked)]
         return {"session_id": session.id, "requirement_id": main.id if main else None, "origin": session.origin,
                 "path": path, "roles": roles, "basis": basis,
                 "quote": next((t.text for t in session.turns if t.speaker == "customer"), ""),
                 "n_human_steps": sum(e.kind in _HUMAN_STEPS and e.actor.split(":")[0] in {"sales", "pm", "rd"}
                                      and e.actor != "pm:agent" for e in events)}
+
+    def workload(self, viewer_id):
+        """v6.1 E6：本人的工作分两组——被系统拿掉的无效工作（因信息缺失、转述、重复而被迫发生的）与保留的专业判断。
+        全部由事件日志计数，不另存。"""
+        viewer = self._actor(viewer_id, {"sales", "pm", "rd"})
+        events = self.events.query()
+        count = lambda kind, **kw: sum(e.kind == kind and all(e.payload.get(k) == v for k, v in kw.items())
+                                       for e in events)
+        by_me = lambda kind: sum(e.kind == kind and e.actor == viewer_id for e in events)
+        scope_hits = lambda kus: sum(e.reason == "cited" and e.ku_id in kus for e in self.ledger.list(None))
+        mine_cust = lambda s: viewer.role != "sales" or self.config["customer_sales"].get(s.customer_id) == viewer_id
+        self_served = sum(s.origin == "customer" and s.status == "recommended" and mine_cust(s) and
+                          not any(s.id in r.session_ids for r in self._requirements.values())
+                          for s in self._sessions.values())
+        auto_escalated = sum(e.kind == "auto_executed" and e.payload["action"] == "escalate"
+                             and mine_cust(self._sessions[e.session_id]) for e in events)
+        if viewer.role == "rd":
+            judged = {f"ku:translation:scope:{e.payload['product_id']}:{e.payload['phenomenon']}" for e in events
+                      if e.kind == "project_declined" and e.actor == viewer_id and e.payload["product_id"]}
+            mine = [r for r in self._requirements.values() if r.assigned_rd == viewer_id]
+            asked = sum(self.readiness(r.id, viewer_id)["n_asked_by_jue"] for r in mine if r.status != "merged")
+            merged = sum(len(e.payload["members"]) for e in events if e.kind == "requirements_merged"
+                         and self._requirements[e.payload["target"]].assigned_rd == viewer_id)
+            removed = [("开工前觉已替你问清的必问条件", asked, "不用拿着半截需求回头找业务员补问"),
+                       ("因信息不全退回", by_me("requirement_returned"), "退回越少，说明进研发的需求越完整"),
+                       ("重复需求合并，少收的单", merged, "产品经理附商业判断汇成一个课题"),
+                       ("同类需求客户自助解决（不再进研发）", scope_hits(judged), "你判一次「已有产品适用」，组织记住"),
+                       ("常规问题客户自助解决", self_served, "现有产品能解决的，不占用研发")]
+            kept = [("接单立项", by_me("requirement_accepted")), ("不立项判断", by_me("project_declined")),
+                    ("确认化学要点", by_me("requirement_translated")), ("试样", by_me("trial")),
+                    ("审定发布", by_me("product_released"))]
+        elif viewer.role == "pm":
+            removed = [("逐单转述（产品经理 Agent 已后台转译）", sum(r.drafted_by == "pm:agent" for r in self._requirements.values()),
+                        "你不用再把每张单转述一遍")]
+            extended = {e.payload["ku_id"] for e in events if e.kind == "scope_extended" and e.actor == viewer_id}
+            kept = [("扩展产品适用范围", len(extended)), ("此后因此自动解决的需求", scope_hits(extended)),
+                    ("签产品机会（附商业判断）", by_me("requirements_merged")),
+                    ("纠正研发退回的需求", sum(e.kind == "requirement_edited" and e.actor == viewer_id
+                                             and e.payload.get("layer") == 2 and e.payload["index"] >= 0 for e in events)),
+                    ("沉淀产品需求知识", by_me("l2_contributed"))]
+        else:
+            removed = [("回答技术问题（客户自助解决）", self_served, "常规问题客户自己就拿到推荐和公开案例"),
+                       ("签字升级（觉自动升级）", auto_escalated, "现有产品解决不了时，需求带原话直达研发"),
+                       ("转述与重填需求", 0, "转来的商务事项带完整原话和已推荐产品")]
+            kept = [("商务事项（报价、采购）", count("sales_assigned", sales_id=viewer_id)),
+                    ("录入客户评价", by_me("market_eval"))]
+        return {"removed": [{"label": l, "n": n, "note": note} for l, n, note in removed],
+                "kept": [{"label": l, "n": n} for l, n in kept]}
 
     def mark_prepared(self, question_id, by):
         """由 hub 在主人准备完毕后调用；只标待签，不签字、不推进业务。"""

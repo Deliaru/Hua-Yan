@@ -9,18 +9,20 @@ import { ChevronRight } from "../components/Icons";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
 import { useGlow, useGuide, useGuideArg } from "../components/Guide";
 import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip } from "../components/ui";
+import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
 const reqsOf = (q: Question) => q.refs.requirement_id ? [q.refs.requirement_id] : (q.refs.requirement_ids ?? "").split(",").filter(Boolean);
 
 // 选中一项决策即打开它所说的需求单；也可以从侧栏直接打开需求单（此时签字区显示这张单上待你签的决策）
 export function Rd() {
-  const { me } = useApp();
+  const { me, focus } = useApp();
   const L = useLabels();
   const { all, ready } = useInbox();
   const reqs = (useData(() => api.requirements(me), [me]) ?? []).slice().reverse();
   const [qid, setQid] = useState<string | null>(null);
-  const [chosenReq, setChosenReq] = useState<string | null>(null);
+  const [chosenReq, setChosenReq] = useState<string | null>(focus);   // v6：从轨迹条跳来时打开同一张单
+  useEffect(() => { if (focus) { setChosenReq(focus); setQid(null); } }, [focus]);
   // 导览要你签的那项决策：没手动选过就直接打开它；导览换到新的一项时，回到它
   const g = useGuide();
   const guided = g.who === me ? ready.find((q) => `sign:${q.family}` === g.target) ?? null : null;
@@ -63,7 +65,9 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
           <PendingActions />
           {view ? (
             <>
+              <RouteStrip objectId={view.requirement.id} />
               <ReqHead view={view} />
+              <ReadinessCard reqId={view.requirement.id} />
               <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
               <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />
             </>
@@ -77,6 +81,7 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
           <button className="ml-2 text-accent" onClick={() => setItemIndex(null)}>返回整张单</button>
         </div>}
         {view && <ReqContext view={view} />}
+        <WorkloadCard />
       </AgentPanel>
     </>
   );
@@ -339,8 +344,11 @@ function KnowledgeChip({ c }: { c: CitedKnowledge }) {
 
 // 右侧：这张单的来历——客户原话、业务员的升级说明、现成产品结论、产品需求全文、合并判断、退回记录
 function ReqContext({ view }: { view: RequirementView }) {
+  const { me } = useApp();
   const L = useLabels();
   const req = view.requirement;
+  const route = useData(() => api.route(req.id, me), [req.id, me]);
+  const business = (route?.basis ?? []).filter((b) => b.family === "opportunity" && b.action === "sign" && b.note);
   const l2 = req.product_lang.filter((it) => !isCond(it) && !untranslated(it));
   return (
     <>
@@ -366,6 +374,11 @@ function ReqContext({ view }: { view: RequirementView }) {
           {l2.map((it, i) => <div key={i} className="row !min-h-0 !py-2 text-[13px] leading-5">{splitArrow(it.text).body}</div>)}
         </Group>
       )}
+      {business.map((b) => (
+        <Group key={b.question_id} title={`产品经理 ${L.name(b.by)} 的商业判断`}>
+          <div className="row attn-edge text-[13px] leading-5">{b.note}</div>
+        </Group>
+      ))}
       {req.merge_note && <Group title="产品经理 Agent 的合并判断"><div className="row text-[13px] leading-5">{req.merge_note}</div></Group>}
       {!!req.return_notes.length && (
         <Group title="退回记录">{req.return_notes.map((n, i) => <div key={i} className="row text-[13px] leading-5">{n}</div>)}</Group>
@@ -458,17 +471,44 @@ function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: Reac
 }
 
 function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: React.ReactNode; evidence: React.ReactNode }) {
-  const { me } = useApp();
+  const { me, meta } = useApp();
+  const L = useLabels();
+  const [mode, setMode] = useState<"accept" | "applicable" | "other" | "return">("accept");
   const [reason, setReason] = useState("");
+  const [product, setProduct] = useState(meta.products[0]?.id ?? "");
+  const tab = (k: typeof mode, label: string) => (
+    <button type="button" onClick={() => { setMode(k); setReason(""); }}
+            className={`h-7 rounded-[7px] px-3 text-[13px] ${mode === k ? "bg-white font-semibold shadow-[0_0_0_.5px_rgba(0,0,0,.14),0_1px_1.5px_rgba(0,0,0,.07)]" : "text-ink-2"}`}>{label}</button>
+  );
   return (
     <>
       {evidence}
       <div className="row !items-start">
-        <div className="flex flex-1 flex-col gap-2">
-          <p className="text-[13px] text-ink-2">接单即立项：被引用的 L2 知识给归属人记分。</p>
-          <div className="flex flex-wrap gap-2"><Act label="接单" run={() => api.accept(reqId, me)} />{dismiss}</div>
-          <Field value={reason} onChange={setReason} placeholder="退回理由（提交前做研发术语自查，产品经理 Agent 可见）" />
-          <div><Act kind="plain" label="退回" disabled={!reason.trim()} run={() => api.returnReq(reqId, reason, me)} /></div>
+        <div className="flex flex-1 flex-col gap-2.5">
+          <div className="inline-flex w-fit gap-0.5 rounded-[9px] bg-fill p-0.5">
+            {tab("accept", "接单立项")}{tab("applicable", "不立项：已有产品适用")}{tab("other", "不立项：其他原因")}{tab("return", "退回补充")}
+          </div>
+          {mode === "accept" && <>
+            <p className="text-[13px] text-ink-2">接单即立项：被引用的 L2 知识给归属人记分。</p>
+            <div className="flex flex-wrap gap-2"><Act label="接单立项" run={() => api.accept(reqId, me)} />{dismiss}</div>
+          </>}
+          {mode === "applicable" && <>
+            <p className="text-[13px] leading-5 text-ink-2">现有产品其实能解决，只是说明书没标注这种用法：客户会收到该产品的推荐；觉随后请产品经理把它加进产品适用范围，同类需求以后在客户自助阶段就解决，不再进研发。</p>
+            <select value={product} onChange={(e) => setProduct(e.target.value)} className="field !h-8 w-fit !py-0" aria-label="适用的产品">
+              {meta.products.map((p) => <option key={p.id} value={p.id}>{L.product(p.id)}</option>)}
+            </select>
+            <Field value={reason} onChange={setReason} placeholder="判断依据（产品经理可见，提交前做研发术语自查）" />
+            <div><Act label="不立项：已有产品适用" disabled={!reason.trim()} run={() => api.decline(reqId, reason, me, product)} /></div>
+          </>}
+          {mode === "other" && <>
+            <Field value={reason} onChange={setReason} placeholder="不立项原因（客户会收到「已记录，暂无方案」）" />
+            <div><Act kind="plain" label="不立项" disabled={!reason.trim()} run={() => api.decline(reqId, reason, me, null)} /></div>
+          </>}
+          {mode === "return" && <>
+            <p className="text-[13px] text-ink-2">需求定义有问题：退回给真人产品经理修正，不让 Agent 自己重写。</p>
+            <Field value={reason} onChange={setReason} placeholder="退回理由（提交前做研发术语自查，产品经理可见）" />
+            <div><Act kind="plain" label="退回" disabled={!reason.trim()} run={() => api.returnReq(reqId, reason, me)} /></div>
+          </>}
         </div>
       </div>
     </>

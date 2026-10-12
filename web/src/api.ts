@@ -3,6 +3,7 @@
 import type {
   Conversation, ContributionStat, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun,
+  Route, Readiness, SessionReadiness, Workload, DemoRoute,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -70,7 +71,7 @@ export const api = {
   singleCard: <T,>(viewer: string) => call<T>(`report?${q({ name: "single_card", viewer })}`),
 
   // 业务员工作面
-  startSession: (customer_id: string, sales_id: string) => call<{ id: string }>("sessions", { customer_id, sales_id }),
+  startSession: (customer_id: string, sales_id?: string) => call<{ id: string }>("sessions", { customer_id, sales_id }),
   addTurn: (session_id: string, speaker: "customer" | "sales", text: string) => call("turn", { session_id, speaker, text }),
   recommend: (session_id: string) => call("recommend", { session_id }),
   escalateNote: (session_id: string, text: string, by: string) => call("escalate-note", { session_id, text, by }),
@@ -82,7 +83,7 @@ export const api = {
   reuseNote: (req_id: string, text: string, by: string) => call("reuse-note", { req_id, text, by }),
   adoptReuse: (req_id: string, by: string) => call("reuse/adopt", { req_id, by }),
   declineReuse: (req_id: string, reason: string, by: string) => call("reuse/decline", { req_id, reason, by }),
-  merge: (question_id: string, by: string) => call("merge", { question_id, by }),
+  merge: (question_id: string, by: string, note = "") => call("merge", { question_id, by, note }),
   accept: (req_id: string, by: string) => call("accept", { req_id, by }),
   returnReq: (req_id: string, reason: string, by: string) => call("return", { req_id, reason, by }),
   editItem: (req_id: string, index: number, item: ReqItem, by: string) => call("req-item", { req_id, index, item, by }),
@@ -97,6 +98,20 @@ export const api = {
   trial: (req_id: string, result: "pass" | "fail", by: string) => call("trial", { req_id, result, by }),
   resolve: (question_id: string, action: "dismiss" | "update_sheet" | "freeze_access", by: string, note = "") =>
     call("resolve", { question_id, action, by, note }),
+
+  // v6：路由、开工条件、岗位工作、产品经理协作、研发不立项
+  route: (id: string, viewer: string) => call<Route>(`route?${q({ id, viewer })}`),
+  readiness: (id: string, viewer: string) => call<Readiness>(`readiness?${q({ id, viewer })}`),
+  sessionReadiness: (id: string, viewer: string) => call<SessionReadiness>(`session-readiness?${q({ id, viewer })}`),
+  workload: (viewer: string) => call<Workload>(`workload?${q({ viewer })}`),
+  decline: (req_id: string, reason: string, by: string, product_id: string | null) => call("decline", { req_id, reason, by, product_id }),
+  extendScope: (question_id: string, note: string, by: string) => call("scope/extend", { question_id, note, by }),
+  contributeL2: (req_id: string, item_index: number, scene_phrase: string, product_term: string, by: string) =>
+    call("contribute_l2", { req_id, item_index, scene_phrase, product_term, by }),
+  prepared: (question_id: string, by: string) => call("prepared", { question_id, by }),
+  demoRoutes: () => call<DemoRoute[]>("demo/routes"),
+  openRoute: (route: string, customer?: string) => call<{ session_id: string; customer_id: string }>("demo/open", { route, customer }),
+  routeNext: (session: string) => call<{ text: string | null }>(`demo/route-next?${q({ session })}`),
 
   // Agent 协作（契约 ⑭）
   conversation: (actor: string, session_id: string | null) => call<Conversation | null>(`agents/conversation?${q({ actor, session_id })}`),

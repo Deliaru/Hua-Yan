@@ -1,0 +1,178 @@
+// 客户子工作面（L0，v6）：客户自助描述问题，觉直接追问研发开工需要的条件（E1），能解决的当场拿到推荐卡（说明书 + 公开案例）；
+// 「我要报价」交给归属业务员；解决不了的需求带原话直达研发。右栏「这件事接下来会去哪」来自 route_of。客户没有 Agent。
+import { useEffect, useState } from "react";
+import { api } from "../api";
+import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
+import type { Route, SessionView } from "../types";
+import { OpenRouteMenu, RouteStrip, SessionConditions, useRouteHint } from "../components/Route";
+import { EmptyState, Group, PageHead, SideHead } from "../components/ui";
+
+export function Customer() {
+  const { me, focus } = useApp();
+  const L = useLabels();
+  const all = useData(() => api.sessions(), []) ?? [];
+  const mine = all.filter((s) => s.customer_id === me).reverse();
+  const [chosen, choose] = useState<string | null>(focus);
+  useEffect(() => { if (focus) choose(focus); }, [focus]);
+  const current = mine.find((s) => s.id === chosen) ?? mine[0] ?? null;
+  return (
+    <>
+      <Side>
+        <SideHead aside={<OpenRouteMenu customer={me} onOpened={(sid) => choose(sid)} />}>我的需求</SideHead>
+        {mine.map((s) => (
+          <button key={s.id} onClick={() => choose(s.id)} className={`side-row ${s.id === current?.id ? "on" : ""}`}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate text-[13px] font-semibold">{s.phenomenon ? L.phen(s.phenomenon) : "尚未识别现象"}</span>
+              <span className="shrink-0 text-[12px] text-ink-2">{SESSION_STATUS[s.status] ?? s.status}</span>
+            </div>
+            <p className="truncate text-[12px] text-ink-2">{s.origin === "customer" ? "自助" : `业务员 ${L.name(s.sales_id)} 陪同`}</p>
+          </button>
+        ))}
+        {!mine.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">点 ＋ 新开一个需求</p>}
+      </Side>
+      {current ? <Desk key={current.id} sid={current.id} />
+        : <EmptyState title="向化言描述你的问题" text="点侧栏「我的需求」右侧的 ＋，选一个开场（A–D），或直接用自己的话描述现象。客户只需说现象，研发开工需要的条件由觉来问。" />}
+    </>
+  );
+}
+
+function Desk({ sid }: { sid: string }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const v = useData(() => api.session(sid, me), [sid, me]);
+  const route = useData(() => api.route(sid, me), [sid, me]);
+  const hint = useRouteHint(me, v?.turns.find((t) => t.speaker === "customer")?.text);
+  if (!v) return null;
+  return (
+    <>
+      <div className="mr-[372px]">
+        <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pb-28 pt-7">
+          <PageHead title={v.turns.length ? "我的问题" : "描述你的问题"}
+                    subtitle={`${L.name(me)} · ${SESSION_STATUS[v.status] ?? v.status}`} />
+          <p className="text-[12.5px] leading-5 text-ink-2">
+            <span className="tag mr-2">L0 · 客户</span>你只看得到说明书、用法和公开案例；化言只问会改变推荐或研发判断的条件。</p>
+          <RouteStrip objectId={sid} />
+          <div className="grid grid-cols-[minmax(320px,6fr)_minmax(280px,5fr)] items-start gap-5">
+            <Chat v={v} route={route} />
+            <SessionConditions sessionId={sid} />
+          </div>
+          {v.card && <Card v={v} />}
+        </div>
+      </div>
+      <aside className="inspector fixed bottom-0 right-0 top-[52px] z-10 flex w-[372px] flex-col gap-5 overflow-y-auto border-l border-sep px-5 py-5">
+        {route && <Outcome r={route} />}
+        {hint && (
+          <Group title={`开场 ${hint.id} · 接下来去哪里看`}>
+            <div className="row text-[13px] leading-5">{hint.hint}</div>
+          </Group>
+        )}
+      </aside>
+    </>
+  );
+}
+
+// 对话：客户的话、知识助手的回答、觉的追问；末尾是客户输入框（「演示自动填入」只填进输入框）
+function Chat({ v, route }: { v: SessionView; route: Route | null }) {
+  const { refresh } = useApp();
+  const [said, setSaid] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const line = useData(() => api.routeNext(v.session_id), [v.session_id, v.turns.length])?.text ?? null;
+  const send = (text: string) => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setErr(null);
+    api.addTurn(v.session_id, "customer", text.trim()).then(() => { setSaid(""); refresh(); },
+      (e) => setErr(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
+  };
+  const replies = (turnId: string) => v.replies.filter((r) => r.turn_id === turnId);
+  const canQuote = v.status === "recommended" && route?.path === "自助解决";
+  return (
+    <section>
+      <div className="group-title">对话</div>
+      <div className="group">
+        <ol className="flex flex-col gap-2.5 px-4 py-3">
+          {!v.turns.length && <li className="text-[13px] leading-5 text-ink-2">只说你看到的现象就行，比如「白地被沾色了」。</li>}
+          {v.turns.map((t) => (
+            <li key={t.id} className="anim-rise flex flex-col gap-1.5">
+              <div className={`flex ${t.speaker === "customer" ? "justify-end" : ""}`}>
+                <p className={`max-w-[85%] rounded-[14px] px-3 py-1.5 text-[14px] leading-[21px] ${
+                  t.speaker === "customer" ? "bg-accent text-white" : "bg-bg"}`}>
+                  {t.speaker === "sales" && <span className="mr-1 text-[11px] font-semibold text-accent">业务员</span>}{t.text}</p>
+              </div>
+              {replies(t.id).map((r, j) => (
+                <p key={j} className="max-w-[85%] rounded-[14px] bg-bg px-3 py-1.5 text-[13.5px] leading-[21px]">
+                  <span className="mr-1 text-[11px] font-semibold text-ink-2">化言</span>{r.text}</p>
+              ))}
+              <span className={`num text-[10.5px] text-ink-3 ${t.speaker === "customer" ? "text-right" : ""}`}>{hhmm(t.ts)}</span>
+            </li>
+          ))}
+          {v.status === "open" && v.hints.map((h) => (
+            <li key={h.slot} className="anim-rise">
+              <p className="max-w-[85%] rounded-[14px] bg-attn-bg px-3 py-1.5 text-[14px] leading-[21px] shadow-[0_0_0_.5px_rgba(176,80,10,.25)]">
+                <span className="mr-1 text-[11px] font-semibold text-attn-ink">觉想确认 · {h.label}</span>{h.ask_text}</p>
+            </li>
+          ))}
+        </ol>
+        <form onSubmit={(e) => { e.preventDefault(); send(said); }} className="flex items-center gap-2 border-t border-sep bg-[#fafafb] py-2 pl-4 pr-2.5">
+          <input value={said} onChange={(e) => setSaid(e.target.value)} aria-label="我说" disabled={busy}
+                 placeholder="描述现象，或回答化言的问题……" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-3" />
+          {line && !said && <button type="button" className="chip" disabled={busy} onClick={() => setSaid(line)}>演示自动填入</button>}
+          <button className="btn btn-primary !h-[26px] !px-3" disabled={busy || !said.trim()}>{busy ? "……" : "发送"}</button>
+        </form>
+        {canQuote && (
+          <div className="flex items-center gap-3 border-t border-sep px-4 py-2.5">
+            <span className="flex-1 text-[12.5px] text-ink-2">想采购或要报价？觉会交给你的业务员，他看得到你说过的每一句。</span>
+            <button className="btn btn-plain" disabled={busy} onClick={() => send("这个产品想要个报价")}>我要报价</button>
+          </div>
+        )}
+        {err && <p role="alert" className="px-4 pb-2 text-[12px] text-danger">{err}</p>}
+      </div>
+    </section>
+  );
+}
+
+// 推荐卡：L0 只有说明书、用法、公开案例（按层级由门面裁剪）
+function Card({ v }: { v: SessionView }) {
+  const L = useLabels();
+  const card = v.card!;
+  return (
+    <Group title="化言推荐" foot={card.note ? L.scrub(card.note) : "说明书、用法与公开案例；研发的机理与配方不对外。"}>
+      <div className="row"><p className="flex-1 text-[17px] font-semibold">{L.product(card.product_id)}</p></div>
+      {card.sections.map((s) => (
+        <div key={s.ku_id} className="row !items-start">
+          <div className="min-w-0">
+            <p className="text-[12px] text-ink-2">{s.title}</p>
+            <p className="text-[14px] leading-[21px]">{s.text}</p>
+          </div>
+        </div>
+      ))}
+    </Group>
+  );
+}
+
+// 「你的问题去了哪里」：由轨迹推出
+function Outcome({ r }: { r: Route }) {
+  const L = useLabels();
+  const rd = r.roles.rd.by[0], sales = r.roles.sales.by[0];
+  const text: Record<string, string> = {
+    自助解决: "你的问题已解决：现有产品适用，推荐卡在左侧。",
+    交业务员: `已转给业务员 ${L.name(sales)}。他看得到你说过的每一句和已推荐的产品，不会再让你重说一遍。`,
+    入研: `已直达研发 ${L.name(rd)}。中间没有人再转述一遍，研发看到的每一条都带着你的原话。`,
+    研发不立项: "研发看过你的需求并给出了判断，结果见左侧。",
+    产品机会: "你的需求和其他客户的同类需求合并为一个课题，研发正在跟进。",
+    复用: "研发审定了一个现成产品，推荐卡在左侧。",
+    追问中: "化言还在确认研发开工需要的条件，回答左侧的问题即可。",
+  };
+  return (
+    <Group title="这件事接下来会去哪">
+      <div className="row text-[14px] leading-[22px]">{text[r.path] ?? r.path}</div>
+      {!!r.basis.length && r.basis.map((b) => (
+        <div key={b.question_id} className="row !min-h-0 !py-2 text-[12.5px] text-ink-2">
+          <span className="w-[72px] shrink-0 font-semibold text-ink">{L.family(b.family)}</span>
+          <span>{b.action === "auto" ? "觉自动执行" : b.status === "open" ? "进行中" : "已处理"}</span>
+        </div>
+      ))}
+    </Group>
+  );
+}

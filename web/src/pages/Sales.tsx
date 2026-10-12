@@ -9,6 +9,7 @@ import { useGlow, useGuideArg, useGuide } from "../components/Guide";
 import { Popover } from "../components/Controls";
 import { Plus } from "../components/Icons";
 import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote } from "../components/ui";
+import { RouteStrip, WorkloadCard } from "../components/Route";
 
 function SalesSidebar({ mine, current, guided, choose }: {
   mine: SessionSummary[]; current: string | null; guided: string | null; choose: (id: string) => void;
@@ -37,7 +38,8 @@ function SalesSidebar({ mine, current, guided, choose }: {
                 className={`side-row ${s.id === current ? "on" : ""} ${s.id === guided && s.id !== current ? "glow" : ""}`}>
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[13px] font-semibold">{s.customer_id ? L.name(s.customer_id) : "样例客户"}</span>
-            <span className="shrink-0 text-[12px] text-ink-2">{SESSION_STATUS[s.status] ?? s.status}</span>
+            {s.origin === "customer" ? <span className="tag tag-attn shrink-0">商务 · 觉转来</span>
+              : <span className="shrink-0 text-[12px] text-ink-2">{SESSION_STATUS[s.status] ?? s.status}</span>}
           </div>
           <p className="truncate text-[12px] text-ink-2">{s.phenomenon ? L.phen(s.phenomenon) : "尚未识别现象"}</p>
         </button>
@@ -60,8 +62,9 @@ export function useMySessions() {
 }
 
 export function Sales() {
-  const { me } = useApp();
-  const [chosen, choose] = useState<string | null>(null);
+  const { me, focus } = useApp();
+  const [chosen, choose] = useState<string | null>(focus);
+  useEffect(() => { if (focus) choose(focus); }, [focus]);
   const mine = useMySessions();
   // 导览指向的会话（轮到本人时）：没手动选过就直接打开它，选过别的就在侧栏高亮它
   const g = useGuide();
@@ -101,6 +104,11 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
           <PageHead title={summary.customer_id ? L.name(summary.customer_id) : "样例客户"}
                     subtitle={`${summary.phenomenon ? L.phen(summary.phenomenon) : "尚未识别现象"} · ${SESSION_STATUS[v.status] ?? v.status}`} />
           <LayerNote layer={1}>你在 L1：你和你的 Agent 只看得到说明书和用法，研发的知识只显示「谁懂」、不显示内容。现有产品解决不了时签字升级，需求带着客户原话交给 L2 产品经理 Agent。</LayerNote>
+          <RouteStrip objectId={v.session_id} />
+          {summary.origin === "customer" && (
+            <p className="rounded-[10px] bg-attn-bg px-3.5 py-2.5 text-[13px] leading-5 text-attn-ink">
+              客户在自助对话里提出了商务诉求，觉把这件事交给你。下面是客户的完整原话、已明确的条件和已推荐的产品，不需要你重新询问、重新记录。</p>
+          )}
           {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的高层级访问已被主管冻结：客户只能拿到说明书与用法，暂不能申请解密。</p>}
           <PendingActions />
           <div className="grid grid-cols-[minmax(280px,5fr)_minmax(320px,6fr)] items-start gap-5">
@@ -114,6 +122,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
         {v.card || v.reuse || questions.length
           ? <Decisions v={v} questions={questions} fill={setReply} replyEmpty={!reply.trim()} escalateNotes={notesFor(conv?.messages, `${v.session_id}/escalate`)} />
           : <p className="text-[13px] leading-5 text-ink-3">此刻没有需要你签字的决策。觉每听一句都会再看一遍：该推荐、该升级、该回问时出现在这里。</p>}
+        <WorkloadCard />
       </AgentPanel>
     </>
   );

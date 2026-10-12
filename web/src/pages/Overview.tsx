@@ -2,8 +2,9 @@
 // 流程图里的示例话术是模拟数据，只说明用法；橙色菱形是「觉提出 → 人签字」的决策点。
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { useData } from "../ctx";
+import { useApp, useData } from "../ctx";
 import { ReplayNote } from "../components/ui";
+import { CausalChain, Workflow } from "./Chain";
 
 const X = [250, 432, 614, 796, 978, 1160];
 const Y = { 1: 164, 2: 296, 3: 428 } as const;
@@ -67,21 +68,27 @@ export const STEPS: { node: string; text: string; how: string }[] = [
   { node: "kb", text: "研发审定发布，新品回到 L1 知识库", how: "下一位客户同样描述，业务员在 L1 直接命中新品，不再升级——这一轮系统又多会了一件事。" },
 ];
 
-export function Overview({ toStory }: { toStory: () => void }) {
+export function Overview() {
+  const { go } = useApp();
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-14 px-8 pb-16 pt-10">
       <Hero />
+      <CausalChain />
+      <Workflow />
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-[15px] text-ink-2">四个角色子工作面里随时切换，看同一份需求出现在谁那里、没出现在谁那里。</p>
+        <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]" onClick={() => go("customer")}>从客户子工作面开始：新开一个需求 →</button>
+        <Status />
+      </div>
       <Pillars />
       <section className="flex flex-col gap-5">
         <h2 className="mx-auto max-w-[860px] text-center text-[26px] font-semibold leading-[38px] tracking-[-0.01em]">
-          化言重构的不是一次化学问答，<br />而是从客户需求到研发行动，再到知识回流的<span className="text-accent">整条企业协作链</span>。
+          知识边界（不是审批顺序）
         </h2>
+        <p className="mx-auto max-w-[860px] text-center text-[14px] leading-[23px] text-ink-2">
+          L0 客户只看说明书、用法与公开案例；L1 业务员多看内部评价；L2、L3 的知识对下层只显示归属。
+          下图是一条需求穿过三层知识时，每一层用了谁的知识、对下层放出了什么——它说的是权限，不是谁签字的先后。</p>
         <FlowDiagram />
-        <div className="flex flex-col items-center gap-3 pt-2">
-          <p className="text-[15px] text-ink-2">让 AI 不只提供答案，更让企业有能力持续发现问题、协同决策、积累经验。</p>
-          <button className="btn btn-primary !h-11 !rounded-[10px] !px-6 !text-[15px]" onClick={toStory}>进入演示流程，进一步理解架构及其价值 →</button>
-        </div>
-        <Status />
       </section>
       <Efficiency />
       <ReplayNote />

@@ -34,6 +34,7 @@ PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
 DIST = Path("web/dist")
 REPORTS = Path("docs/reports")
 MAINLINE = Path("demo/mainline.yaml")
+ROUTES = Path("demo/routes.yaml")     # v6 开场入口 A–D、C′
 REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week")   # 评测页只读这几份报告（WP-E）；300 张卡用于按「应升级」拆开；single_card 经门面按查看者读取
 
 MAX_SESSIONS = int(os.environ.get("HUAYAN_MAX_SESSIONS", "30"))   # 超出时淘汰最久未用的会话
@@ -100,7 +101,7 @@ def meta(app, _):
 
 def sessions(app, _):
     return [{"id": s.id, "customer_id": s.customer_id, "sales_id": s.sales_id, "status": s.status,
-             "phenomenon": s.need.phenomenon} for s in app.sessions()]
+             "phenomenon": s.need.phenomenon, "origin": s.origin} for s in app.sessions()]
 
 
 def session(app, p):
@@ -141,7 +142,30 @@ def next_line(app, p):
     return {"text": lines[sent] if sent < len(lines) else None}
 
 
+def demo_routes():
+    return yaml.safe_load(ROUTES.read_text(encoding="utf-8"))["routes"]
+
+
+def open_route(app, p):
+    """v6 开场入口：只代客户说出预设的第一句话，之后由看的人在各工作面里真实操作（不锁步骤）。"""
+    route = next(r for r in demo_routes() if r["id"] == p["route"])
+    customer = p.get("customer") or route["customer"]     # D 要换一位客户再开一次
+    session = app.start_session(customer)
+    app.add_turn(session.id, "customer", route["lines"][0])
+    return {"session_id": session.id, "customer_id": customer}
+
+
+def route_next(app, p):
+    """开场之后客户的下一句（只填进输入框，由人发出；可改写）。"""
+    session = next(s for s in app.sessions() if s.id == p["session"])
+    sent = [t.text for t in session.turns if t.speaker == "customer"]
+    routes = [r for r in demo_routes() if sent == r["lines"][:len(sent)] and len(sent) < len(r["lines"])]
+    routes.sort(key=lambda r: r["customer"] != session.customer_id)
+    return {"text": routes[0]["lines"][len(sent)] if routes else None}
+
+
 GET = {
+    "/api/demo/route-next": route_next,
     "/api/demo/next": next_line,
     "/api/status": lambda app, p: app.status(),
     "/api/sessions": sessions,
@@ -156,6 +180,9 @@ GET = {
     "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),
     "/api/route": lambda app, p: app.route_of(p["id"], p["viewer"]),   # v6：需求轨迹条
     "/api/readiness": lambda app, p: app.readiness(p["id"], p["viewer"]),   # v6.1：开工门槛
+    "/api/session-readiness": lambda app, p: app.session_readiness(p["id"], p["viewer"]),   # v6.1 E1
+    "/api/workload": lambda app, p: app.workload(p["viewer"]),   # v6.1 E6
+    "/api/demo/routes": lambda app, p: demo_routes(),
     "/api/ledger": lambda app, p: app.ledger.totals(),
     "/api/contributions": lambda app, p: app.contributions(p["viewer"]),
     "/api/report": report,
@@ -178,6 +205,7 @@ POST = {
     "/api/contribute_l2": lambda app, p: app.contribute_l2(p["req_id"], p["item_index"], p["scene_phrase"],
                                                            p["product_term"], p["by"]),   # v6
     "/api/prepared": lambda app, p: app.mark_prepared(p["question_id"], p["by"]),   # v6 退回纠偏：修改完成，交研发
+    "/api/demo/open": open_route,   # v6 开场入口
     "/api/accept": lambda app, p: app.accept_requirement(p["req_id"], p["by"]),
     "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id")),   # v6
     "/api/return": lambda app, p: app.return_requirement(p["req_id"], p["reason"], p["by"]),

@@ -166,7 +166,7 @@ function Compare({ id }: { id: string }) {
   const hit = useData(async () => {
     if (!req?.product_id || !summaries || !rd) return null;
     for (const s of summaries.filter((x) => x.status === "recommended").reverse()) {
-      const d = await api.session(s.id, s.sales_id);
+      const d = await api.session(s.id, s.sales_id ?? s.customer_id);   // v6 自助会话没有业务员，以客户本人身份读
       if (d.card?.product_id === req.product_id) return { l1: d.card, l3: (await api.session(s.id, rd)).card! };
     }
     return null;

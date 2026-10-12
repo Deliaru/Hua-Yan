@@ -23,3 +23,8 @@ export const NavLayers = () => <svg {...nav}><path d="m8 2 6 3-6 3-6-3 6-3Z" /><
 export const NavEval = () => <svg {...nav}><path d="M2.5 13.5h11M4.5 11V7.5M8 11V4M11.5 11V6" /></svg>;
 export const NavLedger = () => <svg {...nav}><circle cx="8" cy="6.5" r="4" /><path d="m5.6 9.8-1 4.2L8 12.4l3.4 1.6-1-4.2" /></svg>;
 export const Gauge = () => <svg {...base} width={13} height={13}><circle cx="8" cy="8" r="6" /><path d="M8 8 10.5 5.5" /></svg>;
+// v6 四个角色子工作面
+export const NavCustomer = () => <svg {...nav}><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5A1.5 1.5 0 0 1 11.5 11H7l-3 2.5V11h.5A1.5 1.5 0 0 1 3 9.5z" /></svg>;
+export const NavSales = () => <svg {...nav}><circle cx="8" cy="5" r="2.5" /><path d="M3 14c.6-2.6 2.6-4 5-4s4.4 1.4 5 4" /></svg>;
+export const NavPm = () => <svg {...nav}><rect x="2.5" y="2.5" width="11" height="11" rx="2" /><path d="M5 6h6M5 8.5h6M5 11h3.5" /></svg>;
+export const NavRd = () => <svg {...nav}><path d="M6 2.5h4M6.5 2.5v4L3 12.6a.9.9 0 0 0 .8 1.4h8.4a.9.9 0 0 0 .8-1.4L9.5 6.5v-4" /><path d="M4.5 10h7" /></svg>;

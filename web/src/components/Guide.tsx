@@ -88,7 +88,7 @@ export function Guide() {
     const last = reqs[reqs.length - 1];
     const view = last ? await api.requirement(last.id, rd) : null;
     const s = sessions[sessions.length - 1];
-    const session = s ? await api.session(s.id, s.sales_id) : null;
+    const session = s ? await api.session(s.id, s.sales_id ?? s.customer_id) : null;
     const script = meta.status.replay ? await api.nextAction() : null;
     return { sessions, reqs, view, session, script, open: [...open.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)) };
   }, [me, version]);

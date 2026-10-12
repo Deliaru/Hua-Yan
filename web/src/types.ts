@@ -74,7 +74,27 @@ export interface SessionView {
   reuse: ReuseView | null;
 }
 
-export interface SessionSummary { id: string; customer_id: string; sales_id: string; status: string; phenomenon: string | null }
+export interface SessionSummary { id: string; customer_id: string; sales_id: string | null; status: string; phenomenon: string | null; origin: "sales" | "customer" }
+
+// v6 需求轨迹（门面 route_of）：四格状态 human 人真实处理过 / auto 由 Agent 或觉代办 / pending 已到、待处理 / none 未经过
+export type RouteState = "human" | "auto" | "pending" | "none";
+export interface RouteBasis { question_id: string; family: string; title: string; p_need: number | null; scored_by: string;
+  status: string; action: string | null; by: string | null; note: string }
+export interface Route {
+  session_id: string; requirement_id: string | null; origin: "sales" | "customer"; path: string;
+  roles: Record<"customer" | "sales" | "pm" | "rd", { state: RouteState; by: string[] }>;
+  basis: RouteBasis[]; quote: string; n_human_steps: number;
+}
+// v6.1 开工条件（E1 会话视角 / E2 需求单视角）
+export interface Condition { slot: string; label: string; value: string | null; quote: string; in_opening: boolean; asked_by_jue: boolean }
+export interface SessionReadiness { session_id: string; phenomenon: string | null; items: Condition[]; n_required: number; n_known: number; n_in_opening: number; n_asked_by_jue: number }
+export interface Readiness {
+  requirement_id: string; items: Condition[]; n_required: number; n_known: number; n_in_opening: number; n_asked_by_jue: number;
+  n_open_ask_back: number; n_open_distortion: number; n_items_with_quote: number; n_items: number; ready: boolean;
+}
+// v6.1 E6：被拿掉的无效工作 / 保留的专业判断（事件日志计数）
+export interface Workload { removed: { label: string; n: number; note: string }[]; kept: { label: string; n: number }[] }
+export interface DemoRoute { id: string; title: string; customer: string; lines: string[]; hint: string }
 
 // ⑥ 问题总线
 export interface Evidence { summary: string; event_ids: string[]; quote: string }

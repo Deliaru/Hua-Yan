@@ -302,7 +302,7 @@ export function Eval() {
       </Side>
       <div className="mx-auto flex max-w-[960px] flex-col gap-14 px-8 pb-24 pt-7">
         <div className="flex flex-col gap-4">
-          <PageHead title="评测" subtitle="全部基于模拟数据，是相对比较，不是真实业务验证。四个结论，点一行看怎么测出来的。" />
+          <PageHead title="研发开工前，需求被说清楚了吗" subtitle="全部基于模拟数据，是相对比较，不是真实业务验证。完整率与需退回比例是返工的前置指标，不是返工次数或工时。四个结论，点一行看怎么测出来的。" />
           <Summary fs={fs} />
         </div>
         <Section f={fs[0]} n={1} bare
