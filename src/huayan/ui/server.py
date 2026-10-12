@@ -155,6 +155,7 @@ GET = {
     "/api/leak": lambda app, p: app.leak_check(p["id"], p["viewer"]),
     "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),
     "/api/route": lambda app, p: app.route_of(p["id"], p["viewer"]),   # v6：需求轨迹条
+    "/api/readiness": lambda app, p: app.readiness(p["id"], p["viewer"]),   # v6.1：开工门槛
     "/api/ledger": lambda app, p: app.ledger.totals(),
     "/api/contributions": lambda app, p: app.contributions(p["viewer"]),
     "/api/report": report,
@@ -172,7 +173,10 @@ POST = {
     "/api/reuse/adopt": lambda app, p: app.adopt_reuse(p["req_id"], p["by"]),
     "/api/reuse/decline": lambda app, p: app.decline_reuse(p["req_id"], p["reason"], p["by"]),
     "/api/reuse-note": lambda app, p: app.update_reuse_note(p["req_id"], p["text"], p["by"]),
-    "/api/merge": lambda app, p: app.merge_requirements(p["question_id"], p["by"]),
+    "/api/merge": lambda app, p: app.merge_requirements(p["question_id"], p["by"], p.get("note", "")),
+    "/api/scope/extend": lambda app, p: app.extend_scope(p["question_id"], p["note"], p["by"]),   # v6
+    "/api/contribute_l2": lambda app, p: app.contribute_l2(p["req_id"], p["item_index"], p["scene_phrase"],
+                                                           p["product_term"], p["by"]),   # v6
     "/api/accept": lambda app, p: app.accept_requirement(p["req_id"], p["by"]),
     "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id")),   # v6
     "/api/return": lambda app, p: app.return_requirement(p["req_id"], p["reason"], p["by"]),

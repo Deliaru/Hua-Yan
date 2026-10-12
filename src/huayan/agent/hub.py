@@ -176,6 +176,8 @@ class AgentHub:
         elif q.family == "reuse_product":
             self.app.save_reuse_proposal(q.refs["requirement_id"], None, [], "",
                                          "离线模式：未检索现成产品", q.owner_id)
+        elif q.family == "scope_update":
+            return "离线模式：研发已判定适用，待产品经理决定是否扩展适用范围。"
         elif q.family == "opportunity":
             reqs = [self.app.requirement_view(rid, q.owner_id).requirement
                     for rid in q.refs["requirement_ids"].split(",")]

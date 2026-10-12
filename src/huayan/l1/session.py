@@ -56,7 +56,16 @@ def recommend(session, deps):
             "phenomenon": session.need.phenomenon, "known": session.need.known(),
             "customer_id": session.customer_id}, session_id=session.id)
         record_disclosure(card, deps)
+        cite_scope(session, decision.choice, deps)
     return session
+
+
+def cite_scope(session, product_id, deps):
+    """v6：产品因产品经理扩展的适用范围才命中时，按 cited 给扩展知识的归属人记分。"""
+    unit = deps.kb._units.get(f"ku:translation:scope:{product_id}:{session.need.phenomenon}")
+    if unit and not deps.ledger.has(unit.owner, unit.id, session.id):
+        deps.ledger.add(LedgerEntry(ts=get_clock().now(), owner=unit.owner, ku_id=unit.id, ref=session.id,
+            points=deps.config["points"]["cited"], reason="cited"))
 
 
 def handle_turn(session, speaker, text, deps, answering=False):

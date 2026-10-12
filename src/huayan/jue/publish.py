@@ -42,6 +42,10 @@ def _summary(family: str, a: dict) -> str:
     if family == "leak_risk":
         return (f"检索 {a['n_queries']} 次，被拦截的高层级命中 {a['n_blocked']} 条，"
                 f"最集中的产品占 {a['blocked_top_share']:.0%}，涉及 {a['n_distinct_products']} 个产品")
+    if family == "scope_update":
+        return f"研发 {a['n_applicable']} 次判定 {a['product_id']} 适用于该现象，产品适用范围尚未包含"
+    if family == "contribution_pm":
+        return f"产品经理修正过、尚未沉淀为知识的产品需求条目 {a['n_pm_edited_uncovered']} 条"
     if family == "handoff_sales":
         return "客户原话中提出了报价、采购或送样等商务诉求，会话尚无业务员"
     if family in ("escalate_need", "route_rd"):
@@ -71,17 +75,20 @@ def _label(obj: JueObject, seeds: Seeds | None) -> str:
         known = dict(kv.split("=") for kv in obj.object_id.split("|")[1].split(",") if kv)
         return " + ".join(known[s] for s in phen.required_slots if s in known) + f"的{phen.label}"
     if obj.object_type == "knowledge":
-        return f"{a['product_id']} × {a['value']}"
+        value = next((p.label for p in seeds.phenomena if p.id == a["value"]), a["value"]) if a["slot"] == "phenomenon" else a["value"]
+        return f"{a['product_id']} × {value}"
     actor = obj.object_id.removeprefix("actor:")
     return next((f"{x.name}（{x.id}）" for x in seeds.actors if x.id == actor), actor)
 
 
 def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None, signer: bool = False) -> str | None:
-    """契约 5.4 解析表：角色 × 对象 → 具体的人。v6：pm 作签字人为真人产品经理。"""
+    """契约 5.4 解析表：角色 × 对象 → 具体的人。v6：pm 作签字人为真人产品经理；
+    需求单被研发退回过以后，pm 作主人也解析为真人产品经理（例外纠偏不走 Agent 起草）。"""
     if role is None:
         return None
     if role == "pm":
-        return min(a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent") if signer else "pm:agent"
+        human = signer or (obj.object_type == "requirement" and obj.attrs.get("n_returns", 0) >= 1)
+        return min(a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent") if human else "pm:agent"
     if role == "sales":
         return ref["sales_id"]
     if role == "supervisor":

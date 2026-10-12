@@ -83,6 +83,7 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
         "n_unmapped_constraints": len(upstream - {i.slot for i in items if i.slot}),
         "n_unquoted_items": sum(not i.quote_refs for i in items),
         "n_edited_uncovered": _edited_uncovered(req, seeds, kb),
+        "n_pm_edited_uncovered": _pm_edited_uncovered(req, seeds, kb),
         "n_contributed": len({e.payload["ku_id"] for e in own if e.kind == "knowledge_contributed"}),
         **_trial_attrs(req, kb, own),
         "points_set": any(e.kind == "points_set" for e in own),
@@ -114,6 +115,13 @@ def _edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase) -> int:
             text = text.replace(term, "")
         uncovered += bool(text.strip(" \t\r\n，。；、：:！？!?/"))
     return uncovered
+
+
+def _pm_edited_uncovered(req: Requirement, seeds: Seeds, kb: KnowledgeBase) -> int:
+    """v6：真人产品经理改过的 L2 条目，尚未从该条目沉淀过 L2 知识（ku:translation:<req>:l2:<i>）。"""
+    pm_ids = {a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent"}
+    return sum(item.edited_by in pm_ids and f"ku:translation:{req.id}:l2:{i}" not in kb._units
+               for i, item in enumerate(req.product_lang))
 
 
 def _trial_attrs(req: Requirement, kb: KnowledgeBase, own: list) -> dict:
@@ -202,6 +210,7 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
     objects, refs = {}, {}
     for obj, ref in [*_themes(events, at, seeds, at - timedelta(days=w["theme_days"])),
                      *_knowledge(events, at, products, at - timedelta(days=w["knowledge_days"])),
+                     *_scope(events, at, products),
                      *_actors(events, at, at - timedelta(hours=w["actor_hours"]))]:
         objects[obj.object_id], refs[obj.object_id] = obj, ref
     return JueState(at=at, mode="scheduled", objects=objects), refs
@@ -276,6 +285,21 @@ def _knowledge(events, at, products, since):
             "n_fail_product": sum(e.payload["cause"] == "product" for e in fails),
             "fail_ratio": len(fails) / len(evs), "n_recommended": recs[(pid, slot, value)],
         }), {"event_ids": [e.id for e in fails], "session_ids": []}
+
+
+def _scope(events, at, products):
+    """v6：研发判定「已有产品适用」的次数（不立项时指定产品、审定采用复用建议），按 产品 × 现象 聚合。"""
+    by_id = {p.id: p for p in products}
+    groups = defaultdict(list)
+    for e in events.query(["project_declined", "reuse_adopted"], until=at):
+        if e.payload.get("product_id") and e.payload.get("phenomenon"):
+            groups[(e.payload["product_id"], e.payload["phenomenon"])].append(e)
+    for (pid, ph), evs in groups.items():
+        yield JueObject(object_id=f"knowledge:{pid}|phenomenon={ph}", object_type="knowledge", attrs={
+            "product_id": pid, "slot": "phenomenon", "value": ph, "n_applicable": len(evs),
+            "solves": pid in by_id and ph in by_id[pid].solves,
+        }), {"event_ids": [e.id for e in evs], "session_ids": sorted({s for e in evs for s in e.payload.get("session_ids", [])}),
+             "requirement_ids": [e.payload["requirement_id"] for e in evs]}
 
 
 def _actors(events, at, since):

@@ -512,12 +512,13 @@ class HuayanApp:
             if unit.level == 2 and unit.owner not in {"pm:agent", "jue"} and not self.ledger.has(unit.owner, unit.id, req.id):
                 self.ledger.add(LedgerEntry(ts=at, owner=unit.owner, ku_id=unit.id, ref=req.id,
                     points=self.config["points"]["cited"], reason="cited"))
-        self.events.append("reuse_adopted", by, {"requirement_id": req_id,
-            "product_id": proposal.product_id, "session_id": session.id}, session_id=session.id)
+        self.events.append("reuse_adopted", by, {"requirement_id": req_id, "product_id": proposal.product_id,
+            "session_id": session.id, "phenomenon": req.phenomenon, "session_ids": req.session_ids}, session_id=session.id)
         if question:
             self._settle(question.id, Resolution(action="sign", by=by))
         self._save_requirement(req)
         self._after([session.id], [req_id])
+        self.scan()
         return session.model_copy(deep=True)
 
     def decline_reuse(self, req_id, reason, by):
@@ -590,7 +591,108 @@ class HuayanApp:
                 self.bus.resolve(q.id, Resolution(action="answered", by=by, note="研发不立项"), at)
         self._save_requirement(req)
         self._after(req.session_ids, [req_id])
+        if applicable_product:
+            self.scan()        # 觉随即看「是否扩展该产品适用范围」
         return self.requirement_view(req_id, by).requirement
+
+    def _human_pm(self, by):
+        actor = self._actor(by, {"pm"})
+        if by == "pm:agent":
+            raise PermissionDenied("产品经理 Agent 只能起草，不能签字")
+        return actor
+
+    def extend_scope(self, question_id, note, by):
+        """v6：产品经理签字扩展产品适用范围。写进本门面内该产品的 solves（不改种子文件），
+        沉淀为产品经理名下的 L2 知识；此后同类需求在 L1 匹配时命中，被引用时给本人记分。"""
+        actor = self._human_pm(by)
+        q = _find(self.bus.questions, question_id, "问题")
+        if q.family != "scope_update" or q.status != "open":
+            raise ValueError("需要待处理的适用范围问题")
+        if q.signer_id != by:
+            raise PermissionDenied("只有指定签字人可以签字")
+        if q.prepared_at is None:
+            raise ValueError("问题尚在准备中")
+        if not note.strip():
+            raise ValueError("请写明扩展依据")
+        pid, ph = q.refs["product_id"], q.object_id.split("phenomenon=", 1)[1]
+        product, phen = self.kb.product(pid), next(p for p in self.seeds.phenomena if p.id == ph)
+        at = get_clock().now()
+        self.kb.extend_solves(pid, ph, by)
+        unit = KnowledgeUnit(id=f"ku:translation:scope:{pid}:{ph}", level=2, kind="translation",
+            title=f"{phen.label} → {product.name}", text=f"{phen.label} → 可选用 {product.name}（{note}）",
+            product_id=pid, phenomenon_ids=[ph], owner=actor.id, source="contributed", created_at=at)
+        self.kb.add(unit)
+        self.ledger.add(LedgerEntry(ts=at, owner=actor.id, ku_id=unit.id, ref=q.id,
+                                    points=self.config["points"]["contributed"], reason="contributed"))
+        self.events.append("scope_extended", by, {"question_id": q.id, "product_id": pid, "phenomenon": ph,
+            "ku_id": unit.id, "note": note, "requirement_ids": q.refs.get("requirement_ids", "").split(",")})
+        self._settle(q.id, Resolution(action="sign", by=by, note=note))
+        return unit.model_copy(deep=True)
+
+    def contribute_l2(self, req_id, item_index, scene_phrase, product_term, by):
+        """v6：产品经理把自己修正的 L2 条目沉淀为本人名下的 L2 转化知识（照 flow.contribute_translation）。"""
+        actor = self._human_pm(by)
+        req, _ = self._requirement(req_id, by, {"pm"}, {"draft", "rd_accepted", "rd_confirmed"})
+        if not 0 <= item_index < len(req.product_lang) or not scene_phrase.strip() or not product_term.strip():
+            raise ValueError("需要有效产品需求条目索引、场景说法与产品需求说法")
+        if req.product_lang[item_index].edited_by != by:
+            raise ValueError("只能沉淀本人修正过的条目")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.seeds, self.kb, get_clock().now(), self.events)
+        question = self._decision("contribution_pm", "contribute_l2", state.objects[f"requirement:{req_id}"], by)
+        at = get_clock().now()
+        unit = KnowledgeUnit(id=f"ku:translation:{req.id}:l2:{item_index}", level=2, kind="translation",
+            title=scene_phrase, text=f"{scene_phrase} → {product_term}", phenomenon_ids=[req.phenomenon],
+            owner=actor.id, source="contributed", created_at=at)
+        self.kb.add(unit)
+        item = req.product_lang[item_index]
+        item.ku_refs = [*item.ku_refs, unit.id]
+        self.ledger.add(LedgerEntry(ts=at, owner=actor.id, ku_id=unit.id, ref=req.id,
+                                    points=self.config["points"]["contributed"], reason="contributed"))
+        self.events.append("l2_contributed", by, {"requirement_id": req.id, "item_index": item_index, "ku_id": unit.id})
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return unit.model_copy(deep=True)
+
+    def readiness(self, req_id, viewer_id):
+        """v6.1 开工门槛（只读）：该现象的必问条件是否已明确、各自出自哪句原话、是不是觉追问出来的；
+        未答回问与未处理失真数。E3「如果只靠开场白」= 客户第一句话里已有的必问条件。全部由现有数据推出。"""
+        self._actor(viewer_id, {"pm", "rd", "supervisor"})
+        req = _find(self._requirements, req_id, "需求单")
+        required = next(p.required_slots for p in self.seeds.phenomena if p.id == req.phenomenon)
+        slots = {s.id: s for s in self.seeds.slots}
+        turns = {t.id: t for sid in req.session_ids for t in self._sessions[sid].turns}
+        fills = {}
+        for sid in req.session_ids:
+            fills.update({k: v for k, v in self._sessions[sid].need.slots.items() if v.status == "filled"})
+        asked = {}
+        for e in self.events.query(["ask_hint"]):
+            if e.session_id in req.session_ids:
+                for slot in e.payload["slots"]:
+                    asked.setdefault(slot, e.id)
+        first = {sid: next((t.id for t in self._sessions[sid].turns if t.speaker == "customer"), None)
+                 for sid in req.session_ids}
+        items = []
+        for slot in required:
+            fill = fills.get(slot)
+            value = req.known_slots.get(slot)
+            items.append({"slot": slot, "label": slots[slot].label, "value": value,
+                          "quote": turns[fill.turn_id].text if fill and fill.turn_id in turns else "",
+                          "in_opening": bool(fill) and fill.turn_id in first.values(),
+                          "asked_by_jue": slot in asked and not (fill and fill.turn_id in first.values())})
+        blockers = [q for q in self.bus.list() if q.refs.get("requirement_id") == req_id
+                    and q.family in {"ask_back", "distortion"}]
+        n_known = sum(i["value"] is not None for i in items)
+        return {"requirement_id": req_id, "items": items, "n_required": len(required), "n_known": n_known,
+                "n_in_opening": sum(i["in_opening"] for i in items),
+                "n_asked_by_jue": sum(i["asked_by_jue"] and i["value"] is not None for i in items),
+                "n_open_ask_back": sum(q.family == "ask_back" for q in blockers),
+                "n_open_distortion": sum(q.family == "distortion" for q in blockers),
+                "n_items_with_quote": sum(bool(i.quote_refs) for i in req.product_lang + req.chem_lang),
+                "n_items": len(req.product_lang) + len(req.chem_lang),
+                "ready": n_known == len(required) and not blockers}
 
     def save_merge_proposal(self, question_id, target_req_id, member_ids, note, by):
         if by != "pm:agent":
@@ -621,7 +723,8 @@ class HuayanApp:
         self._after(req_ids=[target_req_id])
         return self.requirement_view(target_req_id, by).requirement
 
-    def merge_requirements(self, question_id, by):
+    def merge_requirements(self, question_id, by, note=""):
+        """v6：真人产品经理签字合并，note = 商业价值与产品方向判断（随问题结案、合并事件交研发）。"""
         q = self.bus.get(question_id)
         if q.family != "opportunity" or q.status != "open":
             raise ValueError("需要待处理的机会汇聚问题")
@@ -658,8 +761,9 @@ class HuayanApp:
         req.product_lang = [item for item in req.product_lang if item.edited_by]
         self.events.append("requirement_edited", by, {"requirement_id": req.id, "layer": 2, "index": -1,
             "before": before, "after": {"product_lang": [item.model_dump() for item in req.product_lang], "direction": ""}})
-        self.events.append("requirements_merged", by, {"question_id": q.id, "target": req.id, "members": list(req.merge_from)})
-        self._settle(q.id, Resolution(action="sign", by=by))
+        self.events.append("requirements_merged", by, {"question_id": q.id, "target": req.id,
+            "members": list(req.merge_from), "note": note})
+        self._settle(q.id, Resolution(action="sign", by=by, note=note))
         self._return_to_preparation(req)
         self._save_requirement(req)
         self._after(req.session_ids, [req.id, *req.merge_from])
@@ -1223,7 +1327,8 @@ class HuayanApp:
         basis = [{"question_id": q.id, "family": q.family, "title": q.title, "p_need": q.p_need,
                   "scored_by": q.scored_by, "status": q.status,
                   "action": q.resolution.action if q.resolution else None,
-                  "by": q.resolution.by if q.resolution else None}
+                  "by": q.resolution.by if q.resolution else None,
+                  "note": q.resolution.note if q.resolution else ""}
                  for q in self.bus.list(status=None) if q.object_id in objects or q.id in merges]
         return {"session_id": session.id, "requirement_id": main.id if main else None, "origin": session.origin,
                 "path": path, "roles": roles, "basis": basis,

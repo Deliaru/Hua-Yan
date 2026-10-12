@@ -75,6 +75,14 @@ class KnowledgeBase:
         self._products[product_id].applicable[slot] = list(values)
         self.events.append("sheet_updated", by, {"product_id": product_id, "slot": slot, "values": values})
 
+    def extend_solves(self, product_id: str, phenomenon: str, by: str) -> None:
+        """v6：产品经理扩展产品适用现象；产品知识单元的现象标签同步。"""
+        product = self._products[product_id]
+        product.solves.append(phenomenon)
+        for kind in _TITLES:
+            self._units[f"ku:{kind}:{product_id}"].phenomenon_ids = list(product.solves)
+        self.events.append("sheet_updated", by, {"product_id": product_id, "solves": list(product.solves)})
+
     def add(self, ku: KnowledgeUnit) -> None:
         self._units[ku.id] = ku.model_copy(deep=True)
 

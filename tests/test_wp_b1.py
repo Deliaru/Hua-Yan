@@ -76,9 +76,9 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     attrs = session_state(session, session_events, t0).objects["session:sess:20"].attrs
     assert attrs["escalated"] and not evaluate(templates_all["escalate_need"].precondition, attrs, boolean=True)
 
-    # 模板目录：17 个 family（v6 新增 route_rd、handoff_sales）；基线三个目录也能加载
+    # 模板目录：19 个 family（v6 新增 route_rd、handoff_sales、scope_update、contribution_pm）；基线三个目录也能加载
     templates = load_templates(TEMPLATES)
-    assert len({t.family for t in templates.values()}) == 17
+    assert len({t.family for t in templates.values()}) == 19
     for name in ("b1_required", "b2_info_value", "rule_alert"):
         load_templates(ROOT / "config" / "baselines" / name)
 
