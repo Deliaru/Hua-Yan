@@ -379,7 +379,7 @@ function ReqContext({ view }: { view: RequirementView }) {
           <div className="row attn-edge text-[13px] leading-5">{b.note}</div>
         </Group>
       ))}
-      {req.merge_note && <Group title="产品经理 Agent 的合并判断"><div className="row text-[13px] leading-5">{req.merge_note}</div></Group>}
+      {req.merge_note && <Group title="产品经理 Agent 的合并判断"><div className="row text-[13px] leading-5">{L.scrub(req.merge_note)}</div></Group>}
       {!!req.return_notes.length && (
         <Group title="退回记录">{req.return_notes.map((n, i) => <div key={i} className="row text-[13px] leading-5">{n}</div>)}</Group>
       )}

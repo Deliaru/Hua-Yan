@@ -83,12 +83,13 @@ export default function App() {
   const pick = (id: string) => (pageRole ? setWho((w) => ({ ...w, [pageRole]: id })) : setMe(id));
   const restart = (label: string, p: Promise<unknown>) => {
     setError(null);
+    setFocus(null);   // 重建后旧会话、旧需求单都不在了
     setBusy(label);
     p.then(() => api.meta()).then((m) => { setMeta(m); setVersion((v) => v + 1); }).catch(fail).finally(() => setBusy(null));
   };
   const ctx = {
     meta, me: actor.id, role: actor.role, agentOnline: !meta.status.gateway_mock, version, side,
-    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, focus, startDemo: () => setDemo(true),
+    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, focus, startDemo: () => setDemo(true), openMode: () => setModeOpen(true),
     go: (p: string, f?: string | null, id?: string) => {
       const role = ROLE_PAGES[p as Page];
       if (role && id && id.startsWith(`${role}:`)) setWho((w) => ({ ...w, [role]: id }));
@@ -180,7 +181,11 @@ export default function App() {
       </main>
 
       {modeOpen && <ModeDialog mode={meta.mode} onClose={() => setModeOpen(false)}
-                               onDone={() => { setModeOpen(false); restart("正在切换运行方式……", Promise.resolve()); }} />}
+                               onDone={(demoTab) => {
+                                 setModeOpen(false);
+                                 if (demoTab) { localStorage.setItem("huayan-demo-tab", demoTab); setDemo(true); }
+                                 restart("正在切换运行方式……", Promise.resolve());
+                               }} />}
       {error && (
         <div className="popover anim-fade fixed right-4 top-[60px] flex max-w-[360px] items-start gap-2 px-3 py-2.5 text-[13px]">
           <span className="flex-1 text-danger">{error}</span>

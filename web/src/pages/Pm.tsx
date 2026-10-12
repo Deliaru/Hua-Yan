@@ -162,7 +162,7 @@ function Opportunity({ q, onDone }: { q: Question; onDone: (t: string) => void }
         </div>
         {main?.requirement.merge_note && (
           <div className="row !items-start"><span className="w-24 shrink-0 text-[13px] text-ink-2">是不是同一件事</span>
-            <p className="flex-1 text-[13px] leading-5">{main.requirement.merge_note} <AgentMark who="产品经理 Agent 起草" /></p></div>
+            <p className="flex-1 text-[13px] leading-5">{L.scrub(main.requirement.merge_note)} <AgentMark who="产品经理 Agent 起草" /></p></div>
         )}
         {q.evidence.map((e, i) => <div key={i} className="row text-[12.5px] text-ink-2">{L.scrub(e.summary)}</div>)}
       </Group>

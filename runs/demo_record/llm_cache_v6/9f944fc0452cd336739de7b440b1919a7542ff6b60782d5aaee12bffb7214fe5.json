@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"get_knowledge-1791786663107718850-1804","name":"get_knowledge","arguments":{"ku_id":"ku:translation:tr:23"}}],"usage":{"input_tokens":6983,"output_tokens":25},"latency_ms":4410.149821998857,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

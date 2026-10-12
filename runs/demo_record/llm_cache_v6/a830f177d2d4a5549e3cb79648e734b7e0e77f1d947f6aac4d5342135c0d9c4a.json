@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791786368227408278-1768","name":"search_knowledge","arguments":{"query":"HY-FX350"}}],"usage":{"input_tokens":4474,"output_tokens":21},"latency_ms":4852.924646000247,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

@@ -2,6 +2,7 @@
 密钥只存在本会话的内存里：不写配置、不写运行目录、不回显到界面；会话淘汰或服务重启即丢弃。
 接口地址由服务器代为请求，只允许公网地址（防止借演示服务器访问本机与内网）。"""
 import ipaddress
+import json
 import socket
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -61,12 +62,33 @@ class Byok:
         return client
 
     def check(self):
-        """填完先试连一次，把密钥或地址的错误当场告诉试用者。"""
+        """填完先体检：对话不通当场报错；JSON 输出、工具调用不支持时照常接入，但逐项告诉试用者会影响哪一环。"""
+        client = openai.OpenAI(base_url=self.llm_base_url, api_key=self.llm_key, max_retries=0)
+
+        def ask(text, **kw):
+            return client.chat.completions.create(model=self.llm_model, messages=[{"role": "user", "content": text}],
+                                                  max_tokens=1024, timeout=60, **kw).choices[0].message
+
         try:
-            openai.OpenAI(base_url=self.llm_base_url, api_key=self.llm_key, max_retries=0).chat.completions.create(
-                model=self.llm_model, messages=[{"role": "user", "content": "ping"}], max_tokens=32, timeout=30)
+            ask("ping")
         except openai.APIError as e:
             raise ValueError(f"大模型连接失败：{type(e).__name__}: {e}") from None
+        probes = [{"item": "对话", "ok": True, "affects": "L1 回答客户、Agent 起草的正文", "detail": ""}]
+        try:
+            text = ask('只输出 JSON：{"ok": true}', response_format={"type": "json_object"}).content or ""
+            json.loads(text.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
+            probes.append({"item": "JSON 输出", "ok": True, "affects": "听懂客户原话（抽取）、Jev 推荐", "detail": ""})
+        except (openai.APIError, ValueError) as e:
+            probes.append({"item": "JSON 输出", "ok": False, "affects": "听懂客户原话（抽取）、Jev 推荐", "detail": f"{type(e).__name__}: {e}"[:200]})
+        tool = {"type": "function", "function": {"name": "ping", "description": "连通测试",
+                "parameters": {"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"]}}}
+        try:
+            calls = ask("调用 ping 工具，参数 x 填 1。", tools=[tool]).tool_calls
+            probes.append({"item": "工具调用", "ok": bool(calls), "affects": "产品经理 / 研发 Agent 起草需求单、准备待签事项",
+                           "detail": "" if calls else "模型没有调用工具"})
+        except openai.APIError as e:
+            probes.append({"item": "工具调用", "ok": False, "affects": "产品经理 / 研发 Agent 起草需求单、准备待签事项",
+                           "detail": f"{type(e).__name__}: {e}"[:200]})
         if self.jev_base_url:
             client = self.onejev(None)
             try:
@@ -75,6 +97,7 @@ class Byok:
                 raise ValueError(f"OneJev 连接失败：{type(e).__name__}: {e}") from None
             finally:
                 client.close()
+        return probes
 
 
 class OneJevOrLLM:

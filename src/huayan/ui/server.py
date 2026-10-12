@@ -19,6 +19,7 @@ from threading import Lock, RLock, local
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
+import openai
 import yaml
 
 from huayan.app import HuayanApp, _human_events
@@ -26,7 +27,7 @@ from huayan.clock import SimClock, get_clock, set_clock
 from huayan.contracts import ReqItem, SheetDraft, SHANGHAI
 from huayan.knowledge import PermissionDenied
 from huayan.gateway.byok import Byok, public_url
-from huayan.gateway.client import ReplayMiss
+from huayan.gateway.client import ReplayMiss, StructuredOutputError
 from huayan.jev.system1 import OneJevClient
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
@@ -165,6 +166,9 @@ def route_next(app, p):
     return {"text": routes[0]["lines"][len(sent)] if routes else None}
 
 
+SESSION_STATUS = {"open": "进行中", "recommended": "已推荐", "escalated": "已转研发", "closed": "已记录，暂无方案"}
+
+
 def demo_story():
     return yaml.safe_load(STORY.read_text(encoding="utf-8"))
 
@@ -265,6 +269,7 @@ class Api:
         self.activity = None                # 正在进行或最近一次写操作的处理过程
         self.agent_runs = {}                # (对话 id, 回复序号) → 这一轮 Agent 的过程，供对话里展开
         self.story_done, self.story_handles = 0, {}   # V6-5.5 讲解已执行到第几步；句柄 → 会话、开场、已说几句
+        self.story_last = None                        # 上一步的耗时、模型调用次数与是否偏离剧本
         if app is not None:
             self.attach(app)
 
@@ -359,38 +364,73 @@ class Api:
         use_clock(self.clock)
         self.app, self.writes = HuayanApp.build(self.config_path, byok=self.byok), 0
         self.activity, self.agent_runs = None, {}
-        self.story_done, self.story_handles = 0, {}
+        self.story_done, self.story_handles, self.story_last = 0, {}, None
         self.attach(self.app)
 
     def story_state(self):
         story = demo_story()
         view = self._story_view(story["steps"][self.story_done - 1]["view"]) if self.story_done else None
-        return story | {"done": self.story_done, "view": view}
+        return story | {"done": self.story_done, "view": view, "last": self.story_last}
 
     def story_next(self):
         """讲解的下一步：真的执行 do 里的写操作（经 _call，与浏览器里点按钮、scripts/demo_routes.py 同一个入口）。
-        看的人已经在工作面上自己做过的动作（发过这句、签过、接过）跳过，接着往下讲。"""
+        看的人已经在工作面上自己做过的动作（开过、发过这句、签过、接过）跳过，接着往下讲；所以失败后再点一次就是重试。"""
         step = demo_story()["steps"][self.story_done]
+        calls, started = self._model_calls(), time.monotonic()
         try:
             for action in step.get("do", []):
                 self._story_do(action)
+        except (openai.APIError, StructuredOutputError) as e:
+            raise ValueError(f"模型这一步调用失败（{type(e).__name__}: {e}）。再点一次「下一步」重试，已经做完的动作会跳过。") from e
         except (PermissionDenied, ValueError, KeyError, StopIteration) as e:
-            raise ValueError(f"这一步没能执行（{type(e).__name__}: {e}）。刚才在工作面上的操作改变了这一章的走向，"
+            raise ValueError(f"这一步没能执行（{type(e).__name__}: {e}）。前面的走向和剧本不同（自己操作过，或真实模型判断不同），"
                              "可以在目录里点这一章，从头快进到它的开头重新看。") from e
         self.story_done += 1
+        n, tokens = (a - b for a, b in zip(self._model_calls(), calls))
+        self.story_last = {"seconds": round(time.monotonic() - started, 1), "calls": n, "tokens": tokens,
+                           "diverged": self._story_diverged(step.get("expect", {}))}
         return self.story_state()
 
     def story_goto(self, index):
-        """从头重建，再执行到第 index 步（目录里点某一步 / 某一章）。"""
+        """从头重建，再执行到第 index 步（目录里点某一步 / 某一章）。
+        接入自己的模型时每一步都真实调用、又慢又花钱，只补跑这一章和它依赖的章（如 C′ 依赖 C），其余章跳过。"""
         self.app.system1.close()
         self.build()
-        for _ in range(index):
+        story = demo_story()
+        chapter = story["steps"][index - 1]["chapter"] if index else None
+        needed = {chapter, *next((c.get("needs", []) for c in story["chapters"] if c["id"] == chapter), [])}
+        for i in range(index):
+            if self.byok and story["steps"][i]["chapter"] not in needed:
+                self.story_done += 1
+                continue
             self.story_next()
         return self.story_state()
+
+    def _model_calls(self):
+        """本会话到此刻的大模型调用次数与 token 数（计量文件里 kind=llm 的记录；回放时是录制下来的输出）。"""
+        path = Path(self.app.meter.path)
+        records = [json.loads(line) for line in path.open(encoding="utf-8")] if path.exists() else []
+        llm = [r for r in records if r["kind"] == "llm"]
+        return len(llm), sum(r["input_tokens"] + r["output_tokens"] for r in llm)
+
+    def _story_diverged(self, expect):
+        """这一步剧本预期的会话状态没出现时，如实说出真实运行跑到了哪里（真实模型的判断可能和录制时不同）。"""
+        out = []
+        for handle, status in expect.items():
+            sid = self.story_handles.get(handle, {}).get("session")
+            session = next((s for s in self.app.sessions() if s.id == sid), None)
+            if session is None or session.status == status:
+                continue
+            asking = "、".join(h.label for h in session.hints)
+            out.append(f"剧本预期这里「{SESSION_STATUS[status]}」，实际是「{SESSION_STATUS[session.status]}」"
+                       + (f"：觉还在追问{asking}" if asking else ""))
+        return "；".join(out) or None
 
     def _story_do(self, a):
         h = self.story_handles
         if "open" in a:
+            if a["as"] in h:
+                return
             opened = self._call("POST", "/api/demo/open", {"route": a["open"], "customer": a.get("customer")})
             h[a["as"]] = {"session": opened["session_id"], "route": a["open"], "said": 1}
         elif "say" in a:
@@ -420,9 +460,13 @@ class Api:
         return next(r for r in self.app.requirements("rd:R01") if sid in r.session_ids and r.status != "merged")
 
     def _story_question(self, family, **refs):
+        """待产品经理签的问题；已经签过（不再 open）返回 None 跳过，Agent 还没准备好则报错，再点一次重试。"""
         self.app.tick()
-        return next((q for q in self.app.questions("pm:P01") if q.family == family and q.status == "open"
-                     and q.prepared_at is not None and all(q.refs.get(k) == v for k, v in refs.items())), None)
+        q = next((q for q in self.app.questions("pm:P01") if q.family == family and q.status == "open"
+                  and all(q.refs.get(k) == v for k, v in refs.items())), None)
+        if q is not None and q.prepared_at is None:
+            raise ValueError("产品经理 Agent 还没准备好这一项")
+        return q
 
     def _story_view(self, v):
         """执行后切到哪个工作面看哪个对象：研发页的身份取需求单的指派研发，客户页取会话的客户；看的人自己操作过、对象对不上时只切页面。"""
@@ -510,8 +554,8 @@ class Handler(SimpleHTTPRequestHandler):
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
         except ReplayMiss:
-            status, body = 409, {"error": "当前为演示模式，未接入真实模型：这一步不在录制好的演示主线里（缓存未命中）。"
-                                          "请按导览操作；进度已乱时点右上角「重置进度」或「载入检查点」。"}
+            status, body = 409, {"error": "当前是录制回放，只能沿演示讲解一步步走（这一步不在录制里）。想自由操作，"
+                                          "点右上角「接入真实模型」用你自己的模型真实运行；进度乱了可以在讲解目录里点某一章重看。"}
         except AssertionError as e:
             status, body = 409, {"error": str(e)}
         except ValueError as e:
@@ -582,8 +626,8 @@ def set_mode(sid, p):
                 (p.get("jev_key") or "").strip() or None, bool(p.get("jev_fallback", True)))
     if not (byok.llm_model and byok.llm_key):
         raise ValueError("请填写大模型的模型名和密钥")
-    byok.check()
-    return session_api(sid, byok, rebuild=True).mode()
+    probe = byok.check()
+    return session_api(sid, byok, rebuild=True).mode() | {"probe": probe}
 
 
 if __name__ == "__main__":

@@ -185,17 +185,22 @@ export function WorkloadCard({ title = "你的时间用在了哪里" }: { title?
 }
 
 // 开场入口（替代线性主线）：只代客户说出第一句话，之后由看的人自己在各工作面操作
-export function OpenRouteMenu({ customer, onOpened }: { customer?: string; onOpened: (sessionId: string, customer: string) => void }) {
+export function OpenRouteMenu({ customer, onOpened }: { customer: string; onOpened: (sessionId: string, customer: string) => void }) {
   const { fail, refresh } = useApp();
   const routes = useData(() => api.demoRoutes(), []) ?? [];
   const open = (id: string) => api.openRoute(id, customer).then((o) => { onOpened(o.session_id, o.customer_id); refresh(); }, fail);
+  const blank = () => api.startSession(customer).then((o) => { onOpened(o.id, customer); refresh(); }, fail);
   return (
     <Popover trigger={(toggle) => (
       <button onClick={toggle} className="icon-btn !h-6 !w-6" title="新开一个需求"><Plus /></button>
     )}>
       {(close) => (
         <div className="w-[320px]">
-          <p className="px-2.5 pb-1 pt-0.5 text-[12px] text-ink-2">新开一个需求（只预填客户第一句话，后面真实走系统）</p>
+          <button className="menu-item !h-auto flex-col !items-start !py-1.5" onClick={() => { blank(); close(); }}>
+            <span className="text-[13px] font-semibold">用自己的话说</span>
+            <span className="text-[12px] text-ink-2">空白开始，像客户一样只描述现象</span>
+          </button>
+          <p className="px-2.5 pb-1 pt-1.5 text-[12px] text-ink-2">或选一个开场（只预填客户第一句话，后面真实走系统）</p>
           {routes.map((r) => (
             <button key={r.id} className="menu-item !h-auto flex-col !items-start !py-1.5" onClick={() => { open(r.id); close(); }}>
               <span className="text-[13px]"><b className="mr-1.5">{r.id}</b>{r.title}</span>

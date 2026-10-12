@@ -4,13 +4,15 @@
 #   do：open 开场（route、可选 customer，as 记为句柄）· say 该句柄的下一句台词 · decline 研发不立项（已有产品适用）
 #       scope 产品经理签扩适用范围 · merge 产品经理签机会 · accept 研发接单
 #   view：page 工作面；focus 句柄（会话）或 req:句柄（该会话的需求单）；研发页的身份取需求单的指派研发
+#   expect：执行后剧本预期的会话状态（句柄 → open / recommended / escalated）；真实模型跑出来不同时，讲解栏如实说明
+#   章节 needs：接入自己的模型时「按路径看」只补跑这一章和它依赖的章
 # 讲解五段：happened 发生了什么 · before 过去怎么做 · freed 解放了谁的什么 · money 降本增效（↑）· fame 体验与影响力（★）；没有就不写。
 chapters:
   - {id: 开场, title: 研发的一句话}
   - {id: A, title: 常规问题客户自助}
   - {id: B, title: 商务诉求交业务员}
   - {id: C, title: 新问题直达研发，判一次组织记住}
-  - {id: C′, title: 同类问题再来自助解决}
+  - {id: C′, title: 同类问题再来自助解决, needs: [C]}
   - {id: D, title: 短平快汇成课题}
   - {id: 收尾, title: 这个上午解放了多少生产力}
 steps:
@@ -33,6 +35,7 @@ steps:
   - chapter: A
     title: 答完两个问题，当场拿到推荐
     do: [{say: a}]
+    expect: {a: recommended}
     view: {page: customer, focus: a}
     happened: 客户回答「锦氨的，溢流缸」，化言当场给出推荐卡：说明书、用法和公开案例。研发的机理与配方不对外。
     before: 同样的问题业务员每周要答很多遍；答偏了，需求就带着偏差一路传到研发。
@@ -43,6 +46,7 @@ steps:
   - chapter: B
     title: 另一位客户要报价，直接交给业务员
     do: [{open: B, as: b}, {say: b}, {say: b}]
+    expect: {b: recommended}
     view: {page: sales, who: "sales:S01", focus: b}
     happened: 印染厂 B 同样自助拿到推荐，接着说「这个产品想要个报价」。觉判断这是商务诉求，自动交给归属业务员；业务员看到的是完整原话和已推荐的产品。
     before: 客户把问题从头再讲一遍，业务员重新记录，再回头去问技术。
@@ -61,8 +65,9 @@ steps:
   - chapter: C
     title: 现有产品都不合适，需求直达研发
     do: [{say: c}]
+    expect: {c: escalated}
     view: {page: customer, focus: c}
-    happened: 客户答完，化言把声明能处理这类问题的已发布产品按客户条件逐一核对、排除；觉判断「现有产品都不合适」，按模板自动把需求交给研发。看左侧「为什么这份需求可以直接交给研发」。
+    happened: 客户答完，化言把声明能处理这类问题的已发布产品按客户条件逐一核对、排除；觉判断「现有产品都不合适」，按模板自动把需求交给研发。看中间「为什么这份需求可以直接交给研发」。
     before: 业务员签字升级 → 产品经理把需求转述一遍 → 研发。每转一手丢一部分。
     freed: 不经业务员签字，也不用产品经理逐单转述：产品经理 Agent 在后台把原话转成产品需求，每一句都带着客户原话。需求轨迹上业务员、产品经理两格都是空心的。
 
@@ -77,6 +82,7 @@ steps:
   - chapter: C
     title: 研发判断：已有产品适用，不必立项
     do: [{decline: c, product: HY-FX350, reason: 已有产品可覆盖：锦纶固色剂适用于锦纶酸性染料的白地沾色}]
+    expect: {c: recommended}
     view: {page: customer, focus: c}
     happened: 研发判断锦纶固色剂其实能解决这个问题，只是说明书没标这个用法，于是选「不立项：已有产品适用」。客户这边立刻收到了这个产品的推荐——从提问到拿到方案，没有经过任何人转述。
     before: 立项评审、排期，客户等上几周，最后发现一个现成产品就能解决。
@@ -103,6 +109,7 @@ steps:
   - chapter: C′
     title: 同类问题再来，客户自助就解决了
     do: [{open: C′, as: c2}, {say: c2}]
+    expect: {c2: recommended}
     view: {page: customer, focus: c2}
     happened: 印染厂 D 也说「白地被沾色了」，答完问题直接拿到锦纶固色剂的推荐。研发的收件箱里没有新单。
     before: 第二张同样的单又进研发，研发再判一次。
@@ -113,12 +120,14 @@ steps:
   - chapter: D
     title: 一个短平快需求，一句话说全了条件
     do: [{open: D, as: d1}]
+    expect: {d1: escalated}
     view: {page: customer, focus: d1}
     happened: 印染厂 A 又来一个问题：「深一块浅一块，锦氨的，气流缸」。现有产品不适合气流缸，需求直达研发。
 
   - chapter: D
     title: 第二家客户提了同样的需求，觉看出一个机会
     do: [{open: D, customer: "customer:C02", as: d2}]
+    expect: {d2: escalated}
     view: {page: pm, who: "pm:P01", focus: "req:d1"}
     happened: 印染厂 B 也提了同样的问题。觉发现同类需求反复出现、没有产品可用，提出「是否合并为一个课题」交给产品经理；产品经理 Agent 已经把两家的原话并排放好。
     before: 研发逐张接单、逐张做短平快，中长期课题被挤掉。

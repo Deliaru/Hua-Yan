@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"find_products-1791786464675499100-1775","name":"find_products","arguments":{"phenomenon":"color_unlevel","slots":{}}}],"usage":{"input_tokens":4707,"output_tokens":24},"latency_ms":4954.778113999055,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

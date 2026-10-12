@@ -15,6 +15,7 @@ export interface Ctx {
   focus: string | null;             // 跳转时带来的对象 id，子工作面据此选中
   side: HTMLElement | null;         // 侧栏下半部分：各页面把自己的 source list 放进来
   startDemo: () => void;            // V6-5.5：进入演示讲解（左侧换成讲解栏）
+  openMode: () => void;             // 打开「运行方式」（接入自己的模型）
 }
 
 export const AppCtx = createContext<Ctx>(null!);

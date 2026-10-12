@@ -16,7 +16,9 @@ export interface RunStatus {
 }
 
 // 本会话的运行方式（服务端会话层给出，不含密钥）：replay 录制回放；byok 试用者自带模型；local 本地部署按配置运行
-export interface RunMode { kind: "replay" | "byok" | "local"; llm_model: string | null; jev_model: string | null; jev_fallback: boolean }
+export interface RunMode { kind: "replay" | "byok" | "local"; llm_model: string | null; jev_model: string | null; jev_fallback: boolean; probe?: Probe[] }
+// 接入体检：对话、JSON 输出、工具调用三项，不支持的项影响哪一环
+export interface Probe { item: string; ok: boolean; affects: string; detail: string }
 
 // 处理过程（服务端会话层，墙钟）：一次写操作里觉、模型、Jev、各角色 Agent 依次做了什么；别人的 Agent 不含工具名
 export interface ProgressEvent {
@@ -107,9 +109,11 @@ export interface StoryStep {
   happened: string; before?: string; freed?: string; money?: string; fame?: string;
 }
 export interface StoryState {
-  chapters: { id: string; title: string }[]; steps: StoryStep[];
+  chapters: { id: string; title: string; needs?: string[] }[]; steps: StoryStep[];
   done: number;                                  // 已执行到第几步（0 = 还没开始）
   view: { page: string; focus: string | null; who: string | null } | null;
+  // 上一步：耗时、大模型调用次数与 token（回放时是录制下来的输出）、真实运行和剧本不同之处
+  last: { seconds: number; calls: number; tokens: number; diverged: string | null } | null;
 }
 export interface LedgerItem { label: string; value: number; base?: number; note: string }
 

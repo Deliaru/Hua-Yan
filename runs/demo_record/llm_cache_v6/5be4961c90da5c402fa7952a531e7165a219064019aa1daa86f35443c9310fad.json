@@ -1,0 +1,1 @@
+{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791786622442162321-1799","name":"search_knowledge","arguments":{"query":"酸性染料","kind":"translation"}}],"usage":{"input_tokens":5777,"output_tokens":25},"latency_ms":5881.980547999774,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}
