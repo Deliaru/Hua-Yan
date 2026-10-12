@@ -1,1 +1,0 @@
-{"content":"```json\n{\n  \"answers\": {\n    \"disclose\": {\n      \"product\": 0.2,\n      \"product_usage\": 0.8\n    }\n  }\n}\n```","tool_calls":[],"usage":{"input_tokens":426,"output_tokens":48},"latency_ms":15908.422217000407,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

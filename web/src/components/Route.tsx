@@ -7,6 +7,7 @@ import type { Condition, Readiness, Route, RouteState } from "../types";
 import { Popover } from "./Controls";
 import { ChevronRight, Plus } from "./Icons";
 import { Group, Score } from "./ui";
+import { NO_GUIDE, publish, useGuide } from "./Guide";
 
 const ROLES = [["customer", "客户"], ["sales", "业务员"], ["pm", "产品经理"], ["rd", "研发"]] as const;
 const STATE_TEXT: Record<RouteState, string> = { human: "人处理过", auto: "Agent / 觉代办", pending: "待处理", none: "未经过" };
@@ -36,6 +37,7 @@ export function RouteStrip({ objectId }: { objectId: string }) {
   const L = useLabels();
   const r = useData<Route>(() => api.route(objectId, me), [objectId, me]);
   const [open, setOpen] = useState(false);
+  const g = useGuide();   // 演示讲解指向的角色格（route:<角色>），点过即熄
   if (!r) return null;
   const focusOf = (role: string) => (role === "rd" || role === "pm") && r.requirement_id ? r.requirement_id : r.session_id;
   const who = (role: string) => r.roles[role as keyof Route["roles"]].by.find((id) => id !== "pm:agent");
@@ -48,17 +50,19 @@ export function RouteStrip({ objectId }: { objectId: string }) {
         <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-2">{PATH_NOTE[r.path] ?? ""}</span>
         <span className="num shrink-0 text-[12px] text-ink-2">人工节点 {r.n_human_steps} 个</span>
       </div>
+      <p className="px-5 pt-2 text-[11.5px] text-ink-3">点任一角色，切到这个角色的工作面看这件事：能做什么、要做什么、正在做什么</p>
       <div className="grid grid-cols-4">
         {ROLES.map(([role, label], i) => {
           const cell = r.roles[role];
           return (
-            <button key={role} type="button" onClick={() => go(PAGE_OF[role], focusOf(role), who(role))}
-                    className="relative flex items-start gap-2.5 px-5 py-3 text-left hover:bg-[rgba(0,0,0,.02)]"
-                    title={`切到${label}子工作面看同一件事`}>
+            <button key={role} type="button" onClick={() => { if (g.target?.startsWith("route:")) publish(NO_GUIDE); go(PAGE_OF[role], focusOf(role), who(role)); }}
+                    className={`group/cell relative flex items-start gap-2.5 px-5 py-3 text-left hover:bg-[rgba(0,0,0,.03)] ${g.target === `route:${role}` ? "glow rounded-[8px]" : ""}`}
+                    title={`切到${label}子工作面，看${label}在这件事里能做什么、要做什么、在做什么`}>
               {i < 3 && <i className="absolute left-[42px] right-[-18px] top-[23px] h-px bg-sep" />}
               <span className="relative z-[1] bg-white"><Dot state={cell.state} /></span>
               <span className="min-w-0">
-                <span className="block text-[13px] font-semibold">{label}</span>
+                <span className="flex items-center gap-0.5 text-[13px] font-semibold">{label}
+                  <span className="text-ink-3 group-hover/cell:text-accent"><ChevronRight /></span></span>
                 <span className={`block text-[12px] ${cell.state === "pending" ? "text-attn-ink" : "text-ink-2"}`}>
                   {STATE_TEXT[cell.state]}</span>
                 {!!cell.by.length && cell.state !== "none" && (

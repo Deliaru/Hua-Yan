@@ -5,6 +5,7 @@ import { api } from "../api";
 import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { Route, SessionView } from "../types";
 import { OpenRouteMenu, RouteStrip, SessionConditions, useRouteHint } from "../components/Route";
+import { useGlow } from "../components/Guide";
 import { EmptyState, Group, PageHead, SideHead } from "../components/ui";
 
 export function Customer() {
@@ -88,6 +89,7 @@ function Chat({ v, route }: { v: SessionView; route: Route | null }) {
   };
   const replies = (turnId: string) => v.replies.filter((r) => r.turn_id === turnId);
   const canQuote = v.status === "recommended" && route?.path === "自助解决";
+  const glowSay = useGlow("say"), glowQuote = useGlow("quote");   // 演示讲解：轮到客户说下一句 / 点「我要报价」
   return (
     <section>
       <div className="group-title">对话</div>
@@ -118,13 +120,13 @@ function Chat({ v, route }: { v: SessionView; route: Route | null }) {
         <form onSubmit={(e) => { e.preventDefault(); send(said); }} className="flex items-center gap-2 border-t border-sep bg-[#fafafb] py-2 pl-4 pr-2.5">
           <input value={said} onChange={(e) => setSaid(e.target.value)} aria-label="我说" disabled={busy}
                  placeholder="描述现象，或回答化言的问题……" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-3" />
-          {line && !said && <button type="button" className="chip" disabled={busy} onClick={() => setSaid(line)}>演示自动填入</button>}
-          <button className="btn btn-primary !h-[26px] !px-3" disabled={busy || !said.trim()}>{busy ? "……" : "发送"}</button>
+          {line && !said && <button type="button" className={`chip ${glowSay ? "glow" : ""}`} disabled={busy} onClick={() => setSaid(line)}>演示自动填入</button>}
+          <button className={`btn btn-primary !h-[26px] !px-3 ${glowSay && said ? "glow" : ""}`} disabled={busy || !said.trim()}>{busy ? "……" : "发送"}</button>
         </form>
         {canQuote && (
           <div className="flex items-center gap-3 border-t border-sep px-4 py-2.5">
             <span className="flex-1 text-[12.5px] text-ink-2">想采购或要报价？觉会交给你的业务员，他看得到你说过的每一句。</span>
-            <button className="btn btn-plain" disabled={busy} onClick={() => send("这个产品想要个报价")}>我要报价</button>
+            <button className={`btn btn-plain ${glowQuote ? "glow" : ""}`} disabled={busy} onClick={() => send("这个产品想要个报价")}>我要报价</button>
           </div>
         )}
         {err && <p role="alert" className="px-4 pb-2 text-[12px] text-danger">{err}</p>}

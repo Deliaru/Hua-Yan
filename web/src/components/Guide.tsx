@@ -49,9 +49,12 @@ const DO: Record<string, [number, string]> = {
 // arg 是台词要填的内容（客户 id、对 Agent 说的话、要补的文字），由对应输入处的「演示自动填入」使用。只在轮到当前身份时高亮。
 // customer：这一步发生在哪位客户的会话里（回放部署按台词给出），业务员工作面据此选中、高亮那段会话。
 type Target = { who: string | null; target: string | null; arg: string | null; customer: string | null };
-let current: Target = { who: null, target: null, arg: null, customer: null };
+// v6 演示讲解栏也经这里指按钮：target 为 say / quote / decline / scope / merge / sign:accept_requirement，
+// 或 route:<角色>（需求轨迹上的角色格，不限当前身份）。
+export const NO_GUIDE: Target = { who: null, target: null, arg: null, customer: null };
+let current: Target = NO_GUIDE;
 const subs = new Set<() => void>();
-function publish(t: Target) {
+export function publish(t: Target) {
   if (t.who === current.who && t.target === current.target && t.arg === current.arg && t.customer === current.customer) return;
   current = t;
   subs.forEach((f) => f());

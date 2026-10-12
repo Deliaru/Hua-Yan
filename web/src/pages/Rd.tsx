@@ -476,9 +476,14 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
   const [mode, setMode] = useState<"accept" | "applicable" | "other" | "return">("accept");
   const [reason, setReason] = useState("");
   const [product, setProduct] = useState(meta.products[0]?.id ?? "");
+  // 演示讲解：研发判「已有产品适用」要选的产品与依据，由「演示自动填入」填好（录制回放里须与录制一致）
+  const scripted = useGuideArg("decline");
+  const dec = scripted ? JSON.parse(scripted) as { product: string; reason: string } : null;
+  const filled = !!dec && product === dec.product && reason === dec.reason;
   const tab = (k: typeof mode, label: string) => (
     <button type="button" onClick={() => { setMode(k); setReason(""); }}
-            className={`h-7 rounded-[7px] px-3 text-[13px] ${mode === k ? "bg-white font-semibold shadow-[0_0_0_.5px_rgba(0,0,0,.14),0_1px_1.5px_rgba(0,0,0,.07)]" : "text-ink-2"}`}>{label}</button>
+            className={`h-7 rounded-[7px] px-3 text-[13px] ${mode === k ? "bg-white font-semibold shadow-[0_0_0_.5px_rgba(0,0,0,.14),0_1px_1.5px_rgba(0,0,0,.07)]" : "text-ink-2"} ${
+              dec && k === "applicable" && mode !== k ? "glow" : ""}`}>{label}</button>
   );
   return (
     <>
@@ -498,7 +503,8 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
               {meta.products.map((p) => <option key={p.id} value={p.id}>{L.product(p.id)}</option>)}
             </select>
             <Field value={reason} onChange={setReason} placeholder="判断依据（产品经理可见，提交前做研发术语自查）" />
-            <div><Act label="不立项：已有产品适用" disabled={!reason.trim()} run={() => api.decline(reqId, reason, me, product)} /></div>
+            {dec && !filled && <div><button type="button" className="chip glow" onClick={() => { setProduct(dec.product); setReason(dec.reason); }}>演示自动填入</button></div>}
+            <div><Act label="不立项：已有产品适用" disabled={!reason.trim()} glow={filled} run={() => api.decline(reqId, reason, me, product)} /></div>
           </>}
           {mode === "other" && <>
             <Field value={reason} onChange={setReason} placeholder="不立项原因（客户会收到「已记录，暂无方案」）" />

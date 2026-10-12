@@ -1,1 +1,0 @@
-{"content":null,"tool_calls":[{"call_id":"get_session-1791786519905201492-1784","name":"get_session","arguments":{"session_id":"sess:6"}}],"usage":{"input_tokens":4542,"output_tokens":20},"latency_ms":3736.767249998593,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

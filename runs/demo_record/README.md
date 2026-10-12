@@ -2,7 +2,7 @@
 
 ## v6 演示讲解（公开部署默认）
 
-`config/app.demo.v6.yaml`（`replay: true`）回放 `demo/story.yaml` 的 16 步，缓存在 `llm_cache_v6/`（gemini-3.8-flash-high，无 OneJev：Jev 为大模型降级）。录制一次约 8 分钟、72 次模型调用、约 30 万 token。
+`config/app.demo.v6.yaml`（`replay: true`）回放 `demo/story.yaml` 的 16 步，缓存在 `llm_cache_v6/`（gemini-3.8-flash-high，无 OneJev：Jev 为大模型降级）。录制一次约 6–8 分钟、65–72 次模型调用、约 26–30 万 token（真实模型每次略有不同）。2026-10-12 换入两个公开产品（TF-231A、TF-288B）后重录：65 次、约 25.6 万 token、370 秒，16 步无偏离。
 
 ```bash
 BACKUP_API_KEY=... uv run python scripts/record_story.py record   # 清空 llm_cache_v6 后真实录制；偏离剧本即停，重录

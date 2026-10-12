@@ -270,6 +270,7 @@ class Api:
         self.agent_runs = {}                # (对话 id, 回复序号) → 这一轮 Agent 的过程，供对话里展开
         self.story_done, self.story_handles = 0, {}   # V6-5.5 讲解已执行到第几步；句柄 → 会话、开场、已说几句
         self.story_last = None                        # 上一步的耗时、模型调用次数与是否偏离剧本
+        self.story_mark = None                        # 下一步已开始、等看的人在工作面上操作时：开始时的模型调用计数
         if app is not None:
             self.attach(app)
 
@@ -364,32 +365,46 @@ class Api:
         use_clock(self.clock)
         self.app, self.writes = HuayanApp.build(self.config_path, byok=self.byok), 0
         self.activity, self.agent_runs = None, {}
-        self.story_done, self.story_handles, self.story_last = 0, {}, None
+        self.story_done, self.story_handles, self.story_last, self.story_mark = 0, {}, None, None
         self.attach(self.app)
 
     def story_state(self):
         story = demo_story()
         view = self._story_view(story["steps"][self.story_done - 1]["view"]) if self.story_done else None
-        return story | {"done": self.story_done, "view": view, "last": self.story_last}
+        begun = self.story_mark is not None
+        return story | {"done": self.story_done, "view": view, "last": self.story_last,
+                        "begun": begun, "guide": self._story_guide() if begun else None}
+
+    def story_begin(self):
+        """讲解的下一步分两段：先由服务端执行开场（客户来了、说出第一句），再由讲解栏引导看的人在工作面上亲手点该点的按钮
+        （替客户回答追问、签字、接单）；做完（或点「替我做这一步」）由 story_next 收尾、切到讲解。没有要人做的动作时直接收尾。"""
+        self.story_mark = self._model_calls()
+        step = demo_story()["steps"][self.story_done]
+        self._story_run([a for a in step.get("do", []) if "open" in a])
+        return self.story_state() if self._story_guide() else self.story_next()
 
     def story_next(self):
-        """讲解的下一步：真的执行 do 里的写操作（经 _call，与浏览器里点按钮、scripts/demo_routes.py 同一个入口）。
+        """讲解这一步收尾：真的执行 do 里还没做的写操作（经 _call，与浏览器里点按钮、scripts/demo_routes.py 同一个入口）。
         看的人已经在工作面上自己做过的动作（开过、发过这句、签过、接过）跳过，接着往下讲；所以失败后再点一次就是重试。"""
         step = demo_story()["steps"][self.story_done]
-        calls, started = self._model_calls(), time.monotonic()
+        mark = self.story_mark or self._model_calls()
+        self._story_run(step.get("do", []))
+        self.story_done += 1
+        self.story_mark = None
+        n, tokens, ms = (a - b for a, b in zip(self._model_calls(), mark))
+        self.story_last = {"seconds": round(ms / 1000, 1), "calls": n, "tokens": tokens,
+                           "diverged": self._story_diverged(step.get("expect", {}))}
+        return self.story_state()
+
+    def _story_run(self, actions):
         try:
-            for action in step.get("do", []):
+            for action in actions:
                 self._story_do(action)
         except (openai.APIError, StructuredOutputError) as e:
-            raise ValueError(f"模型这一步调用失败（{type(e).__name__}: {e}）。再点一次「下一步」重试，已经做完的动作会跳过。") from e
+            raise ValueError(f"模型这一步调用失败（{type(e).__name__}: {e}）。再点一次重试，已经做完的动作会跳过。") from e
         except (PermissionDenied, ValueError, KeyError, StopIteration) as e:
             raise ValueError(f"这一步没能执行（{type(e).__name__}: {e}）。前面的走向和剧本不同（自己操作过，或真实模型判断不同），"
                              "可以在目录里点这一章，从头快进到它的开头重新看。") from e
-        self.story_done += 1
-        n, tokens = (a - b for a, b in zip(self._model_calls(), calls))
-        self.story_last = {"seconds": round(time.monotonic() - started, 1), "calls": n, "tokens": tokens,
-                           "diverged": self._story_diverged(step.get("expect", {}))}
-        return self.story_state()
 
     def story_goto(self, index):
         """从头重建，再执行到第 index 步（目录里点某一步 / 某一章）。
@@ -407,11 +422,11 @@ class Api:
         return self.story_state()
 
     def _model_calls(self):
-        """本会话到此刻的大模型调用次数与 token 数（计量文件里 kind=llm 的记录；回放时是录制下来的输出）。"""
+        """本会话到此刻的大模型调用次数、token 数与模型用时（计量文件里 kind=llm 的记录；回放时是录制下来的输出）。"""
         path = Path(self.app.meter.path)
         records = [json.loads(line) for line in path.open(encoding="utf-8")] if path.exists() else []
         llm = [r for r in records if r["kind"] == "llm"]
-        return len(llm), sum(r["input_tokens"] + r["output_tokens"] for r in llm)
+        return len(llm), sum(r["input_tokens"] + r["output_tokens"] for r in llm), sum(r["latency_ms"] for r in llm)
 
     def _story_diverged(self, expect):
         """这一步剧本预期的会话状态没出现时，如实说出真实运行跑到了哪里（真实模型的判断可能和录制时不同）。"""
@@ -455,6 +470,42 @@ class Api:
             if req.status == "draft":
                 self._call("POST", "/api/accept", {"req_id": req.id, "by": req.assigned_rd})
 
+    def _story_guide(self):
+        """这一步还没做的第一个人工动作：谁来做（who）、点哪个按钮（target）、「演示自动填入」填什么（arg）、在哪个工作面（view）。
+        都做完了返回 None。只读，不推进；前提没出现（真实模型走向不同）时 view 为空，由「替我做这一步」报出原因。"""
+        said = {}
+        for a in demo_story()["steps"][self.story_done].get("do", []):
+            try:
+                if "say" in a:
+                    s = self.story_handles[a["say"]]
+                    k = s["said"] + said.get(a["say"], 0)
+                    said[a["say"]] = said.get(a["say"], 0) + 1
+                    session = next(x for x in self.app.sessions() if x.id == s["session"])
+                    if sum(t.speaker == "customer" for t in session.turns) > k:
+                        continue
+                    line = next(r for r in demo_routes() if r["id"] == s["route"])["lines"][k]
+                    return {"target": a.get("press", "say"), "who": session.customer_id, "arg": line,
+                            "view": {"page": "customer", "focus": session.id, "who": session.customer_id}}
+                if "decline" in a or "accept" in a:
+                    req = self._story_req(a.get("decline") or a["accept"])
+                    if req.status != "draft":
+                        continue
+                    arg = json.dumps({"product": a["product"], "reason": a["reason"]}, ensure_ascii=False) if "decline" in a else None
+                    return {"target": "decline" if "decline" in a else "sign:accept_requirement", "who": req.assigned_rd, "arg": arg,
+                            "view": {"page": "rd", "focus": req.id, "who": req.assigned_rd}}
+                if "scope" in a or "merge" in a:
+                    family = "scope_update" if "scope" in a else "opportunity"
+                    q = next((q for q in reversed(self.app.bus.list(status=None, family=family))
+                              if "merge" in a or q.refs.get("product_id") == a["scope"]), None)
+                    if q is not None and q.status != "open":
+                        continue
+                    focus = (q.refs.get("requirement_id") or q.refs.get("requirement_ids", "").split(",")[0]) if q else None
+                    return {"target": "scope" if "scope" in a else "merge", "who": "pm:P01", "arg": a.get("note") or a["merge"],
+                            "view": {"page": "pm", "focus": focus, "who": "pm:P01"}}
+            except (KeyError, StopIteration):
+                return {"target": next(iter(a)), "who": None, "arg": None, "view": None}
+        return None
+
     def _story_req(self, handle):
         sid = self.story_handles[handle]["session"]
         return next(r for r in self.app.requirements("rd:R01") if sid in r.session_ids and r.status != "merged")
@@ -494,6 +545,8 @@ class Api:
             return {"run_id": self.app.run_id}
         if method == "GET" and path == "/api/demo/story":
             return self.story_state()
+        if method == "POST" and path == "/api/demo/story/begin":
+            return self.story_begin()
         if method == "POST" and path == "/api/demo/story/next":
             return self.story_next()
         if method == "POST" and path == "/api/demo/story/goto":

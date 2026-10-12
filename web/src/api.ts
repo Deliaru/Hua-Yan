@@ -112,8 +112,9 @@ export const api = {
   demoRoutes: () => call<DemoRoute[]>("demo/routes"),
   openRoute: (route: string, customer?: string) => call<{ session_id: string; customer_id: string }>("demo/open", { route, customer }),
   routeNext: (session: string) => call<{ text: string | null }>(`demo/route-next?${q({ session })}`),
-  // V6-5.5 演示讲解：服务端按 demo/story.yaml 真的执行每一步
+  // V6-5.5 演示讲解：服务端按 demo/story.yaml 真的执行每一步；begin 只执行开场，其余由看的人在工作面上点，next 收尾（或替看的人做完）
   story: () => call<StoryState>("demo/story"),
+  storyBegin: () => call<StoryState>("demo/story/begin", {}),
   storyNext: () => call<StoryState>("demo/story/next", {}),
   storyGoto: (index: number) => call<StoryState>("demo/story/goto", { index }),
   demoLedger: () => call<LedgerItem[]>("demo/ledger"),

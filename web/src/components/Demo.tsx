@@ -1,18 +1,22 @@
 // V6-5.5 演示讲解栏：进入后替换左侧导航，中、右两栏仍是真实的四个子工作面。
-// 每点一次「下一步」，服务端按 demo/story.yaml 真的执行这一步（与浏览器里点按钮同一入口），再切到该看的工作面与对象。
-// 讲解五段：发生了什么 / 过去怎么做 / 解放了谁的什么 / ↑ 降本增效 / ★ 体验与影响力。账本只放实测；估算卡的参数由企业自填，标「估算」。
+// 每点一次「下一步」，服务端按 demo/story.yaml 先执行开场（客户来了、说出第一句）；要人做的动作（替客户回答、签字、接单）
+// 切到对应工作面，由看的人亲手点呼吸高亮的按钮（或「替我做这一步」），做完讲解栏自动收尾，切到该看的工作面与对象。
+// 讲解五段：发生了什么 / 过去怎么做 / 解放了谁的什么 / ↑ 降本增效 / ★ 体验与影响力；讲完可引导点需求轨迹的某个角色格（look）。
+// 账本只放实测；估算卡的参数由企业自填，标「估算」。
 // 三种运行方式同一份讲解：录制回放（真实模型的录制输出）、接入自己的模型（每一步真实调用，判断可能和剧本不同，如实标出）、本地离线。
 // 「自己试」页签：用自己的话当客户、让研发的 Agent 改草稿，需要接入自己的模型。
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { useApp, useData } from "../ctx";
-import type { RunMode, StoryState } from "../types";
+import { useApp, useData, useLabels } from "../ctx";
+import type { RunMode, StoryGuide, StoryState } from "../types";
+import { NO_GUIDE, publish } from "./Guide";
 import { Close } from "./Icons";
 
 type View = StoryState["view"];
 type Tab = "day" | "route" | "try";
-const MONEY = "#248a3d";
+const GAIN = "#248a3d";
 const FAME = "#5856d6";
+const LOOK = "#0a6cdf";
 const WORKBENCHES = [["customer", "客户"], ["sales", "业务员"], ["pm", "产品经理"], ["rd", "研发"]] as const;
 
 export function DemoPanel({ onExit, onView, side }: {
@@ -20,23 +24,41 @@ export function DemoPanel({ onExit, onView, side }: {
   onView: (v: View, rebuilt: boolean) => Promise<void>;
   side: (el: HTMLElement | null) => void;
 }) {
-  const { fail, go, meta } = useApp();
+  const { fail, go, meta, version } = useApp();
   const [story, setStory] = useState<StoryState | null>(null);
   const [mode, setModeState] = useState<Tab>(() => (localStorage.getItem("huayan-demo-tab") as Tab | null) ?? "day");
   const setMode = (t: Tab) => { localStorage.setItem("huayan-demo-tab", t); setModeState(t); };
   const [running, setRunning] = useState<string | null>(null);
   const live = meta.mode.kind === "byok";
-  // 进入（或刷新）时回到当前这一步该看的工作面；「自己试」时留在看的人自己打开的地方
-  useEffect(() => { api.story().then((s) => { setStory(s); if (s.view && mode !== "try") onView(s.view, false); }, fail); }, []);
+  // 等人操作时看要做的那个工作面，否则看这一步讲解对应的工作面
+  const viewOf = (s: StoryState) => (s.begun && s.guide ? s.guide.view : s.view);
+  // 进入（或刷新）时回到该看的工作面；「自己试」时留在看的人自己打开的地方
+  useEffect(() => { api.story().then((s) => { setStory(s); const v = viewOf(s); if (v && mode !== "try") onView(v, false); }, fail); }, []);
+  // 讲解栏指向工作面上的按钮：等人操作时指要点的按钮；讲完这一步指需求轨迹上该看的角色格（点过即熄）
+  const g = story?.begun ? story.guide : null;
+  const look = story && !story.begun && story.done ? story.steps[story.done - 1].look : undefined;
+  useEffect(() => publish(g ? { who: g.who, target: g.target, arg: g.arg, customer: null } : look ? { ...NO_GUIDE, target: `route:${look.role}` } : NO_GUIDE),
+            [g?.target, g?.who, g?.arg, look?.role, story?.done]);
+  useEffect(() => () => publish(NO_GUIDE), []);
+  // 看的人在工作面上做了一步：还有下一个动作就切过去指给他；都做完了就收尾，切到讲解
+  useEffect(() => {
+    if (!story?.begun || running) return;
+    api.story().then((s) => {
+      if (s.begun && !s.guide) return finish();
+      if (s.guide?.view && guideKey(s.guide) !== guideKey(story.guide)) onView(s.guide.view, false);
+      setStory(s);
+    }, fail);
+  }, [version]);
   if (!story) return null;
 
   const { steps, chapters, done } = story;
   const act = (label: string, p: Promise<StoryState>, rebuilt: boolean) => {
     setRunning(label);
-    p.then(async (s) => { setStory(s); await onView(s.view, rebuilt); }).catch(fail).finally(() => setRunning(null));
+    p.then(async (s) => { setStory(s); await onView(viewOf(s), rebuilt); }).catch(fail).finally(() => setRunning(null));
   };
   const goto = (i: number) => act(live ? `正在用你的模型补跑到第 ${i} 步……` : `正在从头执行到第 ${i} 步……`, api.storyGoto(i), true);
-  const next = () => act(live ? "正在用你的模型真实执行……" : "正在执行……", api.storyNext(), false);
+  const next = () => act(live ? "正在用你的模型真实执行……" : "正在执行……", api.storyBegin(), false);
+  function finish() { act(live ? "正在用你的模型真实执行……" : "正在执行……", api.storyNext(), false); }
   const step = done ? steps[done - 1] : null;
   const upcoming = steps[done];
   const chapterOf = (id: string) => chapters.find((c) => c.id === id)!;
@@ -59,27 +81,37 @@ export function DemoPanel({ onExit, onView, side }: {
       <Ledger />
 
       {mode === "try" ? <Try live={live} offline={meta.status.gateway_mock} /> : <>
-      {story.last?.diverged && step && (
+      {story.last?.diverged && step && !story.begun && (
         <section className="rounded-[10px] px-3.5 py-3 text-[13px] leading-[21px] attn-edge">
           <p className="font-semibold text-attn-ink">真实运行和剧本不同</p>
           <p className="mt-0.5">{story.last.diverged}。</p>
           <p className="mt-1 text-ink-2">这是你的模型真实判断的结果。可以在右边的工作面接着操作（比如替客户回答觉的追问）再点「下一步」；也可以在目录里点这一章重看。下面的讲解按剧本写。</p>
         </section>
       )}
-      {step ? (
+      {story.begun && upcoming ? (
         <section className="group flex flex-col gap-3 px-4 py-4">
-          <p className="eyebrow">第 {done} / {steps.length} 步 · {step.chapter === "开场" || step.chapter === "收尾" ? step.chapter : `路径 ${step.chapter}`}：{chapterOf(step.chapter).title}</p>
+          <p className="eyebrow">第 {done + 1} / {steps.length} 步 · {where(upcoming.chapter)}：{chapterOf(upcoming.chapter).title}</p>
+          <h3 className="text-[16px] font-semibold leading-6">{upcoming.title}</h3>
+          <GuideCard g={story.guide} />
+          <p className="text-[12px] leading-[18px] text-ink-2">要点的按钮在右边工作面上呼吸高亮，做完讲解会自动接上。
+            {meta.status.replay && "录制回放里请用「演示自动填入」的原文提交，改写过的内容不在录制里。"}</p>
+        </section>
+      ) : step ? (
+        <section className="group flex flex-col gap-3 px-4 py-4">
+          <p className="eyebrow">第 {done} / {steps.length} 步 · {where(step.chapter)}：{chapterOf(step.chapter).title}</p>
           <h3 className="text-[16px] font-semibold leading-6">{step.title}</h3>
           <Part label="发生了什么">{step.happened}</Part>
           {step.before && <Part label="过去怎么做" muted>{step.before}</Part>}
           {step.freed && <Part label="解放了谁的什么" strong>{step.freed}</Part>}
-          {step.money && <Value mark="↑" label="降本增效" color={MONEY}>{step.money}</Value>}
+          {step.money && <Value mark="↑" label="增效" color={GAIN}>{step.money}</Value>}
           {step.fame && <Value mark="★" label="体验与影响力" color={FAME}>{step.fame}</Value>}
+          {step.look && <Value mark="›" label="顺手看看" color={LOOK}>{step.look.text}</Value>}
         </section>
       ) : (
         <section className="group flex flex-col gap-2.5 px-4 py-4 text-[13.5px] leading-[22px]">
           <h3 className="text-[16px] font-semibold leading-6">一家企业的一个上午</h3>
-          <p>左边讲解，右边是真实的工作面。每点一次按钮，系统都会<b>真的执行</b>这一步：客户发言、觉提出决策、Agent 起草、人签字——然后切到该看的人和那份需求。</p>
+          <p>左边讲解，右边是真实的工作面。每一步都<b>真的执行</b>：客户发言、觉提出决策、Agent 起草、人签字。轮到人做的事（替客户回答、签字、接单）由你在工作面上亲手点，要点的按钮会<b>呼吸高亮</b>。</p>
+          <p className="text-ink-2">工作面顶部的<b className="text-ink">需求轨迹</b>四格都能点：切到那个角色，看他在这件事里能做什么、要做什么、正在做什么。</p>
           <p className="text-ink-2"><b className="text-ink">一个上午</b>：从头到尾连着看 6 个需求。<b className="text-ink">按路径看</b>：在目录里直接点 A / B / C / C′ / D 某一条。</p>
           <p className="text-[12px] text-ink-3">开始时会清空你这个浏览器里的演示进度，从 9:00 重新开始（其他人不受影响）。</p>
         </section>
@@ -87,7 +119,11 @@ export function DemoPanel({ onExit, onView, side }: {
 
       <div className="flex gap-2">
         {done > 1 && <button className="btn btn-plain !h-10 !rounded-[9px]" disabled={!!running} onClick={() => goto(done - 1)}>上一步</button>}
-        {upcoming ? (
+        {story.begun ? (
+          <button className="btn btn-plain !h-10 min-w-0 flex-1 !rounded-[9px]" disabled={!!running} onClick={finish}>
+            <span className="truncate">{running ?? "替我做这一步"}</span>
+          </button>
+        ) : upcoming ? (
           <button className="btn btn-primary !h-10 min-w-0 flex-1 !rounded-[9px] !text-[14px]" disabled={!!running}
                   onClick={() => (done ? next() : goto(1))}>
             <span className="truncate">{running ?? (done ? `下一步：${upcoming.title}` : "开始")}</span>
@@ -97,12 +133,12 @@ export function DemoPanel({ onExit, onView, side }: {
         )}
       </div>
       {running && live && <p className="-mt-2 text-[12px] leading-[18px] text-ink-2">每一步约 5 秒到 1 分多钟；左上角的过程面板能看到每一次模型调用与 Agent 的每一步。</p>}
-      {!running && story.last && story.last.calls > 0 && (
+      {!running && !story.begun && story.last && story.last.calls > 0 && (
         <p className="-mt-2 text-[12px] leading-[18px] text-ink-2">
-          {live ? `这一步调用你的模型 ${story.last.calls} 次 · ${story.last.tokens.toLocaleString()} token · ${story.last.seconds} 秒`
+          {live ? `这一步调用你的模型 ${story.last.calls} 次 · ${story.last.tokens.toLocaleString()} token · 模型用时 ${story.last.seconds} 秒`
             : meta.status.replay ? `这一步有 ${story.last.calls} 次模型输出，来自录制（${meta.mode.llm_model}）` : `这一步调用模型 ${story.last.calls} 次`}</p>
       )}
-      {done > 0 && <p className="-mt-2 text-[12px] leading-[18px] text-ink-3">也可以不点按钮，直接在右边的工作面上自己操作；讲解栏不锁步骤。</p>}
+      {done > 0 && !story.begun && <p className="-mt-2 text-[12px] leading-[18px] text-ink-3">也可以不按讲解，直接在右边的工作面上自己操作；讲解栏不锁步骤。</p>}
 
       {step?.chapter === "收尾" && <><Estimator /><Fame /><Landing /></>}
 
@@ -114,7 +150,7 @@ export function DemoPanel({ onExit, onView, side }: {
               <div key={i}>
                 {(i === 0 || steps[i - 1].chapter !== s.chapter) && (
                   <p className="px-4 pb-0.5 pt-2 text-[11px] font-semibold tracking-[.04em] text-ink-3">
-                    {s.chapter === "开场" || s.chapter === "收尾" ? s.chapter : `路径 ${s.chapter}`} · {chapterOf(s.chapter).title}</p>
+                    {where(s.chapter)} · {chapterOf(s.chapter).title}</p>
                 )}
                 <button disabled={!!running} onClick={() => goto(i + 1)}
                         className={`flex w-full items-start gap-2 px-4 py-1 text-left text-[13px] leading-5 hover:bg-black/[.03] ${i + 1 === done ? "font-semibold text-accent" : i < done ? "text-ink-2" : ""}`}>
@@ -164,6 +200,38 @@ export function DemoPanel({ onExit, onView, side }: {
   );
 }
 
+const where = (chapter: string) => (chapter === "开场" || chapter === "收尾" ? chapter : `路径 ${chapter}`);
+const guideKey = (g: StoryGuide | null) => (g ? `${g.target}|${g.who}|${g.view?.focus}` : "");
+
+// 轮到看的人做的那一步：你现在是谁、点哪个按钮（与工作面上呼吸高亮的按钮一致）
+function GuideCard({ g }: { g: StoryGuide | null }) {
+  const L = useLabels();
+  if (!g?.view) return (
+    <div className="rounded-[9px] px-3 py-2.5 text-[13.5px] leading-[22px] attn-edge">
+      这一步的前提在这次运行里没有出现（真实运行和剧本不同）。点「替我做这一步」看具体原因，或在目录里点这一章重看。</div>
+  );
+  const name = L.name(g.who!);
+  const [role, todo] = ((): [string, string] => {
+    switch (g.target) {
+      case "say": return [`客户 ${name}`, `点对话框底部的「演示自动填入」，再点「发送」。客户这句说：「${g.arg}」`];
+      case "quote": return [`客户 ${name}`, "客户想买了：点对话框下方的「我要报价」。"];
+      case "decline": {
+        const d = JSON.parse(g.arg!) as { product: string };
+        return [`研发 ${name}`, `在「待你签字」里点「不立项：已有产品适用」，再点「演示自动填入」（选${L.product(d.product)}、填好判断依据），最后点「不立项：已有产品适用」签字。`];
+      }
+      case "scope": return [`产品经理 ${name}`, "在「签字：扩展适用范围」里点「演示自动填入」写好依据，再点「扩展适用范围」签字。"];
+      case "merge": return [`产品经理 ${name}`, "在「签字：作为一个课题交研发」里点「演示自动填入」写好商业判断，再点「合并为一个课题」签字。"];
+      default: return [`研发 ${name}`, "在「待你签字」里点「接单立项」。"];
+    }
+  })();
+  return (
+    <div className="rounded-[9px] px-3 py-2.5 attn-edge">
+      <p className="text-[12px] font-semibold text-attn-ink">轮到你 · 你现在是{role}</p>
+      <p className="mt-0.5 text-[13.5px] leading-[22px]">{todo}</p>
+    </div>
+  );
+}
+
 function Part({ label, children, muted, strong }: { label: string; children: React.ReactNode; muted?: boolean; strong?: boolean }) {
   return (
     <div>
@@ -202,7 +270,7 @@ function Ledger() {
             <p className="flex items-baseline gap-1">
               <span className="text-[22px] font-semibold leading-7 tabular-nums">{x.value}</span>
               {x.base != null && <span className="text-[12px] text-ink-3">/ 传统 {x.base}</span>}
-              {delta[x.label] > 0 ? <span className="anim-fade text-[11.5px] font-semibold" style={{ color: MONEY }}>
+              {delta[x.label] > 0 ? <span className="anim-fade text-[11.5px] font-semibold" style={{ color: GAIN }}>
                 +{delta[x.label]}</span> : null}
             </p>
             <p className="text-[11.5px] leading-4 text-ink-2">{x.label}</p>
@@ -250,9 +318,9 @@ function Estimator() {
         <div className="my-1 h-px bg-sep" />
         {field("scopes", "可选：每年扩适用范围次数", "次")}
         {field("sales", "可选：每扩一次带来的年销售额", "万元")}
-        <div className="mt-1 rounded-[9px] px-3 py-2.5 text-[13.5px] leading-[23px]" style={{ background: `${MONEY}12` }}>
+        <div className="mt-1 rounded-[9px] px-3 py-2.5 text-[13.5px] leading-[23px]" style={{ background: `${GAIN}12` }}>
           <p>每月少进研发约 <b>{Math.round(saved)}</b> 张单，释放研发前期工时约 <b>{Math.round(hours)}</b> 小时（约 <b>{(hours / 160).toFixed(1)}</b> 人的全职时间）</p>
-          <p>折合约 <b style={{ color: MONEY }}>{yuan.toFixed(1)} 万元 / 年</b>{sales > 0 && <>；老产品扩范围新增销售约 <b style={{ color: MONEY }}>{sales} 万元 / 年</b></>}</p>
+          <p>折合约 <b style={{ color: GAIN }}>{yuan.toFixed(1)} 万元 / 年</b>{sales > 0 && <>；老产品扩范围新增销售约 <b style={{ color: GAIN }}>{sales} 万元 / 年</b></>}</p>
         </div>
         <p className="text-[11.5px] leading-[18px] text-ink-3">比例来自 6 个模拟需求的结构对照（见「评测」页岗位对照），默认参数只是示例，金额全部由上面自填的参数算出；需要试点验证。</p>
       </div>
@@ -291,7 +359,7 @@ function Landing() {
         <p><b>不重做 RAG。</b>企业已有的向量知识库接在唯一检索入口 <code className="text-[12px]">KnowledgeBase.search</code> 的排序一步后面；权限、审计、引用记分照常生效。</p>
         <p><b>试样结果回流。</b>ELN 里的试样结果经门面的试样录入回到需求单与知识库。</p>
         <p><b>嵌入钉钉 / 飞书。</b>四个工作面就是四个角色在现有协作工具里的入口。</p>
-        <Value mark="↑" label="降本增效" color={MONEY}>不推翻已有 IT 投入；企业的 RAG 越强，化言越强。</Value>
+        <Value mark="↑" label="增效" color={GAIN}>不推翻已有 IT 投入；企业的 RAG 越强，化言越强。</Value>
         <p className="text-[11.5px] leading-[18px] text-ink-3">以上未实际对接，给出的是接入路径与代码接缝（与 README 第 6 节一致）。</p>
       </div>
     </section>

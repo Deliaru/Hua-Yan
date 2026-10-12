@@ -354,7 +354,7 @@ export function Eval() {
           ))}
         </nav>
         <p className="mt-4 px-[18px] text-[12px] leading-[18px] text-ink-3">
-          数字取自各报告的 metrics.json，同一种子重跑逐字节一致；结论与限制以各报告 README.md 为准。
+          数字取自各报告的 metrics.json，同一种子重跑逐字节一致；结论与限制以各报告 README.md 为准。评测按换入两个公开产品（TF-231A、TF-288B）之前的模拟产品表计算；这两个真实产品是后期找到、接入试用的，只改了产品种子，演示路线不变。
         </p>
       </Side>
       <div className="mx-auto flex max-w-[960px] flex-col gap-14 px-8 pb-24 pt-7">

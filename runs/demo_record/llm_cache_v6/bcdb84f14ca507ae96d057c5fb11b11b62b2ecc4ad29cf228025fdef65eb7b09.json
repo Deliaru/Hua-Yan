@@ -1,1 +1,1 @@
-{"content":"```json\n{\n  \"answers\": {\n    \"match\": {\n      \"HY-LV205\": 0.99,\n      \"none\": 0.01\n    }\n  }\n}\n```","tool_calls":[],"usage":{"input_tokens":443,"output_tokens":52},"latency_ms":7993.8250000013795,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}
+{"content":"```json\n{\"answers\": {\"match\": {\"HY-LV205\": 0.98, \"none\": 0.02}}}\n```","tool_calls":[],"usage":{"input_tokens":443,"output_tokens":34},"latency_ms":4259.918051997374,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

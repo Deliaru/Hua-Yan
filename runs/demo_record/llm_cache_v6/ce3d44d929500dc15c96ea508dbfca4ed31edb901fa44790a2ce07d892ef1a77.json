@@ -1,1 +1,0 @@
-{"content":null,"tool_calls":[{"call_id":"search_knowledge-1791786468698094413-1776","name":"search_knowledge","arguments":{"query":"HY-LV101 HY-LV120 HY-LV205","kind":"sheet"}}],"usage":{"input_tokens":4987,"output_tokens":39},"latency_ms":4010.0763690006715,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}

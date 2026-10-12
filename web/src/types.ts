@@ -107,13 +107,18 @@ export interface DemoRoute { id: string; title: string; customer: string; lines:
 export interface StoryStep {
   chapter: string; title: string; do?: object[]; view: { page: string };
   happened: string; before?: string; freed?: string; money?: string; fame?: string;
+  look?: { role: string; text: string };         // 讲完后引导点需求轨迹上的哪个角色格
 }
+// 这一步还没做的人工动作：谁来做、点哪个按钮、「演示自动填入」填什么、在哪个工作面（前提没出现时为空）
+export interface StoryGuide { target: string; who: string | null; arg: string | null; view: { page: string; focus: string | null; who: string | null } | null }
 export interface StoryState {
   chapters: { id: string; title: string; needs?: string[] }[]; steps: StoryStep[];
   done: number;                                  // 已执行到第几步（0 = 还没开始）
   view: { page: string; focus: string | null; who: string | null } | null;
   // 上一步：耗时、大模型调用次数与 token（回放时是录制下来的输出）、真实运行和剧本不同之处
   last: { seconds: number; calls: number; tokens: number; diverged: string | null } | null;
+  begun: boolean;                                // 下一步已开始，等看的人在工作面上操作
+  guide: StoryGuide | null;                      // begun 时还没做的第一个人工动作；做完为空，由讲解栏收尾
 }
 export interface LedgerItem { label: string; value: number; base?: number; note: string }
 

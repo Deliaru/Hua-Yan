@@ -1,1 +1,1 @@
-{"content":"```json\n{\"answers\": {\"disclose\": {\"product\": 0.2, \"product_usage\": 0.8}}}\n```","tool_calls":[],"usage":{"input_tokens":364,"output_tokens":30},"latency_ms":13093.133293001301,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}
+{"content":"```json\n{\"answers\": {\"disclose\": {\"product\": 0.1, \"product_usage\": 0.9}}}\n```","tool_calls":[],"usage":{"input_tokens":364,"output_tokens":30},"latency_ms":7611.986230000184,"model":"gemini-3.8-flash-n","tier":"fast","cost":null,"fallback_used":false}
