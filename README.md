@@ -1138,11 +1138,19 @@ flowchart LR
 
 ### 16.4 团队
 
-| 成员 | 分工 | 个人简历 |
-|---|---|---|
-| **李鸿宗** | 主要开发者 | [简历](docs/assets/team/li-hongzong-resume.jpg) |
-| **奚坚明** | 主要开发者 | [简历](docs/assets/team/xi-jianming-resume.png) |
-| **奚坚超** | 分析协助 | — |
+| 成员 | 分工 |
+|---|---|
+| **李鸿宗** | 主要开发者 |
+| **奚坚明** | 主要开发者 |
+| **奚坚超** | 分析协助 |
+
+**李鸿宗 · 主要开发者**
+
+<img src="docs/assets/team/li-hongzong-resume.jpg" alt="李鸿宗个人简历" width="100%">
+
+**奚坚明 · 主要开发者**
+
+<img src="docs/assets/team/xi-jianming-resume.png" alt="奚坚明个人简历" width="100%">
 
 ---
 

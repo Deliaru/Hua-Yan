@@ -558,11 +558,19 @@ Demo 里的「放到贵司算一算」估算卡，由事业部填写自己的参
 
 **团队**
 
-| 成员 | 分工 | 个人简历 |
-|---|---|---|
-| **李鸿宗** | 主要开发者 | [简历](assets/team/li-hongzong-resume.jpg) |
-| **奚坚明** | 主要开发者 | [简历](assets/team/xi-jianming-resume.png) |
-| **奚坚超** | 分析协助 | — |
+| 成员 | 分工 |
+|---|---|
+| **李鸿宗** | 主要开发者 |
+| **奚坚明** | 主要开发者 |
+| **奚坚超** | 分析协助 |
+
+**李鸿宗 · 主要开发者**
+
+<img src="assets/team/li-hongzong-resume.jpg" alt="李鸿宗个人简历" width="100%">
+
+**奚坚明 · 主要开发者**
+
+<img src="assets/team/xi-jianming-resume.png" alt="奚坚明个人简历" width="100%">
 
 ---
 
