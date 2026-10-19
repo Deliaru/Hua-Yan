@@ -1,0 +1,31 @@
+placeholder: true
+source: "模拟：录制的编译提议，对应 seeds/rag/ 的模拟资料；由 scripts/compile_qi.py --proposals 读入，代替模型调用"
+items:
+  - title: 锦氨色花要问染浴 pH（模拟）
+    text: （模拟）锦纶氨纶色花与染浴 pH 偏离弱酸性直接相关，判断此类色花前必须问清染浴 pH。
+    evidence: [{doc_id: RPT-031, span: p3, quote: 判断此类色花前必须问清染浴 pH}]
+    phenomenon: 色花
+    product: HY-LV205
+    form: ask
+    slot: bath_ph
+  - title: HY-LV205 适用锦氨经轴染色（模拟）
+    text: （模拟）HY-LV205 在经轴染色机上对锦纶氨纶弹力面料匀染良好，适用于锦纶氨纶的经轴染色。
+    evidence: [{doc_id: RPT-044, span: p3, quote: HY-LV205 适用于锦纶氨纶的经轴染色}]
+    phenomenon: 色花
+    product: HY-LV205
+    form: applicable
+    conditions: [锦纶氨纶, 经轴染色机]
+  - title: HY-LV205 产品页适用范围（模拟）
+    text: （模拟）HY-LV205 用于锦纶及锦纶氨纶，适合溢流染色机和卷染机。
+    evidence: [{doc_id: LV205, span: p2, quote: 适合溢流染色机和卷染机}]
+    phenomenon: 色花
+    product: HY-LV205
+    form: applicable
+    conditions: [锦纶, 锦纶氨纶, 溢流染色机, 卷染机]
+  - title: 纯锦纶经轴同样适用（模拟，引文与原文不符，用于展示校验）
+    text: （模拟）HY-LV205 同样适用于纯锦纶的经轴染色。
+    evidence: [{doc_id: RPT-044, span: p4, quote: 纯锦纶在经轴染色机上同样适用}]
+    phenomenon: 色花
+    product: HY-LV205
+    form: applicable
+    conditions: [锦纶, 经轴染色机]

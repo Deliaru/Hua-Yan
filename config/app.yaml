@@ -16,5 +16,5 @@ points: {used: 1, shared: 2, cited: 1, contributed: 5, trial_pass: 5, product_re
 customer_sales: {"customer:C01": "sales:S01", "customer:C02": "sales:S01", "customer:C03": "sales:S01", "customer:C04": "sales:S02"}
 
 # v7：来源与有效状态；null 使用本次运行目录，续跑使用同一运行。
-sources: []
+sources: [{name: 公开资料（模拟）, kind: public, root: seeds/rag/public}, {name: 研发报告（模拟）, kind: internal, root: seeds/rag/internal}]
 qi_state: null

@@ -26,6 +26,8 @@ from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import publish, select_asks
 from huayan.jue.records import load_records
 from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
+from huayan.ingest.compile import recheck
+from huayan.ingest.folder import FolderSource
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder
 from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
@@ -77,6 +79,8 @@ class HuayanApp:
         app.kb = KnowledgeBase.from_seeds(app.seeds, app.events, app.audit,
             state_path=app.config.get("qi_state") or app.run_dir / "qi_state.json")
         app._load_public(Path(app.config["seeds_dir"]) / "public.yaml")
+        app.kb.sources = [FolderSource(s["name"], s["kind"], s["root"], s.get("level"), app.kb._doc_levels)
+                          for s in app.config["sources"]]
         if byok:
             app.gateway = byok.gateway(app.meter)
             app.system1 = byok.system1(app.gateway, app.meter)
@@ -1228,6 +1232,21 @@ class HuayanApp:
         self.events.append("share_requested", by, {"ku_id": ku_id, "owner": holder(unit),
                                                    "product_id": unit.product_id})
         return self.scan()
+
+    def set_doc_level(self, doc_id, level, by):
+        """人给内部文档定密级（片段密级表）；之后编译出的结论按新密级定级。"""
+        self._actor(by, {"rd", "supervisor"})
+        if not any(s.kind == "internal" and doc_id in s.list_docs() for s in self.kb.sources):
+            raise ValueError(f"内部来源里没有文档 {doc_id}")
+        self.kb._doc_levels[doc_id] = level
+        self.kb._save()
+
+    def recheck_evidence(self):
+        """重取依据比指纹：变了的结论待复核、依赖它的能力挂起，由觉提出 qi_review。"""
+        changed = recheck(self.kb, self.kb.sources)
+        self._invalidate_capabilities()
+        self.scan()
+        return changed
 
     def revoke_capability(self, cap_id, by):
         self._actor(by, {"rd"})

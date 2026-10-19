@@ -227,7 +227,9 @@ def test_translation_release_and_ownership(tmp_path):
         item["owner"] = swap.get(item["owner"], item["owner"])
     (seeds_dir / "translations.yaml").write_text(yaml.safe_dump(translations, allow_unicode=True), encoding="utf-8")
     path_r02 = tmp_path / "app_r02.yaml"
-    path_r02.write_text(yaml.safe_dump({**config, "seeds_dir": str(seeds_dir)}), encoding="utf-8")
+    rag = seeds_dir / "rag"                            # Q4 用夹具 rag/ 的临时副本
+    sources = [{"name": kind, "kind": kind, "root": str(rag / kind)} for kind in ("public", "internal", "external")]
+    path_r02.write_text(yaml.safe_dump({**config, "seeds_dir": str(seeds_dir), "sources": sources}), encoding="utf-8")
     app = HuayanApp.build(str(path_r02))
     r01, r02 = app.actors["rd:R01"], app.actors["rd:R02"]
     tr5 = "ku:translation:tr:5"                       # 现归 R01：「锦纶氨纶」的转化知识
@@ -270,3 +272,27 @@ def test_translation_release_and_ownership(tmp_path):
     with pytest.raises(PermissionDenied):
         app.kb.get("ku:formula:T-205", r02)
     assert app.kb.get(tr5, r02) and app.kb.get("ku:formula:T-205", r01)
+
+    # Q4：编译。候选不进任何更低层的视图、不经 search 读出；只有外部依据的不能确认；改原文 → 挂起与复核。
+    from huayan.ingest.compile import Proposals, admit
+    recorded = yaml.safe_load((rag / "proposals.yaml").read_text(encoding="utf-8"))["items"]
+    views = {a: app.kb.view(app.actors[a]).model_dump() for a in ("customer:C01", "sales:S01", "pm:P01", "rd:R01")}
+    report = admit(Proposals(items=recorded).items, app.kb.sources, app.kb)
+    assert report["dropped"] == ["引文不符（模拟）"] and len(report["admitted"]) == 3
+    ask, situation, external = report["admitted"]
+    assert ask["level"] == situation["level"] == 3 and external["level"] == 0
+    assert all(app.kb.view(app.actors[a]).model_dump() == v for a, v in views.items())
+    for viewer in ("customer:C01", "rd:R01"):
+        assert not any(h.ku.kind == "claim" and h.ku.status == "candidate"
+                       for h in app.kb.search("无APEO 涤纶 气流 升温", app.actors[viewer]))
+    with pytest.raises(ValueError, match="外部"):
+        app.kb.confirm([external["ku_id"]], "rd:R01")
+    app.kb.confirm([ask["ku_id"]], "rd:R01")
+    assert app.kb._caps[ask["capability_id"]].status == "active"
+    assert "constraint" in next(p for p in app.kb.view(r01).phenomena if p.id == "color_unlevel").required_slots
+    report_path = rag / "internal" / "RPT-T1.md"
+    report_path.write_text(report_path.read_text(encoding="utf-8").replace("无APEO", "低泡"), encoding="utf-8")
+    assert app.recheck_evidence() == [ask["ku_id"]]
+    assert app.kb._caps[ask["capability_id"]].status == "suspended"
+    review = next(q for q in app.bus.list(family="qi_review") if q.refs["ku_id"] == ask["ku_id"])
+    assert review.signer_id == "rd:R01"

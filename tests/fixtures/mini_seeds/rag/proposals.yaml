@@ -1,0 +1,29 @@
+placeholder: true
+source: "测试夹具：录制的编译提议，模拟数据"
+items:
+  - title: 色花要问环保要求（模拟）
+    text: （模拟）判断色花前必须问清是否要求无APEO。
+    evidence: [{doc_id: RPT-T1, span: p2, quote: 判断前必须问清是否要求无APEO}]
+    phenomenon: 色花
+    product: T-205
+    form: ask
+    slot: constraint
+  - title: T-205 适用涤纶气流（模拟）
+    text: （模拟）T-205 适用于涤纶的气流染色。
+    evidence: [{doc_id: RPT-T2, span: p2, quote: 适用于涤纶的气流染色}]
+    phenomenon: 色花
+    product: T-205
+    form: applicable
+    conditions: [涤纶, 气流染色机]
+  - title: 升温过快致色花（模拟，只有外部依据）
+    text: （模拟）锦纶氨纶色花常与升温过快有关。
+    evidence: [{doc_id: EXT-1, span: p2, quote: 色花常与升温过快有关}]
+    phenomenon: 色花
+    product: T-205
+  - title: 引文不符（模拟）
+    text: （模拟）T-205 适用于棉。
+    evidence: [{doc_id: RPT-T2, span: p2, quote: 适用于棉}]
+    phenomenon: 色花
+    product: T-205
+    form: applicable
+    conditions: [棉, 溢流染色机]
