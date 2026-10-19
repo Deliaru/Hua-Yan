@@ -111,7 +111,7 @@ def _refs(d: ScoredDecision, ref: dict) -> dict[str, str]:
     elif kind == "slot" and d.family == "ask_back":
         q_refs["requirement_id"], q_refs["slot"] = rest.rsplit("/", 1)
     elif kind == "knowledge":
-        q_refs["product_id"] = rest.split("|", 1)[0]
+        q_refs.setdefault("product_id", rest.split("|", 1)[0])
     elif kind == "actor":
         q_refs["actor_id"] = rest
     return q_refs

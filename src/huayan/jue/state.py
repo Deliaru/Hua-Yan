@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 import math
 import re
 from collections import Counter, defaultdict
@@ -204,13 +205,13 @@ def scheduled_state(events: EventLog, at: datetime, seeds: Seeds, products: list
 
 
 def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: list[Product],
-                      windows: dict | None = None) -> tuple[JueState, dict[str, dict]]:
+                      windows: dict | None = None, caps=()) -> tuple[JueState, dict[str, dict]]:
     """返回状态，以及每个对象的引用（event_ids、session_ids；主题另有 requirement_ids、assigned_rd），供发布层写证据与解析签字人。"""
     w = {**WINDOWS, **(windows or {})}
     objects, refs = {}, {}
     for obj, ref in [*_themes(events, at, seeds, at - timedelta(days=w["theme_days"])),
                      *_knowledge(events, at, products, at - timedelta(days=w["knowledge_days"])),
-                     *_scope(events, at, products),
+                     *_scope(events, at, caps),
                      *_actors(events, at, at - timedelta(hours=w["actor_hours"]))]:
         objects[obj.object_id], refs[obj.object_id] = obj, ref
     return JueState(at=at, mode="scheduled", objects=objects), refs
@@ -288,18 +289,18 @@ def _knowledge(events, at, products, since):
         }), {"event_ids": [e.id for e in fails], "session_ids": []}
 
 
-def _scope(events, at, products):
-    """v6：研发判定「已有产品适用」的次数（不立项时指定产品、审定采用复用建议），按 产品 × 现象 聚合。"""
-    by_id = {p.id: p for p in products}
-    groups = defaultdict(list)
-    for e in events.query(["project_declined", "reuse_adopted"], until=at):
-        if e.payload.get("product_id") and e.payload.get("phenomenon"):
-            groups[(e.payload["product_id"], e.payload["phenomenon"])].append(e)
-    for (pid, ph), evs in groups.items():
-        yield JueObject(object_id=f"knowledge:{pid}|phenomenon={ph}", object_type="knowledge", attrs={
-            "product_id": pid, "slot": "phenomenon", "value": ph, "n_applicable": len(evs),
-            "solves": pid in by_id and ph in by_id[pid].solves,
-        }), {"event_ids": [e.id for e in evs], "session_ids": sorted({s for e in evs for s in e.payload.get("session_ids", [])}),
+def _scope(events, at, caps):
+    for cap in caps:
+        if cap.form != "applicable" or cap.status != "proposed":
+            continue
+        pid, ph = cap.payload["product_id"], cap.payload["phenomenon"]
+        evs = [e for e in events.query(["project_declined", "reuse_adopted"], until=at)
+               if e.payload.get("product_id") == pid and e.payload.get("phenomenon") == ph]
+        yield JueObject(object_id=f"knowledge:cap:{cap.id}", object_type="knowledge", attrs={
+            "product_id": pid, "slot": "phenomenon", "value": ph, "conditions": json.dumps(cap.payload["conditions"], ensure_ascii=False),
+            "n_applicable": len(evs), "pending": True,
+        }), {"capability_id": cap.id, "product_id": pid, "event_ids": [e.id for e in evs],
+             "session_ids": sorted({sid for e in evs for sid in e.payload.get("session_ids", [])}),
              "requirement_ids": [e.payload["requirement_id"] for e in evs]}
 
 

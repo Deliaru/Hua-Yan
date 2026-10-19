@@ -3,9 +3,8 @@ family: scope_update
 kind: advance
 object_type: knowledge
 decision_label: 是否扩展产品适用范围
-# v6：研发判定「已有产品适用，只是超出标注范围」（不立项时指定产品，或审定采用复用建议）后提出；
-# 产品经理签字后写进产品的 solves，同类需求以后在客户自助阶段就命中，不再进研发
-precondition: "attrs.n_applicable >= 1 and not attrs.solves"
+# v7：每条待批准的适用情境交产品经理签字后生效。
+precondition: "attrs.pending"
 rule_score: "1"
 worth_prompt: "研发已 {attrs.n_applicable} 次判定产品 {attrs.product_id} 适用于现象 {attrs.value}，但该产品的适用范围尚未包含它。是否由产品经理扩展适用范围，让同类需求以后直接得到推荐？"
 title: "{object}：研发判定适用，是否扩展产品适用范围？"

@@ -29,7 +29,7 @@ from huayan.jue.state import collect_scheduled, realtime_state, requirement_stat
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.disclosure import VERSIONS, cap, render
 from huayan.l1.extract import LLMExtractor, RuleExtractor
-from huayan.l1.session import handle_turn, recommend, record_disclosure
+from huayan.l1.session import handle_turn, recommend, record_disclosure, recommendation_note
 from huayan.meter import FileMeter
 
 
@@ -298,6 +298,7 @@ class HuayanApp:
                 version = maximum
             card = render(rec.product_id, version, viewer, self.kb, session_id=session_id,
                           customer_id=session.customer_id, grants=self.grants)
+            card.note = recommendation_note(session, self)
             if level <= 1:
                 record_disclosure(card, self)
         req = next((r for r in reversed(list(self._requirements.values()))
@@ -574,7 +575,7 @@ class HuayanApp:
         session.status = "recommended"
         record_disclosure(card, self)
 
-    def decline_project(self, req_id, reason, by, applicable_product=None):
+    def decline_project(self, req_id, reason, by, applicable_product=None, claim_ids=()):
         """v6：研发不立项。给出 applicable_product = 已有产品适用（只是超出标注范围），客户会话收到该产品推荐；
         否则客户收到「暂无方案、已记录」（会话 closed）。"""
         req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
@@ -582,11 +583,24 @@ class HuayanApp:
             raise ValueError("请填写不立项的原因")
         if leak_hits(reason, [], [], self.kb):
             raise ValueError("不立项原因含研发术语，请改写为产品需求说明")
-        if applicable_product is not None and not consistent(self.kb.product(applicable_product), req.known_slots):
-            raise ValueError("该产品的适用条件与客户已知条件不符，不能判为已有产品适用")
         at = get_clock().now()
         state = requirement_state(req, self._sessions[req.session_ids[0]].need, self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, at, self.events)
         question = self._decision("accept_requirement", "decline_project", state.objects[f"requirement:{req_id}"], by)
+        if applicable_product:
+            self.kb.product(applicable_product)
+            if claim_ids:
+                self.kb.confirm(claim_ids, by)
+            else:
+                unit = KnowledgeUnit(id=self.kb.next_claim_id(), kind="claim", level=3,
+                    title="研发判定已有产品适用", text=reason, product_id=applicable_product,
+                    phenomenon_ids=[req.phenomenon], owner=by, confirmed_by=by, source="contributed", created_at=at)
+                self.kb.add(unit)
+                claim_ids = [unit.id]
+            required = next(p.required_slots for p in self.kb.view(self._actor(by)).phenomena if p.id == req.phenomenon)
+            self.kb.grant(Capability(id=self.kb.next_cap_id(), form="applicable", audience=0,
+                payload={"product_id": applicable_product, "phenomenon": req.phenomenon,
+                         "conditions": {slot: [value] for slot, value in req.known_slots.items() if slot in required}},
+                based_on=list(claim_ids), granted_by=by, status="proposed", at=at))
         req.status = "rejected"
         for sid in req.session_ids:
             if applicable_product:
@@ -626,15 +640,12 @@ class HuayanApp:
             raise ValueError("问题尚在准备中")
         if not note.strip():
             raise ValueError("请写明扩展依据")
-        pid, ph = q.refs["product_id"], q.object_id.split("phenomenon=", 1)[1]
+        pid = q.refs["product_id"]
+        capability = self.kb._caps[q.refs["capability_id"]]
+        ph = capability.payload["phenomenon"]
         product, phen = self.kb.product(pid), next(p for p in self.seeds.phenomena if p.id == ph)
         at = get_clock().now()
-        original = product.situations[0]
-        capability = self.kb.grant(Capability(id=self.kb.next_cap_id(), form="applicable", audience=0,
-            payload={"product_id": pid, "phenomenon": ph, "conditions": original.conditions},
-            based_on=[f"ku:sheet:{pid}"], granted_by=product.owner, status="proposed", at=at))
         self.kb.approve(capability.id, by)
-        self.events.append("sheet_updated", by, {"product_id": pid, "solves": self.kb.product(pid).solves})
         unit = KnowledgeUnit(id=f"ku:translation:scope:{pid}:{ph}", level=2, kind="translation",
             title=f"{phen.label} → {product.name}", text=f"{phen.label} → 可选用 {product.name}（{note}）",
             product_id=pid, phenomenon_ids=[ph], owner=actor.id, source="contributed", created_at=at)
@@ -642,7 +653,7 @@ class HuayanApp:
         self.ledger.add(LedgerEntry(ts=at, owner=actor.id, ku_id=unit.id, ref=q.id,
                                     points=self.config["points"]["contributed"], reason="contributed"))
         self.events.append("scope_extended", by, {"question_id": q.id, "product_id": pid, "phenomenon": ph,
-            "ku_id": unit.id, "note": note, "requirement_ids": q.refs.get("requirement_ids", "").split(",")})
+            "ku_id": unit.id, "capability_id": capability.id, "note": note, "requirement_ids": q.refs.get("requirement_ids", "").split(",")})
         self._settle(q.id, Resolution(action="sign", by=by, note=note))
         return unit.model_copy(deep=True)
 
@@ -1193,7 +1204,7 @@ class HuayanApp:
 
     def scan(self, at=None):
         at = at or get_clock().now()
-        state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"])
+        state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"], self.kb.capabilities())
         out = self._propose(self.jue_scheduled, state)
         self._close_anomalies(out, set(state.objects))
         self._last_scan = at

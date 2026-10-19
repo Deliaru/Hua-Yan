@@ -157,6 +157,18 @@ class KnowledgeBase:
     def capabilities(self):
         return [c.model_copy(deep=True) for c in self._caps.values()]
 
+    def next_claim_id(self):
+        self._claim_seq += 1
+        return f"ku:claim:{self._claim_seq}"
+
+    def confirm(self, ku_ids, by):
+        for ku_id in ku_ids:
+            unit = self._units[ku_id]
+            if unit.confirmed_by not in (None, by):
+                raise PermissionDenied("只能确认本人负责的结论")
+            unit.status, unit.confirmed_by = "active", by
+        self._save()
+
     def next_cap_id(self):
         self._cap_seq += 1
         return f"cap:{self._cap_seq}"

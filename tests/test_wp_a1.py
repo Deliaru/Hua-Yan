@@ -1,6 +1,7 @@
 import pytest
 
-from huayan.contracts import DecryptGrant
+from huayan.contracts import Capability, DecryptGrant
+from huayan.domain import match_candidates
 from huayan.events import EventLog
 from huayan.knowledge import AuditLog, KnowledgeBase, PermissionDenied
 from huayan.knowledge.disclosure import cap, render
@@ -45,3 +46,18 @@ def test_l1_knowledge_boundary(mini_seeds, sim_clock, tmp_path):
     assert kb.search("用法", sales)
     assert not KnowledgeBase.from_seeds(mini_seeds, EventLog(), AuditLog()).is_frozen(sales.id)
     assert events.query(kinds=["access_denied"]) and audit.list(sales.id)
+
+    # 情境取并集，不能把两条情境里的面料和设备交叉拼接。
+    kb.grant(Capability(id=kb.next_cap_id(), form="applicable", audience=0,
+        payload={"product_id": "T-205", "phenomenon": "color_unlevel",
+                 "conditions": {"fiber": ["涤纶"], "equipment": ["气流染色机"]}},
+        based_on=["ku:sheet:T-205"], granted_by="rd:R01", approved_by="pm:P01",
+        status="active", at=sim_clock.now()))
+    products = kb.view(actors["customer:C01"]).products
+    assert "T-205" not in {c.product_id for c in match_candidates("color_unlevel",
+        {"fiber": "锦纶氨纶", "equipment": "气流染色机"}, products)}
+    partial = next(c for c in match_candidates("color_unlevel", {"fiber": "涤纶"}, products) if c.product_id == "T-205")
+    assert partial.status == "possible" and partial.unknown_slots == ["equipment"]
+    complete = next(c for c in match_candidates("color_unlevel",
+        {"fiber": "涤纶", "equipment": "气流染色机"}, products) if c.product_id == "T-205")
+    assert complete.status == "confirmed" and not complete.unknown_slots

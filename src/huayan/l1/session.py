@@ -51,13 +51,33 @@ def recommend(session, deps):
         session.recommendation = Recommendation(product_id=decision.choice, candidates=candidates, match=decision,
             disclose=disclosure, version=disclosure.choice, at=at)
         session.status = "recommended"
+        selected = next(c for c in candidates if c.product_id == decision.choice)
         deps.events.append("recommend", _acting(session), {"product_id": decision.choice, "version": disclosure.choice,
             "p_choice": decision.probabilities[decision.choice], "candidate_ids": [c.product_id for c in candidates],
             "phenomenon": session.need.phenomenon, "known": session.need.known(),
-            "customer_id": session.customer_id}, session_id=session.id)
+            "customer_id": session.customer_id, "status": selected.status,
+            "capability_id": selected.capability_id}, session_id=session.id)
         record_disclosure(card, deps)
         cite_scope(session, decision.choice, deps)
     return session
+
+
+def recommendation_note(session, deps):
+    rec = session.recommendation
+    candidate = next((c for c in rec.candidates if c.product_id == rec.product_id), None)
+    if candidate is None or candidate.status == "confirmed":
+        return ""
+    product = next(p for p in deps.kb.view(deps.actors[_acting(session)]).products if p.id == rec.product_id)
+    known, unknown = session.need.known(), {}
+    for situation in product.situations:
+        if situation.phenomenon != session.need.phenomenon or any(
+                value not in situation.conditions[slot] for slot, value in known.items() if slot in situation.conditions):
+            continue
+        for slot, values in situation.conditions.items():
+            if slot not in known:
+                unknown.setdefault(slot, []).extend(v for v in values if v not in unknown.get(slot, []))
+    labels = {s.id: s.label for s in deps.seeds.slots}
+    return "；".join(f"{labels[slot]}为{'、'.join(values)}，请确认" for slot, values in unknown.items())
 
 
 def cite_scope(session, product_id, deps):
