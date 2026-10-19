@@ -39,6 +39,7 @@ ROUTES = Path("demo/routes.yaml")     # v6 开场入口 A–D、C′
 STORY = Path("demo/story.yaml")       # V6-5.5 演示讲解：一个上午 / 按路径看
 REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week", "v6_routes")   # 评测页只读这几份报告（WP-E；v6_routes 为 V6-5 岗位对照）；300 张卡用于按「应升级」拆开；single_card 经门面按查看者读取
 
+RESUME = None      # 命令行 --run <id> --resume：默认会话续跑该运行
 MAX_SESSIONS = int(os.environ.get("HUAYAN_MAX_SESSIONS", "30"))   # 超出时淘汰最久未用的会话
 
 T0 = datetime(2026, 10, 12, 9, 0, tzinfo=SHANGHAI)
@@ -370,10 +371,13 @@ class Api:
             use_clock(self.clock)
             return self._call(method, path, params)
 
-    def build(self):
+    def build(self, resume=None):
+        """resume：续跑已有运行（--run <id> --resume），业务时间接着最后一条事件。"""
         self.clock = SimClock(T0)
         use_clock(self.clock)
-        self.app, self.writes = HuayanApp.build(self.config_path, byok=self.byok), 0
+        self.app, self.writes = HuayanApp.build(self.config_path, run_id=resume, byok=self.byok, resume=bool(resume)), 0
+        if self.app.events.events:
+            self.clock.advance_to(self.app.events.events[-1].ts)
         self.activity, self.agent_runs = None, {}
         self.story_done, self.story_handles, self.story_last, self.story_mark = 0, {}, None, None
         self.attach(self.app)
@@ -668,7 +672,7 @@ def session_api(sid, byok=None, rebuild=False):
     with apis_lock:
         if sid not in apis or rebuild:
             api = Api(None, CONFIG, byok=byok)
-            api.build()
+            api.build(RESUME if sid == "default" and not rebuild else None)
             if sid in apis:
                 apis[sid].app.system1.close()
             apis[sid] = api
@@ -694,6 +698,14 @@ def set_mode(sid, p):
 
 
 if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run", help="运行目录名（runs/ 下）；与 --resume 一起用")
+    ap.add_argument("--resume", action="store_true", help="在 --run 指定的运行上续跑：默认会话读回事件、问题、知识与需求单")
+    args = ap.parse_args()
+    if args.resume != bool(args.run):
+        ap.error("--run 与 --resume 要一起给")
+    RESUME = args.run
     session_api("default")   # 先构建一次：Jue-K 模型等首次加载较慢
     print(f"化言界面后端：http://127.0.0.1:{PORT}（每个浏览器一个会话，最多 {MAX_SESSIONS} 个）")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

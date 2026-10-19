@@ -1,4 +1,4 @@
-"""契约 ⑧：事件日志。内存列表 + 可选 JSONL 追加。"""
+"""契约 ⑧：事件日志。内存列表 + 可选 JSONL 追加；文件已存在时逐行读回（续跑）。"""
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +12,9 @@ class EventLog:
         self.events: list[Event] = []
         if self.path:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            if self.path.exists():
+                self.events = [Event.model_validate_json(line)
+                               for line in self.path.read_text(encoding="utf-8").splitlines() if line]
 
     def append(self, kind: EventKind, actor: str, payload: dict, *, session_id: str | None = None,
                ts: datetime | None = None) -> Event:

@@ -60,6 +60,8 @@ def test_mainline_offline(tmp_path):
     assert all(any(t.id in refs for t in app.view_session(sid, rd).turns) for sid in sessions)
     assert len([e for e in app.events.query(["question_prepared"]) if e.payload["question_id"] == accept.id]) == 2
     app.accept_requirement(main.id, rd)
+    # Q6.5 续跑：已接单、问题未结时在同一运行目录上重建，余下步骤照常
+    app = HuayanApp.build(str(path), run_id=app.run_id, resume=True)
 
     # L3 骨架引出回问；回答后重派同一个确认问题，保留研发改过的条目。
     app.kb.add(KnowledgeUnit(id="ku:translation:tr:e2e", level=3, kind="translation", title="无APEO",
@@ -98,6 +100,11 @@ def test_mainline_offline(tmp_path):
     app.set_public_points(req.id, "（模拟）改善低浴比匀染；按工艺试样确认。", [], rd)
     prepared("release", f"requirement:{req.id}")
     app.release_product(req.id, rd)
+    before = (app.ledger.totals(), len(app.events.events), {q.id: q.status for q in app.bus.questions.values()},
+              {c.id: c.status for c in app.kb.capabilities()})
+    app = HuayanApp.build(str(path), run_id=app.run_id, resume=True)     # 产品已发布后再续跑一次
+    assert before == (app.ledger.totals(), len(app.events.events), {q.id: q.status for q in app.bus.questions.values()},
+                      {c.id: c.status for c in app.kb.capabilities()})
     s4 = app.start_session("customer:C01", "sales:S01").id
     assert app.add_turn(s4, "customer", "锦氨布气流缸里染，深一块浅一块，不要APEO").recommendation.product_id == "T-206"
     assert not app.events.query(["human_decision"])

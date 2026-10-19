@@ -49,6 +49,10 @@ def _human_events(events):
             and e.actor != "pm:agent" and not (e.kind == "requirement_edited" and (e.actor, e.ts) in merges)]
 
 
+def _read_dir(path):
+    return [p.read_text(encoding="utf-8") for p in sorted(path.glob("*.json"))] if path.exists() else []
+
+
 def _find(table, key, what):
     # 调用方（助手工具的参数来自大模型）给的 id 不存在时抛 ValueError，工具层统一回给模型。
     if key not in table:
@@ -58,8 +62,10 @@ def _find(table, key, what):
 
 class HuayanApp:
     @classmethod
-    def build(cls, config_path: str = "config/app.yaml", run_id: str | None = None, byok=None):
+    def build(cls, config_path: str = "config/app.yaml", run_id: str | None = None, byok=None, resume: bool = False):
         # byok：试用者自带的大模型 / OneJev（huayan.gateway.byok.Byok），真实调用、不读写录制缓存；密钥只在内存里
+        # resume：在已有运行目录上续跑（Q6.5）；日志类读回各自的文件，会话、需求单、试样在下面读回。
+        # 不恢复觉的推理轨迹、回问答案到发言的映射、Agent 对话与待确认卡（重启后对话从头开始，未确认的提议作废）
         app = cls()
         app.config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
         if byok:
@@ -68,7 +74,7 @@ class HuayanApp:
         if Path(app.run_id).name != app.run_id or any(c in app.run_id for c in '/\\:'):
             raise ValueError("run_id 必须是单个目录名")
         app.run_dir = Path(app.config["run_root"]) / app.run_id
-        app.run_dir.mkdir(parents=True, exist_ok=False)
+        app.run_dir.mkdir(parents=True, exist_ok=resume)
         app.seeds = load_seeds(app.config["seeds_dir"])
         app.actors = {a.id: a for a in app.seeds.actors}
         app.meter = FileMeter(app.run_dir, app.run_id)
@@ -94,7 +100,10 @@ class HuayanApp:
         app.jev = Jev(app.system1, app.config["thresholds"]["match"])
         app.extractor = (RuleExtractor(app.seeds) if app.config["extractor"] == "rule"
                          else LLMExtractor(app.seeds, app.gateway))
-        app._sessions, app._requirements, app._trials = {}, {}, {}
+        app._sessions = {s.id: s for s in map(Session.model_validate_json, _read_dir(app.run_dir / "sessions"))}
+        app._requirements = {r.id: r for r in map(Requirement.model_validate_json, _read_dir(app.run_dir / "requirements"))}
+        app._trials = {t.id: t for t in (Trial.model_validate_json(u.text) for u in app.kb._units.values()
+                                         if u.kind == "trial" and u.source == "trial")}
         app.templates = load_templates(app.config["templates_dir"])
         app.jue_realtime = app._jue_model(app.config["realtime_model"], "realtime")
         app.jue_scheduled = app._jue_model(app.config["scheduled_model"], "scheduled")

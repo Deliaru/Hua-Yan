@@ -89,6 +89,7 @@ class KnowledgeBase:
             kb.add(unit)
         kb._caps = {cap.id: cap for cap in caps}
         kb._seed_units = {key: unit.model_copy(deep=True) for key, unit in kb._units.items()}
+        kb._frozen = {e.payload["actor_id"] for e in events.query(["access_frozen"])}     # 续跑时事件已读回
         kb.state_path = Path(state_path) if state_path else None
         if kb.state_path and kb.state_path.exists():
             data = json.loads(kb.state_path.read_text(encoding="utf-8"))

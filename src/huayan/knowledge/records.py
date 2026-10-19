@@ -1,4 +1,4 @@
-"""内存账本与 UTF-8 JSONL 记录；引用去重由业务调用方负责。"""
+"""内存账本与 UTF-8 JSONL 记录；引用去重由业务调用方负责。文件已存在时逐行读回（续跑）。"""
 from pathlib import Path
 
 from huayan.contracts import AuditRecord, LedgerEntry
@@ -11,10 +11,16 @@ def _append(path, record):
             stream.write(record.model_dump_json() + "\n")
 
 
+def _read(path, model):
+    if path is None or not path.exists():
+        return []
+    return [model.model_validate_json(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
 class AuditLog:
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else None
-        self._records: list[AuditRecord] = []
+        self._records: list[AuditRecord] = _read(self.path, AuditRecord)
 
     def append(self, record: AuditRecord) -> None:
         self._records.append(record)
@@ -27,7 +33,7 @@ class AuditLog:
 class Ledger:
     def __init__(self, path: Path | None = None, *, points: dict[str, int] | None = None):
         self.path = Path(path) if path else None
-        self._entries: list[LedgerEntry] = []
+        self._entries: list[LedgerEntry] = _read(self.path, LedgerEntry)
         self.points = {"cited": 1, "contributed": 5, "trial_pass": 5, "product_released": 10}
         if points is not None:
             self.points.update(points)

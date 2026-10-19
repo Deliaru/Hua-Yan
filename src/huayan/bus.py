@@ -15,6 +15,11 @@ class QuestionBus:
         self.questions: dict[str, Question] = {}
         if self.path:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            if self.path.exists():      # 续跑：每个问题取最后一个快照
+                for line in self.path.read_text(encoding="utf-8").splitlines():
+                    if line:
+                        q = Question.model_validate_json(line)
+                        self.questions[q.id] = q
 
     def _snapshot(self, q: Question) -> None:
         if self.path:
