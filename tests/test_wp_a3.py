@@ -216,3 +216,57 @@ def test_translation_release_and_ownership(tmp_path):
     assert statuses[local.id] == "active"
     assert all(statuses[c.id] == "revoked" for c in (granted, situation, decrypt))
     assert not restored.decrypt_grants()
+
+    # Q2.5：同层研发用到才看、看了记分、想看先申请。换一份夹具副本，让 R02 接这类单（转化对照归属对调）。
+    import shutil
+    seeds_dir = tmp_path / "seeds_r02"
+    shutil.copytree("tests/fixtures/mini_seeds", seeds_dir)
+    swap = {"rd:R01": "rd:R02", "rd:R02": "rd:R01"}
+    translations = yaml.safe_load((seeds_dir / "translations.yaml").read_text(encoding="utf-8"))
+    for item in translations["items"]:
+        item["owner"] = swap.get(item["owner"], item["owner"])
+    (seeds_dir / "translations.yaml").write_text(yaml.safe_dump(translations, allow_unicode=True), encoding="utf-8")
+    path_r02 = tmp_path / "app_r02.yaml"
+    path_r02.write_text(yaml.safe_dump({**config, "seeds_dir": str(seeds_dir)}), encoding="utf-8")
+    app = HuayanApp.build(str(path_r02))
+    r01, r02 = app.actors["rd:R01"], app.actors["rd:R02"]
+    tr5 = "ku:translation:tr:5"                       # 现归 R01：「锦纶氨纶」的转化知识
+    assert any(s.ku_id == tr5 and s.owner == "rd:R01" for s in app.kb.search_blocked("锦纶氨纶", r02))
+    with pytest.raises(PermissionDenied):
+        app.kb.get(tr5, r02)
+    for other in ("sales:S01", "pm:P01"):
+        assert all(s.ku_id is None for s in app.kb.search_blocked("锦纶氨纶 匀染", app.actors[other]))
+    session = app.start_session("customer:C01", "sales:S01")
+    app.add_turn(session.id, "customer", "深一块浅一块，锦纶氨纶的，气流缸")
+    app.save_escalate_note(session.id, "（模拟）锦纶氨纶、气流缸色花", "sales:S01")
+    prepare("escalate_need", f"session:{session.id}")
+    req = app.escalate(session.id, "sales:S01")
+    assert req.assigned_rd == "rd:R02"
+    app.save_reuse_proposal(req.id, None, [], "", "离线：未检索现成产品", "pm:agent")
+    app.draft_requirement(req.id, "pm:agent")
+    prepare("accept_requirement", f"requirement:{req.id}")
+    app.accept_requirement(req.id, "rd:R02")
+    req = app.translate_requirement(req.id, "rd:R02")
+    assert tr5 in req.engine_refs
+    assert next(c for c in app.requirement_view(req.id, "rd:R02").cited if c.ku_id == tr5).text is not None
+    peek = app.requirement_view(req.id, "rd:R01").requirement      # 同事打开 R02 的单子：只见 L2 与归属
+    assert not peek.chem_lang and not peek.hypotheses and not peek.sealed and peek.product_lang
+    assert any("有相关机理（归属" in h for h in req.hypotheses)    # R01 的机理对 R02 只写归属
+    with pytest.raises(ValueError, match="无权读取"):
+        app.edit_req_item(req.id, -1, ReqItem(text="手加同事的机理", ku_refs=["ku:mechanism:T-205"]), "rd:R02")
+    prepare("confirm_translation", f"requirement:{req.id}")
+    app.confirm_translation(req.id, "rd:R02")
+    assert any(e.reason == "cited" and e.owner == "rd:R01" and e.ku_id == tr5 for e in app.ledger.list())
+    for ku_id in (tr5, "ku:formula:T-205"):         # 配方同样走申请与授予
+        app.request_share(ku_id, "rd:R02")
+        q = next(q for q in app.bus.list(family="qi_grant") if q.refs.get("ku_id") == ku_id)
+        assert q.owner_id == q.signer_id == "rd:R01"
+        app.agents.dispatch()
+        assert app.bus.get(q.id).prepared_at is not None
+        share = app.sign_qi_grant(q.id, "rd:R01")
+        assert app.kb.get(ku_id, r02).id == ku_id
+        assert any(e.reason == "shared" and e.ku_id == ku_id for e in app.ledger.list("rd:R01"))
+    app.revoke_capability(share.id, "rd:R01")
+    with pytest.raises(PermissionDenied):
+        app.kb.get("ku:formula:T-205", r02)
+    assert app.kb.get(tr5, r02) and app.kb.get("ku:formula:T-205", r01)

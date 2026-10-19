@@ -10,7 +10,7 @@ from huayan.clock import get_clock
 from huayan.contracts import (KIND_LEVEL, Actor, AuditRecord, BlockedHint, KnowledgeHit,
                               KnowledgeUnit, KUKind, Product, Seeds, Capability, Situation, DecryptGrant)
 from huayan.events import EventLog
-from .permission import PermissionDenied, can_read, level_of
+from .permission import PermissionDenied, can_read, colleague_l3, holder, level_of
 from .records import AuditLog
 
 _TITLES = {"sheet": "产品说明", "usage": "用法用量", "mechanism": "机理", "formula": "配方"}
@@ -280,8 +280,12 @@ class KnowledgeBase:
         temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         temp.replace(self.state_path)
 
+    def _shared(self, actor):
+        return frozenset(c.payload["ku_id"] for c in self._caps.values()
+                         if c.form == "share" and c.status == "active" and c.audience == actor.id)
+
     def _readable(self, actor, ku):
-        return ku.status == "active" and can_read(actor, ku) and (not self.is_frozen(actor.id) or ku.level <= 1)
+        return ku.status == "active" and can_read(actor, ku, self._shared(actor)) and (not self.is_frozen(actor.id) or ku.level <= 1)
 
     def list(self, actor: Actor, *, kinds: list[KUKind] | None = None,
              phenomenon: str | None = None) -> list[KnowledgeUnit]:
@@ -345,7 +349,9 @@ class KnowledgeBase:
 
     def search_blocked(self, query: str, actor: Actor, *, phenomenon: str | None = None,
                        k: int = 3) -> list[BlockedHint]:
-        return [BlockedHint(owner=h.ku.owner, level=h.ku.level, kind=h.ku.kind)
+        # 只有同层研发的存根带 ku_id（可申请查看）；跨层存根不带
+        return [BlockedHint(owner=holder(h.ku), level=h.ku.level, kind=h.ku.kind,
+                            ku_id=h.ku.id if colleague_l3(actor, h.ku) else None)
                 for h in self._rank(query, phenomenon) if not self._readable(actor, h.ku)][:max(0, k)]
 
     def is_frozen(self, actor_id: str) -> bool:

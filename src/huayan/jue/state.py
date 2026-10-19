@@ -329,8 +329,12 @@ def _qi(events, at, caps):
                     if e.kind == "requirement_created"}
     accompanied = {e.session_id for e in history if e.session_id and e.actor.startswith("sales:")}
     backs = defaultdict(list)
-    changed = {}
+    changed, requests = {}, {}
     for event in history:
+        if event.kind == "share_requested":
+            requests[f"knowledge:share:{event.payload['ku_id']}|{event.actor}"] = event
+        elif event.kind == "question_resolved" and event.payload["object_id"] in requests:
+            requests.pop(event.payload["object_id"])      # 归属人已授予或拒绝，申请结束
         if event.kind == "question_published" and event.payload["family"] == "ask_back":
             rid, slot = event.payload["object_id"].removeprefix("slot:").rsplit("/", 1)
             backs[(requirements[rid], slot)].append(event)
@@ -350,10 +354,22 @@ def _qi(events, at, caps):
                       and c.audience in range(level + 1) for c in caps)
         yield JueObject(object_id=f"knowledge:grant:{cap.id}|L{level}", object_type="knowledge", attrs={
             "product_id": cap.payload.get("product_id", ""), "slot": cap.payload.get("slot", "phenomenon"),
-            "value": ph, "n_ask_back": len(evs), "n_unanswerable": 0, "granted": granted,
+            "value": ph, "n_ask_back": len(evs), "n_unanswerable": 0, "requested": False, "granted": granted,
         }), {"capability_id": cap.id, "product_id": cap.payload.get("product_id", ""),
              "audience": str(level), "signer": cap.granted_by, "form": cap.form,
              "based_on": cap.based_on, "event_ids": [e.id for e in evs]}
+    for object_id, event in requests.items():
+        ku_id, requester = event.payload["ku_id"], event.actor
+        granted = any(c.form == "share" and c.status == "active" and c.audience == requester
+                      and c.payload["ku_id"] == ku_id for c in caps)
+        touched = [e for e in history if e.kind == "requirement_translated" and e.actor == requester
+                   and ku_id in e.payload["ku_refs"]]
+        yield JueObject(object_id=object_id, object_type="knowledge", attrs={
+            "product_id": event.payload["product_id"] or "", "slot": "share", "value": requester,
+            "n_ask_back": 0, "n_unanswerable": 0, "requested": True, "granted": granted,
+        }), {"ku_id": ku_id, "requester": requester, "product_id": event.payload["product_id"] or "",
+             "signer": event.payload["owner"], "requirement_ids": [e.payload["requirement_id"] for e in touched],
+             "event_ids": [event.id]}
     for ku_id, event in changed.items():
         if event.payload["signer"] is None:
             continue

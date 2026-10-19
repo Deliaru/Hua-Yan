@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from huayan.knowledge import KnowledgeBase
 
 MIN_OVERLAP = 0.5      # 原文的字符二元组有一半出现在文本中即算命中（写死）
+ENGINE = Actor(id="system:translate", role="rd", name="转译引擎")   # L3 起草以系统身份读全部转化知识（契约 2.10）
 
 
 def _bigrams(s: str) -> set[str]:
@@ -107,13 +108,15 @@ def draft_product_need(req: Requirement, sessions: list[Session], kb: KnowledgeB
 def draft_chem_need(req: Requirement, sessions: list[Session], kb: KnowledgeBase, rd: Actor, at: datetime) -> RDDraft:
     # 条件以 req.known_slots 为准（回问回填后会多出槽位），其余来源是产品需求条目
     sources = [i for i in req.product_lang if i.slot is None] + _slot_items(req.known_slots, sessions)
-    items = _translate(sources, kb, rd, req.phenomenon, level=3)
+    items = _translate(sources, kb, ENGINE, req.phenomenon, level=3)
     # 研发方向假设：已知槽位至少有一个落在其适用限定内的同现象已发布产品，取其机理首句
     related = {p.id for p in kb.products()
                if any(slot in situation.conditions and consistent(p, {slot: value})
                       for situation in p.situations for slot, value in req.known_slots.items())}
-    hypotheses = [f"参考 {ku.product_id} 的机理：{ku.text.split('。')[0]}"
-                  for ku in kb.list(rd, kinds=["mechanism"], phenomenon=req.phenomenon) if ku.product_id in related]
+    # 只对归属人本人写出机理首句；同事的机理只写归属
+    hypotheses = [f"参考 {ku.product_id} 的机理：{ku.text.split('。')[0]}" if ku.owner == rd.id
+                  else f"{ku.product_id} 有相关机理（归属 {next(a.name for a in kb.seeds.actors if a.id == ku.owner)}，可申请查看）"
+                  for ku in kb.list(ENGINE, kinds=["mechanism"], phenomenon=req.phenomenon) if ku.product_id in related]
     return RDDraft(chem_lang=items, hypotheses=hypotheses)
 
 

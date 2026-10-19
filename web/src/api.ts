@@ -85,6 +85,7 @@ export const api = {
   confirmClaims: (req_id: string, ku_ids: string[], by: string) => call("qi/confirm", { req_id, ku_ids, by }),
   grantCapability: (question_id: string, by: string) => call("qi/grant", { question_id, by }),
   revokeCapability: (cap_id: string, by: string) => call("qi/revoke", { cap_id, by }),
+  requestShare: (ku_id: string, by: string) => call("qi/request-share", { ku_id, by }),
   withdrawClaim: (ku_id: string, by: string) => call("qi/withdraw", { ku_id, by }),
 
   // 研发工作面

@@ -1,6 +1,6 @@
 """披露网关：在客户×产品的授权上限内输出卡片。"""
 from huayan.contracts import Actor, CardSection, DecryptGrant, RecommendationCard, Version
-from .permission import PermissionDenied, level_of
+from .permission import PermissionDenied, colleague_l3, level_of
 from .store import KnowledgeBase
 
 VERSIONS = ("product", "product_usage", "full_mechanism", "internal")
@@ -42,6 +42,7 @@ def render(product_id: str, version: Version, viewer: Actor, kb: KnowledgeBase, 
                   if set(u.phenomenon_ids) & set(product.solves)]
     if version == "internal":
         units += [u for u in kb.list(viewer, kinds=["trial"]) if u.product_id == product_id]
+        units = [u for u in units if not colleague_l3(viewer, u) or kb._readable(viewer, u)]   # 同事的机理、配方只经授予可读
     for unit in units:
         decrypted = unit.kind == "mechanism" and unit.decryptable and allowed == "full_mechanism"
         if unit.level > level_of(viewer) and not decrypted:

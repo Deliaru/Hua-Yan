@@ -328,9 +328,11 @@ function Point({ n, index, item, view, cited, l2, editable, notes, select }: {
 // 依据：谁的哪条知识；有原文时点开看，看不到原文时只显示归属
 function KnowledgeChip({ c }: { c: CitedKnowledge }) {
   const L = useLabels();
+  const { me } = useApp();
   const [open, setOpen] = useState(false);
   const label = `${L.name(c.owner)}的知识 · 被引用 ${c.n_cited} 次`;
-  if (c.text == null) return <span className="tag" title={`L${c.level} 知识，原文不可见`}>{label}</span>;
+  if (c.text == null) return <span className="tag" title={`L${c.level} 知识，原文不可见`}>{label}
+    {c.level === 3 && me.startsWith("rd:") && <Act kind="quiet" label="申请查看" run={() => api.requestShare(c.ku_id, me)} />}</span>;
   return (
     <span className="relative">
       <button type="button" onClick={() => setOpen(!open)} className="tag tag-accent">{label}</button>
@@ -736,12 +738,12 @@ function GrantedCapabilities() {
   const L = useLabels();
   const caps = useData(() => api.capabilities(me), [me]) ?? [];
   const status = { proposed: "待批准", active: "生效", suspended: "已挂起", revoked: "已撤销" };
-  const forms: Record<string, string> = { ask: "追问", applicable: "适用情境", statement: "可说的话", decrypt: "解密" };
+  const forms: Record<string, string> = { ask: "追问", applicable: "适用情境", statement: "可说的话", decrypt: "解密", share: "查看原文" };
   return <Group title="我授予的能力">
     {caps.map((c) => <div key={c.id} className="row !items-start">
       <div className="min-w-0 flex-1 text-[13px] leading-5">
         <p><span className="tag mr-2">{status[c.status]}</span>{forms[c.form] ?? c.form} · 给{typeof c.audience === "number" ? ["客户", "业务员", "产品经理", "研发"][c.audience] : L.name(c.audience)}</p>
-        <p>{c.payload.product_id && L.product(c.payload.product_id)} {c.payload.phenomenon && L.phen(c.payload.phenomenon)} {c.payload.slot && L.slot(c.payload.slot)}{c.payload.text}</p>
+        <p>{c.payload.product_id && L.product(c.payload.product_id)} {c.payload.phenomenon && L.phen(c.payload.phenomenon)} {c.payload.slot && L.slot(c.payload.slot)}{c.payload.text}{c.payload.ku_id}</p>
         {c.payload.conditions && <p>{Object.entries(c.payload.conditions).map(([k, v]) => `${L.slot(k)}：${v.join("、")}`).join("；")}</p>}
         <p className="text-ink-3">依据：{c.based_on.join("、")}</p>
       </div>

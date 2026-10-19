@@ -235,7 +235,7 @@ export interface NextAction {
 // v7 契：研发自己授予的能力和本单待确认的结论。
 export interface Capability {
   id: string; form: string; audience: number | string;
-  payload: { product_id?: string; phenomenon?: string; slot?: string; text?: string;
+  payload: { product_id?: string; phenomenon?: string; slot?: string; text?: string; ku_id?: string;
     conditions?: Record<string, string[]>; required?: boolean; prior?: Record<string, number> };
   based_on: string[]; granted_by: string; approved_by: string | null;
   status: "proposed" | "active" | "suspended" | "revoked"; at: string;

@@ -227,6 +227,7 @@ POST = {
     "/api/qi/confirm": lambda app, p: app.confirm_claims(p["req_id"], p["ku_ids"], p["by"]),
     "/api/qi/grant": lambda app, p: app.sign_qi_grant(p["question_id"], p["by"], p.get("claim_ids", ()), p.get("note", "")),
     "/api/qi/revoke": lambda app, p: app.revoke_capability(p["cap_id"], p["by"]),
+    "/api/qi/request-share": lambda app, p: app.request_share(p["ku_id"], p["by"]),
     "/api/qi/withdraw": lambda app, p: app.withdraw_claim(p["ku_id"], p["by"]),
     "/api/sessions": lambda app, p: app.start_session(p["customer_id"], p.get("sales_id")),
     "/api/turn": lambda app, p: app.add_turn(p["session_id"], p["speaker"], p["text"]),

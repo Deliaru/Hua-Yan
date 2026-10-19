@@ -2,10 +2,10 @@ id: qi_grant
 family: qi_grant
 kind: advance
 object_type: knowledge
-decision_label: 是否授予下层能力
-precondition: "not attrs.granted and (attrs.n_ask_back >= 2 or attrs.n_unanswerable >= 1)"
-rule_score: "min(1, (attrs.n_ask_back + attrs.n_unanswerable) / 3)"
-worth_prompt: "该知识已被回问 {attrs.n_ask_back} 次，是否由确认人授予下层使用？"
-title: "{object}：是否授予下层使用？"
+decision_label: 是否授予这项能力
+precondition: "not attrs.granted and (attrs.requested or attrs.n_ask_back >= 2 or attrs.n_unanswerable >= 1)"
+rule_score: "min(1, attrs.requested + (attrs.n_ask_back + attrs.n_unanswerable) / 3)"
+worth_prompt: "该知识被回问 {attrs.n_ask_back} 次或被同事申请查看，是否由确认人授予？"
+title: "{object}：是否授予？"
 owner_role: rd
 signer_role: rd

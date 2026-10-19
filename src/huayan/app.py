@@ -27,6 +27,7 @@ from huayan.jue.publish import publish, select_asks
 from huayan.jue.records import load_records
 from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
+from huayan.knowledge.permission import colleague_l3, holder
 from huayan.knowledge.disclosure import VERSIONS, cap, render
 from huayan.l1.extract import LLMExtractor, RuleExtractor
 from huayan.l1.session import handle_turn, recommend, record_disclosure, recommendation_note
@@ -374,9 +375,15 @@ class HuayanApp:
             raise ValueError("原话引用必须属于本需求单的客户发言")
         for ref in item.ku_refs:
             try:
-                self.kb.get(ref, actor)
+                self._work_unit(req, ref, actor)
             except (ValueError, PermissionDenied) as exc:
                 raise ValueError("知识引用不存在或当前身份无权读取") from exc
+
+    def _work_unit(self, req, ref, actor):
+        """接单研发对转译引擎为本单引用的知识按「工作中用到」处理（契约 2.10）；其余照常按权限读。"""
+        if actor.id == req.assigned_rd and ref in req.engine_refs:
+            return self.kb._units[ref].model_copy(deep=True)
+        return self.kb.get(ref, actor)
 
     def _decision(self, family, action, obj, by):
         question = next((q for q in self.bus.list(family=family) if q.object_id == obj.object_id), None)
@@ -918,6 +925,7 @@ class HuayanApp:
         items = edited + [item for item in draft.chem_lang
                           if not any((item.slot == old.slot if item.slot or old.slot else set(item.quote_refs) & set(old.quote_refs))
                                      for old in edited)]
+        req.engine_refs = sorted(set(req.engine_refs) | {ref for item in draft.chem_lang for ref in item.ku_refs})
         for item in items:
             self._validate_item(req, item, actor)
         req.chem_lang, req.hypotheses, req.chem_drafted_by = items, draft.hypotheses, by
@@ -944,7 +952,7 @@ class HuayanApp:
         req.product_id, req.status, req.rd_confirmed_by = products[0].id, "rd_confirmed", by
         refs = sorted({ref for item in req.chem_lang for ref in item.ku_refs})
         for ref in refs:
-            unit = self.kb.get(ref, actor)
+            unit = self._work_unit(req, ref, actor)
             if unit.level == 3 and unit.owner != "pm:agent" and not self.ledger.has(unit.owner, ref, req.id):
                 self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=unit.owner, ku_id=ref, ref=req.id,
                     points=self.config["points"]["cited"], reason="cited"))
@@ -1020,17 +1028,20 @@ class HuayanApp:
         if self.kb.is_frozen(viewer.id):
             raise PermissionDenied("高层级访问已冻结")
         req = _find(self._requirements, req_id, "需求单").model_copy(deep=True)
-        # L2 可看转译条目；研发内部假设、封存项及两类草稿只对 L3 开放。
-        if level_of(viewer) < 3:
+        refs = sorted({ref for item in req.product_lang + req.chem_lang for ref in item.ku_refs})
+        colleague = viewer.role == "rd" and viewer.id != req.assigned_rd
+        # L2 可看转译条目；研发内部假设、封存项及两类草稿只对 L3 开放。非接单研发与 L2 同样裁剪，且看不到 L3 条目正文。
+        if level_of(viewer) < 3 or colleague:
             req.hypotheses = []
             req.sealed = []
             req.points_draft = None
             req.contribution_drafts = []
-        refs = sorted({ref for item in req.product_lang + req.chem_lang for ref in item.ku_refs})
+        if colleague:
+            req.chem_lang = []
         cited = []
         for ref in refs:
             unit = self.kb._units[ref]
-            readable = unit.level <= level_of(viewer)
+            readable = (viewer.id == req.assigned_rd and ref in req.engine_refs) or self.kb._readable(viewer, unit)
             cited.append(CitedKnowledge(ku_id=ref, owner=unit.owner, level=unit.level,
                 title=unit.title if readable else f"{self.actors[unit.owner].name}的知识（L{unit.level}，仅显示归属）",
                 text=unit.text if readable else None,
@@ -1149,7 +1160,7 @@ class HuayanApp:
             if not entries:
                 continue
             result.append(ContributionStat(owner=unit.owner, ku_id=unit.id, level=unit.level,
-                title=unit.title if unit.level <= level_of(viewer) else
+                title=unit.title if self.kb._readable(viewer, unit) else
                     f"{self.actors[unit.owner].name}的知识（L{unit.level}，仅显示归属）",
                 n_cited=sum(e.reason == "cited" for e in entries), points=sum(e.points for e in entries),
                 used_by=sorted({e.ref for e in entries})))
@@ -1186,6 +1197,14 @@ class HuayanApp:
             raise ValueError("需要已准备的授予问题")
         if q.signer_id != by:
             raise PermissionDenied("只有结论确认人可以授予")
+        if "requester" in q.refs:      # 同层申请查看：授予申请人本人，给归属人记「授予」分
+            cap = self.kb.grant(Capability(id=self.kb.next_cap_id(), form="share", audience=q.refs["requester"],
+                payload={"ku_id": q.refs["ku_id"]}, based_on=[q.refs["ku_id"]], granted_by=by,
+                status="active", at=get_clock().now()))
+            self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=by, points=self.config["points"]["shared"],
+                                        reason="shared", ku_id=q.refs["ku_id"], ref=cap.id))
+            self._settle(q.id, Resolution(action="sign", by=by, note=note))
+            return cap
         source = self.kb._caps[q.refs["capability_id"]]
         if claim_ids:
             if not set(claim_ids) <= set(source.based_on):
@@ -1197,6 +1216,15 @@ class HuayanApp:
         self._settle(q.id, Resolution(action="sign", by=by, note=note))
         self.scan()
         return cap
+
+    def request_share(self, ku_id, by):
+        actor = self._actor(by, {"rd"})
+        unit = _find(self.kb._units, ku_id, "知识")
+        if unit.status != "active" or not colleague_l3(actor, unit) or self.kb._readable(actor, unit):
+            raise ValueError("只能申请查看本人当前不可读的同层研发知识")
+        self.events.append("share_requested", by, {"ku_id": ku_id, "owner": holder(unit),
+                                                   "product_id": unit.product_id})
+        return self.scan()
 
     def revoke_capability(self, cap_id, by):
         self._actor(by, {"rd"})
@@ -1344,7 +1372,10 @@ class HuayanApp:
                      if viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
                          and self._sessions[q.refs["session_id"]].sales_id == viewer_id)]
         for q in questions:
-            if q.family == "qi_grant":
+            if q.family == "qi_grant" and "requester" in q.refs:
+                unit = self.kb._units[q.refs["ku_id"]]
+                q.evidence.append(Evidence(summary=f"{self.actors[q.refs['requester']].name}申请查看：{unit.title}"))
+            elif q.family == "qi_grant":
                 cap = self.kb._caps[q.refs["capability_id"]]
                 q.evidence.append(Evidence(summary=f"形式：{cap.form}；目标层：L{q.refs['audience']}"))
                 for uid in cap.based_on:

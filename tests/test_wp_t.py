@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from huayan.contracts import CustomerProfile, NeedState, Requirement, Session, SlotFill, Turn
-from huayan.escalation.translate import draft_chem_need, draft_product_need, leak_hits, package_sheet
+from huayan.escalation.translate import ENGINE, draft_chem_need, draft_product_need, leak_hits, package_sheet
 from huayan.events import EventLog
 from huayan.knowledge import AuditLog, KnowledgeBase
 
@@ -25,7 +25,7 @@ def test_layers_cite_own_knowledge_and_keep_quotes(mini_seeds, sim_clock):
     req = Requirement(id="req:1", question_id="q:1", session_ids=[session.id], phenomenon="color_unlevel",
                       known_slots=need.known(), assigned_rd="rd:R02", status="draft", created_at=at)
     l3_terms = [t.chem_term for t in mini_seeds.translations if t.level == 3]
-    units = {u.id: u for u in kb.list(actors["rd:R01"])}
+    units = {u.id: u for u in kb.list(ENGINE)}   # Q2.5：同事的 L3 知识对 R01 只见归属，按引擎身份取全部
 
     # L2：引用 tr:1、tr:3，不含任何 L3 知识（引用与文字都不含）
     pm = draft_product_need(req, [session], kb, actors["pm:agent"], at)
@@ -49,7 +49,9 @@ def test_layers_cite_own_knowledge_and_keep_quotes(mini_seeds, sim_clock):
 
     # leak_hits：三类来源各命中一次，只返回句序号与类别
     sealed = "升温到九十度后分两次加入保护液"
-    hypothesis = next(h for h in rd.hypotheses if "T-205" in h)
+    # Q2.5：同事 R01 的机理对 R02 只写归属；机理首句只写给归属人本人
+    assert any("T-205 有相关机理" in h for h in rd.hypotheses)
+    hypothesis = next(h for h in draft_chem_need(req, [session], kb, actors["rd:R01"], at).hypotheses if "T-205" in h)
     text = f"请先做小样。{sealed}；{l3_terms[0]}！与染料竞争染座，均匀上染"
     assert [h.model_dump() for h in leak_hits(text, [sealed], [hypothesis], kb)] == [
         {"index": 1, "source": "sealed"}, {"index": 2, "source": "l3_term"}, {"index": 3, "source": "hypothesis"}]

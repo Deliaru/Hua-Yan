@@ -42,6 +42,8 @@ def _summary(family: str, a: dict) -> str:
     if family == "leak_risk":
         return (f"检索 {a['n_queries']} 次，被拦截的高层级命中 {a['n_blocked']} 条，"
                 f"最集中的产品占 {a['blocked_top_share']:.0%}，涉及 {a['n_distinct_products']} 个产品")
+    if family == "qi_grant" and a["requested"]:
+        return "同事申请查看这条知识的原文；授予后对方可读、你记「授予」分，可随时撤销。"
     if family == "qi_grant":
         return f"研发已回问 {a['n_ask_back']} 次；是否将这项能力授予所需层级？"
     if family == "qi_review":
@@ -78,6 +80,9 @@ def _label(obj: JueObject, seeds: Seeds | None) -> str:
         phen = next(p for p in seeds.phenomena if p.id == a["phenomenon"])
         known = dict(kv.split("=") for kv in obj.object_id.split("|")[1].split(",") if kv)
         return " + ".join(known[s] for s in phen.required_slots if s in known) + f"的{phen.label}"
+    if obj.object_type == "knowledge" and a["slot"] == "share":
+        name = next((x.name for x in seeds.actors if x.id == a["value"]), a["value"])
+        return f"{name}申请查看 {obj.object_id.removeprefix('knowledge:share:').split('|')[0]}"
     if obj.object_type == "knowledge":
         value = next((p.label for p in seeds.phenomena if p.id == a["value"]), a["value"]) if a["slot"] == "phenomenon" else a["value"]
         return f"{a['product_id']} × {value}"

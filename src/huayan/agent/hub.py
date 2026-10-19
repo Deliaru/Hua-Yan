@@ -148,6 +148,8 @@ class AgentHub:
                         f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。")
                 # 授予现有能力：形式与目标层已由觉算出，Agent 只告知委托人，不起草
                 text += ("请告知委托人待签的授予，不起草，不签字。" if q.family == "qi_grant" and "capability_id" in q.refs
+                         else "请告知委托人：同事申请查看这条知识，附上申请人碰到过它的需求单，不起草，不签字。"
+                         if q.family == "qi_grant" and "requester" in q.refs
                          else "请为此问题准备草稿，不签字。")
                 if self.app.config["gateway_mock"]:
                     text += "\n" + self._prepare_offline(q)
@@ -184,6 +186,9 @@ class AgentHub:
         elif q.family == "qi_grant" and "capability_id" in q.refs:
             layer = "客户层" if q.refs["audience"] == "0" else "业务员层"
             return f"离线模式：觉提出了「是否把这项能力授予{layer}」，形式与依据见问题卡，请在签字区决定。"
+        elif q.family == "qi_grant" and "requester" in q.refs:
+            reqs = q.refs.get("requirement_ids") or "无"
+            return f"离线模式：{q.refs['requester']} 申请查看这条知识（碰到过它的需求单：{reqs}），请在签字区决定是否授予。"
         elif q.family == "opportunity":
             reqs = [self.app.requirement_view(rid, q.owner_id).requirement
                     for rid in q.refs["requirement_ids"].split(",")]
