@@ -110,10 +110,18 @@ class KnowledgeBase:
             self.add(unit)
         return units
 
+    def _visible_caps(self, actor):
+        level = level_of(actor)
+        return [c for c in self._caps.values() if c.status == "active" and c.audience in range(level + 1)]
+
+    def ask_capabilities(self, actor, phenomenon, slots):
+        """本层生效、属于该现象且槽位在 slots 中的追问能力（供记「被使用」）。"""
+        return [c.model_copy(deep=True) for c in self._visible_caps(actor) if c.form == "ask"
+                and c.payload["phenomenon"] == phenomenon and c.payload["slot"] in slots]
+
     def view(self, actor) -> Seeds:
         level = level_of(actor)
-        caps = [c for c in self._caps.values() if c.status == "active"
-                and c.audience in range(level + 1)]
+        caps = self._visible_caps(actor)
         phenomena = []
         for phen in self.seeds.phenomena:
             asks = [c.payload for c in caps if c.form == "ask" and c.payload["phenomenon"] == phen.id]
@@ -173,8 +181,9 @@ class KnowledgeBase:
 
     def revoke(self, cap_id, by):
         cap = self._caps[cap_id]
-        if cap.granted_by != by:
-            raise PermissionDenied("只有授予人可以撤销能力")
+        owner = self._products[cap.payload["product_id"]].owner if cap.form == "applicable" else None
+        if by not in (cap.granted_by, owner):
+            raise PermissionDenied("只有授予人或产品归属研发可以撤销能力")
         cap.status = "revoked"
         self.events.append("capability_revoked", by, {"capability_id": cap_id})
         self._save()

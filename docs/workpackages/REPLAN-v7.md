@@ -213,7 +213,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 ### 2.7 门面（契约 ⑫）与 Agent（契约 ⑭）
 
 - 新增：`confirm_claims(req_id, ku_ids, by)`、`sign_qi_grant(question_id, by, claim_ids=(), note="")`、`revoke_capability(cap_id, by)`、`withdraw_claim(ku_id, by)`、`set_doc_level(doc_id, level, by)`、`recheck_evidence()`、`capabilities(viewer_id)`；
-- 改：`decline_project(..., applicable_product=None, claim_ids=())` 不再要求相容，改为提议一个完整情境；`extend_scope` 改为批准待批准的适用能力；`release_product` 同时授予新品的适用情境；`decide_decrypt` 写 `decrypt` 能力；`adopt_reuse` 的审定说明写 `statement`（授予业务员层）；`save_reply_draft` 先过 `render_refs` 与 `leak_hits(audience=0)`；`resolve` 处理 `qi_review`；`app.grants` 改为 `kb.decrypt_grants()` 的只读属性；
+- 改：`decline_project(..., applicable_product=None, claim_ids=())` 不再要求相容，改为提议一个完整情境；`extend_scope` 改为批准待批准的适用能力；`release_product` 同时授予新品的适用情境；`decide_decrypt` 写 `decrypt` 能力；`adopt_reuse` 的审定说明写 `statement`（授予客户层）；`save_reply_draft` 先过 `render_refs` 与 `leak_hits(audience=0)`；`resolve` 处理 `qi_review`；`app.grants` 改为 `kb.decrypt_grants()` 的只读属性；
 - 门面内部按「代谁」取视图（设计第 4 节规则一的表）；`self.seeds` 只用于标签、问法、抽取词表，以及读立项产品；
 - Agent 工具 `search_knowledge` 改调 `explore`；写给下层的文字里，专业结论只写 `[[编号]]`。
 
@@ -300,7 +300,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 - **传播**：`withdraw(ku_id)` 与 `evidence_changed(ku_id)` 把所有 `based_on` 含它的 `active` 能力置 `suspended`，写 `capability_suspended`；只此一个函数。
 - **确认**：`confirm_claims(req_id, ku_ids, by)`：仅需求单的接单研发；候选结论变 `active`，`confirmed_by=by`；为它提议的能力随之生效（适用类仍待批准）。
 - **qi_grant**（新家族，`owner_role: rd`、`signer_role: rd`）有两种对象，本包只做第一种（第二种依赖 Q5 的「本层无能力」，放在 Q5）：
-  - `knowledge:grant:<cap_id>|L<k>`：某条追问或适用能力只授予了它的结论那一层，而更低的第 k 层需要过它。形式与目标都能算出，不经 Agent 起草，问题卡直接列出形式、目标层、依据与原文位置；
+  - `knowledge:grant:<cap_id>|L<k>`：某条追问或适用能力只授予了它的结论那一层，而更低的第 k 层需要过它。本包的信号只有回问次数，每条能力只生成一个对象，`k` 取引发回问的会话里最低的一层：出自客户自助的会话为 0，全部出自业务员陪同的会话为 1（看该会话有没有业务员身份的事件）。只授予真正缺这个条件的那一层，授予低层即覆盖高层；不按层各出一个，因为推进类问题不会因前置不再成立而自动关闭，会留下签不完的重复卡；按层的对象在 Q5 随 `n_unanswerable` 接上。形式与目标都能算出，不经 Agent 起草，问题卡直接列出形式、目标层、依据与原文位置；
   - 属性 `{product_id, slot, value, n_ask_back, n_unanswerable, granted}`：`n_ask_back` 是研发为同一现象回问同一槽位的次数（现有 `question_published` 事件里 `family=ask_back`、对象 `slot:<需求单>/<槽位>`，按需求单的现象聚合）；`n_unanswerable` 在 Q5 接上，本包为 0；
   - 前置 `not attrs.granted and (attrs.n_ask_back >= 2 or attrs.n_unanswerable >= 1)`，`rule_score` 取两者之和除以 3 封顶 1；
   - 签字人：所依据结论的确认人；结论还是候选的，取对齐产品的归属研发，签时一并确认。`publish.py` 的 `_resolve` 从 `refs["signer"]` 读签字人，不再按 `product_id` 推断；
@@ -308,7 +308,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 - **qi_review**（新家族，`kind: anomaly`）：只由 `evidence_changed` 触发（撤回结论的人就是授予人，不再给他发复核）；对象 `knowledge:claim:<ku_id>`，签字人是确认人；`resolve` 里 `sign` = 保留（重新取指纹，恢复被挂起的能力），撤回走 `withdraw_claim`。
 - **撤销**：`revoke_capability(cap_id, by)` 仅授予人；解密能力同样可撤。
 - **解密进能力表**：`decide_decrypt` 通过时 `grant` 一条 `decrypt`（`audience=客户 id`、payload 带 `session_id`、依据该产品的 `ku:mechanism`）；`app.grants` 改为只读属性 `self.kb.decrypt_grants()`，`disclosure.cap/render` 的签名与 `test_wp_a1` 的用法不变。
-- **复用审定说明进能力表**：`adopt_reuse` 把 `customer_note` 写成一条授予业务员层的 `statement`；`view_session` 从能力表取这句话，撤销后不再显示。
+- **复用审定说明进能力表**：`adopt_reuse` 把 `customer_note` 写成一条授予客户层的 `statement`（这句话写给客户；只授予业务员层时，自助会话的客户收不到它，与 VISION 第 5 节「研发审过才回到客户」相悖）；`view_session` 从能力表取这句话，撤销后不再显示。
 - **被使用记分（替代 `cite_scope`）**：推荐命中的适用能力、本轮追问用到的 `ask` 能力、渲染用到的 `statement`，各写一条 `capability_used`，给 `based_on` 的确认人记 `used` 分；适用能力另给批准它的产品经理记一份（第 0 天的 `"seed"` 不记）。同一会话同一能力只记一次。同时删除 `l1/session.py::cite_scope` 与 `extend_scope` 生成的 `ku:translation:scope:*` 条目；`app.py` 工作量统计里「同类需求客户自助解决」「此后因此自动解决的需求」改为数这些能力的 `capability_used`。**记分对象有变化**：C′ 之后的复用由作出判断的研发和批准范围的产品经理各记一份「被使用」，V6 里只记产品经理的「被引用」；`demo_routes.py` 的 C′ 断言与 `docs/reports/v6_routes/` 按此更新。现有「被引用」记分的其余部分不动。
 - **界面**：研发工作面加「我授予的能力」列表（状态、依据、撤销按钮）；需求单页列出本单相关的候选结论，可勾选确认；`qi_grant`、`qi_review` 用现有问题卡。HTTP 只加对应 2.7 门面方法的几个 `POST`。
 
@@ -396,7 +396,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
   写一条 `retrieve` 事件（payload 同 `search`，加 `unanswerable_ku_ids`、`n_unanswerable`）。研发层另带本层候选，标「候选」。
 - Agent 工具 `search_knowledge` 改调 `explore`；`search` 本身不变。
 - **L1 回答用上授予的话**：`l1/answer.py` 的检索改调 `explore`，可用材料 = `units`（本层可读的结论，含现有的说明书、用法）+ `capabilities` 里授予收件层的 `statement`。离线模式按现有的拼接方式输出：结论原文，加上 `render_refs` 渲染出的 `statement` 原文；在线模式把 `statement` 以编号交给模型，模型只写 `[[编号]]`，回答经 Q3 的 `render_refs` 与 `leak_hits(audience=)` 后发出。渲染用到的 `statement` 写 `capability_used`（Q2）。问原理（`mechanism_request`）时，只要有授予收件层且命中的 `statement`，就用它回答，不再一律回「研发保密」；没有时照旧。撤销后它不在 `explore` 结果里，编号渲染也会被拒，回答回到「需要专业人员解答」。
-- `qi_grant` 的 `n_unanswerable` 从 `retrieve` 事件按「结论 × 提问者层级」计数。
+- `qi_grant` 的 `n_unanswerable` 从 `retrieve` 事件按「结论 × 提问者层级」计数；第一种对象从这里起按层生成（只为 `n_unanswerable ≥ 1` 的那一层出对象；回问次数仍按 Q2 的规则计入它所在的那一层）。
 - **`qi_grant` 的第二种对象（从 Q2 移来）** `knowledge:grant:<ku_id>|L<k>`：某条已确认结论在第 k 层被检索命中、却没有任何能力，要授予的是一句**可说的话**（`statement`）。问题卡附那一层被问到的原话与结论的原文位置；研发 Agent 在线时照现有准备流程起草措辞，离线时没有草稿（与其他家族一致）；研发签字时把改定的措辞经 `sign_qi_grant(..., note=措辞)` 传入，先过 `leak_hits(audience=k)`，再新建一条 `statement`。这是「研发授权一句话给前台说，前台看不到机理」的通用入口。
 
 **验收**：`test_wp_l` 加：客户层命中上层时的返回与「没找到」完全相同；L1、L2 只拿到本层内容、能力、提示与存根，不出现 L3 原文；L1 命中一条 L3 结论 → 觉提出 `qi_grant` → 研发签字授予一句话 → 同一个问题再问一次，**L1 回答的文字里出现这句话**、不出现结论原文 → 研发撤销 → 再问，回答回到「需要专业人员解答」。

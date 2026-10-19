@@ -14,7 +14,7 @@ from huayan.contracts import (KIND_LEVEL, Actor, Capability, AuditRecord, CitedK
     Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
     JueTimeline, TimelineNode, TimelinePoint)
-from huayan.domain import consistent, load_seeds
+from huayan.domain import consistent, load_seeds, match_candidates
 from huayan.escalation import flow
 from huayan.escalation.translate import leak_hits
 from huayan.events import EventLog
@@ -311,7 +311,7 @@ class HuayanApp:
                 and c.payload.get("product_id") == proposal.product_id
                 and c.payload["text"] == proposal.customer_note and c.granted_by == req.assigned_rd), None)
             customer_note = statement.payload["text"] if statement else ""
-            if statement and adopted:
+            if statement and adopted and level <= 1:
                 self._use_capability(statement.id, session_id, viewer_id)
             if card and adopted and customer_note and card.product_id == proposal.product_id:
                 card.note = "；".join(filter(None, [card.note, f"研发 {req.assigned_rd} 审定：{customer_note}"]))
@@ -528,7 +528,7 @@ class HuayanApp:
             title="研发审定的复用说明", text=proposal.customer_note, product_id=proposal.product_id,
             phenomenon_ids=[req.phenomenon], owner=by, confirmed_by=by, source="contributed", created_at=at)
         self.kb.add(unit)
-        self.kb.grant(Capability(id=self.kb.next_cap_id(), form="statement", audience=1,
+        self.kb.grant(Capability(id=self.kb.next_cap_id(), form="statement", audience=0,   # 写给客户的话，研发审过后回到客户
             payload={"text": proposal.customer_note, "product_id": proposal.product_id},
             based_on=[unit.id], granted_by=by, status="active", at=at))
         req.status = "reused"
@@ -1161,7 +1161,7 @@ class HuayanApp:
 
     def capabilities(self, viewer_id):
         self._actor(viewer_id, {"rd"})
-        return [c for c in self.kb.capabilities() if c.granted_by == viewer_id]
+        return [c for c in self.kb.capabilities() if c.granted_by == viewer_id and c.approved_by != "seed"]
 
     def candidate_claims(self, req_id, viewer_id):
         req, _ = self._requirement(req_id, viewer_id, {"rd"},
@@ -1216,12 +1216,16 @@ class HuayanApp:
     def _invalidate_capabilities(self):
         active = {c.id for c in self.kb.capabilities() if c.status == "active"}
         for session in self._sessions.values():
+            if session.status in {"escalated", "closed"}:
+                continue
             rec = session.recommendation
             selected = next((c for c in rec.candidates if c.product_id == rec.product_id), None) if rec else None
-            if selected and selected.capability_id not in active:
+            # 命中的情境失效后，按本层现有情境重新匹配；收窄后仍覆盖已知条件的推荐保留
+            if selected and selected.capability_id not in active and rec.product_id not in {
+                    c.product_id for c in match_candidates(session.need.phenomenon, session.need.known(),
+                        self.kb.view(self._actor(session.sales_id or session.customer_id)).products)}:
                 session.recommendation, session.status = None, "open"
-            if session.status not in {"escalated", "closed"}:
-                session.hints = self.ask_hints(session.need)
+            session.hints = self.ask_hints(session.need)
             self._save_session(session)
 
     def _use_capability(self, cap_id, session_id, by):
@@ -1234,7 +1238,9 @@ class HuayanApp:
         self.events.append("capability_used", by, {"capability_id": cap_id, "form": capability.form,
             "based_on": capability.based_on, "granted_by": capability.granted_by,
             "approved_by": capability.approved_by}, session_id=session_id)
-        owners = {self.kb._units[uid].confirmed_by for uid in capability.based_on}
+        if capability.approved_by == "seed":   # 第 0 天迁移出的情境不是运行中人签的判断，不记分
+            return
+        owners ={self.kb._units[uid].confirmed_by for uid in capability.based_on}
         if capability.form == "applicable":
             owners.add(capability.approved_by)
         for owner in owners - {None, "seed", "pm:agent"}:
@@ -1323,6 +1329,7 @@ class HuayanApp:
                     payload = {**capability.payload, "conditions": {**conditions, slot: [v for v in current if v != value]}}
                     self.kb.grant(capability.model_copy(update={"id": self.kb.next_cap_id(), "payload": payload}))
             self.events.append("sheet_updated", by, {"product_id": pid, "slot": slot, "removed": value})
+            self._invalidate_capabilities()
         elif q.family == "qi_review" and action == "sign":
             self.kb.confirm([q.refs["ku_id"]], by)
         elif action == "freeze_access":
@@ -1521,7 +1528,9 @@ class HuayanApp:
         by_me = lambda kind: sum(e.kind == kind and e.actor == viewer_id for e in events)
         scope_hits = lambda caps: sum(e.kind == "capability_used" and e.payload["capability_id"] in caps for e in events)
         mine_cust = lambda s: viewer.role != "sales" or self.config["customer_sales"].get(s.customer_id) == viewer_id
-        self_served = sum(s.origin == "customer" and s.status == "recommended" and mine_cust(s) and
+        confirmed = lambda s: any(c.product_id == s.recommendation.product_id and c.status == "confirmed"
+                                  for c in s.recommendation.candidates)   # 「可能适用」不算自助解决
+        self_served = sum(s.origin == "customer" and s.status == "recommended" and confirmed(s) and mine_cust(s) and
                           not any(s.id in r.session_ids for r in self._requirements.values())
                           for s in self._sessions.values())
         auto_escalated = sum(e.kind == "auto_executed" and e.payload["action"] == "escalate"

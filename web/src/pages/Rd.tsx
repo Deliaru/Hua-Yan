@@ -745,7 +745,7 @@ function GrantedCapabilities() {
         {c.payload.conditions && <p>{Object.entries(c.payload.conditions).map(([k, v]) => `${L.slot(k)}：${v.join("、")}`).join("；")}</p>}
         <p className="text-ink-3">依据：{c.based_on.join("、")}</p>
       </div>
-      <Act kind="quiet" label="撤销" run={() => api.revokeCapability(c.id, me)} />
+      {c.status !== "revoked" && <Act kind="quiet" label="撤销" run={() => api.revokeCapability(c.id, me)} />}
     </div>)}
     {!caps.length && <div className="row text-[13px] text-ink-2">还没有授予的能力</div>}
   </Group>;

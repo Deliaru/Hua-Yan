@@ -327,6 +327,7 @@ def _qi(events, at, caps):
     history = events.query(until=at)
     requirements = {e.payload["requirement_id"]: e.payload["phenomenon"] for e in history
                     if e.kind == "requirement_created"}
+    accompanied = {e.session_id for e in history if e.session_id and e.actor.startswith("sales:")}
     backs = defaultdict(list)
     changed = {}
     for event in history:
@@ -338,20 +339,21 @@ def _qi(events, at, caps):
         elif event.kind in {"claim_confirmed", "claim_withdrawn"}:
             changed.pop(event.payload["ku_id"], None)
     for cap in caps:
-        if cap.form not in {"ask", "applicable"} or cap.status != "active":
+        if cap.form not in {"ask", "applicable"} or cap.status != "active" or cap.audience == 0:
             continue
         ph = cap.payload["phenomenon"]
         evs = backs[(ph, cap.payload["slot"])] if cap.form == "ask" else [
             event for (phen, _), rows in backs.items() if phen == ph for event in rows]
-        for level in range(cap.audience):
-            granted = any(c.form == cap.form and c.payload == cap.payload and c.status == "active"
-                          and c.audience in range(level + 1) for c in caps)
-            yield JueObject(object_id=f"knowledge:grant:{cap.id}|L{level}", object_type="knowledge", attrs={
-                "product_id": cap.payload.get("product_id", ""), "slot": cap.payload.get("slot", "phenomenon"),
-                "value": ph, "n_ask_back": len(evs), "n_unanswerable": 0, "granted": granted,
-            }), {"capability_id": cap.id, "product_id": cap.payload.get("product_id", ""),
-                 "audience": str(level), "signer": cap.granted_by, "form": cap.form,
-                 "based_on": cap.based_on, "event_ids": [e.id for e in evs]}
+        # 只授予真正缺这个条件的那一层：回问出自业务员陪同的会话为 L1，出自客户自助的会话为 L0，取最低的一层。
+        level = min((1 if e.session_id in accompanied else 0 for e in evs), default=0)
+        granted = any(c.form == cap.form and c.payload == cap.payload and c.status == "active"
+                      and c.audience in range(level + 1) for c in caps)
+        yield JueObject(object_id=f"knowledge:grant:{cap.id}|L{level}", object_type="knowledge", attrs={
+            "product_id": cap.payload.get("product_id", ""), "slot": cap.payload.get("slot", "phenomenon"),
+            "value": ph, "n_ask_back": len(evs), "n_unanswerable": 0, "granted": granted,
+        }), {"capability_id": cap.id, "product_id": cap.payload.get("product_id", ""),
+             "audience": str(level), "signer": cap.granted_by, "form": cap.form,
+             "based_on": cap.based_on, "event_ids": [e.id for e in evs]}
     for ku_id, event in changed.items():
         if event.payload["signer"] is None:
             continue

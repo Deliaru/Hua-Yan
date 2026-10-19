@@ -77,7 +77,7 @@ def recommendation_note(session, deps):
             if slot not in known:
                 unknown.setdefault(slot, []).extend(v for v in values if v not in unknown.get(slot, []))
     labels = {s.id: s.label for s in deps.seeds.slots}
-    return "；".join(f"{labels[slot]}为{'、'.join(values)}，请确认" for slot, values in unknown.items())
+    return "可能适用：" + "；".join(f"{labels[slot]}为{'、'.join(values)}，请确认" for slot, values in unknown.items())
 
 
 def handle_turn(session, speaker, text, deps, answering=False):
@@ -102,12 +102,9 @@ def handle_turn(session, speaker, text, deps, answering=False):
     # 已有推荐在需求条件未变时继续有效，普通发言不能用 L1 匹配覆盖研发审定的复用结果。
     if (conditions_changed or (result.intent == "need" and session.status != "recommended")) and matching:
         session.hints = deps.ask_hints(session.need)
-        level = {"customer": 0, "sales": 1}[deps.actors[_acting(session)].role]
-        for capability in deps.kb.capabilities():
-            if (capability.form == "ask" and capability.status == "active" and capability.audience in range(level + 1)
-                    and capability.payload["phenomenon"] == session.need.phenomenon
-                    and capability.payload["slot"] in {h.slot for h in session.hints}):
-                deps._use_capability(capability.id, session.id, _acting(session))
+        for capability in deps.kb.ask_capabilities(deps.actors[_acting(session)], session.need.phenomenon,
+                                                   {h.slot for h in session.hints}):
+            deps._use_capability(capability.id, session.id, _acting(session))
         deps.events.append("ask_hint", _acting(session), {"slots": [h.slot for h in session.hints],
             "p": {h.slot: h.p_need for h in session.hints}, "model": deps.jue_realtime.name}, session_id=session.id)
         if not session.hints:
