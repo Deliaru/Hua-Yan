@@ -23,19 +23,36 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
-from huayan.contracts import SHANGHAI
+from huayan.contracts import SHANGHAI, JueObject
 from huayan.domain import load_seeds
 from huayan.eval.week import chain_events
 from huayan.events import EventLog
-from huayan.jue.features import vectorize
+from huayan.jue.features import build, vectorize
 from huayan.jue.jue_k import JueK
-from huayan.jue.proto import JueProto
+from huayan.jue.proto import JueProto, load_templates, rule_score
 from huayan.jue.state import collect_scheduled
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.sim import make_cards, make_week, shifted_world
 from huayan.sim.trajectory import trajectory
 from huayan.sim.week_events import TICK_HOURS
-from train_jue_k import features, make_classifier, rule_scores
+from huayan.jue.train import make_classifier
+from train_jue_k import sample_rows
+
+
+def _objects(df: pd.DataFrame, templates: str):
+    rows = sample_rows(df, templates)
+    return rows, [JueObject(object_id=r["object_id"], object_type=r["object_type"], attrs=r["attrs"]) for r in rows]
+
+
+def _rule(df: pd.DataFrame, templates: str) -> np.ndarray:
+    by_family = {t.family: t for t in load_templates(templates).values()}
+    rows, objects = _objects(df, templates)
+    return np.array([rule_score(by_family[r["family"]], o) for r, o in zip(rows, objects)])
+
+
+def _features(df: pd.DataFrame, templates: str) -> list[dict[str, float]]:
+    rows, objects = _objects(df, templates)
+    return [build(o, r["family"]) for r, o in zip(rows, objects)]
 
 FAMILIES = ["ask_slot", "ask_back", "opportunity", "knowledge_conflict", "leak_risk"]
 
@@ -113,13 +130,13 @@ def learning_curve(seeds, kb, templates: str, start: datetime, lams=(0.0, 0.25, 
             world = shifted_world(seeds, lam, random.Random(42 + r))
             pool, test = rows(world, max(sizes), 1000 * r + 1), rows(world, n_test, 1000 * r + 2).drop(columns="card")
             y = test.label.to_numpy()
-            run = {"p_fix": stats(test.p_fix.to_numpy(), y), "template_rule": stats(rule_scores(test, templates), y), "jue_k": {}}
+            run = {"p_fix": stats(test.p_fix.to_numpy(), y), "template_rule": stats(_rule(test, templates), y), "jue_k": {}}
             for n in sizes:
                 train = pool[pool.card < n].drop(columns="card")
-                feats = features(train)
+                feats = _features(train, templates)
                 columns = sorted({k for f in feats for k in f})
                 clf = make_classifier().fit(np.asarray(vectorize(feats, columns)), train.label)
-                run["jue_k"][n] = stats(clf.predict_proba(np.asarray(vectorize(features(test), columns)))[:, 1], y)
+                run["jue_k"][n] = stats(clf.predict_proba(np.asarray(vectorize(_features(test, templates), columns)))[:, 1], y)
             runs.append(run)
         mean = lambda get: float(np.mean([get(run) for run in runs]))
         result[str(lam)] = {
@@ -177,13 +194,18 @@ def main():
 def evaluate(args, out: Path) -> None:
     df = pd.read_csv(args.samples)
     with (Path(args.model_dir) / "model.pkl").open("rb") as stream:
-        artifact = pickle.load(stream)
+        models = pickle.load(stream)["models"]
     columns = json.loads((Path(args.model_dir) / "features.json").read_text(encoding="utf-8"))["columns"]
-    raw = artifact["classifier"].predict_proba(np.asarray(vectorize(features(df), columns)))[:, 1]
-    rule = rule_scores(df, args.templates)
-    # 回落规则的类没有校准器：「jue_k」一栏即最终使用的分数（规则），与 JueK 推理一致
-    cal = np.array([artifact["calibrators"][f].predict([r])[0] if f in artifact["calibrators"] else q
-                    for f, r, q in zip(df.family, raw, rule)])
+    rows, objects = _objects(df, args.templates)
+    rule = _rule(df, args.templates)
+    # 按「家族 × 判断层」取模型；没有模型的格回落规则：「jue_k」两栏即最终使用的分数（规则），与 JueK 推理一致
+    raw, cal = rule.copy(), rule.copy()
+    for i, (r, o) in enumerate(zip(rows, objects)):
+        cell = f"{r['family']}|L{r['judge_level']}"
+        if cell in models:
+            classifier, calibrator = models[cell]
+            raw[i] = classifier.predict_proba(vectorize([build(o, r["family"])], columns[cell]))[0, 1]
+            cal[i] = calibrator.predict([raw[i]])[0]
     y = df.label.to_numpy()
 
     calibration, curves = {}, {}

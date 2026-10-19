@@ -848,7 +848,8 @@ class HuayanApp:
         trial.market_eval_missing = list(missing_slots)
         unit = self.kb._units[f"ku:trial:{trial.id}"]
         self.kb.add(unit.model_copy(update={"text": trial.model_dump_json()}))
-        self.events.append("market_eval", by, {"requirement_id": req.id, "trial_id": trial.id, "result": result})
+        self.events.append("market_eval", by, {"requirement_id": req.id, "trial_id": trial.id, "result": result,
+                                               "missing_slots": list(missing_slots)})
         if question:
             self._settle(question.id, Resolution(action="sign", by=by))
         self._after(req_ids=[req.id])
@@ -1125,7 +1126,8 @@ class HuayanApp:
         self.kb.add(unit)
         self._trials[trial.id] = trial.model_copy(deep=True)
         self.events.append("trial", trial.rd, {"trial_id": trial.id, "product_id": trial.product_id,
-            "conditions": trial.conditions, "result": trial.result, "cause": trial.cause}, ts=trial.at)
+            "conditions": trial.conditions, "result": trial.result, "cause": trial.cause,
+            "requirement_id": trial.requirement_id, "missing_slots": trial.missing_slots}, ts=trial.at)
         if trial.result == "pass":
             self.ledger.add(LedgerEntry(ts=trial.at, owner=trial.rd, ku_id=unit.id,
                 points=self.config["points"]["trial_pass"], reason="trial_pass", ref=trial.id))

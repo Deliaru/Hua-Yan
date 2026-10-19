@@ -25,7 +25,9 @@ _PURCHASE = re.compile("报价|价格|采购|下单|送样")   # v6：商务诉�
 
 
 def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: datetime) -> JueState:
-    return JueState(at=at, mode="realtime", objects=_slot_objects(need.session_id, need.known(), need, seeds, products, 1))
+    # 判断层：客户自助会话里代客户判断（L0），陪同会话里代业务员判断（L1）
+    return JueState(at=at, mode="realtime", objects=_slot_objects(need.session_id, need.known(), need, seeds, products, 1,
+                                                                  judge=0 if need.sales_id is None else 1))
 
 
 def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
@@ -154,7 +156,7 @@ def _missing(req: Requirement, kb: KnowledgeBase, own: list, history: list) -> t
 
 
 def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: Seeds, products: list[Product],
-                  layer: int, kb: KnowledgeBase | None = None, failed=frozenset()) -> dict[str, JueObject]:
+                  layer: int, kb: KnowledgeBase | None = None, failed=frozenset(), judge=None) -> dict[str, JueObject]:
     ph = need.phenomenon
     phen = next((p for p in seeds.phenomena if p.id == ph), None)
     ids = lambda k: tuple(c.product_id for c in match_candidates(ph, k, products))
@@ -174,7 +176,8 @@ def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: See
             "asked": need.asked.get(slot.id, 0), "required": phen is not None and slot.id in phen.required_slots,
             "turn": need.turn_count, "n_filled": len(known), "n_candidates": len(ids(known)) if ph else 0,
             "splits": splits, "prior_top": max(prior.values(), default=0.0), "chem_savvy": need.profile.chem_savvy,
-            "layer": layer, "trans_splits": trans, "p_fix": p_fix, "failed_on": slot.id in failed})
+            "layer": layer, "trans_splits": trans, "p_fix": p_fix, "failed_on": slot.id in failed,
+            "judge_level": layer if judge is None else judge})
     return objects
 
 

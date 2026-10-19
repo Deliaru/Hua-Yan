@@ -1,36 +1,51 @@
 {
-  "samples": "data/jue_k/samples.csv",
   "rows": 15399,
-  "by_family": {
-    "ask_back": {
+  "by_cell": {
+    "ask_back|L2": {
       "n": {
-        "train": 1034,
-        "val": 243,
-        "test": 205,
+        "train": 7,
+        "val": 4,
+        "test": 2,
+        "heldout": 0
+      },
+      "positives": {
+        "train": 5,
+        "val": 4,
+        "test": 0,
+        "heldout": 0
+      },
+      "scored_by": "rule",
+      "reason": "样本不够"
+    },
+    "ask_back|L3": {
+      "n": {
+        "train": 1027,
+        "val": 239,
+        "test": 203,
         "heldout": 224
       },
       "positives": {
-        "train": 367,
-        "val": 105,
+        "train": 362,
+        "val": 101,
         "test": 54,
         "heldout": 8
       },
-      "val_auc": 0.7503105590062111,
-      "val_brier_raw": 0.20550629965218822,
-      "val_brier_calibrated": 0.17844983201129205,
-      "test_auc": 0.7143119941133186,
+      "val_auc": 0.7345745444109628,
+      "val_brier_raw": 0.1950164650816686,
+      "val_brier_calibrated": 0.17607213439174488,
+      "test_auc": 0.6943201590852596,
       "test_rule_auc": 0.5,
       "test_auc_diff_ci95": [
-        0.131,
-        0.297
+        0.115,
+        0.291
       ],
-      "test_brier": 0.18120422170324466,
-      "test_rule_brier": 0.38463414634146337,
-      "heldout_auc": 0.9531249999999999,
+      "test_brier": 0.1686506430003282,
+      "test_rule_brier": 0.38359605911330047,
+      "heldout_auc": 0.9696180555555556,
       "heldout_rule_auc": 0.5,
       "scored_by": "jue_k"
     },
-    "ask_slot": {
+    "ask_slot|L1": {
       "n": {
         "train": 5193,
         "val": 1158,
@@ -43,22 +58,22 @@
         "test": 350,
         "heldout": 293
       },
-      "val_auc": 0.7931528336629613,
-      "val_brier_raw": 0.15780119483262375,
-      "val_brier_calibrated": 0.14806961260839355,
-      "test_auc": 0.7580900621118012,
+      "val_auc": 0.7997088985164951,
+      "val_brier_raw": 0.1549496138988753,
+      "val_brier_calibrated": 0.1475551474314694,
+      "test_auc": 0.7533850931677019,
       "test_rule_auc": 0.6695652173913044,
       "test_auc_diff_ci95": [
-        0.055,
-        0.119
+        0.047,
+        0.113
       ],
-      "test_brier": 0.17026049123344983,
+      "test_brier": 0.1732363946045006,
       "test_rule_brier": 0.28400437181663835,
-      "heldout_auc": 0.5964297051129662,
+      "heldout_auc": 0.6219447205558992,
       "heldout_rule_auc": 0.5592253278002914,
       "scored_by": "jue_k"
     },
-    "knowledge_conflict": {
+    "knowledge_conflict|L3": {
       "n": {
         "train": 1877,
         "val": 477,
@@ -72,7 +87,7 @@
         "heldout": 0
       },
       "val_auc": 1.0,
-      "val_brier_raw": 1.2967615668750935e-05,
+      "val_brier_raw": 3.188280918543977e-08,
       "val_brier_calibrated": 0.0,
       "test_auc": 1.0,
       "test_rule_auc": 1.0,
@@ -86,7 +101,7 @@
       "heldout_rule_auc": null,
       "scored_by": "rule"
     },
-    "leak_risk": {
+    "leak_risk|L2": {
       "n": {
         "train": 430,
         "val": 86,
@@ -99,22 +114,22 @@
         "test": 39,
         "heldout": 0
       },
-      "val_auc": 0.9296235679214403,
-      "val_brier_raw": 0.1024368735046662,
-      "val_brier_calibrated": 0.08533251733986127,
-      "test_auc": 0.9413461538461538,
+      "val_auc": 0.92253136933988,
+      "val_brier_raw": 0.11722758259826482,
+      "val_brier_calibrated": 0.0862777669207218,
+      "test_auc": 0.9314102564102563,
       "test_rule_auc": 0.5,
       "test_auc_diff_ci95": [
-        0.378,
-        0.488
+        0.376,
+        0.484
       ],
-      "test_brier": 0.08404035034792084,
+      "test_brier": 0.08490565695150151,
       "test_rule_brier": 0.5063291139240507,
       "heldout_auc": null,
       "heldout_rule_auc": null,
       "scored_by": "jue_k"
     },
-    "opportunity": {
+    "opportunity|L2": {
       "n": {
         "train": 722,
         "val": 128,
@@ -128,7 +143,7 @@
         "heldout": 0
       },
       "val_auc": 0.9474206349206349,
-      "val_brier_raw": 0.0735839509510322,
+      "val_brier_raw": 0.07377434098640871,
       "val_brier_calibrated": 0.06907894736842106,
       "test_auc": 0.958861280236959,
       "test_rule_auc": 0.8538752674016785,

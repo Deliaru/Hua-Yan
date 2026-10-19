@@ -53,3 +53,15 @@ def human_decisions(events: list[Event]) -> dict[str, dict]:
                     numeric[k].append(float(v))
         out[key] = {"n": len(snaps), "attrs_mean": {k: round(sum(v) / len(v), 3) for k, v in sorted(numeric.items())}}
     return out
+
+
+def row_stats(rows: list[dict]) -> dict[str, dict]:
+    """决策行按结果层级：行数、按家族计数、处置分布、标签分布（无标签 = 没有人的处置）。"""
+    out = {}
+    for level in sorted({r["level"] for r in rows}, key=lambda x: (x is None, x)):
+        group = [r for r in rows if r["level"] == level]
+        out["无标签" if level is None else f"L{level}"] = {
+            "n": len(group), "families": dict(Counter(r["family"] for r in group)),
+            "actions": dict(Counter(r["action"] or "未处置" for r in group)),
+            "labels": dict(Counter(str(r["label"]) for r in group))}
+    return out

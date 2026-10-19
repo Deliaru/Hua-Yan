@@ -2,17 +2,22 @@ import json
 from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from huayan.bus import QuestionBus
-from huayan.contracts import NeedState, Requirement, ReuseProposal, ScoredDecision, Session
+from huayan.contracts import (JueObject, JueOutput, JueRecord, JueState, NeedState, Requirement, ReuseProposal,
+                              ScoredDecision, Session)
 from huayan.events import EventLog
 from huayan.jev.system1 import MockSystem1Client
 from huayan.jue.expr import evaluate
+from huayan.jue.jue_k import JueK
 from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import ask_hints, publish
+from huayan.jue.records import decision_rows, rows_for
 from huayan.jue.scan import scan
 from huayan.jue.state import requirement_state, session_state
+from huayan.jue.train import fit
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.meter import FileMeter
 
@@ -118,3 +123,53 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     assert {json.loads(line)["kind"] for line in meter.path.read_text(encoding="utf-8").splitlines()} == {"jue"}
     assert not any("huayan.gateway" in p.read_text(encoding="utf-8") for p in (ROOT / "src/huayan/jue").glob("*.py"))
 
+
+    # Q6 决策投影：一行 = 觉提出的一个决策点；标签只来自人的处置与试样 / 评价结果，层级不低于判断层
+    def slot(oid, judge, **attrs):
+        return JueObject(object_id=oid, object_type="slot", attrs={"layer": 1, "slot": "fiber", "phenomenon": "color_unlevel",
+                                                                   "judge_level": judge} | attrs)
+    objects = {o.object_id: o for o in (slot("slot:sess:a/fiber", 0), slot("slot:sess:b/fiber", 1),
+                                        slot("slot:req:9/equipment", 3, layer=3, slot="equipment"))}
+    record = JueRecord(state=JueState(at=t0, mode="realtime", objects=objects), output=JueOutput(
+        at=t0, mode="realtime", model="jue_proto", scored_by="rule",
+        decisions=[ScoredDecision(family=f, object_id=oid, p_need=0.7) for f, oid in
+                   (("ask_slot", "slot:sess:a/fiber"), ("ask_slot", "slot:sess:b/fiber"), ("ask_back", "slot:req:9/equipment"))]))
+    log = EventLog()
+    for qid, family, oid, by, action, sid in (("q:a", "ask_slot", "slot:sess:a/fiber", "customer:C01", "answered", "sess:a"),
+                                              ("q:b", "ask_slot", "slot:sess:b/fiber", "sales:S01", "dismiss", "sess:b"),
+                                              ("q:c", "ask_back", "slot:req:9/equipment", "pm:agent", "answered", None)):
+        log.append("question_published", "jue", {"question_id": qid, "family": family, "object_id": oid, "template_id": family},
+                   session_id=sid, ts=t0)
+        log.append("question_resolved", by, {"question_id": qid, "family": family, "object_id": oid, "template_id": family,
+                                             "action": action, "by": by}, session_id=sid, ts=t0 + timedelta(hours=1))
+    log.append("trial", "rd:R01", {"requirement_id": "req:9", "result": "fail", "cause": "requirement",
+                                   "missing_slots": ["equipment"]}, ts=t0 + timedelta(hours=2))
+    rows = decision_rows([record], log)
+    assert [(r["family"], r["label"], r["judge_level"], r["level"]) for r in rows] == [
+        ("ask_slot", 1, 0, 0), ("ask_slot", 0, 1, 1), ("ask_back", None, 3, None), ("ask_back", 1, 3, 3)]
+    assert [r["object_id"] for r in rows_for(rows, 0)] == ["slot:sess:a/fiber"]     # 研发回问的结果行不进客户层
+
+    # Q6 隔离：ask_slot|L0 训练一次；再加入 L1、L2 的行与「判断层 0、结果来自 L3」的行重训，L0 的分数逐条不变
+    rng = np.random.default_rng(0)
+    def synth(n, judge, level, flip, tag):
+        out = []
+        for i in range(n):
+            p = float(rng.random())         # 规则看不到的信号：模型赢了规则才会保存这一格
+            attrs = {"layer": 1, "filled": False, "unknown": False, "asked": 0, "phenomenon": "color_unlevel", "slot": "fiber",
+                     "splits": 2, "required": False, "prior_top": float(rng.random()), "p_fix": p, "judge_level": judge}
+            out.append({"family": "ask_slot", "object_type": "slot", "object_id": f"slot:{tag}{i}/fiber", "attrs": attrs,
+                        "label": int((p > 0.5) != flip), "judge_level": judge, "level": level})
+        return out
+    base = synth(600, 0, 0, False, "a")
+    fixed = {f"slot:f{i}/fiber": JueObject(object_id=f"slot:f{i}/fiber", object_type="slot",
+                                           attrs=base[0]["attrs"] | {"p_fix": i / 10}) for i in range(11)}
+
+    def l0_scores(rows, out):
+        summary = fit(rows, TEMPLATES, out)
+        decided = JueK(out, TEMPLATES).propose(JueState(at=t0, mode="realtime", objects=fixed)).decisions
+        return summary, [(d.p_need, d.scored_by) for d in decided if d.family == "ask_slot"]
+    first, before = l0_scores(base, tmp_path / "k1")
+    second, after = l0_scores(base + synth(300, 1, 1, True, "b") + synth(300, 2, 2, True, "c") + synth(300, 0, 3, True, "d"),
+                              tmp_path / "k2")
+    assert first["ask_slot|L0"]["scored_by"] == second["ask_slot|L0"]["scored_by"] == "jue_k"
+    assert {"ask_slot|L1", "ask_slot|L2"} <= set(second) and len(before) == 11 and before == after

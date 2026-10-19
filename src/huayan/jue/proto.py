@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import yaml
 
-from huayan.contracts import JueObject, JueOutput, JueState, JueTemplate, Meter, S1Noul, ScoredDecision, System1Client
+from huayan.contracts import ROLE_LEVEL, JueObject, JueOutput, JueState, JueTemplate, Meter, S1Noul, ScoredDecision, System1Client
 from huayan.jev.system1 import OneJevClient
 from huayan.jue.expr import evaluate
 
@@ -44,6 +44,11 @@ def rule_score(t: JueTemplate, o: JueObject) -> float:
     if score is None:
         raise ValueError(f"模板 {t.id} 的 rule_score 无法在 {o.object_id} 上求值")
     return min(1.0, max(0.0, float(score)))
+
+
+def judge_level(t: JueTemplate, o: JueObject) -> int:
+    """这个决策代哪一层判断：对象带 judge_level 的用它（槽位对象），其余取模板签字人（提示类取主人）所在层。"""
+    return int(o.attrs.get("judge_level", ROLE_LEVEL[t.signer_role or t.owner_role]))
 
 
 def decisions(pairs, scores: dict, sources: dict) -> list[ScoredDecision]:

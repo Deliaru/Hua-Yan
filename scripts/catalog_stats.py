@@ -1,4 +1,5 @@
-"""目录飞轮统计（WP-J）：读一个运行目录的事件日志，按模板统计提出与处置、按「动作 × 对象类型」统计人自发决策，
+"""目录飞轮统计（WP-J）：读一个运行目录的事件日志，按模板统计提出与处置、按结果层级统计决策行（Q6）、
+按「动作 × 对象类型」统计人自发决策（人自发做了、觉没提），
 写 runs/<run_id>/catalog_stats.json 与一页 docs/reports/catalog_stats.md。只报计数与比率，不给阈值建议。
 
 uv run python scripts/catalog_stats.py --run runs/week-w1-jue_k-handle --injections data/week/w1/injections.jsonl
@@ -8,8 +9,10 @@ import json
 from pathlib import Path
 
 from huayan.contracts import Event, Injection
-from huayan.eval.catalog import human_decisions, template_stats
+from huayan.eval.catalog import human_decisions, row_stats, template_stats
+from huayan.events import EventLog
 from huayan.jue.proto import load_templates
+from huayan.jue.records import decision_rows, load_records
 
 
 def main():
@@ -26,8 +29,11 @@ def main():
     if args.injections:
         injections = [Injection.model_validate_json(l)
                       for l in Path(args.injections).read_text(encoding="utf-8").splitlines()]
+    log = EventLog()
+    log.events = events
     result = {"run": str(run), "injections": args.injections,
               "templates": template_stats(events, load_templates(args.templates), injections),
+              "rows": row_stats(decision_rows(load_records(run), log)),
               "human_decisions": human_decisions(events)}
     (run / "catalog_stats.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     Path(args.out).write_text(_markdown(result), encoding="utf-8")
@@ -51,6 +57,11 @@ def _markdown(r: dict) -> str:
         lines.append(f"| `{tid}` | {'推进' if s['kind'] == 'advance' else '异常'} | {s['proposed']} | {s['signed']} | "
                      f"{s['returned']} | {s['dismissed']} | {s['dismissed_not_same']} | {s['auto_closed']} | {s['open']} | "
                      f"{_fmt(s['ignored_rate'])} | {_fmt(s.get('false_alarm_rate'))} |")
+    lines += ["", "## 决策行（按结果层级；觉在客户层的追问只学 L0 的行，研发的判断只成为授予的理由）", "",
+              "| 层级 | 行数 | 家族 | 处置 | 标签 |", "|---|---|---|---|---|"]
+    for level, g in r["rows"].items():
+        fmt = lambda d: "，".join(f"{k} {v}" for k, v in d.items())
+        lines.append(f"| {level} | {g['n']} | {fmt(g['families'])} | {fmt(g['actions'])} | {fmt(g['labels'])} |")
     lines += ["", "## 人自发决策（执行生效动作时同一对象上没有对应的已提出问题）", ""]
     if not r["human_decisions"]:
         lines.append("本次运行没有人自发决策（模拟业务周不产生 `human_decision`，C12）。")
