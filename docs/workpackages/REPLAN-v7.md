@@ -6,6 +6,7 @@
 > v7.1（同日）：按独立审查的 25 条意见修订，修订记录见第 7 节。
 > v7.2（同日）：补上真实运行的两个缺口——从企业资料起草种子（Q4.5）、应用可续跑（Q6.5），见第 1.4 节。
 > v7.3（同日）：人已批准全部契约改动（含 2.8 与 v7.2 新增）；按愿景逐条审核，修正 5 处偏离，见第 9 节。
+> v7.4（同日）：第二轮独立审查（能否开工）报 6 处必须先改，并结合人提供的真实公开产品目录（CSV），全部并入，见第 10 节。
 
 ## 0. 目标与写法
 
@@ -188,7 +189,7 @@ class Candidate(BaseModel):
 
 ```yaml
 sources: []            # [{name, kind: public|internal|external, root, level?}]；替身 RAG 指向 seeds/rag/ 或决赛资料目录
-qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_state.json（每次新运行独立）；试点与决赛回放指向 data/qi/state.json，多次运行共用
+qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_state.json（每次新运行独立）；试点指向 data/qi/state.json。状态文件含运行期发布的产品与试样，只能配同一个运行目录用：接着上次运行一律走 resume（Q6.5），不让两个新运行共用一个状态文件
 ```
 
 有效状态文件的内容（v7.2 扩大）：能力、`claim` 类结论、状态改过的结论、片段密级表、两个序号，**以及运行期新增的全部知识**（`source` 不是 `seed` 的知识单元：发布的产品说明、沉淀的转化知识、试样、公开案例之外的贡献）**和运行期发布的产品记录**。知识与能力的持久化只此一处。
@@ -241,7 +242,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 - **写入口全部改写能力**：
   - `extend_scope`：`grant`「新现象 × 原条件」的情境，并由签字的产品经理 `approve`——这就是 Q1.5 之后的通用路径，Q1.5 只改「情境条件从哪来」，不先写后删；
   - `resolve` 收窄说明书：撤销含该取值的情境，加一个去掉该取值的副本，`approved_by` 沿用原情境；
-  - `release_product`（`escalation/flow.py`）：按新品的情境各 `grant` 一条 `audience=0` 的适用能力，`granted_by` 为产品归属研发，`approved_by` 为发布签字人；新品记录写进有效状态，重启后照常存在。
+  - `release_product`（`escalation/flow.py`）：按新品的情境各 `grant` 一条 `audience=0` 的适用能力，`based_on` 为 `ku:sheet:<pid>`，`granted_by` 为产品归属研发，`approved_by` 为发布签字人；`_put_product` 建产品知识单元时把 `confirmed_by` 设为产品的 `owner`（否则 Q2 的「授予人即确认人」规则会拦下发布）；新品记录写进有效状态，重启后照常存在。
 - **有效状态**：每次写入后把 2.6 列出的内容整体写成 `{"version": n, ...}`（先写临时文件再改名）；`kb.add`、`add_product` 也算写入；`state_path` 为空时不写（只有直接构造知识库的测试与脚本如此，应用总有路径）。
 - **删除**：`update_applicable`、`extend_solves`。（`cite_scope` 在 Q2 与它的替代一起删。）
 
@@ -265,13 +266,12 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 - **四条业务规则**（只在 `grant`、`confirm` 里各写一次）：`based_on` 的确认人都是 `granted_by`；`audience < 3` 时 `based_on` 里不能有 `formula`；只依据外部片段的结论不能 `confirm`；`form == "applicable"` 且 `approved_by` 为空就是 `proposed`。
 - **传播**：`withdraw(ku_id)` 与 `evidence_changed(ku_id)` 把所有 `based_on` 含它的 `active` 能力置 `suspended`，写 `capability_suspended`；只此一个函数。
 - **确认**：`confirm_claims(req_id, ku_ids, by)`：仅需求单的接单研发；候选结论变 `active`，`confirmed_by=by`；为它提议的能力随之生效（适用类仍待批准）。
-- **qi_grant**（新家族，`owner_role: rd`、`signer_role: rd`）有两种对象：
+- **qi_grant**（新家族，`owner_role: rd`、`signer_role: rd`）有两种对象，本包只做第一种（第二种依赖 Q5 的「本层无能力」，放在 Q5）：
   - `knowledge:grant:<cap_id>|L<k>`：某条追问或适用能力只授予了它的结论那一层，而更低的第 k 层需要过它。形式与目标都能算出，不经 Agent 起草，问题卡直接列出形式、目标层、依据与原文位置；
-  - `knowledge:grant:<ku_id>|L<k>`：某条已确认结论在第 k 层被检索命中、却没有任何能力（Q5 的「本层无能力」），要授予的是一句**可说的话**（`statement`）。措辞由确认人的研发 Agent 照现有准备流程起草（附那一层被问到的原话、结论原文位置），研发改定后签字；草稿先过 `leak_hits(audience=k)`。这是「研发授权一句话给前台说，前台看不到机理」的通用入口；
   - 属性 `{product_id, slot, value, n_ask_back, n_unanswerable, granted}`：`n_ask_back` 是研发为同一现象回问同一槽位的次数（现有 `question_published` 事件里 `family=ask_back`、对象 `slot:<需求单>/<槽位>`，按需求单的现象聚合）；`n_unanswerable` 在 Q5 接上，本包为 0；
   - 前置 `not attrs.granted and (attrs.n_ask_back >= 2 or attrs.n_unanswerable >= 1)`，`rule_score` 取两者之和除以 3 封顶 1；
   - 签字人：所依据结论的确认人；结论还是候选的，取对齐产品的归属研发，签时一并确认。`publish.py` 的 `_resolve` 从 `refs["signer"]` 读签字人，不再按 `product_id` 推断；
-  - `sign_qi_grant`：第一种复制该能力，`audience=k`、`granted_by=by`，适用类转入 `scope_update`；第二种按研发改定的措辞新建一条 `statement`。
+  - `sign_qi_grant`：第一种复制该能力，`audience=k`、`granted_by=by`，适用类转入 `scope_update`。
 - **qi_review**（新家族，`kind: anomaly`）：只由 `evidence_changed` 触发（撤回结论的人就是授予人，不再给他发复核）；对象 `knowledge:claim:<ku_id>`，签字人是确认人；`resolve` 里 `sign` = 保留（重新取指纹，恢复被挂起的能力），撤回走 `withdraw_claim`。
 - **撤销**：`revoke_capability(cap_id, by)` 仅授予人；解密能力同样可撤。
 - **解密进能力表**：`decide_decrypt` 通过时 `grant` 一条 `decrypt`（`audience=客户 id`、payload 带 `session_id`、依据该产品的 `ku:mechanism`）；`app.grants` 改为只读属性 `self.kb.decrypt_grants()`，`disclosure.cap/render` 的签名与 `test_wp_a1` 的用法不变。
@@ -297,12 +297,12 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 
 `src/huayan/ingest/`（新）、`scripts/compile_qi.py`（新）、`seeds/rag/`（新，模拟）、`tests/fixtures/mini_seeds/rag/`（新，模拟）、`app.py`
 
-- **替身 RAG**：`ingest/folder.py` 一个类 `FolderSource(name, kind, root, level=None)`：`list_docs()` 列出文件，`fetch(doc_id, span)` 按段号取段落，`search(query, k)` 用现有二元组打分；片段密级按来源：公开 0、外部 0、内部取 `level` 或片段密级表，都没有就是 3。
+- **替身 RAG**：`ingest/folder.py` 一个类 `FolderSource(name, kind, root, level=None)`：`list_docs()` 列出文档 id，`fetch(doc_id, span=None)` 取一段（`span=None` 返回该文档全部段）。分段只有两种写法：`.md`/`.txt` 按空行分段，span 为 `p<序号>`；`.csv` 每条记录是一个文档、每列是一段，doc_id 为 `<文件名>#<首列唯一键>`（产品目录用「产品ID」，型号有重复），span 为列名。`search(query, k)` 用现有二元组打分；片段密级按来源：公开 0、外部 0、内部取 `level` 或片段密级表，都没有就是 3。
 - **编译** `ingest/compile.py`，三个函数：
   - `propose(fragments, gateway)`：经网关（caller `ingest:extract`）让模型从片段里提出结论，每条带引文与对齐建议（现象、槽位取值、产品、形式）；
-  - `admit(proposals, sources)`：用 `fetch` 核对引文确在原文里，查不到就丢；结论 `status=candidate`、`level` = 所依据片段的最高密级、`evidence` 只存位置与指纹；用 `find_phenomenon`、`find_slot_values` 对齐，生成同层的能力提议（`ask`、`applicable`）；与现有能力完全相同的丢弃、取值冲突的列入报告；
+  - `admit(proposals, sources, kb)`（经知识库写入、可与现有能力去重）：用 `fetch` 核对引文确在原文里，查不到就丢；结论 `status=candidate`、`level` = 所依据片段的最高密级、`evidence` 只存位置与指纹；用 `find_phenomenon`、`find_slot_values` 对齐，生成同层的能力提议（`ask`、`applicable`）；与现有能力完全相同的丢弃、取值冲突的列入报告；
   - `recheck(kb, sources)`：逐条 `fetch` 依据并比指纹，取不回或对不上就 `kb.evidence_changed`。
-- **脚本** `scripts/compile_qi.py --state <file> [--proposals <yaml>]`：清点所有 `list_docs()` 的文档 → `propose`（给了 `--proposals` 就读录制好的提议，不调模型；校验、定级、指纹照常执行）→ `admit` → 写入状态文件 → 写 `data/ingest/report.md`（查询、片段、候选、提议、冲突、按设计第 9 节分类的待签数）。
+- **脚本** `scripts/compile_qi.py --state <file> [--proposals <yaml>]`：清点所有 `list_docs()` 的文档 → `propose`（给了 `--proposals` 就读录制好的提议，不调模型；校验、定级、指纹照常执行）→ `admit` → 经 `KnowledgeBase` 写入状态文件（脚本只在应用停着时运行；演示脚本在进程内调用同一函数，不另起脚本）→ 写 `data/ingest/report.md`（查询、片段、候选、提议、冲突、按设计第 9 节分类的待签数）。
 - **模拟资料**：演示用 `seeds/rag/public/LV205.md`、`seeds/rag/internal/RPT-031.md`、`RPT-044.md` 与录制的提议 `seeds/rag/proposals.yaml`；测试用 `tests/fixtures/mini_seeds/rag/`，按 `mini_seeds` 的 T-205 与现有槽位写（追问用 `constraint`，适用情境用夹具里已有的面料与设备取值），不往 `mini_seeds` 加槽位或取值。全部标「模拟」。决赛原始资料放 `data/finals/`，与由它编译出的一切都不入库。
 - 门面 `recheck_evidence()`、`set_doc_level()`；`HuayanApp.build` 按 `config["sources"]` 建适配器。
 
@@ -313,10 +313,11 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 `ingest/draft.py`（新）、`scripts/draft_seeds.py`（新）、`config/app.pilot.yaml`（新）
 
 - `draft_seeds(sources, gateway, seeds_dir=None) -> dict[str, list]`：读公开来源的全部文档（`list_docs` + `fetch`），经网关（caller `ingest:draft`）起草：
-  - 产品：`id`、`name`、`category`、`sheet`、`usage`（原文摘录，标出处）、`solves`、`applicable`、`owner` 留空待填，`mechanism`、`formula` 为空串；
-  - 词表：新的槽位取值、现象及客户说法、问法；`required_slots` 只起草建议，标「待研发确认」。
+  - 产品：`id`（型号；同一型号对应不同产品时加「产品ID」后缀）、`name`、`category`、`sheet`、`usage`（原文摘录，标出处）、`solves`、`applicable`（只起草资料里写明的纤维、染料类别；产品自身的 pH 不是染浴 pH，不起草）、`owner` 留空待填，`mechanism`、`formula` 为空串；
+  - 词表：新的槽位取值、现象及客户说法、问法、成因（`causes` 必填，起草为「待研发补写」）；`required_slots` 只起草建议，标「待研发确认」。资料里没有这些内容的原文，所以**词表草稿不做引文核对，逐条标「无出处，待人写」**；
+  - 同时写出空的 `cases.yaml`、`translations.yaml`（`load_seeds` 要求六个文件都在），`actors.yaml` 由人写。
   给了 `seeds_dir`（已有种子）时只起草其中没有的条目。
-- 每条草稿带来源位置；引文用 `fetch` 核对，查不到的丢弃（同 `admit`）。
+- 产品草稿带来源位置，引文用 `fetch` 核对，查不到的丢弃（同 `admit`）；词表草稿见上，不核对。
 - `scripts/draft_seeds.py --sources <配置> --out <目录>` 写出与种子文件同格式的 yaml，文件头写「草稿：须由产品经理与研发逐条审定后才能作为种子」，`placeholder: false` 由人在审定后改。脚本不启动应用，不写状态文件。
 - `config/app.pilot.yaml`：试点配置样例（`seeds_dir`、`sources`、`qi_state`、`run_root` 都指向 `data/` 下，不入库；`gateway_mock: false`）。
 - 新 caller `ingest:draft` 写进契约 ⑩ 的 caller 表（随 Q0 一并批准）。
@@ -337,8 +338,9 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
   写一条 `retrieve` 事件（payload 同 `search`，加 `unanswerable_ku_ids`、`n_unanswerable`）。研发层另带本层候选，标「候选」。
 - Agent 工具 `search_knowledge` 改调 `explore`；`l1/answer.py` 的检索改调 `explore`，用 `units`。`search` 本身不变。
 - `qi_grant` 的 `n_unanswerable` 从 `retrieve` 事件按「结论 × 提问者层级」计数。
+- **`qi_grant` 的第二种对象（从 Q2 移来）** `knowledge:grant:<ku_id>|L<k>`：某条已确认结论在第 k 层被检索命中、却没有任何能力，要授予的是一句**可说的话**（`statement`）。问题卡附那一层被问到的原话与结论的原文位置；研发 Agent 在线时照现有准备流程起草措辞，离线时没有草稿（与其他家族一致）；研发签字时把改定的措辞经 `sign_qi_grant(..., note=措辞)` 传入，先过 `leak_hits(audience=k)`，再新建一条 `statement`。这是「研发授权一句话给前台说，前台看不到机理」的通用入口。
 
-**验收**：`test_wp_l` 加：客户层命中上层时的返回与「没找到」完全相同；L1、L2 只拿到本层内容、能力、提示与存根，不出现 L3 原文。
+**验收**：`test_wp_l` 加：客户层命中上层时的返回与「没找到」完全相同；L1、L2 只拿到本层内容、能力、提示与存根，不出现 L3 原文；L1 命中一条 L3 结论 → 觉提出 `qi_grant` → 研发授予一句话 → L1 再查时拿到这句话、仍拿不到结论原文。
 
 ### Q6 决策投影（只做有使用方的部分）
 
@@ -357,7 +359,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 
 - 四个日志类的构造：文件已存在就逐行读回（事件、审计、积分照原样；问题按 id 取最后一个快照）。
 - `HuayanApp.build(..., resume=True)`：不新建运行目录；读回 `sessions/*.json`、`requirements/*.json`；`_trials` 从有效状态里 `trial` 类知识的正文（试样 JSON）重建；知识与能力已在 `from_seeds` 加载状态文件时恢复。
-- 不恢复：觉的推理轨迹 `_jue_trace`（原始记录在 `jue_samples.jsonl`，只影响界面上的轨迹显示）、回问答案到发言的映射 `_answers`（只影响界面上的引用跳转）。
+- 不恢复：觉的推理轨迹 `_jue_trace`（原始记录在 `jue_samples.jsonl`，只影响界面上的轨迹显示）、回问答案到发言的映射 `_answers`（只影响界面上的引用跳转）、Agent 对话与待确认卡（`hub._pending`、`conversations/`，重启后对话从头开始，未确认的提议作废）。
 - `ui/server.py` 加 `--run <id> --resume`。
 - 编号（需求单、事件、问题、试样）都是「已有数量 + 1」，读回后自然续上，不另加计数器。
 
@@ -368,7 +370,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 `scripts/demo_qi.py`（新）、`scripts/compare_v6_qi.py`（新）、`config/app.demo.qi.yaml`（新）、`docs/reports/qi_demo/`、`README.md`、`docs/VISION.md`、`docs/PITCH.md`、`docs/QI.md`
 
 - **`demo_qi.py`**（离线配置，状态文件放本次运行目录）：
-  1. 编译 `seeds/rag`（录制的提议）；
+  1. 建应用后在进程内编译 `seeds/rag`（录制的提议，调用 `admit(..., kb)`）；
   2. 三态：同一句客户话「锦氨在经轴缸上染出来深一块浅一块」，A 未授予（R01 已确认 C4，只在研发开工门槛要求 pH）→ B R01 签 `qi_grant` 授予 K3 → C 撤销 K3，记录每一态客户是否被追问 pH、问原理时得到什么；
   3. 四步：C05 → C07 → C08 与「只说锦纶氨纶」→ 撤销 K5 / 改 RPT-044 后 `recheck_evidence`；
   4. 重启：用 `resume=True` 重建应用（Q6.5），重放 C07 的问题，并确认未办完的需求单与积分都还在。
@@ -500,3 +502,26 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 **愿景文字收窄（实现不跟着扩）**：VISION 6.2「能力进化」列了三种燃料，其中「单子因为缺同一项信息被退回」本轮不作为 `qi_grant` 的信号（退回理由是自由文本；缺信息的情况已由「反复回问同一槽位」覆盖），本次把这半句删掉。
 
 **新增一条边界**（写入 VISION 第 7 节）：第 0 天迁移进来的种子内容没有依据指纹，「资料一改自动复核」只覆盖经编译、带依据的结论；试点时种子由 Q4.5 从公开资料起草，再编译一次公开来源即可补上依据。
+
+## 10. 第二轮独立审查（能否开工）与真实公开资料（v7.4）
+
+结论是「改完以下几处再开始」，6 处已全部并入：
+
+| # | 问题 | 处理 |
+|---|---|---|
+| 1 | 状态文件「多次运行共用」与 v7.2 冲突：第二个新运行会报「该产品已经发布」（`app.py:1096`），试样知识按数量编号会被覆盖 | 删掉共用；接着上次一律走 resume（2.6） |
+| 2 | 编译结果怎么进应用没写清：应用整份保存会冲掉脚本写的文件；`admit` 拿不到现有能力 | `admit(proposals, sources, kb)` 经知识库写入；脚本只在应用停着时跑，演示在进程内调用（Q4、Q7） |
+| 3 | 「段」没定义：CSV 没有空行、多行单元格按行会被切断 | md 按空行、csv 每条记录一文档每列一段；`fetch(doc_id, span=None)` 取全部段（Q4） |
+| 4 | `qi_grant` 第二种对象放在 Q2 永远触发不了、也没人验收 | 挪到 Q5，措辞经 `note` 传入，`test_wp_l` 验收（Q2、Q5） |
+| 5 | 发布新品会被「授予人即确认人」规则拦下 | 发布的适用能力依据 `ku:sheet:<pid>`，`_put_product` 设 `confirmed_by=owner`（Q1） |
+| 6 | Q4.5 草稿三处不可行：词表在资料里没有原文会全被丢；`load_seeds` 要六个文件且 `causes` 必填；型号重复 | 词表不核对、标「无出处」；写出空文件；重复型号加产品ID（Q4.5） |
+
+审查还指出、已顺手补上：Q6.5 的「不恢复」补上 Agent 对话与待确认卡。
+
+**人提供的真实公开资料**：一家企业官网的染色系列产品目录（CSV，177 条、168 个型号、16 个分类），放在 `data/finals/public/catalog.csv`，不入库。核对过的事实：
+
+- 每条都有产品简介（离子性、pH、用途、用量）与来源页面，可以直接作为公开来源（L0）读入，按产品ID 分文档；
+- 9 个型号重复出现，其中 4 个同号不同品；
+- 能起草出：型号、名称、品类、说明、用量、资料里写明的适用纤维与染料类别，以及可推断的适用现象（匀染剂对应色花、固色剂对应牢度差，需人确认）；
+- 起草不出：设备条件（简介里没有一条提到溢流、气流、经轴、卷染）、现象、必问条件、客户口语说法、先验、归属研发、机理、内部依据；
+- 所以它能真跑 Q4.5（起草种子）与 Q4（公开来源编译、客户层原样引用）；决赛的三态与四步仍要内部资料（缺时用模拟的内部资料，界面与报告标明），对照数字仍来自模拟问题。由它产出的一切都不入库（铁律 7）。
