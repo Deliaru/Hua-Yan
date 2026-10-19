@@ -129,24 +129,26 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
         return JueObject(object_id=oid, object_type="slot", attrs={"layer": 1, "slot": "fiber", "phenomenon": "color_unlevel",
                                                                    "judge_level": judge} | attrs)
     objects = {o.object_id: o for o in (slot("slot:sess:a/fiber", 0), slot("slot:sess:b/fiber", 1),
-                                        slot("slot:req:9/equipment", 3, layer=3, slot="equipment"))}
+                                        *(slot(f"slot:req:{i}/equipment", 3, layer=3, slot="equipment") for i in (7, 8, 9)))}
     record = JueRecord(state=JueState(at=t0, mode="realtime", objects=objects), output=JueOutput(
         at=t0, mode="realtime", model="jue_proto", scored_by="rule",
-        decisions=[ScoredDecision(family=f, object_id=oid, p_need=0.7) for f, oid in
-                   (("ask_slot", "slot:sess:a/fiber"), ("ask_slot", "slot:sess:b/fiber"), ("ask_back", "slot:req:9/equipment"))]))
+        decisions=[ScoredDecision(family="ask_slot" if "sess" in oid else "ask_back", object_id=oid, p_need=0.7)
+                   for oid in objects]))
     log = EventLog()
-    for qid, family, oid, by, action, sid in (("q:a", "ask_slot", "slot:sess:a/fiber", "customer:C01", "answered", "sess:a"),
-                                              ("q:b", "ask_slot", "slot:sess:b/fiber", "sales:S01", "dismiss", "sess:b"),
-                                              ("q:c", "ask_back", "slot:req:9/equipment", "pm:agent", "answered", None)):
-        log.append("question_published", "jue", {"question_id": qid, "family": family, "object_id": oid, "template_id": family},
-                   session_id=sid, ts=t0)
-        log.append("question_resolved", by, {"question_id": qid, "family": family, "object_id": oid, "template_id": family,
-                                             "action": action, "by": by}, session_id=sid, ts=t0 + timedelta(hours=1))
+    for qid, oid, by, action in (("q:7", "slot:req:7/equipment", "rd:R01", "dismiss"),
+                                 ("q:8", "slot:req:8/equipment", "pm:agent", "answered"),
+                                 ("q:9", "slot:req:9/equipment", "customer:C01", "answered")):
+        log.append("question_published", "jue", {"question_id": qid, "family": "ask_back", "object_id": oid,
+                                                 "template_id": "ask_back"}, ts=t0)
+        log.append("question_resolved", by, {"question_id": qid, "family": "ask_back", "object_id": oid,
+                                             "template_id": "ask_back", "action": action, "by": by}, ts=t0 + timedelta(hours=1))
     log.append("trial", "rd:R01", {"requirement_id": "req:9", "result": "fail", "cause": "requirement",
                                    "missing_slots": ["equipment"]}, ts=t0 + timedelta(hours=2))
     rows = decision_rows([record], log)
+    # 追问是提示、没有人的处置，标签留空；Agent 的处置不当标签；客户回答研发的回问，结果仍属 L3
     assert [(r["family"], r["label"], r["judge_level"], r["level"]) for r in rows] == [
-        ("ask_slot", 1, 0, 0), ("ask_slot", 0, 1, 1), ("ask_back", None, 3, None), ("ask_back", 1, 3, 3)]
+        ("ask_slot", None, 0, 0), ("ask_slot", None, 1, 1), ("ask_back", 0, 3, 3), ("ask_back", None, 3, None),
+        ("ask_back", 1, 3, 3), ("ask_back", 1, 3, 3)]
     assert [r["object_id"] for r in rows_for(rows, 0)] == ["slot:sess:a/fiber"]     # 研发回问的结果行不进客户层
 
     # Q6 隔离：ask_slot|L0 训练一次；再加入 L1、L2 的行与「判断层 0、结果来自 L3」的行重训，L0 的分数逐条不变
@@ -164,12 +166,18 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     fixed = {f"slot:f{i}/fiber": JueObject(object_id=f"slot:f{i}/fiber", object_type="slot",
                                            attrs=base[0]["attrs"] | {"p_fix": i / 10}) for i in range(11)}
 
-    def l0_scores(rows, out):
+    def ask_scores(rows, out):
         summary = fit(rows, TEMPLATES, out)
         decided = JueK(out, TEMPLATES).propose(JueState(at=t0, mode="realtime", objects=fixed)).decisions
         return summary, [(d.p_need, d.scored_by) for d in decided if d.family == "ask_slot"]
-    first, before = l0_scores(base, tmp_path / "k1")
-    second, after = l0_scores(base + synth(300, 1, 1, True, "b") + synth(300, 2, 2, True, "c") + synth(300, 0, 3, True, "d"),
+    first, before = ask_scores(base, tmp_path / "k1")
+    second, after = ask_scores(base + synth(300, 1, 1, True, "b") + synth(300, 2, 2, True, "c") + synth(300, 0, 3, True, "d"),
                               tmp_path / "k2")
     assert first["ask_slot|L0"]["scored_by"] == second["ask_slot|L0"]["scored_by"] == "jue_k"
     assert {"ask_slot|L1", "ask_slot|L2"} <= set(second) and len(before) == 11 and before == after
+    # L1 同理：判断层 1、结果来自 L2 / L3 的行不改变 ask_slot|L1 的分数
+    fixed = {k: o.model_copy(update={"attrs": o.attrs | {"judge_level": 1}}) for k, o in fixed.items()}
+    rows = base + synth(300, 1, 1, True, "b") + synth(300, 2, 2, True, "c")
+    _, before = ask_scores(rows, tmp_path / "k3")
+    third, after = ask_scores(rows + synth(300, 1, 2, False, "e") + synth(300, 1, 3, False, "f"), tmp_path / "k4")
+    assert third["ask_slot|L1"]["scored_by"] == "jue_k" and before == after and {s for _, s in after} == {"jue_k"}

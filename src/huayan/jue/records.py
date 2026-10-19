@@ -26,6 +26,7 @@ def _human_level(by: str) -> int | None:
 
 def decision_rows(records: list[JueRecord], events: EventLog) -> list[dict]:
     """决策投影（纯函数，不落盘）。一行 = 觉提出的一个决策点：当时的属性与 p_need、谁怎么处置、用到的能力；
+    追问每次打分各一行（标签留空，模拟运行由 sim 按需求卡真值补）；
     另加与觉无关的结果：试样因需求条件缺失失败、客户评价不通过所指向的条件，作为该需求单回问对象的正例。
     label：人处置为 dismiss 记 0，其余处置记 1，没有人的处置为 None；
     judge_level：代哪一层判断（槽位对象自带，其余取处置人所在层）；level：结果来自哪一层的判断（不低于 judge_level）。"""
@@ -46,6 +47,10 @@ def decision_rows(records: list[JueRecord], events: EventLog) -> list[dict]:
                 "judge_level": judge, "level": None if level is None else max(judge, level)}
 
     rows = []
+    # 追问不进总线（是提示），每次打分即一个决策点；运行中没有人的处置，结果（客户的真实条件）由模拟一侧补标签
+    for oid, decided in scored.items():
+        rows += [row(at, record, d, None, None, None, record.state.objects[oid].attrs.get("judge_level")) | {"capabilities": []}
+                 for at, record, d in decided if d.family == "ask_slot" and d.p_need is not None]
     for pub in events.query(["question_published"]):
         p = pub.payload
         earlier = [x for x in scored[p["object_id"]] if x[2].family == p["family"] and x[2].p_need is not None
