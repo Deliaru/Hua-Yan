@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import pytest
+
 from huayan.contracts import CustomerProfile, NeedState, Requirement, Session, SlotFill, Turn
 from huayan.escalation.translate import ENGINE, draft_chem_need, draft_product_need, leak_hits, package_sheet
 from huayan.events import EventLog
@@ -57,3 +59,26 @@ def test_layers_cite_own_knowledge_and_keep_quotes(mini_seeds, sim_clock):
         {"index": 1, "source": "sealed"}, {"index": 2, "source": "l3_term"}, {"index": 3, "source": "hypothesis"}]
     # 措辞略改仍由二元组重合识别；不能只实现完整子串匹配。
     assert any(h.source == "sealed" for h in leak_hits("升温至九十度以后分两次加入保护液", [sealed], [], kb))
+
+    # Q3：按编号渲染。授予收件层的编号换成原文，错层编号被拒并记审计。
+    from huayan.contracts import Capability, KnowledgeUnit
+    from huayan.knowledge import PermissionDenied
+    from huayan.knowledge.disclosure import render_refs
+    claim = KnowledgeUnit(id=kb.next_claim_id(), kind="claim", level=3, title="（模拟）pH 判断",
+        text="（模拟）染浴偏酸时氨纶沾色加重", owner="rd:R01", phenomenon_ids=["color_unlevel"], created_at=at)
+    kb.add(claim)
+    said = kb.grant(Capability(id=kb.next_cap_id(), form="statement", audience=0,
+        payload={"text": "（模拟）按说明书控制染浴即可"}, based_on=[claim.id], granted_by="rd:R01",
+        status="active", at=at))
+    usage = kb.get("ku:usage:T-205", actors["customer:C01"]).text
+    assert render_refs(f"用法：[[ku:usage:T-205]]；[[{said.id}]]", 0, kb) == f"用法：{usage}；（模拟）按说明书控制染浴即可"
+    for wrong in (f"[[{claim.id}]]", "[[ku:mechanism:T-205]]", "[[ku:case:missing]]"):
+        with pytest.raises(PermissionDenied):
+            render_refs(wrong, 0, kb)
+    assert kb.audit.list()[-1].action == "deny"
+    # leak_hits：不传 audience 与原来逐条一致；传入后拦截与上层结论重合的句子
+    reply = f"请先做小样。{claim.text}"
+    assert leak_hits(reply, [], [], kb) == []
+    assert [h.model_dump() for h in leak_hits(reply, [], [], kb, audience=0)] == [{"index": 1, "source": "claim"}]
+    assert leak_hits(reply, [], [], kb, audience=3) == []
+    assert leak_hits(text, [sealed], [hypothesis], kb, audience=3) == leak_hits(text, [sealed], [hypothesis], kb)

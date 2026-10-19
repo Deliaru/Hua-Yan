@@ -28,7 +28,7 @@ from huayan.jue.records import load_records
 from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder
-from huayan.knowledge.disclosure import VERSIONS, cap, render
+from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
 from huayan.l1.extract import LLMExtractor, RuleExtractor
 from huayan.l1.session import handle_turn, recommend, record_disclosure, recommendation_note
 from huayan.meter import FileMeter
@@ -247,6 +247,9 @@ class HuayanApp:
 
     def save_reply_draft(self, session_id, text, by):
         session = self._sales_session(session_id, by)
+        text = render_refs(text, 0, self.kb)       # 专业结论只能以编号写入，按客户层渲染
+        if leak_hits(text, [], [], self.kb, audience=0):
+            raise ValueError("回复草稿含客户层不可见的内容，请改写")
         session.reply_draft = text
         self._save_session(session)
         self._after([session_id])

@@ -1,9 +1,29 @@
-"""披露网关：在客户×产品的授权上限内输出卡片。"""
-from huayan.contracts import Actor, CardSection, DecryptGrant, RecommendationCard, Version
+"""披露网关：在客户×产品的授权上限内输出卡片；按编号渲染写给下层的文字。"""
+import re
+
+from huayan.clock import get_clock
+from huayan.contracts import Actor, AuditRecord, CardSection, DecryptGrant, RecommendationCard, Version
 from .permission import PermissionDenied, colleague_l3, level_of
 from .store import KnowledgeBase
 
 VERSIONS = ("product", "product_usage", "full_mechanism", "internal")
+_REF = re.compile(r"\[\[([^\[\]]+)\]\]")
+
+
+def render_refs(draft: str, audience: int, kb: KnowledgeBase) -> str:
+    """把 [[编号]] 换成原文：层级 ≤ 收件层的已确认知识，或授予收件层（及以下）的 statement；其余编号拒绝并记审计。"""
+    def text(match):
+        ref = match.group(1)
+        unit, capability = kb._units.get(ref), kb._caps.get(ref)
+        if unit and unit.status == "active" and unit.level <= audience:
+            return unit.text
+        if capability and capability.form == "statement" and capability.status == "active" \
+                and capability.audience in range(audience + 1):
+            return capability.payload["text"]
+        kb.audit.append(AuditRecord(ts=get_clock().now(), actor="system:render", action="deny",
+                                    object_ids=[ref], reason=f"编号不可写给 L{audience}"))
+        raise PermissionDenied(f"编号 {ref} 不可写给 L{audience}")
+    return _REF.sub(text, draft)
 
 
 def cap(viewer: Actor, customer_id: str, product_id: str, grants: list[DecryptGrant]) -> Version:

@@ -37,10 +37,15 @@ def _hypothesis_body(value: str) -> str:
     return re.sub(r"^参考 \S+ 的机理：(（模拟机理）)?", "", value)
 
 
-def leak_hits(text: str, sealed: list[str], hypotheses: list[str], kb: KnowledgeBase) -> list[LeakHit]:
-    """按非空句编号，只返回句序号与来源类别；同句同类去重，不返回保密原文。"""
+def leak_hits(text: str, sealed: list[str], hypotheses: list[str], kb: KnowledgeBase, *,
+              audience: int | None = None) -> list[LeakHit]:
+    """按非空句编号，只返回句序号与来源类别；同句同类去重，不返回保密原文。
+    传入 audience 时另查与层级高于收件层的已确认结论（claim）重合的句子。"""
     sources = (("sealed", sealed), ("l3_term", kb._l3_translation_terms()),
                ("hypothesis", [_hypothesis_body(value) for value in hypotheses]))
+    if audience is not None:
+        sources += (("claim", [u.text for u in kb._units.values()
+                               if u.kind == "claim" and u.status == "active" and u.level > audience]),)
     phrases = [(source, [p.strip() for value in values for p in re.split(r"[。；！？\n]+", value) if p.strip()])
                for source, values in sources]
     sentences = [s.strip() for s in re.split(r"[。；！？\n]+", text) if s.strip()]

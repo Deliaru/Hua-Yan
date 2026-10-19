@@ -5,6 +5,9 @@ from pathlib import Path
 from huayan.clock import get_clock
 from huayan.contracts import AssistantReply, AuditRecord, KnowledgeHit, LLMRequest, Message, Tier
 from huayan.domain import consistent
+from huayan.escalation.translate import leak_hits
+from huayan.knowledge import PermissionDenied, level_of
+from huayan.knowledge.disclosure import render_refs
 
 
 def target_products(session, deps, products):
@@ -76,7 +79,16 @@ def answer(session, deps, *, check_grounding=False):
                  "turns": [{"speaker": t.speaker, "text": t.text} for t in session.turns[-6:]],
                  "hits": [{"ku_id": h.ku.id, "title": h.ku.title, "text": h.ku.text} for h in hits]},
                 ensure_ascii=False))]))
-        text = response.content or "没有生成可用回答。"
+        # 专业内容只以 [[编号]] 写出，按收件层渲染并查泄密；任一不过就不发出
+        try:
+            text = render_refs(response.content or "没有生成可用回答。", level_of(actor), deps.kb)
+            leaked = bool(leak_hits(text, [], [], deps.kb, audience=level_of(actor)))
+        except PermissionDenied:
+            leaked = True
+        if leaked:
+            deps.audit.append(AuditRecord(ts=get_clock().now(), actor=actor.id, action="deny",
+                object_ids=[turn.id], session_id=session.id, reason="回答含收件层不可见的内容"))
+            text = "这部分需要专业人员解答。"
     if hits and blocked:
         text += "\n" + denial
     if any(not consistent(products[pid], session.need.known()) or
