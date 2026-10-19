@@ -1,0 +1,21 @@
+# 试点配置样例：企业种子、资料、有效状态与运行目录都在 data/ 下，不入库（铁律 7）。流程见 REPLAN-v7 第 1.4 节。
+seeds_dir: data/pilot/seeds
+templates_dir: config/templates
+run_root: data/pilot/runs
+system1_impl: llm_fallback            # mock | llm_fallback | onejev
+gateway_mock: false
+extractor: llm               # rule | llm
+realtime_model: jue_proto     # jue_proto | jue_k
+scheduled_model: jue_proto    # jue_proto | jue_k
+jue_k_dir: models/jue_k
+llm_cache_dir: null
+replay: false                 # true = 记录回放模式，界面标明
+thresholds: {ask: 0.5, ask_jue_k: 0.15, max_asks: 2, match: 0.5, publish: 0.5}  # ask_jue_k：Jue-K 输出校准概率，漏问代价高，实时追问阈值取 0.15（见 models/jue_k/model_card.md）
+windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
+points: {used: 1, shared: 2, cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
+# v6：客户归属业务员（模拟），客户自助会话有商务诉求时由觉自动交给归属业务员
+customer_sales: {}
+
+# v7：来源与有效状态；null 使用本次运行目录，续跑使用同一运行。
+sources: [{name: 公开资料, kind: public, root: data/finals/public}, {name: 内部资料, kind: internal, root: data/finals/internal}]
+qi_state: data/pilot/qi_state.json

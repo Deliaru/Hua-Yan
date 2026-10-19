@@ -14,6 +14,8 @@ from huayan.knowledge.store import _grams
 class FolderSource:
     def __init__(self, name, kind, root, level=None, doc_levels=None):
         self.name, self.kind, self.root, self.level = name, kind, Path(root), level
+        if not self.root.is_dir():
+            raise ValueError(f"来源 {name} 的目录不存在：{root}")
         self.doc_levels = {} if doc_levels is None else doc_levels     # 片段密级表（按文档，人设定）
 
     def _docs(self) -> dict[str, list[tuple[str, str]]]:
