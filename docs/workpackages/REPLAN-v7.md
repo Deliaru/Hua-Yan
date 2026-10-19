@@ -1,10 +1,11 @@
 # REPLAN-v7｜契落地
 
 > 2026-10-19。代码基线：`main` @ `351c2c9`（V6 完成态）。设计依据：`docs/QI.md`（契 v3.3 设计文档，下称「设计」）、`docs/VISION.md` 第 1 节、`docs/PITCH.md` 第 6.1 节。
-> **第 2 节的契约改动已由人批准**（其中 2.8 的两处是独立审查后的修正，见第 7 节，需人再确认一次），之后冻结；实施中需要再改契约，先停下来问人。
+> **第 2 节的契约改动已由人批准**（含 2.8 的两处与 v7.2 新增的续跑、`ingest:draft`），之后冻结；实施中需要再改契约，先停下来问人。
 > 本文与 `REPLAN-v6.md` 冲突处以本文为准。不标耗时。
 > v7.1（同日）：按独立审查的 25 条意见修订，修订记录见第 7 节。
 > v7.2（同日）：补上真实运行的两个缺口——从企业资料起草种子（Q4.5）、应用可续跑（Q6.5），见第 1.4 节。
+> v7.3（同日）：人已批准全部契约改动（含 2.8 与 v7.2 新增）；按愿景逐条审核，修正 5 处偏离，见第 9 节。
 
 ## 0. 目标与写法
 
@@ -203,7 +204,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 - 门面内部按「代谁」取视图（设计第 4 节规则一的表）；`self.seeds` 只用于标签、问法、抽取词表，以及读立项产品；
 - Agent 工具 `search_knowledge` 改调 `explore`；写给下层的文字里，专业结论只写 `[[编号]]`。
 
-### 2.8 独立审查后需人再确认的两处
+### 2.8 独立审查后的两处修正（已批准）
 
 1. **`qi_review` 做成独立家族，不放进 `knowledge_conflict`。** 设计原写「`knowledge_conflict` 家族的新模板」，但 `jue/proto.py:20-22` 与 `docs/CONTRACTS.md` 第 623 行规定「每个 family 只有一个模板」，`resolve` 也按 family 决定允许的动作。所以 `qi_review` 单列为家族，家族数 21。
 2. **出口渲染函数叫 `render_refs`，不叫 `render`**：`disclosure.render` 已是推荐卡片渲染，`test_wp_a1` 在用。
@@ -264,17 +265,18 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 - **四条业务规则**（只在 `grant`、`confirm` 里各写一次）：`based_on` 的确认人都是 `granted_by`；`audience < 3` 时 `based_on` 里不能有 `formula`；只依据外部片段的结论不能 `confirm`；`form == "applicable"` 且 `approved_by` 为空就是 `proposed`。
 - **传播**：`withdraw(ku_id)` 与 `evidence_changed(ku_id)` 把所有 `based_on` 含它的 `active` 能力置 `suspended`，写 `capability_suspended`；只此一个函数。
 - **确认**：`confirm_claims(req_id, ku_ids, by)`：仅需求单的接单研发；候选结论变 `active`，`confirmed_by=by`；为它提议的能力随之生效（适用类仍待批准）。
-- **qi_grant**（新家族，`owner_role: rd`、`signer_role: rd`，不经 Agent 起草，问题卡直接列出形式、目标层、依据与原文位置）：
-  - 对象 `knowledge:grant:<cap_id>|L<k>`：某条能力只授予了它的结论那一层，而更低的第 k 层需要过它；
+- **qi_grant**（新家族，`owner_role: rd`、`signer_role: rd`）有两种对象：
+  - `knowledge:grant:<cap_id>|L<k>`：某条追问或适用能力只授予了它的结论那一层，而更低的第 k 层需要过它。形式与目标都能算出，不经 Agent 起草，问题卡直接列出形式、目标层、依据与原文位置；
+  - `knowledge:grant:<ku_id>|L<k>`：某条已确认结论在第 k 层被检索命中、却没有任何能力（Q5 的「本层无能力」），要授予的是一句**可说的话**（`statement`）。措辞由确认人的研发 Agent 照现有准备流程起草（附那一层被问到的原话、结论原文位置），研发改定后签字；草稿先过 `leak_hits(audience=k)`。这是「研发授权一句话给前台说，前台看不到机理」的通用入口；
   - 属性 `{product_id, slot, value, n_ask_back, n_unanswerable, granted}`：`n_ask_back` 是研发为同一现象回问同一槽位的次数（现有 `question_published` 事件里 `family=ask_back`、对象 `slot:<需求单>/<槽位>`，按需求单的现象聚合）；`n_unanswerable` 在 Q5 接上，本包为 0；
   - 前置 `not attrs.granted and (attrs.n_ask_back >= 2 or attrs.n_unanswerable >= 1)`，`rule_score` 取两者之和除以 3 封顶 1；
   - 签字人：所依据结论的确认人；结论还是候选的，取对齐产品的归属研发，签时一并确认。`publish.py` 的 `_resolve` 从 `refs["signer"]` 读签字人，不再按 `product_id` 推断；
-  - `sign_qi_grant`：复制该能力，`audience=k`、`granted_by=by`；适用类转入 `scope_update`。
+  - `sign_qi_grant`：第一种复制该能力，`audience=k`、`granted_by=by`，适用类转入 `scope_update`；第二种按研发改定的措辞新建一条 `statement`。
 - **qi_review**（新家族，`kind: anomaly`）：只由 `evidence_changed` 触发（撤回结论的人就是授予人，不再给他发复核）；对象 `knowledge:claim:<ku_id>`，签字人是确认人；`resolve` 里 `sign` = 保留（重新取指纹，恢复被挂起的能力），撤回走 `withdraw_claim`。
 - **撤销**：`revoke_capability(cap_id, by)` 仅授予人；解密能力同样可撤。
 - **解密进能力表**：`decide_decrypt` 通过时 `grant` 一条 `decrypt`（`audience=客户 id`、payload 带 `session_id`、依据该产品的 `ku:mechanism`）；`app.grants` 改为只读属性 `self.kb.decrypt_grants()`，`disclosure.cap/render` 的签名与 `test_wp_a1` 的用法不变。
 - **复用审定说明进能力表**：`adopt_reuse` 把 `customer_note` 写成一条授予业务员层的 `statement`；`view_session` 从能力表取这句话，撤销后不再显示。
-- **被使用记分（替代 `cite_scope`）**：推荐命中的适用能力、本轮追问用到的 `ask` 能力、渲染用到的 `statement`，各写一条 `capability_used`，给 `based_on` 的确认人记 `used` 分（同一会话同一能力只记一次）。同时删除 `l1/session.py::cite_scope` 与 `extend_scope` 生成的 `ku:translation:scope:*` 条目；`app.py` 工作量统计里「同类需求客户自助解决」「此后因此自动解决的需求」改为数这些能力的 `capability_used`。**记分对象有变化**：C′ 之后的复用记给作出判断的研发，产品经理记的是「批准了几次、批准的能力被用了几次」；`demo_routes.py` 的 C′ 断言与 `docs/reports/v6_routes/` 按此更新。现有「被引用」记分的其余部分不动。
+- **被使用记分（替代 `cite_scope`）**：推荐命中的适用能力、本轮追问用到的 `ask` 能力、渲染用到的 `statement`，各写一条 `capability_used`，给 `based_on` 的确认人记 `used` 分；适用能力另给批准它的产品经理记一份（第 0 天的 `"seed"` 不记）。同一会话同一能力只记一次。同时删除 `l1/session.py::cite_scope` 与 `extend_scope` 生成的 `ku:translation:scope:*` 条目；`app.py` 工作量统计里「同类需求客户自助解决」「此后因此自动解决的需求」改为数这些能力的 `capability_used`。**记分对象有变化**：C′ 之后的复用由作出判断的研发和批准范围的产品经理各记一份「被使用」，V6 里只记产品经理的「被引用」；`demo_routes.py` 的 C′ 断言与 `docs/reports/v6_routes/` 按此更新。现有「被引用」记分的其余部分不动。
 - **界面**：研发工作面加「我授予的能力」列表（状态、依据、撤销按钮）；需求单页列出本单相关的候选结论，可勾选确认；`qi_grant`、`qi_review` 用现有问题卡。HTTP 只加对应 2.7 门面方法的几个 `POST`。
 
 **验收**（测试数据直接用 `kb.confirm`、`kb.grant` 在 `mini_seeds` 上构造，不依赖 Q4 的编译）：`test_wp_a3` 加：授予 → 客户被追问；撤销 → 不再追问；撤销解密；撤销一个适用情境后客户、业务员、Agent 工具都不再推荐；适用能力未经产品经理批准不生效；依据他人结论的授予被拒；用同一个状态文件重建应用后授予与撤销都保留；被使用记分正确，被引用断言不变。`test_wp_b1`：家族数 21，`auto_action` 仍两种。
@@ -318,6 +320,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 - `scripts/draft_seeds.py --sources <配置> --out <目录>` 写出与种子文件同格式的 yaml，文件头写「草稿：须由产品经理与研发逐条审定后才能作为种子」，`placeholder: false` 由人在审定后改。脚本不启动应用，不写状态文件。
 - `config/app.pilot.yaml`：试点配置样例（`seeds_dir`、`sources`、`qi_state`、`run_root` 都指向 `data/` 下，不入库；`gateway_mock: false`）。
 - 新 caller `ingest:draft` 写进契约 ⑩ 的 caller 表（随 Q0 一并批准）。
+- **只读公开来源**：内部来源的文档一律不进草稿，种子里不出现内部资料的原文（愿景：不导出、不缓存企业文档；种子里的说明与用法本来就是对外公开的话）。
 - 不做：自动合并草稿进种子、让模型填 `owner`、机理、配方或定密级。
 
 **验收**：用决赛资料（或 `seeds/rag/public/`）真实跑一次，草稿能被 `load_seeds` 读入、人工补齐 `owner` 后应用能启动；不写测试（AGENTS.md 第 5 节：能用一次真实运行验证的不写测试）。
@@ -370,7 +373,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
   3. 四步：C05 → C07 → C08 与「只说锦纶氨纶」→ 撤销 K5 / 改 RPT-044 后 `recheck_evidence`；
   4. 重启：用 `resume=True` 重建应用（Q6.5），重放 C07 的问题，并确认未办完的需求单与积分都还在。
   每一步的结论从事件日志读出，写进 `docs/reports/qi_demo/demo.json` 与一页 `demo.md`，不写死文案。
-- **`compare_v6_qi.py`**：问题批次（按时间排序的模拟问题，含 C05、C07、C08 的同类问题若干，以及每个问题的「研发判断」）与五个指标的统计函数两边共用；两个驱动函数各自只调用本版本已有的接口：契的驱动用 `decline_project(..., claim_ids)`、`extend_scope`；V6 的驱动在 `351c2c9` 的 worktree 里运行，研发判断与产品不相容时按 V6 的真实做法不带产品不立项。指标：正确的自助处理数、研发重复参与次数、未经授权的确定推荐数（确定推荐没有落在研发判断写定的任何完整情境内）、撤销或失效后的行为、重启后的授权状态。报告写进 `docs/reports/qi_demo/compare.md`，注明数据为模拟、处置为脚本写定。
+- **`compare_v6_qi.py`**：问题批次（按时间排序的模拟问题，含 C05、C07、C08 的同类问题若干，以及每个问题的「研发判断」）与五个指标的统计函数两边共用；两个驱动函数各自只调用本版本已有的接口：契的驱动用 `decline_project(..., claim_ids)`、`extend_scope`；V6 的驱动在 `351c2c9` 的 worktree 里运行，研发判断与产品不相容时按 V6 的真实做法不带产品不立项。指标：正确的自助处理数、研发重复参与次数、未经授权的确定推荐数（确定推荐没有落在研发判断写定的任何完整情境内）、撤销或失效后的行为、重启后的授权状态；另按时间窗画「每解决一个客户问题需要几次研发判断」（VISION 6.2 的衡量指标，由授予机制算出，不是学习曲线）。报告写进 `docs/reports/qi_demo/compare.md`，注明数据为模拟、处置为脚本写定。
 - **材料**：按 1.1 更新 `docs/QI.md` 第 12 节（并删去该节开头的校正注）与 PITCH 的演示台词；VISION 1.2 证据表里已实现的行改为「已实现」并指向测试与报告；README 加一节「契」（三句话 + 演示命令 + 报告链接）。
 
 **验收**：两个脚本在离线配置下从头跑通；报告里的数字能用事件日志复算。
@@ -465,7 +468,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 | 5 | 契约定义 `SourceAdapter` 协议；网关另加不带缓存的 `ingest` 配置 | 只有 `FolderSource` 一个类；编译脚本自建网关、关缓存 | 只有一种适配器；少一份配置 |
 | 6 | 第 0 天把种子全部迁成能力，含 `phrase`、`translation`、`statement` | 只建 `applicable`、`ask` 行；说法、转化对照、说明书是同层结论，直接用 | 同层不需要授予，建行无行为差别 |
 | 7 | 业务员改正槽位时确认并授予说法（第②类签字） | 本轮不做，`phrase` 无入口 | V6 没有改正槽位的入口（1.2） |
-| 8 | `qi_grant` 由确认人的 Agent 准备（附原话、建议措辞） | 不经 Agent，问题卡直接列形式、目标层、依据与原文位置 | 这些都能从属性算出 |
+| 8 | `qi_grant` 由确认人的 Agent 准备（附原话、建议措辞） | 追问、适用两种不经 Agent（形式与目标能算出）；授予可说的话时由研发 Agent 起草措辞 | 只有措辞需要起草 |
 | 9 | `scope_update` 里由 Jev 标出与原文对不上的条目 | 不做 | Jev 第三问尚未接入 |
 | 10 | 放出对外要点 → 若干条 `statement` 授予客户层 | 不建行，发布后随说明书成为 L0 结论 | 发布前不对外 |
 | 11 | 所有发往下层的文字先经渲染 | 只接两处大模型写的（L1 回答、业务员回复草稿）；人写人签的保留 `leak_hits` | 人签的文字不是 Agent 自称引用 |
@@ -477,3 +480,23 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 | 17 | 测试的适配器指向 `tests/fixtures/` 下的小目录 | `tests/fixtures/mini_seeds/rag/`，按 T-205 与现有槽位写 | AGENTS.md 只允许 `mini_seeds` 一份夹具 |
 | 18 | 视图里的产品带汇总的适用字段（隐含） | 视图里的产品 `applicable` 置空，只看 `situations` | 防止汇总字段被当成适用判断 |
 | 19 | 决赛：「重启应用后 K5 仍是撤销或挂起状态」 | 用续跑（Q6.5）重启，同时验证未办完的工作也在 | 真实的重启就是续跑 |
+
+## 9. 愿景审核（v7.3）
+
+人批准契约改动时要求：改动不能偏离愿景。逐条对照 `docs/VISION.md` 第 1 节八条主张、1.3 升级点、6.2 觉的自进化、第 7 节边界、第 10 节评委追问，以及 `AGENTS.md` 第 1 节「权责对等」，结论如下。
+
+**不偏离、且是愿景要求的**：情境匹配与可能适用（主张 6、1.3「条件没问全时只说可能适用」）；`render_refs` 与 `leak_hits(audience)`（主张 5）；能力表与唯一读路径、撤销（主张 4、5）；有效状态与续跑（主张 5「重启后仍是撤销状态」、第 11 节试点路径）；替身 RAG、只存位置与指纹（主张 7、第 11 节「不导出、不缓存」）；`qi_review` 独立家族（主张 5，只是目录里多一个模板）；决策投影与层级过滤（6.2「代谁判断，就只用谁那一层的决策来学」）。
+
+**偏离，已修正**：
+
+| # | 改动 | 偏离了什么 | 修正 |
+|---|---|---|---|
+| 1 | C′ 之后的复用只给研发记「被使用」 | AGENTS.md「权责对等」、VISION 第 10 节「产品经理的判断记在本人名下」：V6 里产品经理扩范围后被引用即记分，改后产品经理没有了 | 适用能力被使用时，确认的研发与批准的产品经理各记一份（Q2） |
+| 2 | `qi_grant` 只覆盖追问与适用 | 主张 4、5 与设计例子「对客户层可以说『无需另加醋酸』」：研发把一句话授权给前台说的通用入口缺失，只剩复用审定一处 | `qi_grant` 加第二种对象：已确认结论在下层被需要却无能力时，授予一句 `statement`，措辞由研发 Agent 起草、研发签（Q2，依赖 Q5 的「本层无能力」） |
+| 3 | `phrase` 本轮无入口 | VISION 第 10 节与 PITCH 第 13 节写着「客户说法由业务员顺手授予」，说了做不到 | 删掉这半句（本次已改），1.2 不变 |
+| 4 | Q4.5 从资料起草种子 | 第 11 节「不导出、不缓存企业文档」：草稿若读内部资料，内部原文会进种子文件 | 草稿只读公开来源（Q4.5） |
+| 5 | V6 对照只报五个计数 | 6.2 的衡量指标是「每解决一个客户问题需要几次研发判断」随时间下降，决赛要展示 | 对照报告按时间窗画这条线（Q7） |
+
+**愿景文字收窄（实现不跟着扩）**：VISION 6.2「能力进化」列了三种燃料，其中「单子因为缺同一项信息被退回」本轮不作为 `qi_grant` 的信号（退回理由是自由文本；缺信息的情况已由「反复回问同一槽位」覆盖），本次把这半句删掉。
+
+**新增一条边界**（写入 VISION 第 7 节）：第 0 天迁移进来的种子内容没有依据指纹，「资料一改自动复核」只覆盖经编译、带依据的结论；试点时种子由 Q4.5 从公开资料起草，再编译一次公开来源即可补上依据。
