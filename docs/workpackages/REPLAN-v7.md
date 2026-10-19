@@ -1,6 +1,6 @@
 # REPLAN-v7｜契落地
 
-> 2026-10-19。代码基线：`main` @ `351c2c9`（V6 完成态）。设计依据：契 v3.3 设计文档（[链接](https://claude.ai/code/artifact/c4b96c26-b91f-4ab6-a261-5ca22cff07f5)，下称「设计」）、`docs/VISION.md` 第 1 节、`docs/PITCH.md` 第 6.1 节。
+> 2026-10-19。代码基线：`main` @ `351c2c9`（V6 完成态）。设计依据：`docs/QI.md`（契 v3.3 设计文档，下称「设计」）、`docs/VISION.md` 第 1 节、`docs/PITCH.md` 第 6.1 节。
 > **第 2 节的全部契约改动已由人一次批准**，之后冻结；实施中需要再改契约，先停下来问人。
 > 本文与 `REPLAN-v6.md` 冲突处以本文为准。不标耗时。
 
@@ -172,14 +172,15 @@ qi_maintainer: rd:R01  # 种子里没有归属人的现象，迁移时登记给�
 
 ### 2.8 文档
 
-`docs/CONTRACTS.md` 同步以上各节；`AGENTS.md`：目录加 `src/huayan/ingest/`、`seeds/rag/`；铁律 4 补一句「引擎只读视图，行为只由能力驱动，跨层能力只来自人签的授予」；开头的阅读顺序加本文。
+`docs/CONTRACTS.md` 同步以上各节；`AGENTS.md`：目录加 `src/huayan/ingest/`、`seeds/rag/`；铁律 4 补一句「引擎只读视图，行为只由能力驱动，跨层能力只来自人签的授予」；开头的阅读顺序加本文与 `docs/QI.md`。
 
 ## 3. 工作包（按顺序，每包一个提交，可单独回退）
 
 ### Q0 契约与文档
 
-`contracts/`、`docs/CONTRACTS.md`、`AGENTS.md`、`config/app*.yaml`
+`contracts/`、`docs/CONTRACTS.md`、`AGENTS.md`、`config/app*.yaml`、`docs/QI.md`
 
+- **设计文档入库（已完成）**：契 v3.3 设计从 Claude Docs 导出为 `docs/QI.md`，架构图改为 Mermaid；文首注明以本文为实现依据，第 12 节加注 1.1 的数据校正。之后改设计只改这份文件。
 - 落第 2 节的全部定义；新字段都有默认值，现有代码不用改就能跑。
 - 不写任何实现，不加模板（模板随实现它的包一起加，免得家族数先变）。
 
@@ -290,7 +291,7 @@ qi_maintainer: rd:R01  # 种子里没有归属人的现象，迁移时登记给�
 
 ### Q7 决赛主演示与 V6 对照
 
-`scripts/demo_qi.py`（新）、`scripts/compare_v6_qi.py`（新）、`config/app.demo.qi.yaml`（新）、`docs/reports/qi_demo/`、`README.md`、`docs/VISION.md`、`docs/PITCH.md`、设计文档第 12 节
+`scripts/demo_qi.py`（新）、`scripts/compare_v6_qi.py`（新）、`config/app.demo.qi.yaml`（新）、`docs/reports/qi_demo/`、`README.md`、`docs/VISION.md`、`docs/PITCH.md`、`docs/QI.md`
 
 - **`demo_qi.py`**（离线配置，状态文件放本次运行目录）：
   1. 编译 `seeds/rag`（录制的提议）；
@@ -299,7 +300,7 @@ qi_maintainer: rd:R01  # 种子里没有归属人的现象，迁移时登记给�
   4. 重启：用同一个状态文件重建应用，重放 C07 的问题。
   每一步的结论从事件日志读出，写进 `docs/reports/qi_demo/demo.json` 与一页 `demo.md`，不写死文案。
 - **`compare_v6_qi.py`**：一批按时间排序的模拟问题（含 C05、C07、C08 的同类问题若干），分别在契与 V6 基线（`git worktree add <dir> 351c2c9` 后用该目录运行同一脚本）上跑一次；研发的处置按脚本里写定的「研发判断」执行，V6 里 `decline_project` 因相容检查报错时，按 V6 的真实做法改为不带产品的不立项。五个指标都从两边的事件日志统计：正确的自助处理数、研发重复参与次数、未经授权的确定推荐数（确定推荐没有落在研发判断写定的任何完整情境内）、撤销或失效后的行为、重启后的授权状态。报告写进 `docs/reports/qi_demo/compare.md`，注明数据为模拟、处置为脚本写定。
-- **材料**：按 1.1 更新设计第 12 节与 PITCH 的演示台词；VISION 1.2 证据表里已实现的行改为「已实现」并指向测试与报告；README 加一节「契」（三句话 + 演示命令 + 报告链接）。
+- **材料**：按 1.1 更新 `docs/QI.md` 第 12 节（并删去该节开头的校正注）与 PITCH 的演示台词；VISION 1.2 证据表里已实现的行改为「已实现」并指向测试与报告；README 加一节「契」（三句话 + 演示命令 + 报告链接）。
 
 **验收**：两个脚本在离线配置下从头跑通；报告里的数字能用事件日志复算。
 
