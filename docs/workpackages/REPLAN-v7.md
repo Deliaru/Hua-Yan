@@ -9,6 +9,7 @@
 > v7.4（同日）：第二轮独立审查（能否开工）报 6 处必须先改，并结合人提供的真实公开产品目录（CSV），全部并入，见第 10 节。
 > v7.5（同日）：人要求觉的自进化现在就演示出来；Q6 改为「决策记录与觉的在线自进化」，Q7 加 `demo_evolution.py`，见第 11 节。
 > v7.6（同日）：并入契之前那份决赛行动计划里该在 v7 做的三项——试样失败回路（Q5.5，契约改动已获批）、真实案例回测（Q7.5）、终赛资料四类入口与归属认领（Q4、Q4.5），见第 12 节。其余项见 `REPLAN-v7-after.md`。
+> v7.9（同日）：复核又报两处——训练隔离要按「家族 × 判断层」而不是只按家族、2.1 代码块里 `candidates` 放错了类，均已修正，见第 14 节。
 > v7.8（同日）：开工前审查（Codex）报 5 处接口与行为边界未闭合、2 处执行清单错漏，全部并入，见第 14 节；其中 `BlockedHint.ku_id`、Jue-K 按家族分开训练两处契约改动已由人批准。
 > v7.7（同日）：按访谈（`docs/reference/interview_notes.md` 第 2、5 节）补上研发之间的知识边界：同层只见归属，申请后由归属人授予并记分，配方也走授予（Q2.5，契约改动已获批，见 2.10 与第 13 节）。
 
@@ -123,13 +124,13 @@ class ExploreResult(BaseModel):
     capabilities: list[Capability]       # 授予本层（及以下）的能力
     hints: list[str]                     # 只从本层视图算出
     stubs: list[BlockedHint] = []        # 只对 L1–L3；客户层永远为空
+    candidates: list[KnowledgeUnit] = [] # 只对研发层：本层候选，标「候选」
 
 class BlockedHint(BaseModel):            # v7.8 加一个字段（已批准）
     owner: str
     level: Level
     kind: KUKind
     ku_id: str | None = None             # 只在「同层研发、可申请查看」的存根上填写；跨层存根一律为 None
-    candidates: list[KnowledgeUnit] = [] # 只对研发层：本层候选，标「候选」
 ```
 
 | form | payload | 第 0 天来源 |
@@ -418,7 +419,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 
 ### Q6 决策记录与觉的在线自进化
 
-`jue/records.py`、`jue/train.py`（新，从 `scripts/train_jue_k.py` 移出训练函数）、`scripts/train_jue_k.py`、`eval/catalog.py`、`scripts/catalog_stats.py`
+`jue/records.py`、`jue/train.py`（新，从 `scripts/train_jue_k.py` 移出训练函数）、`scripts/train_jue_k.py`、`jue/jue_k.py`、`jue/state.py`、`eval/catalog.py`、`scripts/catalog_stats.py`、`tests/test_wp_b1.py`
 
 觉必须在系统运行中自进化，而且现在就要演示出来，不等企业试用（人的要求，v7.5）。做法是把已有的离线训练接成运行中的闭环：
 
@@ -426,11 +427,15 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 - **标签只有两种来源**：人的处置，以及与觉无关的结果（客户实际的条件、研发最终需要的信息、试样与评价）。Agent 和系统自己的决定永不当标签。模拟运行里「结果」来自需求卡的真值，复用 `sim/trajectory.py` 的 `ask_label`、`back_label`，不新写一套标注规则。
 - `rows_for(rows, level)`：只留 `level ≤ k` 的行。觉在客户层提出的追问只用客户层的行来学，研发的回问学不成客户侧的习惯，只会成为 `qi_grant` 的理由（设计第 10 节）。
 - `jue/train.py::fit(rows) -> model_dir`：把 `scripts/train_jue_k.py` 里的训练、校准、与规则比较三步移成函数（脚本改为调它，行为不变）；只对样本够的家族保存模型，其余照旧回落规则打分。本地 CPU，几秒到几十秒。
-- **按家族分开训练，层级过滤落在家族上**（v7.8，模型文件格式已批准）：现有 Jue-K 是所有家族共用一个分类器、各家族一个校准器，L3 的行会经共用分类器影响客户层的分数，`rows_for` 管不住。改为每个家族一个分类器加一个校准器（`model.pkl` 里 `classifiers: {family: ...}`），每个家族只用 `rows_for(rows, 该家族所代表的层)` 训练：`ask_slot` 代表客户与业务员（≤ 1），`ask_back` 代表研发（3），其余按模板的签字人所在层。推理时 `JueK` 按问题所属家族取对应分类器，接口不变。第 0 天用现有训练数据按家族重训一次，与现有模型在 `docs/reports/jue_k/` 的指标上对照，不劣才替换。
+- **按「家族 × 判断层」分开训练**（v7.8 立项、v7.9 修正，模型文件格式已批准）：现有 Jue-K 是所有家族共用一个分类器、各家族一个校准器，L3 的行会经共用分类器影响客户层的分数，`rows_for` 管不住；只按家族拆也不够，因为同一家族会代表不同的层判断：`ask_slot` 在客户自助会话里代客户判断（L0），在陪同会话里代业务员判断（L1）；`ask_back` 在产品经理起草时是 L2，在研发转译时是 L3。
+  - **判断层写在对象上**：`jue/state.py` 给每个对象加属性 `judge_level`：会话里的槽位对象，客户自助（`sales_id` 为空）取 0、陪同取 1；需求单里的槽位对象取现有的 `layer`（2 或 3）；其余对象取模板签字人所在层（这些家族目前都按规则打分）。
+  - **一个模型对应一个「家族 × 判断层」**：`model.pkl` 里 `models: {"<family>|L<k>": (classifier, calibrator)}`；训练这一格只用该家族、该判断层的决策行，且行的 `level ≤ k`（`rows_for`）。样本不够的格不保存，照旧回落规则打分。
+  - **推理**：`JueK` 按「问题所属家族 × 对象的 `judge_level`」取模型，没有对应的格就用规则分；接口不变。
+  - 第 0 天用现有训练数据按格重训一次，与现有模型在 `docs/reports/jue_k/` 的指标上对照，不劣才替换。
 - **换模型**：配置 `jue_k_dir` 指向新模型目录，续跑（Q6.5）时生效；演示脚本在进程内直接换 `app.jue_realtime`。不加「自动重训」的决策点，也不在门面里加重训入口。
 - `catalog_stats.py` 按层级输出决策行数、处置与结果分布，并列出「人自发做了、觉没提」的决定（结构进化的原料，只统计，不自动生成模板）。
 
-**验收**：`test_wp_b1` 加：决策投影的行与层级正确；研发回问产生的结果行在 `rows_for(rows, 0)` 里不出现。自进化的效果由 Q7 的 `demo_evolution.py` 证明，不进测试。
+**验收**：`test_wp_b1` 加：决策投影的行与层级正确；研发回问产生的结果行在 `rows_for(rows, 0)` 里不出现；**隔离按模型实测**：固定随机种子训练一次，再往训练数据里加入一批 L1、L2、L3 的行重训，`ask_slot|L0` 的模型对同一组固定对象给出的分数逐条不变（`ask_slot|L1`、`ask_back|L2` 对更高层的行同理），只检查 `rows_for` 的返回值不算数。自进化的效果由 Q7 的 `demo_evolution.py` 证明，不进测试。
 
 ### Q6.5 可续跑
 
@@ -705,5 +710,12 @@ Codex 对照计划、契约与 `351c2c9` 的代码只读审查（基线 11 个�
 | 5 | 授予的 `statement` 进了 `ExploreResult.capabilities`，L1 回答却只用 `units`，前台用不上 | L1 回答的材料加上授予收件层的 `statement`，经 `render_refs` 渲染并记 `capability_used`；验收看实际回答文字与撤销后的回答（Q5） |
 | 6 | Q2「重建应用后保留」依赖 Q6.5 的续跑 | Q2 改为在知识库层验收，应用级重启留到 Q6.5 |
 | 7 | Q5 要改 `sign_qi_grant`，允许修改范围没列 `app.py` | 补上 `app.py` 与 `prompts/l1_answer.md` |
+
+**v7.9 复核（同日）**：Codex 复核 `dc54662` 又报两处，均已核实并修正：
+
+| # | 问题 | 处理 |
+|---|---|---|
+| 8 | 按家族拆模型不等于按层隔离：`ask_slot` 同时代客户（L0）与业务员（L1）判断，`ask_back` 同时用于 L2 与 L3，统一按一层训练仍会让上层结果影响下层 | 按「家族 × 判断层」分格训练，对象带 `judge_level`，推理按格取模型；验收改为加入上层行重训后下层模型分数逐条不变（Q6） |
+| 9 | 2.1 插入 `BlockedHint` 时把 `candidates` 错放进了存根，`ExploreResult` 反而少了这个字段 | 移回 `ExploreResult`（2.1） |
 
 没有扩大功能范围；家族数、测试数不变。
