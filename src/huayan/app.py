@@ -90,7 +90,6 @@ class HuayanApp:
         app.extractor = (RuleExtractor(app.seeds) if app.config["extractor"] == "rule"
                          else LLMExtractor(app.seeds, app.gateway))
         app._sessions, app._requirements, app._trials = {}, {}, {}
-        app.grants = []
         app.templates = load_templates(app.config["templates_dir"])
         app.jue_realtime = app._jue_model(app.config["realtime_model"], "realtime")
         app.jue_scheduled = app._jue_model(app.config["scheduled_model"], "scheduled")
@@ -298,7 +297,7 @@ class HuayanApp:
                 version = maximum
             card = render(rec.product_id, version, viewer, self.kb, session_id=session_id,
                           customer_id=session.customer_id, grants=self.grants)
-            card.note = recommendation_note(session, self)
+            card.note = "；".join(filter(None, [card.note, recommendation_note(session, self)]))
             if level <= 1:
                 record_disclosure(card, self)
         req = next((r for r in reversed(list(self._requirements.values()))
@@ -307,15 +306,22 @@ class HuayanApp:
         if req and req.reuse and req.session_ids[0] == session_id:
             proposal = req.reuse
             adopted = req.status == "reused"
-            if card and adopted and card.product_id == proposal.product_id:
-                card.note = "；".join(filter(None, [card.note, f"研发 {req.assigned_rd} 审定：{proposal.customer_note}"]))
+            statement = next((c for c in reversed(self.kb.capabilities()) if c.form == "statement"
+                and c.status == "active" and c.audience in range(level + 1)
+                and c.payload.get("product_id") == proposal.product_id
+                and c.payload["text"] == proposal.customer_note and c.granted_by == req.assigned_rd), None)
+            customer_note = statement.payload["text"] if statement else ""
+            if statement and adopted:
+                self._use_capability(statement.id, session_id, viewer_id)
+            if card and adopted and customer_note and card.product_id == proposal.product_id:
+                card.note = "；".join(filter(None, [card.note, f"研发 {req.assigned_rd} 审定：{customer_note}"]))
             if viewer_id == session.sales_id:
                 product = self.kb.product(proposal.product_id) if proposal.product_id else None
                 reuse = ReuseView(requirement_id=req.id, product_id=proposal.product_id,
                     product_name=product.name if product else "",
                     status="adopted" if adopted else "declined" if proposal.declined_reason else "pending" if product else "none")
                 if adopted:
-                    reuse.usage, reuse.customer_note = product.usage, proposal.customer_note
+                    reuse.usage, reuse.customer_note = product.usage, customer_note
                     for ref in dict.fromkeys(proposal.ku_refs):
                         unit = self.kb._units[ref]
                         label = "历史案例" if unit.kind == "case" else "转化知识"
@@ -518,6 +524,13 @@ class HuayanApp:
         state = requirement_state(req, session.need, self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, at, self.events)
         question = self._decision("reuse_product", "adopt_reuse", state.objects[f"requirement:{req_id}"], by)
         self._recommend_product(session, proposal.product_id, at)
+        unit = KnowledgeUnit(id=self.kb.next_claim_id(), kind="claim", level=3,
+            title="研发审定的复用说明", text=proposal.customer_note, product_id=proposal.product_id,
+            phenomenon_ids=[req.phenomenon], owner=by, confirmed_by=by, source="contributed", created_at=at)
+        self.kb.add(unit)
+        self.kb.grant(Capability(id=self.kb.next_cap_id(), form="statement", audience=1,
+            payload={"text": proposal.customer_note, "product_id": proposal.product_id},
+            based_on=[unit.id], granted_by=by, status="active", at=at))
         req.status = "reused"
         for unit in units:
             if unit.level == 2 and unit.owner not in {"pm:agent", "jue"} and not self.ledger.has(unit.owner, unit.id, req.id):
@@ -640,22 +653,13 @@ class HuayanApp:
             raise ValueError("问题尚在准备中")
         if not note.strip():
             raise ValueError("请写明扩展依据")
-        pid = q.refs["product_id"]
-        capability = self.kb._caps[q.refs["capability_id"]]
-        ph = capability.payload["phenomenon"]
-        product, phen = self.kb.product(pid), next(p for p in self.seeds.phenomena if p.id == ph)
-        at = get_clock().now()
-        self.kb.approve(capability.id, by)
-        unit = KnowledgeUnit(id=f"ku:translation:scope:{pid}:{ph}", level=2, kind="translation",
-            title=f"{phen.label} → {product.name}", text=f"{phen.label} → 可选用 {product.name}（{note}）",
-            product_id=pid, phenomenon_ids=[ph], owner=actor.id, source="contributed", created_at=at)
-        self.kb.add(unit)
-        self.ledger.add(LedgerEntry(ts=at, owner=actor.id, ku_id=unit.id, ref=q.id,
-                                    points=self.config["points"]["contributed"], reason="contributed"))
-        self.events.append("scope_extended", by, {"question_id": q.id, "product_id": pid, "phenomenon": ph,
-            "ku_id": unit.id, "capability_id": capability.id, "note": note, "requirement_ids": q.refs.get("requirement_ids", "").split(",")})
+        capability = self.kb.approve(q.refs["capability_id"], by)
+        self.events.append("scope_extended", by, {"question_id": q.id,
+            "product_id": capability.payload["product_id"], "phenomenon": capability.payload["phenomenon"],
+            "capability_id": capability.id, "note": note,
+            "requirement_ids": q.refs.get("requirement_ids", "").split(",")})
         self._settle(q.id, Resolution(action="sign", by=by, note=note))
-        return unit.model_copy(deep=True)
+        return capability
 
     def contribute_l2(self, req_id, item_index, scene_phrase, product_term, by):
         """v6：产品经理把自己修正的 L2 条目沉淀为本人名下的 L2 转化知识（照 flow.contribute_translation）。"""
@@ -1151,6 +1155,92 @@ class HuayanApp:
                 used_by=sorted({e.ref for e in entries})))
         return result
 
+    @property
+    def grants(self):
+        return self.kb.decrypt_grants()
+
+    def capabilities(self, viewer_id):
+        self._actor(viewer_id, {"rd"})
+        return [c for c in self.kb.capabilities() if c.granted_by == viewer_id]
+
+    def candidate_claims(self, req_id, viewer_id):
+        req, _ = self._requirement(req_id, viewer_id, {"rd"},
+            {"draft", "rd_accepted", "rd_confirmed", "released", "rejected", "reused", "merged"})
+        return [u.model_copy(deep=True) for u in self.kb._units.values()
+                if u.kind == "claim" and u.status == "candidate"
+                and req.phenomenon in u.phenomenon_ids]
+
+    def confirm_claims(self, req_id, ku_ids, by):
+        candidates = {u.id for u in self.candidate_claims(req_id, by)}
+        if not set(ku_ids) <= candidates:
+            raise ValueError("只能确认本单相关的候选结论")
+        self.kb.confirm(ku_ids, by)
+        self._after(req_ids=[req_id])
+        self.scan()
+        return self.requirement_view(req_id, by).requirement
+
+    def sign_qi_grant(self, question_id, by, claim_ids=(), note=""):
+        self._actor(by, {"rd"})
+        q = _find(self.bus.questions, question_id, "问题")
+        if q.family != "qi_grant" or q.status != "open" or q.prepared_at is None:
+            raise ValueError("需要已准备的授予问题")
+        if q.signer_id != by:
+            raise PermissionDenied("只有结论确认人可以授予")
+        source = self.kb._caps[q.refs["capability_id"]]
+        if claim_ids:
+            if not set(claim_ids) <= set(source.based_on):
+                raise ValueError("只能确认此项能力依据的结论")
+            self.kb.confirm(claim_ids, by)
+        cap = self.kb.grant(source.model_copy(update={"id": self.kb.next_cap_id(),
+            "audience": int(q.refs["audience"]), "granted_by": by, "approved_by": None,
+            "status": "active", "at": get_clock().now()}))
+        self._settle(q.id, Resolution(action="sign", by=by, note=note))
+        self.scan()
+        return cap
+
+    def revoke_capability(self, cap_id, by):
+        self._actor(by, {"rd"})
+        self.kb.revoke(cap_id, by)
+        self._invalidate_capabilities()
+        self.scan()
+
+    def withdraw_claim(self, ku_id, by):
+        self._actor(by, {"rd"})
+        self.kb.withdraw(ku_id, by)
+        for q in self.bus.list(family="qi_review"):
+            if q.refs["ku_id"] == ku_id:
+                self._settle(q.id, Resolution(action="answered", by=by, note="撤回结论"))
+        self._invalidate_capabilities()
+        self.scan()
+
+    def _invalidate_capabilities(self):
+        active = {c.id for c in self.kb.capabilities() if c.status == "active"}
+        for session in self._sessions.values():
+            rec = session.recommendation
+            selected = next((c for c in rec.candidates if c.product_id == rec.product_id), None) if rec else None
+            if selected and selected.capability_id not in active:
+                session.recommendation, session.status = None, "open"
+            if session.status not in {"escalated", "closed"}:
+                session.hints = self.ask_hints(session.need)
+            self._save_session(session)
+
+    def _use_capability(self, cap_id, session_id, by):
+        capability = self.kb._caps[cap_id]
+        if capability.status != "active":
+            return
+        if any(e.session_id == session_id and e.payload["capability_id"] == cap_id
+               for e in self.events.query(["capability_used"])):
+            return
+        self.events.append("capability_used", by, {"capability_id": cap_id, "form": capability.form,
+            "based_on": capability.based_on, "granted_by": capability.granted_by,
+            "approved_by": capability.approved_by}, session_id=session_id)
+        owners = {self.kb._units[uid].confirmed_by for uid in capability.based_on}
+        if capability.form == "applicable":
+            owners.add(capability.approved_by)
+        for owner in owners - {None, "seed", "pm:agent"}:
+            self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=owner,
+                points=self.config["points"]["used"], reason="used", ku_id=capability.based_on[0], ref=session_id))
+
     def request_decrypt(self, session_id, by):
         actor = self._actor(by, {"sales"})
         session = _find(self._sessions, session_id, "会话")
@@ -1182,9 +1272,9 @@ class HuayanApp:
             raise PermissionDenied("只有产品归属研发本人可审批")
         at, refs = get_clock().now(), question.refs
         if approve:
-            self.grants.append(DecryptGrant(id=f"grant:{len(self.grants) + 1}",
-                customer_id=refs["customer_id"], product_id=refs["product_id"],
-                session_id=refs["session_id"], approved_by=by, at=at, text=text))
+            self.kb.grant(Capability(id=self.kb.next_cap_id(), form="decrypt", audience=refs["customer_id"],
+                payload={"product_id": refs["product_id"], "session_id": refs["session_id"], "text": text},
+                based_on=[f"ku:mechanism:{refs['product_id']}"], granted_by=by, status="active", at=at))
             self.events.append("decrypt_approve", by, {"question_id": question.id,
                 "customer_id": refs["customer_id"], "product_id": refs["product_id"]}, session_id=refs["session_id"])
         self.audit.append(AuditRecord(ts=at, actor=by, action="decrypt_approve" if approve else "decrypt_reject",
@@ -1218,7 +1308,7 @@ class HuayanApp:
             raise ValueError("问题已处理")
         if by == "pm:agent" or q.signer_id != actor.id:
             raise PermissionDenied("只有问题的签字人可以处置")
-        allowed = {"knowledge_conflict": "update_sheet", "leak_risk": "freeze_access"}
+        allowed = {"knowledge_conflict": "update_sheet", "leak_risk": "freeze_access", "qi_review": "sign"}
         if action != "dismiss" and allowed.get(q.family) != action:
             raise ValueError(f"{q.family} 问题不能执行 {action}")
         if action == "update_sheet":
@@ -1233,6 +1323,8 @@ class HuayanApp:
                     payload = {**capability.payload, "conditions": {**conditions, slot: [v for v in current if v != value]}}
                     self.kb.grant(capability.model_copy(update={"id": self.kb.next_cap_id(), "payload": payload}))
             self.events.append("sheet_updated", by, {"product_id": pid, "slot": slot, "removed": value})
+        elif q.family == "qi_review" and action == "sign":
+            self.kb.confirm([q.refs["ku_id"]], by)
         elif action == "freeze_access":
             self.kb.freeze(q.refs["actor_id"], by, get_clock().now())
         return self._settle(question_id, Resolution(action=action, by=by, note=note)).model_copy(deep=True)
@@ -1241,9 +1333,18 @@ class HuayanApp:
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
         if viewer.role != "sales" and self.kb.is_frozen(viewer.id):
             raise PermissionDenied("高层级访问已冻结")
-        return [q.model_copy(deep=True) for q in self.bus.list()
-                if viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
-                    and self._sessions[q.refs["session_id"]].sales_id == viewer_id)]
+        questions = [q.model_copy(deep=True) for q in self.bus.list()
+                     if viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
+                         and self._sessions[q.refs["session_id"]].sales_id == viewer_id)]
+        for q in questions:
+            if q.family == "qi_grant":
+                cap = self.kb._caps[q.refs["capability_id"]]
+                q.evidence.append(Evidence(summary=f"形式：{cap.form}；目标层：L{q.refs['audience']}"))
+                for uid in cap.based_on:
+                    unit = self.kb._units[uid]
+                    q.evidence.append(Evidence(summary=f"{unit.title}；依据位置：{'；'.join(unit.evidence) or '研发直接判断'}",
+                                               quote=unit.text))
+        return questions
 
     def jue_timeline(self, target_id, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
@@ -1418,7 +1519,7 @@ class HuayanApp:
         count = lambda kind, **kw: sum(e.kind == kind and all(e.payload.get(k) == v for k, v in kw.items())
                                        for e in events)
         by_me = lambda kind: sum(e.kind == kind and e.actor == viewer_id for e in events)
-        scope_hits = lambda kus: sum(e.reason == "cited" and e.ku_id in kus for e in self.ledger.list(None))
+        scope_hits = lambda caps: sum(e.kind == "capability_used" and e.payload["capability_id"] in caps for e in events)
         mine_cust = lambda s: viewer.role != "sales" or self.config["customer_sales"].get(s.customer_id) == viewer_id
         self_served = sum(s.origin == "customer" and s.status == "recommended" and mine_cust(s) and
                           not any(s.id in r.session_ids for r in self._requirements.values())
@@ -1426,8 +1527,8 @@ class HuayanApp:
         auto_escalated = sum(e.kind == "auto_executed" and e.payload["action"] == "escalate"
                              and mine_cust(self._sessions[e.session_id]) for e in events)
         if viewer.role == "rd":
-            judged = {f"ku:translation:scope:{e.payload['product_id']}:{e.payload['phenomenon']}" for e in events
-                      if e.kind == "project_declined" and e.actor == viewer_id and e.payload["product_id"]}
+            judged = {c.id for c in self.kb.capabilities() if c.form == "applicable" and c.granted_by == viewer_id
+                      and c.approved_by != "seed"}
             mine = [r for r in self._requirements.values() if r.assigned_rd == viewer_id]
             asked = sum(self.readiness(r.id, viewer_id)["n_asked_by_jue"] for r in mine if r.status != "merged")
             merged = sum(len(e.payload["members"]) for e in events if e.kind == "requirements_merged"
@@ -1443,7 +1544,7 @@ class HuayanApp:
         elif viewer.role == "pm":
             removed = [("逐单转述（产品经理 Agent 已后台转译）", sum(r.drafted_by == "pm:agent" for r in self._requirements.values()),
                         "你不用再把每张单转述一遍")]
-            extended = {e.payload["ku_id"] for e in events if e.kind == "scope_extended" and e.actor == viewer_id}
+            extended = {e.payload["capability_id"] for e in events if e.kind == "scope_extended" and e.actor == viewer_id}
             kept = [("扩展产品适用范围", len(extended)), ("此后因此自动解决的需求", scope_hits(extended)),
                     ("签产品机会（附商业判断）", by_me("requirements_merged")),
                     ("纠正研发退回的需求", sum(e.kind == "requirement_edited" and e.actor == viewer_id

@@ -194,6 +194,8 @@ def demo_ledger(app, p):
 
 
 GET = {
+    "/api/capabilities": lambda app, p: app.capabilities(p["viewer"]),
+    "/api/claims": lambda app, p: app.candidate_claims(p["req_id"], p["viewer"]),
     "/api/demo/ledger": demo_ledger,
     "/api/demo/route-next": route_next,
     "/api/demo/next": next_line,
@@ -222,6 +224,10 @@ GET = {
     "/api/agents/pending": lambda app, p: app.agents.pending(p["actor"]),
 }
 POST = {
+    "/api/qi/confirm": lambda app, p: app.confirm_claims(p["req_id"], p["ku_ids"], p["by"]),
+    "/api/qi/grant": lambda app, p: app.sign_qi_grant(p["question_id"], p["by"], p.get("claim_ids", ()), p.get("note", "")),
+    "/api/qi/revoke": lambda app, p: app.revoke_capability(p["cap_id"], p["by"]),
+    "/api/qi/withdraw": lambda app, p: app.withdraw_claim(p["ku_id"], p["by"]),
     "/api/sessions": lambda app, p: app.start_session(p["customer_id"], p.get("sales_id")),
     "/api/turn": lambda app, p: app.add_turn(p["session_id"], p["speaker"], p["text"]),
     "/api/recommend": lambda app, p: app.recommend_now(p["session_id"]),
@@ -237,7 +243,7 @@ POST = {
     "/api/prepared": lambda app, p: app.mark_prepared(p["question_id"], p["by"]),   # v6 退回纠偏：修改完成，交研发
     "/api/demo/open": open_route,   # v6 开场入口
     "/api/accept": lambda app, p: app.accept_requirement(p["req_id"], p["by"]),
-    "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id")),   # v6
+    "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id"), p.get("claim_ids", ())),   # v7
     "/api/return": lambda app, p: app.return_requirement(p["req_id"], p["reason"], p["by"]),
     "/api/req-item": lambda app, p: app.edit_req_item(p["req_id"], p["index"], ReqItem.model_validate(p["item"]), p["by"]),
     "/api/confirm": lambda app, p: app.confirm_translation(p["req_id"], p["by"]),

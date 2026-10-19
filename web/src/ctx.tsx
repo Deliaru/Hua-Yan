@@ -29,6 +29,7 @@ export function Side({ children }: { children: React.ReactNode }) {
 
 // ── 显示用标签：界面上不出现内部 id 与枚举 ─────────────────
 export const FAMILY: Record<string, string> = {
+  qi_grant: "授予能力", qi_review: "依据复核",
   ask_slot: "追问", escalate_need: "推荐还是升级", reuse_product: "现成产品审定", opportunity: "机会汇聚",
   accept_requirement: "接单", ask_back: "回问", distortion: "转译失真", confirm_translation: "确认化学要点",
   contribution: "沉淀", market_eval: "客户评价", seal_points: "封存 / 放出", seal_leak: "说明书泄密",
@@ -37,6 +38,7 @@ export const FAMILY: Record<string, string> = {
 };
 // 准备中的问题只显示主人在做什么
 export const PREPARING: Record<string, string> = {
+  qi_grant: "正在整理授予依据", qi_review: "正在整理变化的依据",
   reuse_product: "正在查现成产品", opportunity: "正在读各单原话、判断是不是同一件事",
   accept_requirement: "正在起草产品需求（L2）", confirm_translation: "正在起草化学语言（L3）",
   contribution: "正在提炼可沉淀的知识", seal_points: "正在起草封存 / 放出两栏", release: "正在包装说明书",

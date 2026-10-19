@@ -141,6 +141,22 @@
             "customer:C01"
           ],
           [
+            "capability_used",
+            "customer:C01"
+          ],
+          [
+            "capability_used",
+            "customer:C01"
+          ],
+          [
+            "capability_used",
+            "customer:C01"
+          ],
+          [
+            "capability_used",
+            "customer:C01"
+          ],
+          [
             "ask_hint",
             "customer:C01"
           ],
@@ -162,6 +178,10 @@
           ],
           [
             "recommend",
+            "customer:C01"
+          ],
+          [
+            "capability_used",
             "customer:C01"
           ]
         ]
@@ -184,6 +204,22 @@
             "customer:C02"
           ],
           [
+            "capability_used",
+            "customer:C02"
+          ],
+          [
+            "capability_used",
+            "customer:C02"
+          ],
+          [
+            "capability_used",
+            "customer:C02"
+          ],
+          [
+            "capability_used",
+            "customer:C02"
+          ],
+          [
             "ask_hint",
             "customer:C02"
           ],
@@ -205,6 +241,10 @@
           ],
           [
             "recommend",
+            "customer:C02"
+          ],
+          [
+            "capability_used",
             "customer:C02"
           ],
           [
@@ -257,6 +297,22 @@
           ],
           [
             "extraction",
+            "customer:C03"
+          ],
+          [
+            "capability_used",
+            "customer:C03"
+          ],
+          [
+            "capability_used",
+            "customer:C03"
+          ],
+          [
+            "capability_used",
+            "customer:C03"
+          ],
+          [
+            "capability_used",
             "customer:C03"
           ],
           [
@@ -320,6 +376,10 @@
             "pm:agent"
           ],
           [
+            "capability_granted",
+            "rd:R02"
+          ],
+          [
             "project_declined",
             "rd:R02"
           ],
@@ -334,10 +394,6 @@
           [
             "question_prepared",
             "pm:agent"
-          ],
-          [
-            "sheet_updated",
-            "pm:P01"
           ],
           [
             "scope_extended",
@@ -367,6 +423,22 @@
             "customer:C04"
           ],
           [
+            "capability_used",
+            "customer:C04"
+          ],
+          [
+            "capability_used",
+            "customer:C04"
+          ],
+          [
+            "capability_used",
+            "customer:C04"
+          ],
+          [
+            "capability_used",
+            "customer:C04"
+          ],
+          [
             "ask_hint",
             "customer:C04"
           ],
@@ -388,6 +460,10 @@
           ],
           [
             "recommend",
+            "customer:C04"
+          ],
+          [
+            "capability_used",
             "customer:C04"
           ]
         ]
@@ -607,6 +683,22 @@
             "sales:S01"
           ],
           [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
             "ask_hint",
             "sales:S01"
           ],
@@ -629,6 +721,10 @@
           [
             "recommend",
             "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
           ]
         ]
       },
@@ -647,6 +743,22 @@
           ],
           [
             "extraction",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
             "sales:S01"
           ],
           [
@@ -671,6 +783,10 @@
           ],
           [
             "recommend",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
             "sales:S01"
           ],
           [
@@ -707,6 +823,22 @@
           ],
           [
             "extraction",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
+            "sales:S01"
+          ],
+          [
+            "capability_used",
             "sales:S01"
           ],
           [
@@ -815,6 +947,22 @@
           ],
           [
             "extraction",
+            "sales:S02"
+          ],
+          [
+            "capability_used",
+            "sales:S02"
+          ],
+          [
+            "capability_used",
+            "sales:S02"
+          ],
+          [
+            "capability_used",
+            "sales:S02"
+          ],
+          [
+            "capability_used",
             "sales:S02"
           ],
           [

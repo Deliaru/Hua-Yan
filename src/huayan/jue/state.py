@@ -212,6 +212,7 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
     for obj, ref in [*_themes(events, at, seeds, at - timedelta(days=w["theme_days"])),
                      *_knowledge(events, at, products, at - timedelta(days=w["knowledge_days"])),
                      *_scope(events, at, caps),
+                     *_qi(events, at, caps),
                      *_actors(events, at, at - timedelta(hours=w["actor_hours"]))]:
         objects[obj.object_id], refs[obj.object_id] = obj, ref
     return JueState(at=at, mode="scheduled", objects=objects), refs
@@ -319,3 +320,43 @@ def _actors(events, at, since):
             "blocked_top_share": max(blocked.values()) / sum(blocked.values()) if blocked else 0.0,
             "n_distinct_products": len(hit | set(blocked)), "frozen": actor in frozen,
         }), {"event_ids": [e.id for e in evs if e.payload["n_blocked"]], "session_ids": []}
+
+
+def _qi(events, at, caps):
+    """能力授予与依据复核：只读能力和业务事件，不读取资料、不调用工具。"""
+    history = events.query(until=at)
+    requirements = {e.payload["requirement_id"]: e.payload["phenomenon"] for e in history
+                    if e.kind == "requirement_created"}
+    backs = defaultdict(list)
+    changed = {}
+    for event in history:
+        if event.kind == "question_published" and event.payload["family"] == "ask_back":
+            rid, slot = event.payload["object_id"].removeprefix("slot:").rsplit("/", 1)
+            backs[(requirements[rid], slot)].append(event)
+        if event.kind == "evidence_changed":
+            changed[event.payload["ku_id"]] = event
+        elif event.kind in {"claim_confirmed", "claim_withdrawn"}:
+            changed.pop(event.payload["ku_id"], None)
+    for cap in caps:
+        if cap.form not in {"ask", "applicable"} or cap.status != "active":
+            continue
+        ph = cap.payload["phenomenon"]
+        evs = backs[(ph, cap.payload["slot"])] if cap.form == "ask" else [
+            event for (phen, _), rows in backs.items() if phen == ph for event in rows]
+        for level in range(cap.audience):
+            granted = any(c.form == cap.form and c.payload == cap.payload and c.status == "active"
+                          and c.audience in range(level + 1) for c in caps)
+            yield JueObject(object_id=f"knowledge:grant:{cap.id}|L{level}", object_type="knowledge", attrs={
+                "product_id": cap.payload.get("product_id", ""), "slot": cap.payload.get("slot", "phenomenon"),
+                "value": ph, "n_ask_back": len(evs), "n_unanswerable": 0, "granted": granted,
+            }), {"capability_id": cap.id, "product_id": cap.payload.get("product_id", ""),
+                 "audience": str(level), "signer": cap.granted_by, "form": cap.form,
+                 "based_on": cap.based_on, "event_ids": [e.id for e in evs]}
+    for ku_id, event in changed.items():
+        if event.payload["signer"] is None:
+            continue
+        yield JueObject(object_id=f"knowledge:claim:{ku_id}", object_type="knowledge", attrs={
+            "product_id": event.payload["product_id"] or "", "slot": "evidence", "value": ku_id,
+            "evidence_changed": True,
+        }), {"ku_id": ku_id, "product_id": event.payload["product_id"] or "",
+             "signer": event.payload["signer"], "event_ids": [event.id]}

@@ -146,6 +146,10 @@ class AgentHub:
                 session_id = q.refs.get("session_id") if q.owner_role == "sales" else None
                 text = (f"{q.id}（{q.family}）：{q.title}。引用：{q.refs}。"
                         f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。请为此问题准备草稿，不签字。")
+                if q.family == "qi_grant" and "capability_id" in q.refs:
+                    self.app.mark_prepared(q.id, q.owner_id)
+                    self._dispatched.add((q.id, rounds.get(q.id, 0)))
+                    continue
                 if self.app.config["gateway_mock"]:
                     text += "\n" + self._prepare_offline(q)
                     ctx = ToolContext(self.app, self.app.actors[q.owner_id],

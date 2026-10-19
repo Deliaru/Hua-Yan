@@ -61,3 +61,8 @@ def test_l1_knowledge_boundary(mini_seeds, sim_clock, tmp_path):
     complete = next(c for c in match_candidates("color_unlevel",
         {"fiber": "涤纶", "equipment": "气流染色机"}, products) if c.product_id == "T-205")
     assert complete.status == "confirmed" and not complete.unknown_slots
+
+    with pytest.raises(PermissionDenied, match="配方"):
+        kb.grant(Capability(id=kb.next_cap_id(), form="statement", audience=0,
+            payload={"text": "不应放出"}, based_on=["ku:formula:T-205"], granted_by="rd:R01",
+            status="active", at=sim_clock.now()))

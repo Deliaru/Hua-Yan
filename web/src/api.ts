@@ -1,7 +1,7 @@
 // 前端唯一的数据入口：src/huayan/ui/server.py 的 JSON 接口，每个接口对应一个门面方法（WP-C 第 5 项）。
 // 身份由界面选择后作为 viewer / by 传入，裁剪与可签条件都在门面里；门面拒绝时原样显示它返回的 error。
 import type {
-  Conversation, ContributionStat, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
+  Capability, Claim, Conversation, ContributionStat, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun,
   Route, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem,
 } from "./types";
@@ -79,6 +79,14 @@ export const api = {
   requestDecrypt: (session_id: string, by: string) => call("decrypt/request", { session_id, by }),
   marketEval: (req_id: string, result: "pass" | "fail", note: string, by: string) => call("market-eval", { req_id, result, note, by }),
 
+  // 契的签字入口
+  capabilities: (viewer: string) => call<Capability[]>(`capabilities?${q({ viewer })}`),
+  claims: (req_id: string, viewer: string) => call<Claim[]>(`claims?${q({ req_id, viewer })}`),
+  confirmClaims: (req_id: string, ku_ids: string[], by: string) => call("qi/confirm", { req_id, ku_ids, by }),
+  grantCapability: (question_id: string, by: string) => call("qi/grant", { question_id, by }),
+  revokeCapability: (cap_id: string, by: string) => call("qi/revoke", { cap_id, by }),
+  withdrawClaim: (ku_id: string, by: string) => call("qi/withdraw", { ku_id, by }),
+
   // 研发工作面
   reuseNote: (req_id: string, text: string, by: string) => call("reuse-note", { req_id, text, by }),
   adoptReuse: (req_id: string, by: string) => call("reuse/adopt", { req_id, by }),
@@ -96,7 +104,7 @@ export const api = {
   decideDecrypt: (question_id: string, approve: boolean, text: string, by: string) =>
     call("decrypt/decide", { question_id, approve, text, by }),
   trial: (req_id: string, result: "pass" | "fail", by: string) => call("trial", { req_id, result, by }),
-  resolve: (question_id: string, action: "dismiss" | "update_sheet" | "freeze_access", by: string, note = "") =>
+  resolve: (question_id: string, action: "dismiss" | "update_sheet" | "freeze_access" | "sign", by: string, note = "") =>
     call("resolve", { question_id, action, by, note }),
 
   // v6：路由、开工条件、岗位工作、产品经理协作、研发不立项

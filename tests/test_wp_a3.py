@@ -143,3 +143,76 @@ def test_translation_release_and_ownership(tmp_path):
     assert repeated.recommendation == adopted.recommendation
     changed = app.add_turn(reuse_session.id, "customer", "说错了，是锦纶氨纶，手感发硬")
     assert changed.recommendation is None and changed.status == "open"
+
+    # Q2：未授予的研发追问不影响客户；授予、撤销与持久化共用能力表。
+    from huayan.contracts import Capability, KnowledgeUnit
+    from huayan.domain import match_candidates
+    from huayan.events import EventLog
+    from huayan.knowledge import AuditLog, KnowledgeBase
+
+    app = HuayanApp.build(str(path))
+    unit = KnowledgeUnit(id=app.kb.next_claim_id(), kind="claim", level=3, title="环保条件判断（模拟）",
+        text="（模拟）此类需求要确认环保要求", owner="rd:R01", status="candidate",
+        phenomenon_ids=["color_unlevel"], source="contributed", created_at=get_clock().now())
+    app.kb.add(unit)
+    assert not any(h.ku.id == unit.id for h in app.kb.search("环保", app.actors["rd:R01"]))
+    app.kb.confirm([unit.id], "rd:R01")
+    local = app.kb.grant(Capability(id=app.kb.next_cap_id(), form="ask", audience=3,
+        payload={"phenomenon": "color_unlevel", "slot": "constraint", "required": True},
+        based_on=[unit.id], granted_by="rd:R01", status="active", at=get_clock().now()))
+    opening = "深一块浅一块，锦氨的，溢流缸"
+    first = app.start_session("customer:C01")
+    assert not app.add_turn(first.id, "customer", opening).hints
+    granted = app.kb.grant(local.model_copy(update={"id": app.kb.next_cap_id(), "audience": 0}))
+    second = app.start_session("customer:C02")
+    assert {h.slot for h in app.add_turn(second.id, "customer", opening).hints} == {"constraint"}
+    used = [e for e in app.events.query(["capability_used"]) if e.payload["capability_id"] == granted.id]
+    assert len(used) == 1 and used[0].session_id == second.id
+    app._use_capability(granted.id, second.id, second.customer_id)
+    assert len([e for e in app.ledger.list("rd:R01") if e.reason == "used" and e.ref == second.id]) == 1
+    with pytest.raises(PermissionDenied):
+        app.kb.grant(local.model_copy(update={"id": app.kb.next_cap_id(), "granted_by": "rd:R02"}))
+    with pytest.raises(PermissionDenied):
+        app.revoke_capability(granted.id, "rd:R02")
+    app.revoke_capability(granted.id, "rd:R01")
+    assert not app.view_session(second.id, second.customer_id).hints
+    third = app.start_session("customer:C03")
+    assert not app.add_turn(third.id, "customer", opening).hints
+
+    # 适用情境待产品经理批准；撤销后客户、业务员和 Agent 的匹配一起停止。
+    situation = app.kb.grant(Capability(id=app.kb.next_cap_id(), form="applicable", audience=0,
+        payload={"product_id": "T-205", "phenomenon": "color_unlevel",
+                 "conditions": {"fiber": ["锦纶氨纶"], "equipment": ["气流染色机"]}},
+        based_on=[unit.id], granted_by="rd:R01", status="active", at=get_clock().now()))
+    known = {"fiber": "锦纶氨纶", "equipment": "气流染色机"}
+    assert situation.status == "proposed"
+    assert not match_candidates("color_unlevel", known, app.kb.view(app.actors["customer:C01"]).products)
+    app.scan()
+    app.tick()
+    q = next(q for q in app.bus.list(family="scope_update") if q.refs["capability_id"] == situation.id)
+    app.extend_scope(q.id, "（模拟）批准这一完整情境", "pm:P01")
+    reuse = app.start_session("customer:C01")
+    assert app.add_turn(reuse.id, "customer", "深一块浅一块，锦氨的，气流缸").recommendation.product_id == "T-205"
+    assert {"rd:R01", "pm:P01"} <= {e.owner for e in app.ledger.list() if e.reason == "used" and e.ref == reuse.id}
+    app.revoke_capability(situation.id, "rd:R01")
+    for viewer in ("customer:C01", "sales:S01", "pm:agent"):
+        assert not match_candidates("color_unlevel", known, app.kb.view(app.actors[viewer]).products)
+    result = app.agents.call_tool(app.agents.context("pm:agent"), "find_products",
+                                 {"phenomenon": "color_unlevel", "slots": known})
+    assert result.ok and not result.data
+    assert app.view_session(reuse.id, "customer:C01").card is None
+
+    # 解密撤销沿用披露上限，原推荐卡立即不再包含机理。
+    decrypted = app.start_session("customer:C02", "sales:S01")
+    app.add_turn(decrypted.id, "customer", "深一块浅一块，锦氨的，溢流缸，要匀染剂")
+    request = app.request_decrypt(decrypted.id, "sales:S01")
+    app.decide_decrypt(request.id, "rd:R01", True, "（模拟）审定的机理说明")
+    assert app.view_session(decrypted.id, "sales:S01").card.version == "full_mechanism"
+    decrypt = next(c for c in app.capabilities("rd:R01") if c.form == "decrypt")
+    app.revoke_capability(decrypt.id, "rd:R01")
+    assert app.view_session(decrypted.id, "sales:S01").card.version == "product_usage"
+    restored = KnowledgeBase.from_seeds(app.seeds, EventLog(), AuditLog(), state_path=app.kb.state_path)
+    statuses = {c.id: c.status for c in restored.capabilities()}
+    assert statuses[local.id] == "active"
+    assert all(statuses[c.id] == "revoked" for c in (granted, situation, decrypt))
+    assert not restored.decrypt_grants()

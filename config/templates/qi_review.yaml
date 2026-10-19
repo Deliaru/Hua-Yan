@@ -1,0 +1,11 @@
+id: qi_review
+family: qi_review
+kind: anomaly
+object_type: knowledge
+decision_label: 是否保留依据已变化的结论
+precondition: "attrs.evidence_changed"
+rule_score: "1"
+worth_prompt: "原文依据已变化，是否保留该结论与依赖它的能力？"
+title: "{object}：依据已变化，请复核"
+owner_role: rd
+signer_role: rd

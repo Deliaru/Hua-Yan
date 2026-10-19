@@ -8,7 +8,7 @@ from datetime import datetime
 
 from huayan.clock import get_clock
 from huayan.contracts import (KIND_LEVEL, Actor, AuditRecord, BlockedHint, KnowledgeHit,
-                              KnowledgeUnit, KUKind, Product, Seeds, Capability, Situation)
+                              KnowledgeUnit, KUKind, Product, Seeds, Capability, Situation, DecryptGrant)
 from huayan.events import EventLog
 from .permission import PermissionDenied, can_read, level_of
 from .records import AuditLog
@@ -63,6 +63,7 @@ class KnowledgeBase:
         self._version = 0
         self._claim_seq = self._cap_seq = 0
         self._doc_levels = {}
+        self.sources = []
         self._seed_units = {}
 
     @classmethod
@@ -140,41 +141,119 @@ class KnowledgeBase:
         return self._put_product(product.model_copy(update={"status": "released"}), at, "released")
 
     def grant(self, cap: Capability) -> Capability:
-        self._caps[cap.id] = cap.model_copy(deep=True)
+        units = [self._units[ku_id] for ku_id in cap.based_on]
+        if not units or any(u.confirmed_by != cap.granted_by for u in units):
+            raise PermissionDenied("授予人必须是全部依据结论的确认人")
+        if cap.audience in (0, 1, 2) and any(u.kind == "formula" for u in units):
+            raise PermissionDenied("配方不能作为下层能力的依据")
+        cap = cap.model_copy(deep=True)
+        if any(u.status != "active" for u in units):
+            cap.status = "proposed"
+        if cap.form == "applicable" and cap.approved_by is None:
+            cap.status = "proposed"
+        self._caps[cap.id] = cap
+        if cap.id.removeprefix("cap:").isdigit():
+            self._cap_seq = max(self._cap_seq, int(cap.id.removeprefix("cap:")))
+        self.events.append("capability_granted", cap.granted_by, cap.model_dump(mode="json"))
         self._save()
         return cap.model_copy(deep=True)
 
     def approve(self, cap_id, by):
+        actor = next(a for a in self.seeds.actors if a.id == by)
+        if actor.role != "pm" or by == "pm:agent":
+            raise PermissionDenied("适用能力必须由真人产品经理批准")
         cap = self._caps[cap_id]
+        if cap.form != "applicable" or cap.status != "proposed":
+            raise ValueError("只能批准待批准的适用能力")
+        if any(self._units[u].status != "active" for u in cap.based_on):
+            raise ValueError("依据结论尚未确认")
         cap.approved_by, cap.status = by, "active"
         self._save()
         return cap.model_copy(deep=True)
 
     def revoke(self, cap_id, by):
-        self._caps[cap_id].status = "revoked"
+        cap = self._caps[cap_id]
+        if cap.granted_by != by:
+            raise PermissionDenied("只有授予人可以撤销能力")
+        cap.status = "revoked"
+        self.events.append("capability_revoked", by, {"capability_id": cap_id})
         self._save()
 
     def capabilities(self):
         return [c.model_copy(deep=True) for c in self._caps.values()]
 
+    def decrypt_grants(self):
+        return [DecryptGrant(id=c.id, customer_id=c.audience, product_id=c.payload["product_id"],
+            session_id=c.payload["session_id"], text=c.payload["text"], approved_by=c.granted_by, at=c.at)
+            for c in self._caps.values() if c.form == "decrypt" and c.status == "active"]
+
     def next_claim_id(self):
         self._claim_seq += 1
         return f"ku:claim:{self._claim_seq}"
 
+    def _fragments(self, unit):
+        fragments = []
+        for evidence in unit.evidence:
+            location = evidence.rsplit("@", 1)[0]
+            doc_id, span = location.rsplit("#", 1)
+            source = next(s for s in self.sources if doc_id in s.list_docs())
+            fragments.append(source.fetch(doc_id, span))
+        return fragments
+
     def confirm(self, ku_ids, by):
-        for ku_id in ku_ids:
-            unit = self._units[ku_id]
+        units = [self._units[ku_id] for ku_id in ku_ids]
+        for unit in units:
             if unit.confirmed_by not in (None, by):
                 raise PermissionDenied("只能确认本人负责的结论")
-            unit.status, unit.confirmed_by = "active", by
+            fragments = self._fragments(unit)
+            if fragments and all(f.source == "external" for f in fragments):
+                raise ValueError("只依据外部片段的结论不能确认")
+        for unit in units:
+            if unit.evidence:
+                unit.evidence = [f"{f.doc_id}#{f.span}@{f.fingerprint}" for f in self._fragments(unit)]
+            unit.status, unit.confirmed_by, unit.owner = "active", by, by
+            self.events.append("claim_confirmed", by, {"ku_id": unit.id})
+        for cap in self._caps.values():
+            if cap.status not in {"proposed", "suspended"} or not set(cap.based_on) & set(ku_ids):
+                continue
+            if all(self._units[u].status == "active" for u in cap.based_on):
+                cap.status = "proposed" if cap.form == "applicable" and cap.approved_by is None else "active"
         self._save()
+
+    def _suspend(self, ku_id):
+        for cap in self._caps.values():
+            if ku_id in cap.based_on and cap.status in {"active", "proposed"}:
+                cap.status = "suspended"
+                self.events.append("capability_suspended", cap.granted_by,
+                                   {"capability_id": cap.id, "ku_id": ku_id})
+        self._save()
+
+    def withdraw(self, ku_id, by):
+        unit = self._units[ku_id]
+        if unit.confirmed_by != by:
+            raise PermissionDenied("只有确认人可以撤回结论")
+        unit.status = "withdrawn"
+        self.events.append("claim_withdrawn", by, {"ku_id": ku_id})
+        self._suspend(ku_id)
+
+    def evidence_changed(self, ku_id):
+        unit = self._units[ku_id]
+        unit.status = "candidate"
+        self.events.append("evidence_changed", "system:knowledge", {"ku_id": ku_id,
+            "signer": unit.confirmed_by, "product_id": unit.product_id, "evidence": unit.evidence})
+        self._suspend(ku_id)
 
     def next_cap_id(self):
         self._cap_seq += 1
         return f"cap:{self._cap_seq}"
 
     def add(self, ku: KnowledgeUnit) -> None:
-        self._units[ku.id] = ku.model_copy(deep=True)
+        unit = ku.model_copy(deep=True)
+        if unit.status == "active" and unit.confirmed_by is None:
+            unit.confirmed_by = unit.owner
+        self._units[ku.id] = unit
+        if ku.id.removeprefix("ku:claim:").isdigit():
+            self._claim_seq = max(self._claim_seq, int(ku.id.removeprefix("ku:claim:")))
         self._save()
 
     def _save(self):
@@ -193,7 +272,7 @@ class KnowledgeBase:
         temp.replace(self.state_path)
 
     def _readable(self, actor, ku):
-        return can_read(actor, ku) and (not self.is_frozen(actor.id) or ku.level <= 1)
+        return ku.status == "active" and can_read(actor, ku) and (not self.is_frozen(actor.id) or ku.level <= 1)
 
     def list(self, actor: Actor, *, kinds: list[KUKind] | None = None,
              phenomenon: str | None = None) -> list[KnowledgeUnit]:
@@ -228,6 +307,8 @@ class KnowledgeBase:
             return []
         hits = []
         for ku in self._units.values():
+            if ku.status != "active":
+                continue
             if phenomenon and ku.phenomenon_ids and phenomenon not in ku.phenomenon_ids:
                 continue
             score = len(grams & _grams(ku.title + " " + ku.text)) / len(grams)

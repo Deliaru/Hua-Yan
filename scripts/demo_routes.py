@@ -115,7 +115,8 @@ def run_v6(config):
         if rid == "C′":
             assert r.req_of(sid) is None and app._sessions[sid].status == "recommended", "C′：第二次不产生需求单，自助命中"
             assert not any(e.actor.startswith("rd:") for e in human), "C′：研发 0 介入"
-            assert any(x.owner == "pm:P01" and x.reason == "cited" and x.ref == sid for x in app.ledger.list(None)), "C′：pm:P01 获得引用记分"
+            assert {"pm:P01", req.assigned_rd} <= {x.owner for x in app.ledger.list(None)
+                if x.reason == "used" and x.ref == sid}, "C′：研发与产品经理获得被使用记分"
         if rid == "D" and customer:
             assert ("requirements_merged", "pm:P01") in {(e.kind, e.actor) for e in human}, "D：产品经理签机会"
             d_reqs = {x.id for x in app._requirements.values() if {sids[("D", None)], sid} & set(x.session_ids)}

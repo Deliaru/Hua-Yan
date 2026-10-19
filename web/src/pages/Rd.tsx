@@ -63,11 +63,13 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
       <div className="mr-[372px]">
         <div className="mx-auto flex max-w-[1080px] flex-col gap-6 px-8 pb-24 pt-7">
           <PendingActions />
+          <GrantedCapabilities />
           {view ? (
             <>
               <RouteStrip objectId={view.requirement.id} />
               <ReqHead view={view} />
               <ReadinessCard reqId={view.requirement.id} />
+              <CandidateClaims reqId={view.requirement.id} />
               <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
               <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />
             </>
@@ -413,6 +415,11 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
     <div key={i} className="row !items-start text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}{e.quote && `「${e.quote}」`}</div>
   ));
   const body = (() => {
+    if (q.family === "qi_grant") return <>{evidence}<div className="row gap-2">
+      <Act label="签字授予" run={() => api.grantCapability(q.id, me)} />{dismiss}</div></>;
+    if (q.family === "qi_review") return <>{evidence}<div className="row gap-2">
+      <Act label="复核后保留" run={() => api.resolve(q.id, "sign", me)} />
+      <Act kind="plain" label="撤回结论" run={() => api.withdrawClaim(q.refs.ku_id, me)} />{dismiss}</div></>;
     if (q.family === "decrypt_request") return <DecryptReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (!req) return <>{evidence}<div className="row text-[13px] text-ink-2">证据 {q.evidence.length} 条</div><div className="row gap-2">{q.family === "knowledge_conflict" && <Act label="更新适用表" run={() => api.resolve(q.id, "update_sheet", me)} />}{q.family === "leak_risk" && <Act label="冻结权限" run={() => api.resolve(q.id, "freeze_access", me)} />}{dismiss}</div></>;
     switch (q.family) {
@@ -721,4 +728,40 @@ function DecryptReview({ q, dismiss, evidence }: { q: Question; dismiss: React.R
       </div>
     </>
   );
+}
+
+
+function GrantedCapabilities() {
+  const { me } = useApp();
+  const L = useLabels();
+  const caps = useData(() => api.capabilities(me), [me]) ?? [];
+  const status = { proposed: "待批准", active: "生效", suspended: "已挂起", revoked: "已撤销" };
+  const forms: Record<string, string> = { ask: "追问", applicable: "适用情境", statement: "可说的话", decrypt: "解密" };
+  return <Group title="我授予的能力">
+    {caps.map((c) => <div key={c.id} className="row !items-start">
+      <div className="min-w-0 flex-1 text-[13px] leading-5">
+        <p><span className="tag mr-2">{status[c.status]}</span>{forms[c.form] ?? c.form} · 给{typeof c.audience === "number" ? ["客户", "业务员", "产品经理", "研发"][c.audience] : L.name(c.audience)}</p>
+        <p>{c.payload.product_id && L.product(c.payload.product_id)} {c.payload.phenomenon && L.phen(c.payload.phenomenon)} {c.payload.slot && L.slot(c.payload.slot)}{c.payload.text}</p>
+        {c.payload.conditions && <p>{Object.entries(c.payload.conditions).map(([k, v]) => `${L.slot(k)}：${v.join("、")}`).join("；")}</p>}
+        <p className="text-ink-3">依据：{c.based_on.join("、")}</p>
+      </div>
+      <Act kind="quiet" label="撤销" run={() => api.revokeCapability(c.id, me)} />
+    </div>)}
+    {!caps.length && <div className="row text-[13px] text-ink-2">还没有授予的能力</div>}
+  </Group>;
+}
+
+function CandidateClaims({ reqId }: { reqId: string }) {
+  const { me } = useApp();
+  const claims = useData(() => api.claims(reqId, me), [reqId, me]) ?? [];
+  const [selected, setSelected] = useState<string[]>([]);
+  if (!claims.length) return null;
+  return <Group title="本单候选结论 · 待研发确认">
+    {claims.map((c) => <label key={c.id} className="row !items-start text-[13px] leading-5">
+      <input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))} />
+      <span><strong>{c.title}</strong><br />{c.text}<br /><span className="text-ink-3">依据：{c.evidence.join("；") || "研发直接判断"}</span></span>
+    </label>)}
+    <div className="row"><Act label="签字确认所选结论" disabled={!selected.length}
+      run={() => api.confirmClaims(reqId, selected, me).then(() => setSelected([]))} /></div>
+  </Group>;
 }

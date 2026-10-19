@@ -42,6 +42,10 @@ def _summary(family: str, a: dict) -> str:
     if family == "leak_risk":
         return (f"检索 {a['n_queries']} 次，被拦截的高层级命中 {a['n_blocked']} 条，"
                 f"最集中的产品占 {a['blocked_top_share']:.0%}，涉及 {a['n_distinct_products']} 个产品")
+    if family == "qi_grant":
+        return f"研发已回问 {a['n_ask_back']} 次；是否将这项能力授予所需层级？"
+    if family == "qi_review":
+        return "结论的原文依据已变化，依赖它的能力已挂起；请复核或撤回。"
     if family == "scope_update":
         return f"研发 {a['n_applicable']} 次判定 {a['product_id']} 适用于该现象，产品适用范围尚未包含"
     if family == "contribution_pm":
@@ -95,6 +99,8 @@ def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None, s
     if role == "supervisor":
         return min(a.id for a in seeds.actors if a.role == "supervisor")
     if obj.object_type == "knowledge":
+        if "signer" in ref:
+            return ref["signer"]
         return next((p.owner for p in seeds.products if p.id == obj.attrs["product_id"]), None)
     return ref["assigned_rd"]      # requirement / slot（第 2、3 层）/ theme（机会汇聚，C14）
 
