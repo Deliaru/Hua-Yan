@@ -40,7 +40,7 @@ class ReuseProposal(BaseModel):               # 产品经理 Agent 查 L2 知识
 
 class LeakHit(BaseModel):                     # 泄密匹配结果，只给句序号与类别，不含命中内容
     index: int                                # 按「。；！？\n」切句后的序号，从 0 开始
-    source: Literal["sealed", "l3_term", "hypothesis"]
+    source: Literal["sealed", "l3_term", "hypothesis", "claim"]
 
 
 class PointsDraft(BaseModel):                 # 封存 / 放出两栏草稿（只对 L3 可见）
@@ -70,6 +70,7 @@ class Requirement(BaseModel):
     merge_note: str = ""                      # v5.2：判断依据——几位客户说的是不是同一件事（L2/L3 可见）
     direction: str = ""                       # 空单时为空
     product_lang: list[ReqItem] = []          # L2/L3 可见；空单时为空
+    engine_refs: list[str] = []
     chem_lang: list[ReqItem] = []             # L2/L3 可见；所引 L3 知识的原文只有 L3 可见
     hypotheses: list[str] = []                # 研发方向假设（只对 L3 可见）；泄密匹配的来源之一
     status: Literal["draft", "reused", "merged", "rd_accepted", "rd_confirmed", "released", "rejected"]
@@ -95,12 +96,14 @@ class Trial(BaseModel):
     rd: str
     conditions: dict[str, str]
     result: Literal["pass", "fail"]
-    cause: Literal["none", "product", "equipment", "operation"]
+    cause: Literal["none", "product", "equipment", "operation", "requirement"]
     note: str = ""
     at: datetime
     market_eval: Literal["pass", "fail"] | None = None   # 客户评价，业务员录入
     market_eval_by: str | None = None
     market_eval_note: str = ""
+    missing_slots: list[str] = []
+    market_eval_missing: list[str] = []
 
 
 class CitedKnowledge(BaseModel):              # 需求单中被引用的知识，按查看者裁剪

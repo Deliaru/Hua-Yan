@@ -6,7 +6,7 @@ from typing import Literal
 from ._base import BaseModel, datetime
 from .seeds import Level
 
-KUKind = Literal["sheet", "usage", "public_case", "report", "case", "translation", "requirement", "mechanism", "formula", "trial"]
+KUKind = Literal["sheet", "usage", "public_case", "report", "case", "translation", "requirement", "mechanism", "formula", "trial", "claim"]
 KIND_LEVEL: dict[KUKind, Level] = {"sheet": 0, "usage": 0, "public_case": 0, "report": 1, "case": 2, "requirement": 2,
                                     "mechanism": 3, "formula": 3, "trial": 3}   # translation 取种子中的 level
 
@@ -23,6 +23,9 @@ class KnowledgeUnit(BaseModel):
     decryptable: bool = False                 # 只有 mechanism 为 True
     source: Literal["seed", "released", "trial", "contributed"] = "seed"
     created_at: datetime
+    evidence: list[str] = []
+    confirmed_by: str | None = None
+    status: Literal["candidate", "active", "withdrawn"] = "active"
 
 
 class KnowledgeHit(BaseModel):
@@ -34,6 +37,39 @@ class BlockedHint(BaseModel):                 # 越权命中只告诉调用方�
     owner: str
     level: Level
     kind: KUKind
+    ku_id: str | None = None
+
+
+Form = Literal["phrase", "ask", "applicable", "translation", "statement", "decrypt", "share"]
+
+
+class Capability(BaseModel):
+    id: str
+    form: Form
+    audience: Level | str
+    payload: dict
+    based_on: list[str]
+    granted_by: str
+    approved_by: str | None = None
+    status: Literal["proposed", "active", "suspended", "revoked"]
+    at: datetime
+
+
+class Fragment(BaseModel):
+    doc_id: str
+    span: str
+    text: str
+    level: Level
+    source: Literal["public", "internal", "external"]
+    fingerprint: str
+
+
+class ExploreResult(BaseModel):
+    units: list[KnowledgeUnit]
+    capabilities: list[Capability]
+    hints: list[str]
+    stubs: list[BlockedHint] = []
+    candidates: list[KnowledgeUnit] = []
 
 
 Version = Literal["product", "product_usage", "full_mechanism", "internal"]
@@ -80,6 +116,6 @@ class LedgerEntry(BaseModel):
     ts: datetime
     owner: str
     points: int
-    reason: Literal["cited", "contributed", "trial_pass", "product_released", "bounty"]
+    reason: Literal["cited", "contributed", "trial_pass", "product_released", "bounty", "used", "shared"]
     ku_id: str | None = None
     ref: str

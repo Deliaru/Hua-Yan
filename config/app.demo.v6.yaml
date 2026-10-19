@@ -14,5 +14,9 @@ llm_cache_dir: runs/demo_record/llm_cache_v6
 replay: true
 thresholds: {ask: 0.5, ask_jue_k: 0.15, max_asks: 2, match: 0.5, publish: 0.5}
 windows: {theme_days: 7, knowledge_days: 7, actor_hours: 48}
-points: {cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
+points: {used: 1, shared: 2, cited: 1, contributed: 5, trial_pass: 5, product_released: 10}
 customer_sales: {"customer:C01": "sales:S01", "customer:C02": "sales:S01", "customer:C03": "sales:S01", "customer:C04": "sales:S02"}
+
+# v7：来源与有效状态；null 使用本次运行目录，续跑使用同一运行。
+sources: []
+qi_state: null

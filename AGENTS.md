@@ -1,7 +1,8 @@
 # AGENTS.md
 
-> 给 coding agent 的项目宪法。每次会话先读本文件，再读 `docs/workpackages/REPLAN-v5.md`，再读 `docs/CONTRACTS.md`，再读分配给你的工作包 `docs/workpackages/WP-*.md`。
-> **v5 重整进行中**：旧工作包、`docs/DEMO.md`、`demo/mainline.yaml` 中与 `REPLAN-v5.md` 冲突的描述一律作废，以 REPLAN 为准。
+> 给 coding agent 的项目宪法。每次会话先读本文件，再读 `docs/workpackages/REPLAN-v5.md`，再读 `docs/CONTRACTS.md`、`docs/workpackages/REPLAN-v7.md` 和 `docs/QI.md`，再读分配给你的工作包 `docs/workpackages/WP-*.md`。
+> **v7 契落地进行中**：已批准的变更以 `REPLAN-v7.md` 为准。
+> **v5 历史基线**：旧工作包、`docs/DEMO.md`、`demo/mainline.yaml` 中与 `REPLAN-v5.md` 冲突的描述一律作废，以 REPLAN 为准。
 > 愿景与架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`；方向与取舍有疑问时以 `docs/VISION.md` 为准。
 
 ## 1. 项目是什么
@@ -18,7 +19,7 @@
 - **觉（Jue-K）**：**全过程的决策点发现器**。对决策目录（`config/templates/`）里每个「决策 × 对象」给出「此刻需要被决策」的概率，超过阈值即提出问题；目录分推进类（追问、升级、接单、回问、确认、沉淀、客户评价、封存 / 放出、发布）与异常类（失真、对外泄密、知识冲突、拼凑）；主人与签字人由模板写定。**流程由「觉提出 → 主人准备 → 签字人签字 → 状态改变 → 觉再看」推动**。代码中是 `QuestionModel` 接口，两个实现：`jue_proto`（模板 × 对象 + 规则或 OneJev 打分）、`jue_k`（训练模型，覆盖追问、回问、机会汇聚、知识冲突、泄露风险）；新增决策先用规则打分并标 `scored_by: rule`；每次调用记录 `JueRecord`；
 - **Jev**：决策模型，回答已经提出的问题（推荐哪个产品、披露哪个版本、回答是否有依据），输出各选项概率。
 
-当前目标：**剩余约 36 小时内按 `REPLAN-v5.md` 完成 v5 主线**（时间表与检查点见其第 7 节）；v4 可演示版本在 T+4 打标签 `v4-final` 保留。
+当前目标：按 `docs/workpackages/REPLAN-v7.md` 的 Q0–Q8 顺序完成契落地，每包一个提交；v6 对照基线为 `351c2c9`。
 
 ## 2. 技术栈
 
@@ -33,6 +34,8 @@ AGENTS.md  README.md
 docs/        VISION.md  ARCHITECTURE.md  CONTRACTS.md  JUE_K_TRAINING.md  DEMO.md
              workpackages/  reference/  reports/  assets/
 config/      app.yaml  models.yaml  system1.yaml  templates/  baselines/
+seeds/rag/   模拟依据与录制的编译提议
+tests/fixtures/mini_seeds/rag/  测试用模拟依据
 seeds/       slots.yaml  phenomena.yaml  products.yaml  cases.yaml  translations.yaml  actors.yaml
 prompts/     业务员与研发的 Agent、产品经理 Agent、抽取、模拟客户的提示词
 demo/        mainline.yaml（演示台词）
@@ -42,6 +45,7 @@ src/huayan/
   gateway/     模型网关（复用 JUE）
   jev/         Jev 三个问题；system1/ 为 OneJev 客户端、降级与桩（复用 JUE）
   knowledge/   知识库、权限、披露、审计与积分
+  ingest/      依据适配器、编译与公开资料种子起草
   l1/          抽取、L1 回答、会话流程
   escalation/  translate.py（转译骨架：L2、L3、反向包装、转化对照匹配）  flow.py（需求单流转、沉淀、试样、发布）
   agent/       角色 Agent 与产品经理 Agent：loop.py（Agent Loop）  tools.py（原子工具）  hub.py（对话、确认卡、派总线上的问题）
@@ -61,7 +65,7 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 1. **契约冻结。** `docs/CONTRACTS.md` 与 `src/huayan/contracts/` 只能由人修改。觉得必须改时停下来，在汇报中说明；不要在自己的模块里另造一套等价结构绕过。决策目录（`config/templates/` 的模板）不属于冻结契约，但新增或删除决策点需人批准。
 2. **所有大模型调用经过模型网关**，必须带 `caller`（契约 ⑩ 的 caller 表）。
 3. **觉的发现环节不调用大模型、不调用工具。** 原型只允许「规则前置条件 + 规则打分或 OneJev 打分」；Jue-K 只做本地推理。`huayan/jue/` 不得 import `huayan.gateway`。
-4. **权限只在知识库、披露和门面里执行。** Jev 只能在硬上限之内选择披露版本；传给 Jev 和 L1 Agent 的内容只含请求者权限内的知识；界面不做权限判断。L1 的任何输出都不得包含 L2/L3 内容（解密授权的机理除外，配方永不对外）。
+4. **权限只在知识库、披露和门面里执行。** Jev 只能在硬上限之内选择披露版本；传给 Jev 和 L1 Agent 的内容只含请求者权限内的知识；界面不做权限判断。L1 的任何输出都不得包含 L2/L3 内容（解密授权的机理除外，配方永不对外）。引擎只读视图，行为只由能力驱动，跨层能力只来自人签的授予；同层研发的知识原文须经归属人授予，转译引擎为接单研发引用的知识按「工作中用到」处理。
 5. **评估不作弊。** 觉、Jev、Agent、门面不得读取需求卡、注入清单和评测标签；只有 `sim/` 与 `eval/` 可以读。
 6. **降级必须标注。** Jev 走大模型降级或桩、觉用规则模式、抽取用规则时，结果上标 `scored_by` / `extracted_by`，界面状态条可见。
 7. **数据全部是模拟数据并明确标注。** 不提交任何传化真实资料、真实客户、真实配方，不提及其他化工企业名称。不提交密钥。文件读写显式 `encoding="utf-8"`。
@@ -89,6 +93,21 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 | `test_wp_b2` | 同种子可复现；业务代码不引用需求卡与注入清单 |
 | `test_wp_b3` | 事后有用性标签在手算样例上正确 |
 | `test_e2e` | 演示主线离线跑通（直接调用门面） |
+
+v7 在上述现有测试函数内增加以下验收，不增加测试数量：
+
+
+| 测试 | 新增场景 | 所在包 |
+|---|---|---|
+| `test_wp0` | 不改：种子产品带第 0 天情境，四步关系照旧成立 | Q1 |
+| `test_wp_a1` | 给 T-205 再授予一个「涤纶 × 气流染色机」情境后，「锦纶氨纶 × 气流染色机」不命中 T-205；部分条件为 possible、全知为 confirmed；配方不能作下层依据；未授予的 L3 结论不改变客户层视图 | Q1.5、Q2 |
+| `test_wp_t` | `render_refs` 换编号与拒错层编号；`leak_hits` 不传 `audience` 逐条不变，传入后拦截上层结论 | Q3 |
+| `test_wp_l` | `explore` 客户层无存根无提示；L1/L2 只得本层 | Q5 |
+| `test_wp_a3` | 授予/撤销追问（色花 × 环保要求）；撤销解密；撤销情境后各调用方不再推荐；批准；依据他人结论被拒；重启保留；被使用记分；编译、候选不可读、指纹变化 → 挂起与复核；需求条件缺失 → `trial_rework` → 回问；同层研发只见存根、用到可见并记引用、申请 → 授予 → 可读并记 `shared`、撤销、配方可授予 | Q2、Q2.5、Q4、Q5.5 |
+| `test_wp_b1` | 家族数 22；`auto_action` 两种；决策投影与层级过滤 | Q2、Q5.5、Q6 |
+| `test_e2e` | 第 0 天迁移后主线结果不变；主线中途续跑 | Q1、Q6.5 |
+
+桩仍只有 `MockGateway`、`MockSystem1Client` 和 `mini_seeds`（含新加的 `rag/` 子目录）。四步演示由 Q7 的脚本证明，不进测试（与设计第 13 节测试表的 `test_e2e` 一行不同，见第 7 节）。
 
 能用一次真实运行验证的事（看生成的数据、看报告、看界面），就不要写测试。不为 mock 写测试，不为 getter 和 pydantic 行为写测试，不为测试再造新的桩（全项目只有 `MockGateway`、`MockSystem1Client` 两个桩和 `mini_seeds` 一份夹具）。助手的 Loop 不写测试：用 `agent_cli.py` 和现场版演示主线真实跑。
 

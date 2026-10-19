@@ -1530,3 +1530,170 @@ v5 删除：`record_customer_turn`、`record_sales_turn`、`recommend_now`（客
 **v5 删除「确认后派单」**：下一步由觉的写后评估提出（AGENTS.md 铁律 14）。
 
 **不变量（有测试，`tests/test_wp_l.py`，不调用模型）**：`pm:agent` 的工具集合中没有 `effect` 工具；它的 `search_knowledge` / `get_knowledge` / `get_requirement` 拿不到 L3 原文（只有 `BlockedHint` 与归属）、`sealed` 与 `points_draft`；`effect` 工具在 `approve` 之前不改变任何状态；非委托人 `approve` 抛 `PermissionDenied`。
+
+
+## ⑮ 契 v7（2026-10-19，人已批准，之后冻结）
+
+本节为 v7 的契约差异，覆盖前文同名定义与接口；未列出的部分保持不变。执行包见 `workpackages/REPLAN-v7.md`。
+
+
+### 2.1 知识（契约 ②，`contracts/knowledge.py`）
+
+```python
+KUKind = Literal[..., "claim"]          # 新增：编译出的、或研发直接写下的结论；level 由依据定，不进 KIND_LEVEL
+
+class KnowledgeUnit(BaseModel):          # 加三个字段，默认值保持现有行为
+    ...
+    evidence: list[str] = []             # "<doc_id>#<span>@<fingerprint>"，只存位置与指纹
+    confirmed_by: str | None = None      # 迁移进来的取原 owner；现象的必问与先验为 "seed"
+    status: Literal["candidate", "active", "withdrawn"] = "active"
+
+Form = Literal["phrase", "ask", "applicable", "translation", "statement", "decrypt"]
+
+class Capability(BaseModel):
+    id: str                              # 第 0 天：cap:applicable:<pid>:<ph>、cap:ask:<ph>:<slot>、cap:prior:<ph>:<slot>；之后：cap:<n>
+    form: Form
+    audience: Level | str                # decrypt 为客户 id
+    payload: dict                        # 见下表
+    based_on: list[str]                  # 结论 id，至少一条，确认人都是 granted_by
+    granted_by: str
+    approved_by: str | None = None       # 只有 applicable 需要，见 1.3
+    status: Literal["proposed", "active", "suspended", "revoked"]
+    at: datetime
+
+class Fragment(BaseModel):
+    doc_id: str
+    span: str                            # 段号，如 "p3"
+    text: str
+    level: Level
+    source: Literal["public", "internal", "external"]
+    fingerprint: str                     # sha256(text) 前 12 位
+
+class ExploreResult(BaseModel):
+    units: list[KnowledgeUnit]           # 本层可读、已确认的结论
+    capabilities: list[Capability]       # 授予本层（及以下）的能力
+    hints: list[str]                     # 只从本层视图算出
+    stubs: list[BlockedHint] = []        # 只对 L1–L3；客户层永远为空
+    candidates: list[KnowledgeUnit] = [] # 只对研发层：本层候选，标「候选」
+
+class BlockedHint(BaseModel):            # v7.8 加一个字段（已批准）
+    owner: str
+    level: Level
+    kind: KUKind
+    ku_id: str | None = None             # 只在「同层研发、可申请查看」的存根上填写；跨层存根一律为 None
+```
+
+| form | payload | 第 0 天来源 |
+|---|---|---|
+| `applicable` | `{product_id, phenomenon, conditions: {slot: [values]}}` | 每个已发布产品的每个 `solves` 现象 × 原 `applicable`，一行 |
+| `ask` | `{phenomenon, slot, required: true}` 或 `{phenomenon, slot, prior: {value: p}}` | 现象的 `required_slots`、`slot_priors` |
+| `statement` | `{text, product_id?}` | 无（第 0 天的说明书、用法、公开案例是 L0 结论，同层直接用） |
+| `decrypt` | `{product_id, session_id, text}` | 无（启动时没有解密授权） |
+
+结论与能力的新编号（`ku:claim:<n>`、`cap:<n>`）取已加载的最大序号加 1，跨重启不冲突；不用需求单号做编号（需求单号每次运行从 1 开始）。
+
+`LedgerEntry.reason` 加 `"used"`。`DecryptGrant` 保留，改为由 `decrypt` 能力投影出来的只读类型（`approved_by = granted_by`，`session_id` 取自 payload）。
+
+`SourceAdapter` 不定义成协议：本轮只有一种适配器（替身 RAG 的 `FolderSource`），接入企业 RAG 时再按它的三个方法 `search`、`fetch`、`list_docs` 写第二个类。
+
+`KnowledgeBase` 的接口变化：
+
+- `from_seeds(seeds, events, audit, *, state_path=None)`：只加一个有默认值的参数，现有三参数调用不变；
+- 新增 `view(actor) -> Seeds`、`products()`（= 研发层视图的产品，只供系统内部扫描与内部各层使用）、`explore(query, actor) -> ExploreResult`、`capabilities(...)`、`decrypt_grants() -> list[DecryptGrant]`；
+- 新增写入：`confirm(ku_ids, by)`、`withdraw(ku_id, by)`、`grant(cap) -> Capability`、`approve(cap_id, by)`、`revoke(cap_id, by)`、`evidence_changed(ku_id)`；每次写入后整体保存有效状态；
+- 删除：`update_applicable`、`extend_solves`；
+- `search`、`search_blocked`、`get`、`list` 的签名不变；可读条件加一条「结论状态为 `active`」（候选只经 `explore` 的 `candidates` 给研发，撤回的不再可读）。
+
+### 2.2 领域（契约 1.5，`contracts/seeds.py`、`domain.py`）
+
+```python
+class Situation(BaseModel):
+    phenomenon: str
+    conditions: dict[str, list[str]]     # 同时成立；未列出的槽位不限
+    capability_id: str
+
+class Product(BaseModel):
+    ...                                  # 种子文件格式不变
+    situations: list[Situation] = []     # 不写在种子文件里，见下
+
+class Candidate(BaseModel):
+    product_id: str
+    unknown_slots: list[str]             # 命中情境里未知的条件
+    status: Literal["confirmed", "possible"] = "confirmed"
+    capability_id: str | None = None
+```
+
+- `load_seeds` 给每个产品（含立项产品）按 `solves × applicable` 填好第 0 天情境，`capability_id = cap:applicable:<pid>:<ph>`。这样直接拿种子产品调匹配函数的地方（测试、`sim/`、`confirm_translation` 找立项产品）行为不变，也不需要兜底分支。
+- `migrate_seeds(seeds, at) -> tuple[list[KnowledgeUnit], list[Capability]]`：直接读已发布产品的这些情境生成适用能力，按 2.1 表生成追问能力；每个现象生成一条 L3 结论 `ku:claim:phen:<id>`（必问与先验的依据，确认人 `"seed"`）。**迁移不写事件。**
+- `view()` 用能力表重新算出情境，覆盖种子里的第 0 天情境；视图里的 `Product.solves` 取情境的现象并集，`Product.applicable` 置空。
+- `consistent(product, known)`：存在一个情境与已知条件相容（不看现象）。
+- `match_candidates(phenomenon, known, products)`：签名不变；取该现象下与已知条件相容的情境，每个产品取未知条件最少的那个；无未知条件为 `confirmed`，否则 `possible`。
+- `correct_product`：用命中情境里**限定的槽位个数**衡量具体程度（与 V6 的 `len(applicable)` 一致）。
+
+### 2.3 出口（契约 7.1）
+
+- 新增 `render_refs(draft, audience, kb) -> str`（`knowledge/disclosure.py`；现有的 `render` 是推荐卡片渲染，名字和签名都不动）：把稿子里的 `[[编号]]` 换成原文。编号可以是层级 ≤ 收件层的已确认结论，或授予收件层（及以下）的 `statement`；其余编号直接抛 `PermissionDenied` 并记审计。
+- `leak_hits(text, sealed, hypotheses, kb, *, audience=None)`：不传 `audience` 时与现在逐条一致；传入时增加来源 `"claim"`：与层级高于收件层的已确认结论重合。
+
+### 2.4 事件（契约 ⑧）
+
+新增 `claim_confirmed`、`claim_withdrawn`、`capability_granted`、`capability_revoked`、`capability_suspended`、`capability_used`、`evidence_changed`。`retrieve` 的 payload 加 `unanswerable_ku_ids` 与 `n_unanswerable`。`recommend` 的 payload 加 `status` 与 `capability_id`。批准复用现有 `scope_extended`。
+
+### 2.5 觉（契约 5.2、5.4、⑨）
+
+- `collect_scheduled(events, at, seeds, products, windows=None, caps=())`：加 `caps`，供 `qi_grant`、`qi_review`、`scope_update` 读能力状态。
+- 新家族 `qi_grant`（推进类）与 `qi_review`（异常类），对象类型都是 `knowledge`；`scope_update` 的对象改为「待批准的适用能力」。家族数 19 → **21**，`auto_action` 仍只有 `escalate`、`assign_sales`。两个新家族都没有 Jue-K 校准器，由模板 `rule_score` 打分并标 `scored_by: rule`（`jue_k.py` 现有处理）。
+- `jue/records.py` 新增只读投影 `decision_rows(records, events)` 与 `rows_for(rows, level)`。`JueRecord` 不变。
+
+### 2.6 配置（契约 ⑪）与网关（契约 ⑩）
+
+所有 `config/app*.yaml` 加：
+
+```yaml
+sources: []            # [{name, kind: public|internal|external, root, level?}]；替身 RAG 指向 seeds/rag/ 或决赛资料目录
+qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_state.json（每次新运行独立）；试点指向 data/qi/state.json。状态文件含运行期发布的产品与试样，只能配同一个运行目录用：接着上次运行一律走 resume（Q6.5），不让两个新运行共用一个状态文件
+```
+
+有效状态文件的内容（v7.2 扩大）：能力、`claim` 类结论、状态改过的结论、片段密级表、两个序号，**以及运行期新增的全部知识**（`source` 不是 `seed` 的知识单元：发布的产品说明、沉淀的转化知识、试样、公开案例之外的贡献）**和运行期发布的产品记录**。知识与能力的持久化只此一处。
+
+`HuayanApp.build(config_path, run_id=None, byok=None, *, resume=False)`：`resume=True` 时 `run_id` 必须指向已有的运行目录，按 Q6.5 读回；默认行为不变。`EventLog`、`QuestionBus`、`AuditLog`、`Ledger` 的构造在文件已存在时读回已有记录（新增的只有这一个行为）。
+
+`points` 加 `used: 1`。新 caller `ingest:extract`；编译脚本自建网关并关闭缓存（`cache_dir = None`），不另写模型配置。
+
+### 2.7 门面（契约 ⑫）与 Agent（契约 ⑭）
+
+- 新增：`confirm_claims(req_id, ku_ids, by)`、`sign_qi_grant(question_id, by, claim_ids=(), note="")`、`revoke_capability(cap_id, by)`、`withdraw_claim(ku_id, by)`、`set_doc_level(doc_id, level, by)`、`recheck_evidence()`、`capabilities(viewer_id)`；
+- 改：`decline_project(..., applicable_product=None, claim_ids=())` 不再要求相容，改为提议一个完整情境；`extend_scope` 改为批准待批准的适用能力；`release_product` 同时授予新品的适用情境；`decide_decrypt` 写 `decrypt` 能力；`adopt_reuse` 的审定说明写 `statement`（授予业务员层）；`save_reply_draft` 先过 `render_refs` 与 `leak_hits(audience=0)`；`resolve` 处理 `qi_review`；`app.grants` 改为 `kb.decrypt_grants()` 的只读属性；
+- 门面内部按「代谁」取视图（设计第 4 节规则一的表）；`self.seeds` 只用于标签、问法、抽取词表，以及读立项产品；
+- Agent 工具 `search_knowledge` 改调 `explore`；写给下层的文字里，专业结论只写 `[[编号]]`。
+
+### 2.8 独立审查后的两处修正（已批准）
+
+1. **`qi_review` 做成独立家族，不放进 `knowledge_conflict`。** 设计原写「`knowledge_conflict` 家族的新模板」，但 `jue/proto.py:20-22` 与 `docs/CONTRACTS.md` 第 623 行规定「每个 family 只有一个模板」，`resolve` 也按 family 决定允许的动作。所以 `qi_review` 单列为家族，家族数 21。
+2. **出口渲染函数叫 `render_refs`，不叫 `render`**：`disclosure.render` 已是推荐卡片渲染，`test_wp_a1` 在用。
+
+### 2.8′ 试样失败回路与回测（v7.6，已批准）
+
+- `Trial.cause` 增加 `"requirement"`（需求条件缺失），`Trial` 加 `missing_slots: list[str] = []`（研发填写缺了哪几个条件）与 `market_eval_missing: list[str] = []`（客户评价不通过时，业务员按客户反馈勾选的条件）。
+- 新家族 `trial_rework`（推进类，对象类型 `requirement`，主人与签字人都是研发），家族数 21 → **22**；`auto_action` 不变。
+- `record_requirement_trial(req_id, result, by, cause="none", missing_slots=())`、`record_market_eval(req_id, result, note, by, missing_slots=())`：多两个带默认值的参数。
+- 新 caller `eval:one_shot`（回测里「强模型一次性翻译」对照组）。
+
+### 2.10 研发之间的知识边界（v7.7，已批准）
+
+规则一句话：**同层的研发知识，用到才看、看了就记分；随手检索只见归属，想看原文向归属人申请。** 理由见第 13 节。
+
+- **读权限（契约 ②，`knowledge/permission.py::can_read`）**：在层级判断之外加一条——知识 `level == 3`、归属人是真人研发（`owner` 以 `rd:` 开头；结论取 `confirmed_by`）、读者是另一位研发时，只有存在授予读者本人的 `active` 的 `share` 能力才可读。归属人本人照常可读；系统内部身份（id 以 `system:` 开头，如觉现有的 `system:jue`）不受此限。适用于转化知识、机理、配方、试样、结论各类，配方同样可以授予。
+- **能力形式**：`Form` 加 `"share"`：`audience` 为读者的研发 id，payload `{ku_id}`，`based_on = [ku_id]`，`granted_by` = 归属人，不需要产品经理批准；可由归属人撤销。结构约束不变：配方仍不能作 `audience < 3` 的依据，`share` 的读者本来就在 L3。
+- **工作中用到**：`Requirement` 加 `engine_refs: list[str] = []`，由转译引擎起草 L3 条目时写入它引用的知识编号。门面**只对这张单的接单研发（`assigned_rd`）**，把 `engine_refs` 里的知识按「工作中用到」处理：需求单页显示原文、技术确认时可通过校验、确认时照常记「被引用」分。研发自己往条目里加的编号仍须本人可读（自己的或被授予的），不能靠猜编号读到同事的知识。这个判断只写在门面一处。
+- **需求单正文也按接单研发裁剪**：L3 条目（`chem_lang`）的正文本身就含转化知识，研发假设、封存项、两类草稿同理。`requirement_view` 对非接单研发与对 L2 一视同仁：只给产品需求条目（`product_lang`，L2）、状态、现象、已知条件与接单人，L3 条目正文、假设、封存项、草稿置空；「引用的知识」按 `can_read` 显示原文或只显示归属。这样「打开同事的单子」读不到同事的知识。
+- **可申请的存根**：`BlockedHint` 加 `ku_id`（已批准）。`search_blocked` 与 `explore` 只在「读者是研发、命中的是同事的 L3 知识」时填写，界面据此显示「申请查看」；跨层存根（L1、L2 看到上层）仍不填，客户层仍什么都不返回。`request_share` 的 `ku_id` 就取自这里。
+- **转译引擎**：`draft_chem_need` 以内部身份 `system:translate` 读转化对照与机理。研发方向假设只对归属人本人写出机理首句；同事的机理写成「`<产品>` 有相关机理（归属 `<研发>`，可申请查看）」。
+- **申请与授予**：门面新增 `request_share(ku_id, by)`（仅研发，对象必须是本人当前不可读的同层知识），写 `share_requested` 事件；觉的 `qi_grant` 加第三种对象 `knowledge:share:<ku_id>|<申请人>`，属性 `{product_id, pending, granted}`，前置条件 `attrs.pending and not attrs.granted`，`rule_score` 恒为 1（人主动申请，必提）；`refs` 写明主人与签字人都是归属人。觉只在总线上提出「此刻需要归属人决定是否授予」，问题的证据写明谁申请、哪条知识；觉不通知人、不起草、不签字。之后照现有流程：hub 把问题派给主人（归属人）的研发 Agent，Agent 在归属人的助手对话里告知并附上申请人的哪些单子碰到过这条知识（离线时无草稿，与其他家族一致）；问题卡出现在归属人工作面的签字区，归属人签字或忽略。`sign_qi_grant` 对这种对象 `grant` 一条 `share` 能力，并给归属人记一笔 `shared`。拒绝走现有的 `dismiss`。不新增家族，家族数不变。
+- **记分**：`LedgerEntry.reason` 加 `"shared"`；配置 `points` 加 `shared: 2`。
+- **事件**：新增 `share_requested`；授予与撤销复用 `capability_granted`、`capability_revoked`。
+
+
+补充 caller：`ingest:draft`（公开来源起草种子）；`eval:one_shot`（真实案例的一次性翻译对照）。
+
+Jue-K 模型按「家族 × 判断层」保存：`models: {"<family>|L<k>": (classifier, calibrator)}`。对象属性 `judge_level` 标明代谁判断；每格只使用同家族、同判断层且结果层级不高于该层的行训练，无模型的格按规则打分。

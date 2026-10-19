@@ -11,9 +11,9 @@ from .jev import JevDecision, S1Answer, S1Choice, S1Noul, S1Question, S1Result, 
 from .jue import (Discoverer, Family, JueObject, JueOutput, JueRecord, JueState, JueTemplate, ObjectType,
                   QuestionModel, ScoredDecision)
 from .knowledge import (CUSTOMER_VERSIONS, KIND_LEVEL, AuditRecord, BlockedHint, CardSection, DecryptGrant, KnowledgeHit,
-                        KnowledgeUnit, KUKind, LedgerEntry, RecommendationCard, Version)
+                        KnowledgeUnit, KUKind, Capability, Form, Fragment, ExploreResult, LedgerEntry, RecommendationCard, Version)
 from .meter import Meter, MeterRecord
-from .seeds import (ROLE_LEVEL, Actor, Candidate, Case, Level, Phenomenon, Product, Role, Seeds, SlotDef,
+from .seeds import (ROLE_LEVEL, Actor, Candidate, Case, Situation, Level, Phenomenon, Product, Role, Seeds, SlotDef,
                     Translation)
 from .session import (AskHint, AssistantReply, CustomerProfile, ExtractedSlot, ExtractionResult, Intent, NeedState,
                       Recommendation, Session, SlotFill, Turn)
@@ -22,7 +22,7 @@ from .sim import Injection, NeedCard, WeekItem
 __all__ = [
     "SHANGHAI", "BaseModel",
     "Role", "Level", "ROLE_LEVEL", "Actor", "SlotDef", "Phenomenon", "Product", "Case", "Translation", "Seeds",
-    "Candidate",
+    "Candidate", "Situation", "Capability", "Form", "Fragment", "ExploreResult",
     "KUKind", "KIND_LEVEL", "KnowledgeUnit", "KnowledgeHit", "BlockedHint", "Version", "CUSTOMER_VERSIONS", "DecryptGrant",
     "CardSection", "RecommendationCard", "AuditRecord", "LedgerEntry",
     "Intent", "Turn", "SlotFill", "CustomerProfile", "NeedState", "ExtractedSlot", "ExtractionResult", "AskHint",

@@ -34,6 +34,12 @@ class Phenomenon(BaseModel):
     slot_priors: dict[str, dict[str, float]] = {}
 
 
+class Situation(BaseModel):
+    phenomenon: str
+    conditions: dict[str, list[str]]
+    capability_id: str
+
+
 class Product(BaseModel):
     id: str
     name: str
@@ -46,6 +52,7 @@ class Product(BaseModel):
     formula: str                              # L3，永不对外
     owner: str
     status: Literal["released", "project"] = "released"
+    situations: list[Situation] = []
 
 
 class Case(BaseModel):
@@ -79,4 +86,6 @@ class Seeds(BaseModel):
 
 class Candidate(BaseModel):
     product_id: str
-    unknown_slots: list[str]                  # applicable 中有限定、但当前未知的槽位
+    unknown_slots: list[str]                  # 命中情境中限定、但当前未知的槽位
+    status: Literal["confirmed", "possible"] = "confirmed"
+    capability_id: str | None = None

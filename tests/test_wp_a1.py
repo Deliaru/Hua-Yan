@@ -38,7 +38,7 @@ def test_l1_knowledge_boundary(mini_seeds, sim_clock, tmp_path):
     before = len(events.events), len(audit.list())
     hints = kb.search_blocked("匀染 缓染 染座", pm)
     assert any(h.owner == "rd:R01" for h in hints)
-    assert all(set(h.model_dump()) == {"owner", "level", "kind"} for h in hints)
+    assert all(set(h.model_dump()) == {"owner", "level", "kind", "ku_id"} and h.ku_id is None for h in hints)
     assert before == (len(events.events), len(audit.list()))
     kb.freeze(sales.id, "supervisor:M01", sim_clock.now())
     assert kb.search("T-205 配方", sales) == []
