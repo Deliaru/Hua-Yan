@@ -77,7 +77,9 @@ export const api = {
   escalateNote: (session_id: string, text: string, by: string) => call("escalate-note", { session_id, text, by }),
   escalate: (session_id: string, by: string) => call("escalate", { session_id, by }),
   requestDecrypt: (session_id: string, by: string) => call("decrypt/request", { session_id, by }),
-  marketEval: (req_id: string, result: "pass" | "fail", note: string, by: string) => call("market-eval", { req_id, result, note, by }),
+  marketEval: (req_id: string, result: "pass" | "fail", note: string, by: string, missing_slots: string[] = []) =>
+    call("market-eval", { req_id, result, note, by, missing_slots }),
+  rework: (req_id: string, by: string) => call("rework", { req_id, by }),
 
   // 契的签字入口
   capabilities: (viewer: string) => call<Capability[]>(`capabilities?${q({ viewer })}`),
@@ -104,7 +106,8 @@ export const api = {
   release: (req_id: string, by: string) => call("release", { req_id, by }),
   decideDecrypt: (question_id: string, approve: boolean, text: string, by: string) =>
     call("decrypt/decide", { question_id, approve, text, by }),
-  trial: (req_id: string, result: "pass" | "fail", by: string) => call("trial", { req_id, result, by }),
+  trial: (req_id: string, result: "pass" | "fail", by: string, cause = "none", missing_slots: string[] = []) =>
+    call("trial", { req_id, result, by, cause, missing_slots }),
   resolve: (question_id: string, action: "dismiss" | "update_sheet" | "freeze_access" | "sign", by: string, note = "") =>
     call("resolve", { question_id, action, by, note }),
 

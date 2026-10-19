@@ -60,9 +60,10 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
         return JueState(at=at, mode="realtime", objects={})
     layer = {"draft": 2, "rd_accepted": 3}.get(req.status, 0)
     need = need.model_copy(update={"phenomenon": req.phenomenon})
-    objects = _slot_objects(req.id, req.known_slots, need, seeds, kb.products(), layer, kb) if layer else {}
     history = events.query()
     own = [e for e in history if e.payload.get("requirement_id") == req.id]
+    missing, last_result = _missing(req, kb, own, history)
+    objects = _slot_objects(req.id, req.known_slots, need, seeds, kb.products(), layer, kb, missing) if layer else {}
     items = {2: req.product_lang, 3: req.chem_lang}.get(layer, [])
     upstream = set(req.known_slots) if layer == 2 else {i.slot for i in req.product_lang if i.slot} if layer == 3 else set()
     open_backs = set()
@@ -86,7 +87,7 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
         "n_edited_uncovered": _edited_uncovered(req, seeds, kb),
         "n_pm_edited_uncovered": _pm_edited_uncovered(req, seeds, kb),
         "n_contributed": len({e.payload["ku_id"] for e in own if e.kind == "knowledge_contributed"}),
-        **_trial_attrs(req, kb, own),
+        **_trial_attrs(req, kb, own), "n_missing": len(missing), "last_result": last_result,
         "points_set": any(e.kind == "points_set" for e in own),
         "n_sealed": len(req.sealed), "sheet_ready": req.sheet is not None,
         "n_leak_hits": len({h.index for h in leak_hits(req.sheet.sheet + "\n" + req.sheet.usage,
@@ -136,8 +137,24 @@ def _trial_attrs(req: Requirement, kb: KnowledgeBase, own: list) -> dict:
             "market_eval": evaluation}
 
 
+def _missing(req: Requirement, kb: KnowledgeBase, own: list, history: list) -> tuple[frozenset[str], str]:
+    """最近一次试样失败（原因为需求条件缺失）或客户评价不通过所指向、此后还没回问答过的槽位。"""
+    trials = {t.id: t for t in (Trial.model_validate_json(u.text) for u in kb.list(_INTERNAL, kinds=["trial"]))
+              if t.requirement_id == req.id}
+    failures = [(t.at, t.missing_slots, "试样失败") for t in trials.values() if t.result == "fail" and t.cause == "requirement"]
+    failures += [(e.ts, trials[e.payload["trial_id"]].market_eval_missing, "客户评价不通过") for e in own
+                 if e.kind == "market_eval" and e.payload["result"] == "fail"]
+    if not failures:
+        return frozenset(), "none"
+    at, slots, label = max(failures, key=lambda f: f[0])
+    answered = {e.payload["object_id"].rsplit("/", 1)[1] for e in history if e.kind == "question_resolved"
+                and e.payload["family"] == "ask_back" and e.payload["action"] == "answered"
+                and e.payload["object_id"].startswith(f"slot:{req.id}/") and e.ts >= at}
+    return frozenset(slots) - answered, label
+
+
 def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: Seeds, products: list[Product],
-                  layer: int, kb: KnowledgeBase | None = None) -> dict[str, JueObject]:
+                  layer: int, kb: KnowledgeBase | None = None, failed=frozenset()) -> dict[str, JueObject]:
     ph = need.phenomenon
     phen = next((p for p in seeds.phenomena if p.id == ph), None)
     ids = lambda k: tuple(c.product_id for c in match_candidates(ph, k, products))
@@ -157,7 +174,7 @@ def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: See
             "asked": need.asked.get(slot.id, 0), "required": phen is not None and slot.id in phen.required_slots,
             "turn": need.turn_count, "n_filled": len(known), "n_candidates": len(ids(known)) if ph else 0,
             "splits": splits, "prior_top": max(prior.values(), default=0.0), "chem_savvy": need.profile.chem_savvy,
-            "layer": layer, "trans_splits": trans, "p_fix": p_fix})
+            "layer": layer, "trans_splits": trans, "p_fix": p_fix, "failed_on": slot.id in failed})
     return objects
 
 
@@ -328,6 +345,17 @@ def _qi(events, at, caps, units):
     requirements = {e.payload["requirement_id"]: e.payload["phenomenon"] for e in history
                     if e.kind == "requirement_created"}
     accompanied = {e.session_id for e in history if e.session_id and e.actor.startswith("sales:")}
+    req_level = {e.payload["requirement_id"]: min(1 if s in accompanied else 0 for s in e.payload["session_ids"])
+                 for e in history if e.kind == "requirement_created"}
+    # 试样失败（需求条件缺失）与客户评价不通过指向的条件：研发的判断，只作为授予追问的理由
+    trial_misses = defaultdict(list)
+    for unit in units.values():
+        if unit.kind != "trial" or unit.status != "active":
+            continue
+        t = Trial.model_validate_json(unit.text)
+        slots = (t.missing_slots if t.result == "fail" and t.cause == "requirement" else []) +             (t.market_eval_missing if t.market_eval == "fail" else [])
+        for slot in slots if t.requirement_id in requirements else []:
+            trial_misses[(requirements[t.requirement_id], slot)].append(req_level[t.requirement_id])
     backs, unanswerable = defaultdict(list), defaultdict(list)
     changed, requests = {}, {}
     for event in history:
@@ -352,7 +380,8 @@ def _qi(events, at, caps, units):
         evs = backs[(ph, cap.payload["slot"])] if cap.form == "ask" else [
             event for (phen, _), rows in backs.items() if phen == ph for event in rows]
         # 只授予真正缺这个条件的那一层：回问出自业务员陪同的会话为 L1，出自客户自助的会话为 L0，取最低的一层。
-        back_level = min((1 if e.session_id in accompanied else 0 for e in evs), default=0)
+        missed = trial_misses[(ph, cap.payload["slot"])] if cap.form == "ask" else []
+        back_level = min([1 if e.session_id in accompanied else 0 for e in evs] + missed, default=0)
         misses = {level: [e for ku_id in cap.based_on for e in unanswerable[(ku_id, level)]] for level in range(3)}
         for level in sorted({back_level} | {k for k, v in misses.items() if v}):
             granted = any(c.form == cap.form and c.payload == cap.payload and c.status == "active"
@@ -361,7 +390,7 @@ def _qi(events, at, caps, units):
             yield JueObject(object_id=f"knowledge:grant:{cap.id}|L{level}", object_type="knowledge", attrs={
                 "product_id": cap.payload.get("product_id", ""), "slot": cap.payload.get("slot", "phenomenon"),
                 "value": ph, "n_ask_back": len(asked), "n_unanswerable": len(misses[level]), "requested": False,
-                "granted": granted,
+                "n_trial_missing": len(missed) if level == back_level else 0, "granted": granted,
             }), {"capability_id": cap.id, "product_id": cap.payload.get("product_id", ""),
                  "audience": str(level), "signer": cap.granted_by, "form": cap.form,
                  "based_on": cap.based_on, "event_ids": [e.id for e in asked + misses[level]]}
@@ -375,7 +404,7 @@ def _qi(events, at, caps, units):
                       and c.audience in range(level + 1) for c in caps)
         yield JueObject(object_id=f"knowledge:grant:{ku_id}|L{level}", object_type="knowledge", attrs={
             "product_id": unit.product_id or "", "slot": "statement", "value": ku_id,
-            "n_ask_back": 0, "n_unanswerable": len(evs), "requested": False, "granted": granted,
+            "n_ask_back": 0, "n_unanswerable": len(evs), "n_trial_missing": 0, "requested": False, "granted": granted,
         }), {"ku_id": ku_id, "product_id": unit.product_id or "", "audience": str(level),
              "signer": unit.confirmed_by, "form": "statement", "based_on": [ku_id],
              "session_ids": sorted({e.session_id for e in evs if e.session_id}),
@@ -388,7 +417,7 @@ def _qi(events, at, caps, units):
                    and ku_id in e.payload["ku_refs"]]
         yield JueObject(object_id=object_id, object_type="knowledge", attrs={
             "product_id": event.payload["product_id"] or "", "slot": "share", "value": requester,
-            "n_ask_back": 0, "n_unanswerable": 0, "requested": True, "granted": granted,
+            "n_ask_back": 0, "n_unanswerable": 0, "n_trial_missing": 0, "requested": True, "granted": granted,
         }), {"ku_id": ku_id, "requester": requester, "product_id": event.payload["product_id"] or "",
              "signer": event.payload["owner"], "requirement_ids": [e.payload["requirement_id"] for e in touched],
              "event_ids": [event.id]}

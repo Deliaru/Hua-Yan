@@ -830,11 +830,13 @@ class HuayanApp:
         self._after(req.session_ids, [req.id, *req.merge_from])
         return self.requirement_view(req.id, by).requirement
 
-    def record_market_eval(self, req_id, result, note, by):
+    def record_market_eval(self, req_id, result, note, by, missing_slots=()):
+        """missing_slots：评价不通过时，业务员按客户反馈勾选的没问到的条件。"""
         req, _ = self._requirement(req_id, by, {"sales"}, {"rd_confirmed"})
         self._sales_session(req.session_ids[0], by)
         if result not in {"pass", "fail"}:
             raise ValueError("客户评价必须为 pass 或 fail")
+        self._check_slots(missing_slots, result == "fail")
         trial = next((t for t in reversed(list(self._trials.values()))
                       if t.requirement_id == req_id and t.result == "pass"), None)
         if trial is None or trial.market_eval is not None:
@@ -843,6 +845,7 @@ class HuayanApp:
                                   self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("market_eval", "record_market_eval", state.objects[f"requirement:{req_id}"], by)
         trial.market_eval, trial.market_eval_by, trial.market_eval_note = result, by, note
+        trial.market_eval_missing = list(missing_slots)
         unit = self.kb._units[f"ku:trial:{trial.id}"]
         self.kb.add(unit.model_copy(update={"text": trial.model_dump_json()}))
         self.events.append("market_eval", by, {"requirement_id": req.id, "trial_id": trial.id, "result": result})
@@ -1068,15 +1071,41 @@ class HuayanApp:
         # 用完整内部来源检查，返回值仅含句序号与类别；用法接续说明书编号。
         return leak_hits(f"{req.sheet.sheet}\n{req.sheet.usage}", req.sealed, req.hypotheses, self.kb)
 
-    def record_requirement_trial(self, req_id, result, by):
-        """工作面模拟 ELN 录入；关联信息与业务时间由后端生成。"""
+    def record_requirement_trial(self, req_id, result, by, cause="none", missing_slots=()):
+        """工作面模拟 ELN 录入；关联信息与业务时间由后端生成。cause = requirement 时研发勾选缺了哪些条件。"""
         req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
+        if (result == "pass") != (cause == "none"):
+            raise ValueError("通过的试样不填失败原因，失败的试样必须填原因")
+        self._check_slots(missing_slots, cause == "requirement")
         number = len(self._trials) + 1
         while f"trial:{number}" in self._trials:
             number += 1
         return self.record_trial(Trial(id=f"trial:{number}", product_id=req.product_id,
             requirement_id=req.id, rd=by, conditions=dict(req.known_slots), result=result,
-            cause="none", note="（模拟）工作面录入；未填写原因", at=get_clock().now()))
+            cause=cause, missing_slots=list(missing_slots), note="（模拟）工作面录入", at=get_clock().now()))
+
+    def _check_slots(self, slots, allowed):
+        if (bool(slots) and not allowed) or not set(slots) <= {s.id for s in self.seeds.slots}:
+            raise ValueError("缺失条件只在需求条件缺失或评价不通过时勾选，且必须是已知槽位")
+
+    def rework_requirement(self, req_id, by):
+        """研发签 trial_rework：需求单退回到已接单、待重新转译；缺失条件的回问由觉提出。"""
+        req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
+        obj = state.objects[f"requirement:{req_id}"]
+        if not obj.attrs["n_missing"]:
+            raise ValueError("没有待补问的缺失条件")
+        question = self._decision("trial_rework", "rework_requirement", obj, by)
+        reason = f"{obj.attrs['last_result']}：需求条件缺失，退回重新转译"
+        req.status = "rd_accepted"
+        req.return_notes.append(reason)
+        self.events.append("requirement_returned", by, {"requirement_id": req_id, "reason": reason})
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by, note=reason))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
 
     def record_trial(self, trial: Trial):
         actor = self._actor(trial.rd, {"rd"})

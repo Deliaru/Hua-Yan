@@ -148,6 +148,19 @@ export function Act({ label, run, kind = "primary", disabled, done, glow }: {
 }
 
 // 多行输入（草稿、理由）
+// 缺失条件勾选：试样失败（需求条件缺失）与客户评价不通过共用
+export function SlotPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { meta } = useApp();
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {meta.slots.map((s) => (
+        <button key={s.id} type="button" className={`chip ${value.includes(s.id) ? "tag-attn" : ""}`}
+          onClick={() => onChange(value.includes(s.id) ? value.filter((x) => x !== s.id) : [...value, s.id])}>{s.label}</button>
+      ))}
+    </div>
+  );
+}
+
 export function Field({ value, onChange, placeholder, rows = 2, label }: {
   value: string; onChange: (v: string) => void; placeholder?: string; rows?: number; label?: string;
 }) {

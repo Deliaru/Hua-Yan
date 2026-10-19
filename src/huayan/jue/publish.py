@@ -47,7 +47,8 @@ def _summary(family: str, a: dict) -> str:
     if family == "qi_grant" and a["slot"] == "statement":
         return f"这条结论在该层被问到 {a['n_unanswerable']} 次却没有可说的话；是否授予一句话（看不到结论原文）？"
     if family == "qi_grant":
-        return (f"研发已回问 {a['n_ask_back']} 次、该层命中却答不了 {a['n_unanswerable']} 次；"
+        return (f"研发已回问 {a['n_ask_back']} 次、试样因这个条件失败 {a['n_trial_missing']} 次、"
+                f"该层命中却答不了 {a['n_unanswerable']} 次；"
                 "是否将这项能力授予所需层级？")
     if family == "qi_review":
         return "结论的原文依据已变化，依赖它的能力已挂起；请复核或撤回。"

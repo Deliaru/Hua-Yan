@@ -79,7 +79,24 @@ def test_translation_release_and_ownership(tmp_path):
     assert all(c.text is not None for c in app.requirement_view(req.id, "rd:R01").cited)
     with pytest.raises(PermissionDenied):
         app.requirement_view(req.id, "sales:S01")
-    app.record_trial(Trial(id="trial:1", product_id=req.product_id, requirement_id=req.id, rd=rd,
+    # Q5.5 试样失败回路：单上设备填错了（模拟），研发录入「需求条件缺失：设备」→ 觉提出 trial_rework →
+    # 签字后回到待重新转译、觉对设备提出回问 → 回答的新值覆盖原值、不再提出
+    app._requirements[req.id].known_slots["equipment"] = "溢流染色机"
+    with pytest.raises(ValueError):
+        app.record_requirement_trial(req.id, "fail", rd)
+    app.record_requirement_trial(req.id, "fail", rd, cause="requirement", missing_slots=["equipment"])
+    prepare("trial_rework", f"requirement:{req.id}")
+    assert app.rework_requirement(req.id, rd).status == "rd_accepted"
+    assert not app.bus.list(family="trial_rework")
+    back = next(q for q in app.bus.list(family="ask_back") if q.object_id == f"slot:{req.id}/equipment")
+    app.add_turn(session.id, "customer", "设备是气流缸")
+    assert back.id not in {q.id for q in app.bus.list(family="ask_back")}
+    assert app.requirement_view(req.id, rd).requirement.known_slots["equipment"] == "气流染色机"
+    assert not any(q.object_id == f"slot:{req.id}/equipment" for q in app.bus.list(family="ask_back"))
+    prepare("confirm_translation", f"requirement:{req.id}")
+    req = app.confirm_translation(req.id, rd)
+    assert not app.bus.list(family="trial_rework")
+    app.record_trial(Trial(id="trial:2", product_id=req.product_id, requirement_id=req.id, rd=rd,
         conditions=req.known_slots, result="pass", cause="none", at=get_clock().now()))
     prepare("market_eval", f"requirement:{req.id}")
     app.record_market_eval(req.id, "pass", "（模拟）客户试用通过", "sales:S01")

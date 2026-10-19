@@ -3,8 +3,9 @@ family: qi_grant
 kind: advance
 object_type: knowledge
 decision_label: 是否授予这项能力
-precondition: "not attrs.granted and (attrs.requested or attrs.n_ask_back >= 2 or attrs.n_unanswerable >= 1)"
-rule_score: "min(1, attrs.requested + (attrs.n_ask_back + attrs.n_unanswerable) / 3)"
+# 同事申请；或研发反复回问、试样反复因这个条件失败、该层命中却答不了
+precondition: "not attrs.granted and (attrs.requested or attrs.n_ask_back >= 2 or attrs.n_trial_missing >= 2 or attrs.n_unanswerable >= 1)"
+rule_score: "min(1, attrs.requested + (attrs.n_ask_back + attrs.n_trial_missing + attrs.n_unanswerable) / 3)"
 worth_prompt: "该知识被回问 {attrs.n_ask_back} 次或被同事申请查看，是否由确认人授予？"
 title: "{object}：是否授予？"
 owner_role: rd

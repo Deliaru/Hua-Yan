@@ -3,10 +3,11 @@ family: ask_back
 kind: advance
 object_type: slot
 decision_label: 是否回问客户
-# 需求单起草中（layer 2 产品经理 / layer 3 研发）；客户没说过、也没答过「不清楚」，且它的取值会改变本层转译
-precondition: "attrs.layer >= 2 and not attrs.filled and not attrs.unknown and attrs.trans_splits >= 2"
-# 取值能分出的转译越多越该回问
-rule_score: "0.3 + 0.2 * attrs.trans_splits"
+# 需求单起草中（layer 2 产品经理 / layer 3 研发）；客户没说过、也没答过「不清楚」，且它的取值会改变本层转译；
+# 或者它是最近一次试样失败 / 客户评价不通过指向的缺失条件（填过也可能填错，答过不清楚也再问）
+precondition: "attrs.layer >= 2 and (attrs.failed_on or (not attrs.filled and not attrs.unknown and attrs.trans_splits >= 2))"
+# 取值能分出的转译越多越该回问；失败指向的条件加分
+rule_score: "0.3 + 0.2 * attrs.trans_splits + 0.5 * attrs.failed_on"
 worth_prompt: "需求单正在第 {attrs.layer} 层转译（2 = 产品经理起草产品需求，3 = 研发起草化学语言需求单），现象「{attrs.phenomenon}」，客户从未说明槽位「{attrs.slot}」（{object}）；该信息有 {attrs.trans_splits} 种取值会让本层引用的转化知识不同。是否需要派回业务员向客户回问该信息？"
 title: "转译需要确认客户的{object}"
 owner_role: sales

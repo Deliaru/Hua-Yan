@@ -8,7 +8,7 @@ import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "..
 import { useGlow, useGuideArg, useGuide } from "../components/Guide";
 import { Popover } from "../components/Controls";
 import { Plus } from "../components/Icons";
-import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote } from "../components/ui";
+import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote, SlotPicker } from "../components/ui";
 import { RouteStrip, WorkloadCard } from "../components/Route";
 
 function SalesSidebar({ mine, current, guided, choose }: {
@@ -425,6 +425,7 @@ function MarketEval({ q }: { q: Question }) {
   const { me } = useApp();
   const L = useLabels();
   const [note, setNote] = useState("");
+  const [missing, setMissing] = useState<string[]>([]);
   const req = q.refs.requirement_id;
   const glow = useGlow("sign:market_eval");
   const scripted = useGuideArg("sign:market_eval");   // 回放部署：台词里的客户评价原因
@@ -435,9 +436,11 @@ function MarketEval({ q }: { q: Question }) {
           <p className="text-[14px]">{L.scrub(q.title)}</p>
           <Field value={note} onChange={setNote} placeholder="原因（客户怎么说）" />
           {scripted && note !== scripted && <div><button type="button" className="chip glow" onClick={() => setNote(scripted)}>演示自动填入</button></div>}
+          <p className="text-[12.5px] text-ink-2">不通过时，按客户反馈勾选当初没问到的条件：</p>
+          <SlotPicker value={missing} onChange={setMissing} />
           <div className="flex flex-wrap gap-2">
             <Act label="通过" run={() => api.marketEval(req, "pass", note, me)} />
-            <Act kind="plain" label="不通过" run={() => api.marketEval(req, "fail", note, me)} />
+            <Act kind="plain" label="不通过" run={() => api.marketEval(req, "fail", note, me, missing)} />
             <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />
           </div>
         </div>

@@ -1,0 +1,12 @@
+id: trial_rework
+family: trial_rework
+kind: advance
+object_type: requirement
+decision_label: 是否退回重新转译
+# 试样失败或客户评价不通过，指向了需求单上没问到（或问错）的条件，且还没补问
+precondition: "attrs.status == 'rd_confirmed' and attrs.n_missing >= 1"
+rule_score: "1"
+worth_prompt: "需求单 {object} 最近一次{attrs.last_result}指向 {attrs.n_missing} 个需求条件缺失、尚未补问。是否退回到已接单、待重新转译，由觉对这些条件提出回问？"
+title: "{object}：试样暴露条件缺失，是否退回重新转译？"
+owner_role: rd
+signer_role: rd

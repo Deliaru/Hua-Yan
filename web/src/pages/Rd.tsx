@@ -8,7 +8,7 @@ import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "..
 import { ChevronRight } from "../components/Icons";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
 import { useGlow, useGuide, useGuideArg } from "../components/Guide";
-import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip } from "../components/ui";
+import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip, SlotPicker } from "../components/ui";
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
@@ -198,9 +198,9 @@ function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode })
               <span className="w-[92px] shrink-0 text-[14px] font-semibold">试样</span>
               <span className="min-w-0 flex-1 text-[12.5px] text-ink-2">不经过觉：研发在实验室做试样，演示里用按钮模拟实验室系统回传结果</span>
               <Act kind="plain" label="试样通过" glow={glowTrial} run={() => api.trial(req.id, "pass", me)} />
-              <Act kind="quiet" label="不通过" run={() => api.trial(req.id, "fail", me)} />
             </div>
           )}
+          {trial && <TrialFail reqId={req.id} />}
         </div>
       </div>
       {sign}
@@ -417,6 +417,8 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
     <div key={i} className="row !items-start text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}{e.quote && `「${e.quote}」`}</div>
   ));
   const body = (() => {
+    if (q.family === "trial_rework") return <>{evidence}<div className="row gap-2">
+      <Act label="退回重新转译" run={() => api.rework(q.refs.requirement_id, me)} />{dismiss}</div></>;
     if (q.family === "qi_grant" && q.refs.form === "statement") return <StatementGrant q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant") return <>{evidence}<div className="row gap-2">
       <Act label="签字授予" run={() => api.grantCapability(q.id, me)} />{dismiss}</div></>;
@@ -705,6 +707,29 @@ function SheetReview({ view, release, dismiss }: { view: RequirementView; releas
         {dismiss}
       </div>
     </>
+  );
+}
+
+const CAUSES = { product: "产品", equipment: "设备", operation: "操作", requirement: "需求条件缺失" } as const;
+
+function TrialFail({ reqId }: { reqId: string }) {
+  const { me } = useApp();
+  const [cause, setCause] = useState<keyof typeof CAUSES>("product");
+  const [missing, setMissing] = useState<string[]>([]);
+  return (
+    <div className="row !items-start">
+      <span className="w-[110px] shrink-0 text-[13px] text-ink-2">不通过的原因</span>
+      <div className="flex flex-1 flex-col gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(CAUSES).map(([k, label]) => (
+            <button key={k} type="button" className={`chip ${cause === k ? "tag-attn" : ""}`}
+              onClick={() => setCause(k as keyof typeof CAUSES)}>{label}</button>
+          ))}
+        </div>
+        {cause === "requirement" && <SlotPicker value={missing} onChange={setMissing} />}
+        <div><Act kind="quiet" label="录入不通过" run={() => api.trial(reqId, "fail", me, cause, cause === "requirement" ? missing : [])} /></div>
+      </div>
+    </div>
   );
 }
 
