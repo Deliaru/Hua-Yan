@@ -173,8 +173,11 @@ class KnowledgeBase:
         cap = self._caps[cap_id]
         if cap.form != "applicable" or cap.status != "proposed":
             raise ValueError("只能批准待批准的适用能力")
-        if any(self._units[u].status != "active" for u in cap.based_on):
+        pending = [u for u in cap.based_on if self._units[u].status != "active"]
+        if any(self._units[u].confirmed_by != by for u in pending):
             raise ValueError("依据结论尚未确认")
+        if pending:                      # 公开产品页的结论由批准它的产品经理核对，批准即确认
+            self.confirm(pending, by)
         cap.approved_by, cap.status = by, "active"
         self._save()
         return cap.model_copy(deep=True)
@@ -335,6 +338,8 @@ class KnowledgeBase:
         ranked = self._rank(query, phenomenon)
         visible = [h for h in ranked if self._readable(actor, h.ku)]
         blocked = [h for h in ranked if not self._readable(actor, h.ku)]
+        # 拼凑机密只看越层命中；同层研发的存根可以申请查看，不算拼凑信号
+        above = [h for h in blocked if h.ku.level > level_of(actor)]
         intent = _intent(query)
         if self.is_frozen(actor.id) and (intent == "mechanism_request" or (blocked and not visible)):
             self._deny(actor, [h.ku.id for h in blocked] or [actor.id], "高层级访问已冻结", session_id)
@@ -342,8 +347,8 @@ class KnowledgeBase:
         result = visible[:max(0, k)]
         self.events.append("retrieve", actor.id, {"query": query, "intent": intent,
             "actor_level": level_of(actor), "hit_ku_ids": [h.ku.id for h in result],
-            "n_blocked": len(blocked),
-            "blocked_product_ids": [h.ku.product_id for h in blocked if h.ku.product_id]},
+            "n_blocked": len(above),
+            "blocked_product_ids": [h.ku.product_id for h in above if h.ku.product_id]},
             session_id=session_id)
         return result
 

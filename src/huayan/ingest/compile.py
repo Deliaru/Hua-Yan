@@ -70,7 +70,9 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
             continue
         found = find_phenomenon(p.phenomenon, kb.seeds.phenomena)
         product = kb._products.get(p.product) if p.product else None
-        confirmer = p.author or (product.owner if product else None)
+        # 公开产品页的适用情境由产品经理按产品页核对（设计「生效」表）；内部资料取作者，没有就交产品归属研发
+        confirmer = (min(a.id for a in kb.seeds.actors if a.role == "pm" and a.id != "pm:agent")
+                     if all(f.source == "public" for f in fragments) else p.author or (product.owner if product else None))
         payload = None
         if p.form == "ask" and p.slot in slot_ids and found:
             payload = {"phenomenon": found[0], "slot": p.slot, "required": True}
