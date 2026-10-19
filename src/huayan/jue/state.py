@@ -163,7 +163,7 @@ def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: See
 def _p_fix(phen: Phenomenon, known: dict[str, str], slot_id: str, seeds: Seeds, products: list[Product]) -> float:
     """信息价值：按种子中该现象的槽位先验（没有则均匀），问到该槽位真值后推荐由错变对的概率。
     推荐只取决于解决该现象的产品在适用范围上限定过的槽位，只枚举其中未知的那些。"""
-    relevant = {s for p in products if p.status == "released" and phen.id in p.solves for s in p.applicable}
+    relevant = {s for p in products if p.status == "released" and phen.id in p.solves for situation in p.situations if situation.phenomenon == phen.id for s in situation.conditions}
     if slot_id not in relevant:
         return 0.0
     dists = []
@@ -281,7 +281,7 @@ def _knowledge(events, at, products, since):
         product = by_id.get(pid)
         yield JueObject(object_id=f"knowledge:{pid}|{slot}={value}", object_type="knowledge", attrs={
             "product_id": pid, "slot": slot, "value": value,
-            "claimed": product is not None and value in product.applicable.get(slot, []),
+            "claimed": product is not None and any(value in s.conditions.get(slot, []) for s in product.situations),
             "n_trials": len(evs), "n_fail": len(fails),
             "n_fail_product": sum(e.payload["cause"] == "product" for e in fails),
             "fail_ratio": len(fails) / len(evs), "n_recommended": recs[(pid, slot, value)],

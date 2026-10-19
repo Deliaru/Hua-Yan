@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 from huayan.contracts import (Actor, KnowledgeHit, KnowledgeUnit, LeakHit, PMDraft, RDDraft, ReqItem, Requirement,
                               Session, SheetDraft)
 
+from huayan.domain import consistent
+
 if TYPE_CHECKING:
     from huayan.knowledge import KnowledgeBase
 
@@ -108,7 +110,8 @@ def draft_chem_need(req: Requirement, sessions: list[Session], kb: KnowledgeBase
     items = _translate(sources, kb, rd, req.phenomenon, level=3)
     # 研发方向假设：已知槽位至少有一个落在其适用限定内的同现象已发布产品，取其机理首句
     related = {p.id for p in kb.products()
-               if any(req.known_slots.get(slot) in values for slot, values in p.applicable.items())}
+               if any(slot in situation.conditions and consistent(p, {slot: value})
+                      for situation in p.situations for slot, value in req.known_slots.items())}
     hypotheses = [f"参考 {ku.product_id} 的机理：{ku.text.split('。')[0]}"
                   for ku in kb.list(rd, kinds=["mechanism"], phenomenon=req.phenomenon) if ku.product_id in related]
     return RDDraft(chem_lang=items, hypotheses=hypotheses)

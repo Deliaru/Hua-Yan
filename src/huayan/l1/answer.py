@@ -38,7 +38,7 @@ def target_products(session, deps, products):
 def answer(session, deps, *, check_grounding=False):
     turn = session.turns[-1]
     actor = deps.actors[session.sales_id or session.customer_id]   # v6：自助会话按客户身份检索
-    products = {p.id: p for p in deps.kb.products()}
+    products = {p.id: p for p in deps.kb.view(deps.actors[session.sales_id or session.customer_id]).products}
     rec = session.recommendation
     targets = target_products(session, deps, products)
     query = turn.text + " " + " ".join(targets)

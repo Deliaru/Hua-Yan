@@ -10,7 +10,7 @@ import yaml
 from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
-from huayan.contracts import (KIND_LEVEL, AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
+from huayan.contracts import (KIND_LEVEL, Actor, Capability, AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
     Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
     JueTimeline, TimelineNode, TimelinePoint)
@@ -73,7 +73,8 @@ class HuayanApp:
         app.audit = AuditLog(app.run_dir / "audit.jsonl")
         app.ledger = Ledger(app.run_dir / "ledger.jsonl", points=app.config["points"])
         app.bus = QuestionBus(app.events, app.run_dir / "questions.jsonl")
-        app.kb = KnowledgeBase.from_seeds(app.seeds, app.events, app.audit)
+        app.kb = KnowledgeBase.from_seeds(app.seeds, app.events, app.audit,
+            state_path=app.config.get("qi_state") or app.run_dir / "qi_state.json")
         app._load_public(Path(app.config["seeds_dir"]) / "public.yaml")
         if byok:
             app.gateway = byok.gateway(app.meter)
@@ -134,7 +135,9 @@ class HuayanApp:
 
     def ask_hints(self, need):
         """实时觉：每轮对话后给业务员的追问提示；输出记入 jue_trace。"""
-        state = realtime_state(need, self.seeds, self.kb.products(), get_clock().now())
+        session = self._sessions[need.session_id]
+        view = self.kb.view(self._actor(session.sales_id or session.customer_id))
+        state = realtime_state(need, view, view.products, get_clock().now())
         out = self._propose(self.jue_realtime, state)
         self._jue_trace.setdefault(need.session_id, []).append(out)
         thresholds = self.config["thresholds"]
@@ -172,7 +175,7 @@ class HuayanApp:
         for rid in sorted(req_ids):
             req = self._requirements[rid]
             sess = self._sessions[req.session_ids[0]]
-            objects = requirement_state(req, sess.need, self.seeds, self.kb, at, self.events).objects
+            objects = requirement_state(req, sess.need, self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, at, self.events).objects
             state.objects.update(objects)
             refs.update({oid: {"session_id": sess.id, "sales_id": sess.sales_id,
                                "requirement_id": rid, "assigned_rd": req.assigned_rd} for oid in objects})
@@ -423,7 +426,7 @@ class HuayanApp:
         units = [self.kb.get(ref, actor) for ref in sorted({ref for item in req.product_lang for ref in item.ku_refs})]
         units = [u for u in units if u.level == 2]
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("accept_requirement", "accept_requirement", state.objects[f"requirement:{req_id}"], by)
         req.status, req.rd_accepted_by = "rd_accepted", by
         for unit in units:
@@ -448,7 +451,7 @@ class HuayanApp:
         if leak_hits(reason, [], [], self.kb):
             raise ValueError("退回理由含研发术语，请改写为产品需求说明")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("accept_requirement", "return_requirement", state.objects[f"requirement:{req_id}"], by)
         req.return_notes.append(reason)
         self.events.append("requirement_returned", by, {"requirement_id": req_id, "reason": reason})
@@ -511,7 +514,7 @@ class HuayanApp:
         units = [self.kb.get(ref, actor) for ref in sorted(set(proposal.ku_refs))]
         session = self._sessions[req.session_ids[0]]
         at = get_clock().now()
-        state = requirement_state(req, session.need, self.seeds, self.kb, at, self.events)
+        state = requirement_state(req, session.need, self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, at, self.events)
         question = self._decision("reuse_product", "adopt_reuse", state.objects[f"requirement:{req_id}"], by)
         self._recommend_product(session, proposal.product_id, at)
         req.status = "reused"
@@ -535,7 +538,7 @@ class HuayanApp:
         if not reason.strip():
             raise ValueError("请填写不采用的理由")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("reuse_product", "decline_reuse", state.objects[f"requirement:{req_id}"], by)
         req.reuse.declined_reason = reason
         self.events.append("reuse_declined", by, {"requirement_id": req_id,
@@ -582,7 +585,7 @@ class HuayanApp:
         if applicable_product is not None and not consistent(self.kb.product(applicable_product), req.known_slots):
             raise ValueError("该产品的适用条件与客户已知条件不符，不能判为已有产品适用")
         at = get_clock().now()
-        state = requirement_state(req, self._sessions[req.session_ids[0]].need, self.seeds, self.kb, at, self.events)
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need, self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, at, self.events)
         question = self._decision("accept_requirement", "decline_project", state.objects[f"requirement:{req_id}"], by)
         req.status = "rejected"
         for sid in req.session_ids:
@@ -626,7 +629,12 @@ class HuayanApp:
         pid, ph = q.refs["product_id"], q.object_id.split("phenomenon=", 1)[1]
         product, phen = self.kb.product(pid), next(p for p in self.seeds.phenomena if p.id == ph)
         at = get_clock().now()
-        self.kb.extend_solves(pid, ph, by)
+        original = product.situations[0]
+        capability = self.kb.grant(Capability(id=self.kb.next_cap_id(), form="applicable", audience=0,
+            payload={"product_id": pid, "phenomenon": ph, "conditions": original.conditions},
+            based_on=[f"ku:sheet:{pid}"], granted_by=product.owner, status="proposed", at=at))
+        self.kb.approve(capability.id, by)
+        self.events.append("sheet_updated", by, {"product_id": pid, "solves": self.kb.product(pid).solves})
         unit = KnowledgeUnit(id=f"ku:translation:scope:{pid}:{ph}", level=2, kind="translation",
             title=f"{phen.label} → {product.name}", text=f"{phen.label} → 可选用 {product.name}（{note}）",
             product_id=pid, phenomenon_ids=[ph], owner=actor.id, source="contributed", created_at=at)
@@ -647,7 +655,7 @@ class HuayanApp:
         if req.product_lang[item_index].edited_by != by:
             raise ValueError("只能沉淀本人修正过的条目")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("contribution_pm", "contribute_l2", state.objects[f"requirement:{req_id}"], by)
         at = get_clock().now()
         unit = KnowledgeUnit(id=f"ku:translation:{req.id}:l2:{item_index}", level=2, kind="translation",
@@ -698,7 +706,8 @@ class HuayanApp:
 
     def _conditions(self, session_ids, phenomenon, known):
         """该现象的必问条件逐项：取值、出自哪句原话、是客户开场就说了还是觉追问所得。"""
-        required = next(p.required_slots for p in self.seeds.phenomena if p.id == phenomenon)
+        required = next(p.required_slots for p in self.kb.view(
+            Actor(id="system:requirement", role="rd", name="研发需求")).phenomena if p.id == phenomenon)
         slots = {s.id: s for s in self.seeds.slots}
         turns = {t.id: t for sid in session_ids for t in self._sessions[sid].turns}
         fills, asked = {}, set()
@@ -802,7 +811,7 @@ class HuayanApp:
         if trial is None or trial.market_eval is not None:
             raise ValueError("需要尚未录入客户评价的通过试样")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("market_eval", "record_market_eval", state.objects[f"requirement:{req_id}"], by)
         trial.market_eval, trial.market_eval_by, trial.market_eval_note = result, by, note
         unit = self.kb._units[f"ku:trial:{trial.id}"]
@@ -915,7 +924,7 @@ class HuayanApp:
                for q in self.bus.list()):
             raise ValueError("仍有未答回问或未处理失真")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("confirm_translation", "confirm_translation", state.objects[f"requirement:{req_id}"], by)
         req.product_id, req.status, req.rd_confirmed_by = products[0].id, "rd_confirmed", by
         refs = sorted({ref for item in req.chem_lang for ref in item.ku_refs})
@@ -946,7 +955,7 @@ class HuayanApp:
         if not 0 <= item_index < len(req.chem_lang) or not scene_phrase.strip() or not chem_term.strip():
             raise ValueError("需要有效化学条目索引、原文与译文")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("contribution", "contribute_translation", state.objects[f"requirement:{req_id}"], by)
         unit = flow.contribute_translation(req, item_index, scene_phrase, chem_term,
             actor, self.kb, self.ledger, self.events, get_clock().now())
@@ -972,7 +981,7 @@ class HuayanApp:
         if not text.strip():
             raise ValueError("对外要点不能为空")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         obj = state.objects[f"requirement:{req_id}"]
         if obj.attrs["market_eval"] != "pass":
             raise ValueError("客户评价通过后才能签字封存／放出")
@@ -1098,7 +1107,7 @@ class HuayanApp:
         if self.leak_check(req_id, by):
             raise ValueError("说明书或用法存在泄密命中，请改写后再发布")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
-                                  self.seeds, self.kb, get_clock().now(), self.events)
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("release", "release_product", state.objects[f"requirement:{req_id}"], by)
         seed = next(p for p in self.seeds.products if p.id == req.product_id)
         product = seed.model_copy(update={"sheet": req.sheet.sheet, "usage": req.sheet.usage}, deep=True)
@@ -1203,9 +1212,16 @@ class HuayanApp:
             raise ValueError(f"{q.family} 问题不能执行 {action}")
         if action == "update_sheet":
             pid, slot, value = q.refs["product_id"], *q.object_id.split("|")[1].split("=")
-            current = self.kb.product(pid).applicable.get(slot) or next(
-                s.values for s in self.seeds.slots if s.id == slot)
-            self.kb.update_applicable(pid, slot, [v for v in current if v != value], by)
+            for capability in self.kb.capabilities():
+                if capability.form != "applicable" or capability.status != "active" or capability.payload["product_id"] != pid:
+                    continue
+                conditions = capability.payload["conditions"]
+                current = conditions.get(slot, next(s.values for s in self.seeds.slots if s.id == slot))
+                if value in current:
+                    self.kb.revoke(capability.id, by)
+                    payload = {**capability.payload, "conditions": {**conditions, slot: [v for v in current if v != value]}}
+                    self.kb.grant(capability.model_copy(update={"id": self.kb.next_cap_id(), "payload": payload}))
+            self.events.append("sheet_updated", by, {"product_id": pid, "slot": slot, "removed": value})
         elif action == "freeze_access":
             self.kb.freeze(q.refs["actor_id"], by, get_clock().now())
         return self._settle(question_id, Resolution(action=action, by=by, note=note)).model_copy(deep=True)
@@ -1370,9 +1386,10 @@ class HuayanApp:
         if match:
             known = match["known"]
             mismatches = {p.id: [{"slot": k, "value": known[k], "allowed": v}
-                                 for k, v in p.applicable.items() if k in known and known[k] not in v]
+                                 for situation in p.situations for k, v in situation.conditions.items()
+                                 if k in known and known[k] not in v]
                           for p in self.kb.products() if p.status == "released" and match["phenomenon"] in p.solves
-                          and p.id not in match["candidate_ids"]}
+                          and p.id not in match["candidate_ids"] and not consistent(p, known)}
             excluded = [{"product_id": pid, "mismatch": m} for pid, m in mismatches.items() if m]
             why = {"by": esc.actor, "phenomenon": match["phenomenon"], "p_none": match["p_none"],
                    "scored_by": match["scored_by"], "excluded": excluded,

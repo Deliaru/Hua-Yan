@@ -1,12 +1,14 @@
 """分级知识库。结构化产品只供业务内部使用，助手通过知识接口访问。"""
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from datetime import datetime
 
 from huayan.clock import get_clock
 from huayan.contracts import (KIND_LEVEL, Actor, AuditRecord, BlockedHint, KnowledgeHit,
-                              KnowledgeUnit, KUKind, Product, Seeds)
+                              KnowledgeUnit, KUKind, Product, Seeds, Capability, Situation)
 from huayan.events import EventLog
 from .permission import PermissionDenied, can_read, level_of
 from .records import AuditLog
@@ -24,16 +26,49 @@ def _intent(query: str) -> str:
         ("配方", "机理", "原理", "为什么", "成分", "染座", "ph")) else "product_question"
 
 
+def migrate_seeds(seeds, at):
+    units, caps = [], []
+    for product in seeds.products:
+        if product.status != "released":
+            continue
+        for situation in product.situations:
+            caps.append(Capability(id=situation.capability_id, form="applicable", audience=0,
+                payload={"product_id": product.id, "phenomenon": situation.phenomenon,
+                         "conditions": situation.conditions}, based_on=[f"ku:sheet:{product.id}"],
+                granted_by=product.owner, approved_by="seed", status="active", at=at))
+    for phen in seeds.phenomena:
+        unit = KnowledgeUnit(id=f"ku:claim:phen:{phen.id}", kind="claim", level=3,
+            title=phen.label, text=phen.causes, phenomenon_ids=[phen.id], owner="seed",
+            confirmed_by="seed", created_at=at)
+        units.append(unit)
+        for slot in phen.required_slots:
+            caps.append(Capability(id=f"cap:ask:{phen.id}:{slot}", form="ask", audience=0,
+                payload={"phenomenon": phen.id, "slot": slot, "required": True},
+                based_on=[unit.id], granted_by="seed", status="active", at=at))
+        for slot, prior in phen.slot_priors.items():
+            caps.append(Capability(id=f"cap:prior:{phen.id}:{slot}", form="ask", audience=0,
+                payload={"phenomenon": phen.id, "slot": slot, "prior": prior},
+                based_on=[unit.id], granted_by="seed", status="active", at=at))
+    return units, caps
+
+
 class KnowledgeBase:
     def __init__(self, events: EventLog, audit: AuditLog):
         self.events, self.audit = events, audit
         self._units: dict[str, KnowledgeUnit] = {}
         self._products: dict[str, Product] = {}
         self._frozen: set[str] = set()
+        self._caps: dict[str, Capability] = {}
+        self.state_path = None
+        self._version = 0
+        self._claim_seq = self._cap_seq = 0
+        self._doc_levels = {}
+        self._seed_units = {}
 
     @classmethod
-    def from_seeds(cls, seeds: Seeds, events: EventLog, audit: AuditLog) -> KnowledgeBase:
+    def from_seeds(cls, seeds: Seeds, events: EventLog, audit: AuditLog, *, state_path=None) -> KnowledgeBase:
         kb = cls(events, audit)
+        kb.seeds = seeds
         at = get_clock().now()
         for product in seeds.products:
             if product.status == "released":
@@ -42,12 +77,26 @@ class KnowledgeBase:
             kb.add(KnowledgeUnit(id=f"ku:case:{case.id}", level=2, kind="case",
                 title=f"历史案例 {case.id} · {next(p.label for p in seeds.phenomena if p.id == case.phenomenon)}",
                 text=f"{case.scene_text}\n{case.pm_translation}",
-                product_id=case.product_id, phenomenon_ids=[case.phenomenon], owner=case.owner,
+                product_id=case.product_id, phenomenon_ids=[case.phenomenon], owner=case.owner, confirmed_by=case.owner,
                 created_at=at))
         for tr in seeds.translations:
             kb.add(KnowledgeUnit(id=f"ku:translation:{tr.id}", level=tr.level, kind="translation",
                 title=tr.scene_phrase, text=f"{tr.scene_phrase} → {tr.chem_term}",
-                phenomenon_ids=tr.phenomenon_ids, owner=tr.owner, created_at=at))
+                phenomenon_ids=tr.phenomenon_ids, owner=tr.owner, confirmed_by=tr.owner, created_at=at))
+        units, caps = migrate_seeds(seeds, at)
+        for unit in units:
+            kb.add(unit)
+        kb._caps = {cap.id: cap for cap in caps}
+        kb._seed_units = {key: unit.model_copy(deep=True) for key, unit in kb._units.items()}
+        kb.state_path = Path(state_path) if state_path else None
+        if kb.state_path and kb.state_path.exists():
+            data = json.loads(kb.state_path.read_text(encoding="utf-8"))
+            kb._units.update({u["id"]: KnowledgeUnit.model_validate(u) for u in data["units"]})
+            kb._products.update({p["id"]: Product.model_validate(p) for p in data["products"]})
+            kb._caps.update({c["id"]: Capability.model_validate(c) for c in data["capabilities"]})
+            kb._version, kb._doc_levels = data["version"], data["doc_levels"]
+            kb._claim_seq, kb._cap_seq = data["claim_seq"], data["cap_seq"]
+        kb._save()
         return kb
 
     def _put_product(self, product, at, source):
@@ -55,36 +104,81 @@ class KnowledgeBase:
         units = [KnowledgeUnit(id=f"ku:{kind}:{product.id}", level=KIND_LEVEL[kind], kind=kind,
             title=f"{product.name} · {label}", text=getattr(product, kind), product_id=product.id,
             phenomenon_ids=product.solves, owner=product.owner, decryptable=kind == "mechanism",
-            source=source, created_at=at) for kind, label in _TITLES.items()]
+            source=source, confirmed_by=product.owner, created_at=at) for kind, label in _TITLES.items()]
         for unit in units:
             self.add(unit)
         return units
 
+    def view(self, actor) -> Seeds:
+        level = level_of(actor)
+        caps = [c for c in self._caps.values() if c.status == "active"
+                and c.audience in range(level + 1)]
+        phenomena = []
+        for phen in self.seeds.phenomena:
+            asks = [c.payload for c in caps if c.form == "ask" and c.payload["phenomenon"] == phen.id]
+            required = list(dict.fromkeys(a["slot"] for a in asks if a.get("required")))
+            priors = {a["slot"]: a["prior"] for a in asks if "prior" in a}
+            phenomena.append(phen.model_copy(update={"required_slots": required, "slot_priors": priors,
+                                                     "causes": phen.causes if level == 3 else ""}))
+        products = []
+        for product in self._products.values():
+            situations = [Situation(phenomenon=c.payload["phenomenon"], conditions=c.payload["conditions"],
+                capability_id=c.id) for c in caps if c.form == "applicable" and c.payload["product_id"] == product.id]
+            products.append(product.model_copy(update={"situations": situations, "applicable": {},
+                "solves": list(dict.fromkeys(s.phenomenon for s in situations))}, deep=True))
+        return self.seeds.model_copy(update={"phenomena": phenomena, "products": products}, deep=True)
+
     def products(self) -> list[Product]:
-        return [p.model_copy(deep=True) for p in self._products.values()]
+        return self.view(Actor(id="system:knowledge", role="rd", name="知识库")).products
 
     def product(self, product_id: str) -> Product:
         if product_id not in self._products:
             raise ValueError(f"产品 {product_id} 不存在")
-        return self._products[product_id].model_copy(deep=True)
+        return next(p for p in self.products() if p.id == product_id)
 
     def add_product(self, product: Product, at: datetime) -> list[KnowledgeUnit]:
         return self._put_product(product.model_copy(update={"status": "released"}), at, "released")
 
-    def update_applicable(self, product_id: str, slot: str, values: list[str], by: str) -> None:
-        self._products[product_id].applicable[slot] = list(values)
-        self.events.append("sheet_updated", by, {"product_id": product_id, "slot": slot, "values": values})
+    def grant(self, cap: Capability) -> Capability:
+        self._caps[cap.id] = cap.model_copy(deep=True)
+        self._save()
+        return cap.model_copy(deep=True)
 
-    def extend_solves(self, product_id: str, phenomenon: str, by: str) -> None:
-        """v6：产品经理扩展产品适用现象；产品知识单元的现象标签同步。"""
-        product = self._products[product_id]
-        product.solves.append(phenomenon)
-        for kind in _TITLES:
-            self._units[f"ku:{kind}:{product_id}"].phenomenon_ids = list(product.solves)
-        self.events.append("sheet_updated", by, {"product_id": product_id, "solves": list(product.solves)})
+    def approve(self, cap_id, by):
+        cap = self._caps[cap_id]
+        cap.approved_by, cap.status = by, "active"
+        self._save()
+        return cap.model_copy(deep=True)
+
+    def revoke(self, cap_id, by):
+        self._caps[cap_id].status = "revoked"
+        self._save()
+
+    def capabilities(self):
+        return [c.model_copy(deep=True) for c in self._caps.values()]
+
+    def next_cap_id(self):
+        self._cap_seq += 1
+        return f"cap:{self._cap_seq}"
 
     def add(self, ku: KnowledgeUnit) -> None:
         self._units[ku.id] = ku.model_copy(deep=True)
+        self._save()
+
+    def _save(self):
+        if self.state_path is None:
+            return
+        self._version += 1
+        data = {"version": self._version, "units": [u.model_dump(mode="json") for u in self._units.values()
+                    if u.kind == "claim" or u != self._seed_units.get(u.id)],
+                "products": [p.model_dump(mode="json") for p in self._products.values()
+                    if self._units[f"ku:sheet:{p.id}"].source != "seed"],
+                "capabilities": [c.model_dump(mode="json") for c in self._caps.values()],
+                "doc_levels": self._doc_levels, "claim_seq": self._claim_seq, "cap_seq": self._cap_seq}
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        temp = self.state_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        temp.replace(self.state_path)
 
     def _readable(self, actor, ku):
         return can_read(actor, ku) and (not self.is_frozen(actor.id) or ku.level <= 1)

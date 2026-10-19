@@ -173,7 +173,7 @@ class ProductArgs(BaseModel):
 
 @tool("find_products", "read", ["pm", "rd"], "按现象与已知条件查已发布产品中的候选（含还不知道的限定条件）", ProductArgs)
 def find_products(ctx: ToolContext, args: ProductArgs) -> ToolResult:
-    found = match_candidates(args.phenomenon, args.slots, ctx.app.kb.products())
+    found = match_candidates(args.phenomenon, args.slots, ctx.app.kb.view(ctx.principal).products)
     return ToolResult(data=[c.model_dump() for c in found])
 
 

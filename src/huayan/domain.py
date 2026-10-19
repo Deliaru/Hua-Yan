@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 
-from huayan.contracts import Actor, Candidate, Case, Phenomenon, Product, Seeds, SlotDef, Translation
+from huayan.contracts import Actor, Candidate, Case, Phenomenon, Product, Seeds, Situation, SlotDef, Translation
 
 _FILES = {"slots": SlotDef, "phenomena": Phenomenon, "products": Product, "cases": Case,
           "translations": Translation, "actors": Actor}
@@ -15,17 +15,29 @@ def load_seeds(seeds_dir: str | Path) -> Seeds:
         doc = yaml.safe_load((Path(seeds_dir) / f"{name}.yaml").read_text(encoding="utf-8"))
         placeholder = placeholder or bool(doc["placeholder"])
         data[name] = [model.model_validate(item) for item in doc["items"]]
+    for product in data["products"]:
+        product.situations = [Situation(phenomenon=ph, conditions=product.applicable,
+            capability_id=f"cap:applicable:{product.id}:{ph}") for ph in product.solves]
     return Seeds(**data, placeholder=placeholder)
 
 
 def consistent(product: Product, known: dict[str, str]) -> bool:
-    return all(value in product.applicable[slot] for slot, value in known.items() if slot in product.applicable)
+    return any(all(value in situation.conditions[slot] for slot, value in known.items()
+                   if slot in situation.conditions) for situation in product.situations)
 
 
 def match_candidates(phenomenon: str, known: dict[str, str], products: list[Product]) -> list[Candidate]:
-    return [Candidate(product_id=p.id, unknown_slots=[s for s in p.applicable if s not in known])
-            for p in sorted(products, key=lambda p: p.id)
-            if p.status == "released" and phenomenon in p.solves and consistent(p, known)]
+    candidates = []
+    for product in sorted(products, key=lambda p: p.id):
+        matches = [s for s in product.situations if s.phenomenon == phenomenon
+                   and all(value in s.conditions[slot] for slot, value in known.items() if slot in s.conditions)]
+        if product.status != "released" or not matches:
+            continue
+        situation = min(matches, key=lambda s: sum(slot not in known for slot in s.conditions))
+        unknown = [slot for slot in situation.conditions if slot not in known]
+        candidates.append(Candidate(product_id=product.id, unknown_slots=unknown,
+            status="possible" if unknown else "confirmed", capability_id=situation.capability_id))
+    return candidates
 
 
 def correct_product(phenomenon: str, slots: dict[str, str], products: list[Product]) -> str | None:
@@ -33,7 +45,11 @@ def correct_product(phenomenon: str, slots: dict[str, str], products: list[Produ
     candidates = match_candidates(phenomenon, slots, products)
     if not candidates:
         return None
-    return min(candidates, key=lambda c: (-len(by_id[c.product_id].applicable), c.product_id)).product_id
+    def specificity(candidate):
+        situation = next(s for s in by_id[candidate.product_id].situations
+                         if s.capability_id == candidate.capability_id)
+        return -len(situation.conditions), candidate.product_id
+    return min(candidates, key=specificity).product_id
 
 
 def detect_asked_slots(text: str, slots: list[SlotDef]) -> list[str]:

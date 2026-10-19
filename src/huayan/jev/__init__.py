@@ -19,7 +19,7 @@ class Jev:
                                confident=False, scored_by="rule")
         state = {"need": need.model_dump(mode="json"), "candidates": [
             {"id": c.product_id, "name": products[c.product_id].name,
-             "category": products[c.product_id].category, "applicable": products[c.product_id].applicable,
+             "category": products[c.product_id].category, "situations": [s.model_dump() for s in products[c.product_id].situations],
              "unknown_slots": c.unknown_slots} for c in candidates]}
         return self._ask("match", state, "根据客户现象与已知条件，哪个产品最可能解决？都不合适选 none。",
                          {**{c.product_id: products[c.product_id].name for c in candidates}, "none": "都不合适"})

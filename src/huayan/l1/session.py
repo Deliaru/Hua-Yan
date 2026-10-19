@@ -29,7 +29,7 @@ def record_disclosure(card, deps):
 def recommend(session, deps):
     if not session.need.phenomenon or session.status in ("escalated", "closed"):
         return session
-    products = {p.id: p for p in deps.kb.products()}
+    products = {p.id: p for p in deps.kb.view(deps.actors[session.sales_id or session.customer_id]).products}
     candidates = match_candidates(session.need.phenomenon, session.need.known(), list(products.values()))
     decision = deps.jev.match(session.need, candidates, products)
     at = get_clock().now()
