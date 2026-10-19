@@ -6,7 +6,7 @@ import yaml
 from huayan.app import HuayanApp
 from huayan.agent.tools import TOOLS
 from huayan.clock import get_clock
-from huayan.contracts import PointsDraft, Question, ReqItem, Requirement, SheetDraft
+from huayan.contracts import KnowledgeUnit, PointsDraft, Question, ReqItem, Requirement, SheetDraft
 from huayan.knowledge import PermissionDenied
 
 
@@ -83,3 +83,34 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     assert prepared.prepared_at == get_clock().now() and prepared.status == "open"
     assert req.status == "rd_confirmed" and prepared.resolution is None
     assert app.events.query(["question_prepared"])[-1].actor == "pm:agent"
+
+    # Q5 分层召回：客户层命中上层与「没找到」完全相同；L1、L2 只得本层，存根不带原文
+    customer, sales = app.actors["customer:C01"], app.actors["sales:S01"]
+    assert app.kb.explore("缓染 染座", customer) == app.kb.explore("无关查询", customer)
+    for who in (sales, app.actors["pm:agent"]):
+        found = app.kb.explore("缓染 染座", who)
+        assert all(u.level <= (1 if who is sales else 2) for u in found.units) and found.stubs
+        assert not any(t in found.model_dump_json() for t in l3_texts)
+    # L1 两次问到一条 L3 结论却答不了 → 觉提出授予一句话 → 研发签字 → 回答说出这句话、不出现结论原文 → 撤销后回到「需要专业人员解答」
+    claim = KnowledgeUnit(id=app.kb.next_claim_id(), kind="claim", level=3, title="（模拟）升温过快致色花",
+        text="（模拟）锦纶氨纶升温过快会使匀染剂来不及缓染而色花", phenomenon_ids=["color_unlevel"],
+        owner="rd:R01", confirmed_by="rd:R01", source="contributed", created_at=get_clock().now())
+    app.kb.add(claim)
+    ask = app.start_session("customer:C02", "sales:S01")
+    for _ in range(2):
+        app.add_turn(ask.id, "customer", "为什么升温快了就会色花？")
+    assert app.view_session(ask.id, "sales:S01").replies[-1].text == "这部分需要专业人员解答。"
+    app.scan()
+    grant = next(q for q in app.questions("rd:R01") if q.object_id == f"knowledge:grant:{claim.id}|L1")
+    assert any(e.quote == claim.text for e in grant.evidence)
+    app.mark_prepared(grant.id, "rd:R01")
+    with pytest.raises(ValueError):
+        app.sign_qi_grant(grant.id, "rd:R01", note=claim.text)
+    said = "（模拟）这和染色工艺的控制有关，可以安排技术人员上门看工艺。"
+    statement = app.sign_qi_grant(grant.id, "rd:R01", note=said)
+    reply = app.view_session(app.add_turn(ask.id, "customer", "为什么升温快了就会色花？").id, "sales:S01").replies[-1].text
+    assert said in reply and claim.text not in reply
+    assert app.events.query(["capability_used"])[-1].payload["capability_id"] == statement.id
+    app.revoke_capability(statement.id, "rd:R01")
+    app.add_turn(ask.id, "customer", "为什么升温快了就会色花？")
+    assert app.view_session(ask.id, "sales:S01").replies[-1].text == "这部分需要专业人员解答。"

@@ -1212,6 +1212,16 @@ class HuayanApp:
                                         reason="shared", ku_id=q.refs["ku_id"], ref=cap.id))
             self._settle(q.id, Resolution(action="sign", by=by, note=note))
             return cap
+        if q.refs["form"] == "statement":     # 授予一句可说的话：措辞由研发改定，不得含结论原文或收件层看不到的结论
+            unit, audience = self.kb._units[q.refs["ku_id"]], int(q.refs["audience"])
+            if not note.strip() or leak_hits(note, [unit.text], [], self.kb, audience=audience):
+                raise ValueError("措辞为空，或含结论原文、收件层不可见的内容")
+            cap = self.kb.grant(Capability(id=self.kb.next_cap_id(), form="statement", audience=audience,
+                payload={"text": note.strip(), "product_id": unit.product_id}, based_on=[unit.id],
+                granted_by=by, status="active", at=get_clock().now()))
+            self._settle(q.id, Resolution(action="sign", by=by, note=note))
+            self.scan()
+            return cap
         source = self.kb._caps[q.refs["capability_id"]]
         if claim_ids:
             if not set(claim_ids) <= set(source.based_on):
@@ -1350,7 +1360,8 @@ class HuayanApp:
 
     def scan(self, at=None):
         at = at or get_clock().now()
-        state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"], self.kb.capabilities())
+        state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"],
+                                        self.kb.capabilities(), self.kb._units)
         out = self._propose(self.jue_scheduled, state)
         self._close_anomalies(out, set(state.objects))
         self._last_scan = at
@@ -1397,6 +1408,13 @@ class HuayanApp:
             if q.family == "qi_grant" and "requester" in q.refs:
                 unit = self.kb._units[q.refs["ku_id"]]
                 q.evidence.append(Evidence(summary=f"{self.actors[q.refs['requester']].name}申请查看：{unit.title}"))
+            elif q.family == "qi_grant" and q.refs["form"] == "statement":
+                unit = self.kb._units[q.refs["ku_id"]]
+                ids = set(q.refs["retrieve_ids"].split(","))
+                q.evidence += [Evidence(summary=f"L{q.refs['audience']} 被问到：{e.payload['query']}")
+                               for e in self.events.query(["retrieve"]) if e.id in ids]
+                q.evidence.append(Evidence(summary=f"{unit.title}；依据位置：{'；'.join(unit.evidence) or '研发直接判断'}",
+                                           quote=unit.text))
             elif q.family == "qi_grant":
                 cap = self.kb._caps[q.refs["capability_id"]]
                 q.evidence.append(Evidence(summary=f"形式：{cap.form}；目标层：L{q.refs['audience']}"))

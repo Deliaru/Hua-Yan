@@ -205,14 +205,14 @@ def scheduled_state(events: EventLog, at: datetime, seeds: Seeds, products: list
 
 
 def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: list[Product],
-                      windows: dict | None = None, caps=()) -> tuple[JueState, dict[str, dict]]:
+                      windows: dict | None = None, caps=(), units=None) -> tuple[JueState, dict[str, dict]]:
     """返回状态，以及每个对象的引用（event_ids、session_ids；主题另有 requirement_ids、assigned_rd），供发布层写证据与解析签字人。"""
     w = {**WINDOWS, **(windows or {})}
     objects, refs = {}, {}
     for obj, ref in [*_themes(events, at, seeds, at - timedelta(days=w["theme_days"])),
                      *_knowledge(events, at, products, at - timedelta(days=w["knowledge_days"])),
                      *_scope(events, at, caps),
-                     *_qi(events, at, caps),
+                     *_qi(events, at, caps, units or {}),
                      *_actors(events, at, at - timedelta(hours=w["actor_hours"]))]:
         objects[obj.object_id], refs[obj.object_id] = obj, ref
     return JueState(at=at, mode="scheduled", objects=objects), refs
@@ -322,15 +322,18 @@ def _actors(events, at, since):
         }), {"event_ids": [e.id for e in evs if e.payload["n_blocked"]], "session_ids": []}
 
 
-def _qi(events, at, caps):
-    """能力授予与依据复核：只读能力和业务事件，不读取资料、不调用工具。"""
+def _qi(events, at, caps, units):
+    """能力授予与依据复核：只读能力、结论的归属和业务事件，不读取资料、不调用工具。"""
     history = events.query(until=at)
     requirements = {e.payload["requirement_id"]: e.payload["phenomenon"] for e in history
                     if e.kind == "requirement_created"}
     accompanied = {e.session_id for e in history if e.session_id and e.actor.startswith("sales:")}
-    backs = defaultdict(list)
+    backs, unanswerable = defaultdict(list), defaultdict(list)
     changed, requests = {}, {}
     for event in history:
+        if event.kind == "retrieve":       # 命中却没有能力：按「结论 × 提问者层级」计数
+            for ku_id in event.payload.get("unanswerable_ku_ids", []):
+                unanswerable[(ku_id, event.payload["actor_level"])].append(event)
         if event.kind == "share_requested":
             requests[f"knowledge:share:{event.payload['ku_id']}|{event.actor}"] = event
         elif event.kind == "question_resolved" and event.payload["object_id"] in requests:
@@ -349,15 +352,34 @@ def _qi(events, at, caps):
         evs = backs[(ph, cap.payload["slot"])] if cap.form == "ask" else [
             event for (phen, _), rows in backs.items() if phen == ph for event in rows]
         # 只授予真正缺这个条件的那一层：回问出自业务员陪同的会话为 L1，出自客户自助的会话为 L0，取最低的一层。
-        level = min((1 if e.session_id in accompanied else 0 for e in evs), default=0)
-        granted = any(c.form == cap.form and c.payload == cap.payload and c.status == "active"
+        back_level = min((1 if e.session_id in accompanied else 0 for e in evs), default=0)
+        misses = {level: [e for ku_id in cap.based_on for e in unanswerable[(ku_id, level)]] for level in range(3)}
+        for level in sorted({back_level} | {k for k, v in misses.items() if v}):
+            granted = any(c.form == cap.form and c.payload == cap.payload and c.status == "active"
+                          and c.audience in range(level + 1) for c in caps)
+            asked = evs if level == back_level else []
+            yield JueObject(object_id=f"knowledge:grant:{cap.id}|L{level}", object_type="knowledge", attrs={
+                "product_id": cap.payload.get("product_id", ""), "slot": cap.payload.get("slot", "phenomenon"),
+                "value": ph, "n_ask_back": len(asked), "n_unanswerable": len(misses[level]), "requested": False,
+                "granted": granted,
+            }), {"capability_id": cap.id, "product_id": cap.payload.get("product_id", ""),
+                 "audience": str(level), "signer": cap.granted_by, "form": cap.form,
+                 "based_on": cap.based_on, "event_ids": [e.id for e in asked + misses[level]]}
+    # 命中却没有任何能力的结论：要授予的是一句可说的话（statement），由结论确认人起草措辞并签字
+    with_caps = {ku_id for c in caps if c.status == "active" and c.form != "statement" for ku_id in c.based_on}
+    for (ku_id, level), evs in unanswerable.items():
+        if ku_id in with_caps or not (units[ku_id].confirmed_by or "").startswith("rd:"):
+            continue       # 有能力的走上面的授予；只有研发确认的结论由研发授予一句话
+        unit = units[ku_id]
+        granted = any(c.form == "statement" and c.status == "active" and ku_id in c.based_on
                       and c.audience in range(level + 1) for c in caps)
-        yield JueObject(object_id=f"knowledge:grant:{cap.id}|L{level}", object_type="knowledge", attrs={
-            "product_id": cap.payload.get("product_id", ""), "slot": cap.payload.get("slot", "phenomenon"),
-            "value": ph, "n_ask_back": len(evs), "n_unanswerable": 0, "requested": False, "granted": granted,
-        }), {"capability_id": cap.id, "product_id": cap.payload.get("product_id", ""),
-             "audience": str(level), "signer": cap.granted_by, "form": cap.form,
-             "based_on": cap.based_on, "event_ids": [e.id for e in evs]}
+        yield JueObject(object_id=f"knowledge:grant:{ku_id}|L{level}", object_type="knowledge", attrs={
+            "product_id": unit.product_id or "", "slot": "statement", "value": ku_id,
+            "n_ask_back": 0, "n_unanswerable": len(evs), "requested": False, "granted": granted,
+        }), {"ku_id": ku_id, "product_id": unit.product_id or "", "audience": str(level),
+             "signer": unit.confirmed_by, "form": "statement", "based_on": [ku_id],
+             "session_ids": sorted({e.session_id for e in evs if e.session_id}),
+             "retrieve_ids": [e.id for e in evs], "event_ids": [e.id for e in evs]}
     for object_id, event in requests.items():
         ku_id, requester = event.payload["ku_id"], event.actor
         granted = any(c.form == "share" and c.status == "active" and c.audience == requester

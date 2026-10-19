@@ -8,7 +8,7 @@ from datetime import datetime
 
 from huayan.clock import get_clock
 from huayan.contracts import (KIND_LEVEL, Actor, AuditRecord, BlockedHint, KnowledgeHit,
-                              KnowledgeUnit, KUKind, Product, Seeds, Capability, Situation, DecryptGrant)
+                              KnowledgeUnit, KUKind, Product, Seeds, Capability, Situation, DecryptGrant, ExploreResult)
 from huayan.events import EventLog
 from .permission import PermissionDenied, can_read, colleague_l3, holder, level_of
 from .records import AuditLog
@@ -358,6 +358,54 @@ class KnowledgeBase:
         return [BlockedHint(owner=holder(h.ku), level=h.ku.level, kind=h.ku.kind,
                             ku_id=h.ku.id if colleague_l3(actor, h.ku) else None)
                 for h in self._rank(query, phenomenon) if not self._readable(actor, h.ku)][:max(0, k)]
+
+    def _hits(self, text, phenomenon, k):
+        hits = [h.ku for h in self._rank(text, phenomenon)][:k]
+        docs = {f.doc_id for s in self.sources for f in s.search(text, k)}
+        return hits + [u for u in self._units.values() if u.status == "active" and u.id not in {h.id for h in hits}
+                       and any(e.rsplit("@", 1)[0].rsplit("#", 1)[0] in docs for e in u.evidence)]
+
+    def explore(self, query: str, actor: Actor, *, phenomenon: str | None = None, k: int = 5,
+                session_id: str | None = None) -> ExploreResult:
+        """分层召回（只读）：本层可读的结论给原文，授予本层的能力给能力，命中却没有能力的只记「不可答」；
+        内部各层给存根，客户层什么都不给，与没找到相同。"""
+        level = level_of(actor)
+        # 1. 转化对照把查询往上扩展；扩展词只在内部用
+        terms = [h.ku.text for h in self._rank(query, phenomenon) if h.ku.kind == "translation"][:k]
+        expanded = " ".join([query, *terms])
+        # 2. 结论直接命中，加上片段命中后按依据的文档接回结论。本层可读的只用原查询找：
+        #    经上层转化对照才连上的内容不给下层，客户层命中上层时与没找到相同
+        direct, reached = self._hits(query, phenomenon, k), self._hits(expanded, phenomenon, k)
+        # 3. 本层可读 → 原文；授予本层且依据命中的能力 → 能力；越层命中且没有能力 → 不可答
+        units = [u.model_copy(deep=True) for u in direct if self._readable(actor, u)]
+        blocked = [u for u in reached if not self._readable(actor, u)]
+        above = [u for u in blocked if u.level > level]
+        if self.is_frozen(actor.id) and (_intent(query) == "mechanism_request" or (blocked and not units)):
+            self._deny(actor, [u.id for u in blocked] or [actor.id], "高层级访问已冻结", session_id)
+            units = []
+        hit_ids = {u.id for u in direct} | {u.id for u in above}
+        caps = [c for c in self._visible_caps(actor) if hit_ids & set(c.based_on)]
+        covered = {ku_id for c in caps for ku_id in c.based_on}
+        # 转化对照走升级转译，配方永不对下；其余越层命中没有能力的才算「不可答」
+        unanswerable = [u.id for u in above if u.id not in covered and u.kind not in ("formula", "translation")]
+        self.events.append("retrieve", actor.id, {"query": query, "intent": _intent(query),
+            "actor_level": level, "hit_ku_ids": [u.id for u in units], "n_blocked": len(above),
+            "blocked_product_ids": [u.product_id for u in above if u.product_id],
+            "unanswerable_ku_ids": unanswerable, "n_unanswerable": len(unanswerable)}, session_id=session_id)
+        if level == 0:
+            return ExploreResult(units=units, capabilities=[c.model_copy(deep=True) for c in caps], hints=[])
+        # 4. 提示只从本层视图算
+        view = self.view(actor)
+        hints = [f"相关条件：{s.label}" for s in view.slots if any(v in query for v in s.values)]
+        hints += [f"相关现象：{p.label}" for p in view.phenomena if p.label in query]
+        hints += [f"相关产品：{p.id}" for p in view.products if p.id in query or p.name in query]
+        stubs = [BlockedHint(owner=holder(u), level=u.level, kind=u.kind, ku_id=u.id if colleague_l3(actor, u) else None)
+                 for u in blocked]
+        grams = _grams(expanded)
+        candidates = [u.model_copy(deep=True) for u in self._units.values() if actor.role == "rd"
+                      and u.status == "candidate" and u.confirmed_by == actor.id and grams & _grams(u.title + u.text)]
+        return ExploreResult(units=units, capabilities=[c.model_copy(deep=True) for c in caps], hints=hints,
+                             stubs=stubs, candidates=candidates)
 
     def is_frozen(self, actor_id: str) -> bool:
         return actor_id in self._frozen

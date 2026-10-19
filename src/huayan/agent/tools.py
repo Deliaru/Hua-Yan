@@ -77,14 +77,15 @@ class SearchArgs(BaseModel):
 
 
 @tool("search_knowledge", "read", ["sales", "pm", "rd"],
-      "在你委托人可读的知识里检索；越权命中只告诉你归属人与层级（谁知道），不给内容", SearchArgs)
+      "在你委托人这一层检索：可读的结论、授予这一层的话（写给下层时只写 [[编号]]）、相关提示；"
+      "越权命中只告诉你归属人与层级（谁知道），不给内容", SearchArgs)
 def search_knowledge(ctx: ToolContext, args: SearchArgs) -> ToolResult:
-    kb, me = ctx.app.kb, ctx.principal
-    hits = [h.ku for h in kb.search(args.query, me, k=5, session_id=ctx.session_id) if args.kind in (None, h.ku.kind)]
-    blocked = kb.search_blocked(args.query, me)
+    found = ctx.app.kb.explore(args.query, ctx.principal, k=5, session_id=ctx.session_id)
     return ToolResult(data={"hits": [{"ku_id": u.id, "kind": u.kind, "level": u.level, "title": u.title,
-                                      "text": u.text[:160], "owner": u.owner} for u in hits],
-                            "blocked": [f"{b.owner} · L{b.level}" for b in blocked]})
+                                      "text": u.text[:160], "owner": u.owner} for u in found.units if args.kind in (None, u.kind)],
+                            "statements": [{"ref": c.id, "text": c.payload["text"]} for c in found.capabilities if c.form == "statement"],
+                            "hints": found.hints, "candidates": [{"ku_id": u.id, "title": u.title} for u in found.candidates],
+                            "blocked": [f"{b.owner} · L{b.level}" + (f" · 可申请 {b.ku_id}" if b.ku_id else "") for b in found.stubs]})
 
 
 class KuId(BaseModel):

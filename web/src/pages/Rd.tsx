@@ -417,6 +417,7 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
     <div key={i} className="row !items-start text-[13px] leading-5 text-ink-2">{L.scrub(e.summary)}{e.quote && `「${e.quote}」`}</div>
   ));
   const body = (() => {
+    if (q.family === "qi_grant" && q.refs.form === "statement") return <StatementGrant q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant") return <>{evidence}<div className="row gap-2">
       <Act label="签字授予" run={() => api.grantCapability(q.id, me)} />{dismiss}</div></>;
     if (q.family === "qi_review") return <>{evidence}<div className="row gap-2">
@@ -702,6 +703,22 @@ function SheetReview({ view, release, dismiss }: { view: RequirementView; releas
         {changed && <Act kind="plain" label="保存说明书" run={() => api.sheet(req.id, { sheet, usage }, me)} />}
         {release && <Act label="审定发布" disabled={changed} run={() => api.release(req.id, me)} />}
         {dismiss}
+      </div>
+    </>
+  );
+}
+
+function StatementGrant({ q, dismiss, evidence }: { q: Question; dismiss: React.ReactNode; evidence: React.ReactNode }) {
+  const { me } = useApp();
+  const [text, setText] = useState("");
+  return (
+    <>
+      {evidence}
+      <div className="row !items-start">
+        <div className="flex flex-1 flex-col gap-2">
+          <Field value={text} onChange={setText} rows={2} placeholder={`写给 L${q.refs.audience} 可以说的一句话（不含结论原文与机理）`} />
+          <div className="flex flex-wrap gap-2"><Act label="签字授予这句话" run={() => api.grantCapability(q.id, me, text)} />{dismiss}</div>
+        </div>
       </div>
     </>
   );

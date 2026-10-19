@@ -83,7 +83,7 @@ export const api = {
   capabilities: (viewer: string) => call<Capability[]>(`capabilities?${q({ viewer })}`),
   claims: (req_id: string, viewer: string) => call<Claim[]>(`claims?${q({ req_id, viewer })}`),
   confirmClaims: (req_id: string, ku_ids: string[], by: string) => call("qi/confirm", { req_id, ku_ids, by }),
-  grantCapability: (question_id: string, by: string) => call("qi/grant", { question_id, by }),
+  grantCapability: (question_id: string, by: string, note = "") => call("qi/grant", { question_id, by, note }),
   revokeCapability: (cap_id: string, by: string) => call("qi/revoke", { cap_id, by }),
   requestShare: (ku_id: string, by: string) => call("qi/request-share", { ku_id, by }),
   withdrawClaim: (ku_id: string, by: string) => call("qi/withdraw", { ku_id, by }),

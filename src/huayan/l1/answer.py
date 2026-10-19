@@ -46,11 +46,14 @@ def answer(session, deps, *, check_grounding=False):
     targets = target_products(session, deps, products)
     query = turn.text + " " + " ".join(targets)
     # 先记完整检索事件；明确型号不受当前会话现象筛选，以免查别的产品时答错。
-    hits = deps.kb.search(query, actor, session_id=session.id,
-                          phenomenon=None if targets else session.need.phenomenon)
-    # 是否问机理只看抽取给出的意图；能看到什么由知识库按层级裁剪。
-    blocked = session.need.last_intent == "mechanism_request"
-    public_request = not blocked or any(word in turn.text for word in ("怎么用", "用法", "用量", "说明书", "产品说明"))
+    found = deps.kb.explore(query, actor, session_id=session.id,
+                            phenomenon=None if targets else session.need.phenomenon)
+    # 研发授予这一层的话（statement）：前台可以说这句话，看不到它依据的结论
+    statements = [c for c in found.capabilities if c.form == "statement"]
+    # 是否问机理只看抽取给出的意图；能看到什么由知识库按层级裁剪。有授予的话就用它回答。
+    mechanism = session.need.last_intent == "mechanism_request"
+    blocked = mechanism and not statements
+    public_request = not mechanism or any(word in turn.text for word in ("怎么用", "用法", "用量", "说明书", "产品说明"))
     if targets and public_request:
         hits = [KnowledgeHit(ku=deps.kb.get(f"ku:{kind}:{pid}", actor), score=1.0)
                 for pid in targets for kind in ("sheet", "usage")]
@@ -58,17 +61,20 @@ def answer(session, deps, *, check_grounding=False):
         # 没有明确指代或有效推荐时，不把其他型号的剂量当成当前建议。
         hits = []
     denial = ("这部分属于研发保密内容；你的高层级访问已被冻结，暂不能申请解密。" if deps.kb.is_frozen(actor.id)
-              else "这部分属于研发保密内容，可以为客户申请解密。") + "配方不对外开放。"
+              else "这部分属于研发保密内容，可以为客户申请解密。") + "配方不对外开放。" if targets \
+        else "这部分需要专业人员解答。"
     if blocked:
         deps.audit.append(AuditRecord(ts=get_clock().now(), actor=actor.id, action="deny",
             object_ids=[turn.id], session_id=session.id, reason="提问涉及高层级知识"))
-    if not hits:
+    used = statements
+    if not hits and not statements:
         text = denial if blocked else "请明确要查询的产品型号；目前没有足够依据提供用法。"
         if not blocked and session.status == "escalated":
             status = "已转产品经理处理。" if rec and rec.escalated_question_id else "请联系产品经理。"
             text = "当前条件没有适用的推荐产品，" + status + text
     elif deps.config["gateway_mock"]:
-        text = "\n".join(h.ku.text for h in hits)
+        text = render_refs("\n".join([h.ku.text for h in hits] + [f"[[{c.id}]]" for c in statements]),
+                           level_of(actor), deps.kb)
     else:
         prompt = (Path(__file__).resolve().parents[3] / "prompts/l1_answer.md").read_text(encoding="utf-8")
         response = deps.gateway.complete(LLMRequest(tier=Tier.FAST, caller="agent:l1_answer", temperature=0,
@@ -77,8 +83,10 @@ def answer(session, deps, *, check_grounding=False):
                  "recommended_product_id": rec.product_id if rec else None,
                  "need": {"phenomenon": session.need.phenomenon, "known": session.need.known()},
                  "turns": [{"speaker": t.speaker, "text": t.text} for t in session.turns[-6:]],
-                 "hits": [{"ku_id": h.ku.id, "title": h.ku.title, "text": h.ku.text} for h in hits]},
+                 "hits": [{"ku_id": h.ku.id, "title": h.ku.title, "text": h.ku.text} for h in hits],
+                 "statements": [{"ref": c.id, "text": c.payload["text"]} for c in statements]},
                 ensure_ascii=False))]))
+        used = [c for c in statements if f"[[{c.id}]]" in (response.content or "")]
         # 专业内容只以 [[编号]] 写出，按收件层渲染并查泄密；任一不过就不发出
         try:
             text = render_refs(response.content or "没有生成可用回答。", level_of(actor), deps.kb)
@@ -88,7 +96,9 @@ def answer(session, deps, *, check_grounding=False):
         if leaked:
             deps.audit.append(AuditRecord(ts=get_clock().now(), actor=actor.id, action="deny",
                 object_ids=[turn.id], session_id=session.id, reason="回答含收件层不可见的内容"))
-            text = "这部分需要专业人员解答。"
+            text, used = "这部分需要专业人员解答。", []
+    for c in used:      # 说出了授予的话 = 能力被使用，给确认人记分
+        deps._use_capability(c.id, session.id, actor.id)
     if hits and blocked:
         text += "\n" + denial
     if any(not consistent(products[pid], session.need.known()) or

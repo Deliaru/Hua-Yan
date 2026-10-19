@@ -150,6 +150,8 @@ class AgentHub:
                 text += ("请告知委托人待签的授予，不起草，不签字。" if q.family == "qi_grant" and "capability_id" in q.refs
                          else "请告知委托人：同事申请查看这条知识，附上申请人碰到过它的需求单，不起草，不签字。"
                          if q.family == "qi_grant" and "requester" in q.refs
+                         else f"请起草一句可以写给 L{q.refs['audience']} 的话，不含结论原文与机理，交委托人在签字区改定，不签字。"
+                         if q.family == "qi_grant" and q.refs.get("form") == "statement"
                          else "请为此问题准备草稿，不签字。")
                 if self.app.config["gateway_mock"]:
                     text += "\n" + self._prepare_offline(q)

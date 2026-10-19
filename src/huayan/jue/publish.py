@@ -44,8 +44,11 @@ def _summary(family: str, a: dict) -> str:
                 f"最集中的产品占 {a['blocked_top_share']:.0%}，涉及 {a['n_distinct_products']} 个产品")
     if family == "qi_grant" and a["requested"]:
         return "同事申请查看这条知识的原文；授予后对方可读、你记「授予」分，可随时撤销。"
+    if family == "qi_grant" and a["slot"] == "statement":
+        return f"这条结论在该层被问到 {a['n_unanswerable']} 次却没有可说的话；是否授予一句话（看不到结论原文）？"
     if family == "qi_grant":
-        return f"研发已回问 {a['n_ask_back']} 次；是否将这项能力授予所需层级？"
+        return (f"研发已回问 {a['n_ask_back']} 次、该层命中却答不了 {a['n_unanswerable']} 次；"
+                "是否将这项能力授予所需层级？")
     if family == "qi_review":
         return "结论的原文依据已变化，依赖它的能力已挂起；请复核或撤回。"
     if family == "scope_update":
@@ -83,6 +86,8 @@ def _label(obj: JueObject, seeds: Seeds | None) -> str:
     if obj.object_type == "knowledge" and a["slot"] == "share":
         name = next((x.name for x in seeds.actors if x.id == a["value"]), a["value"])
         return f"{name}申请查看 {obj.object_id.removeprefix('knowledge:share:').split('|')[0]}"
+    if obj.object_type == "knowledge" and a["slot"] == "statement":
+        return f"{a['product_id'] or '结论'} · {a['value']} · {obj.object_id.rsplit('|', 1)[1]}"
     if obj.object_type == "knowledge":
         value = next((p.label for p in seeds.phenomena if p.id == a["value"]), a["value"]) if a["slot"] == "phenomenon" else a["value"]
         return f"{a['product_id']} × {value}"
