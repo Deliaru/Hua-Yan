@@ -58,7 +58,7 @@ def write_report(path, kb, fragments, proposals, report, changed, args):
              f"- 提议：{len(proposals)} 条（{'录制：' + args.proposals if args.proposals else '模型 ingest:extract'}）",
              f"- 候选结论：{len(admitted)} 条；能力提议 {sum(a['capability_id'] is not None for a in admitted)} 条",
              f"- 丢弃（引文与原文不符）：{'；'.join(report['dropped']) or '无'}",
-             f"- 与现有能力完全相同：{'；'.join(report['duplicates']) or '无'}",
+             f"- 与现有能力完全相同（已挂为其依据）：{'；'.join(report['duplicates']) or '无'}",
              f"- 冲突（同一目标不同取值）：{'；'.join(report['conflicts']) or '无'}",
              f"- 对不上的新概念或待认领：{'；'.join(report['unaligned']) or '无'}",
              f"- 依据已变化、待复核：{'、'.join(changed) or '无'}", "",

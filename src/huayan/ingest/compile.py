@@ -101,17 +101,19 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
         level = max(f.level for f in fragments)
         existing = [c for c in kb.capabilities() if payload and c.form == p.form and c.audience == level
                     and c.status != "revoked"]
-        if any(c.payload == payload for c in existing):
-            report["duplicates"].append(p.title)
-            continue
-        if any(all(c.payload.get(k) == payload.get(k) for k in ("phenomenon", "product_id", "slot"))
-               and set(c.payload.get("conditions", {})) == set(payload.get("conditions", {})) for c in existing):
-            report["conflicts"].append(p.title)        # 同一目标不同取值：列入报告，仍作为候选交人判断
         at = get_clock().now()
         unit = KnowledgeUnit(id=kb.next_claim_id(), kind="claim", level=level, title=p.title, text=p.text,
             product_id=product.id if product else None, phenomenon_ids=[found[0]], owner=confirmer,
             confirmed_by=confirmer, status="candidate", source="contributed", created_at=at,
             evidence=[f"{f.doc_id}#{f.span}@{f.fingerprint}" for f in fragments])
+        same = next((c for c in existing if c.payload == payload), None)
+        if same:                                       # 与已有能力完全相同：挂为它的依据（第 0 天内容也有指纹）
+            kb.attach_evidence(same.id, unit)
+            report["duplicates"].append(p.title)
+            continue
+        if any(all(c.payload.get(k) == payload.get(k) for k in ("phenomenon", "product_id", "slot"))
+               and set(c.payload.get("conditions", {})) == set(payload.get("conditions", {})) for c in existing):
+            report["conflicts"].append(p.title)        # 同一目标不同取值：列入报告，仍作为候选交人判断
         kb.add(unit)
         cap = kb.grant(Capability(id=kb.next_cap_id(), form=p.form, audience=level, payload=payload,
             based_on=[unit.id], granted_by=confirmer, status="proposed", at=at)) if payload else None

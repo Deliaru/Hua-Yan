@@ -256,6 +256,13 @@ class KnowledgeBase:
             "signer": unit.confirmed_by, "product_id": unit.product_id, "evidence": unit.evidence})
         self._suspend(ku_id)
 
+    def attach_evidence(self, cap_id, ku: KnowledgeUnit):
+        """编译出与已有能力完全相同的结论：由该能力的授予人确认入库并挂为依据。能力行为不变，只多一条可复核的依据。"""
+        cap = self._caps[cap_id]
+        self.add(ku.model_copy(update={"owner": cap.granted_by, "confirmed_by": cap.granted_by, "status": "active"}))
+        cap.based_on.append(ku.id)
+        self._save()
+
     def next_cap_id(self):
         self._cap_seq += 1
         return f"cap:{self._cap_seq}"
