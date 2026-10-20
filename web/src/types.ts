@@ -42,7 +42,7 @@ export interface Meta {
 }
 
 // ③ 会话
-export interface Turn { id: string; n: number; speaker: "customer" | "sales"; text: string; ts: string }
+export interface Turn { id: string; n: number; speaker: "customer" | "sales" | "assistant"; text: string; ts: string }
 export interface SlotFill { slot: string; value: string | null; status: "filled" | "unknown"; confidence: number; quote: string; turn_id: string }
 export interface AskHint { slot: string; label: string; ask_text: string; p_need: number; scored_by: string }
 export interface AssistantReply { turn_id: string; text: string; ku_ids: string[]; blocked: boolean }

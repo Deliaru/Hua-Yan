@@ -393,7 +393,7 @@ flowchart LR
 | 觉驱动全链路，代码里没有写死的流程推进 | `config/templates/`（22 个决策家族）；[`docs/reports/catalog_stats.md`](reports/catalog_stats.md)；`test_wp_b1` | 已有 |
 | 觉学会在客户还在时问研发要的信息 | [`docs/reports/distortion/`](reports/distortion/README.md)；[`docs/reports/jue_k/`](reports/jue_k/README.md) | 已有（模拟数据） |
 | 能读与能用分开；撤销立即生效，并且跨重启保留 | 三态演示（[`docs/reports/qi_demo/demo.md`](reports/qi_demo/demo.md)）；`test_wp_a1`、`test_wp_a3`、`test_e2e` | 已实现（模拟数据） |
-| 适用判断不越出已授权的情境 | 授予「锦氨 × 气流染色机」「纯锦纶 × 溢流染色机」后，「纯锦纶 × 气流染色机」不命中；只说了部分条件时只给「可能适用」 | 已实现（`test_wp_a1`；演示第 ③ 步）。边界：「可能适用」目前只在业务员陪同时出现，客户自助时系统发出的追问不在对话记录里，「不清楚」记不成未知 |
+| 适用判断不越出已授权的情境 | 授予「锦氨 × 气流染色机」「纯锦纶 × 溢流染色机」后，「纯锦纶 × 气流染色机」不命中；只说了部分条件时只给「可能适用」 | 已实现（`test_wp_a1`；演示第 ③ 步） |
 | 一次判断，反复复用 | 四步主演示；同一批问题上 V6 与契的对照（[`docs/reports/qi_demo/compare.md`](reports/qi_demo/compare.md)） | 已实现（模拟数据） |
 
 ---

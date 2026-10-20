@@ -39,7 +39,7 @@ class RuleExtractor:
             result.slots.append(ExtractedSlot(slot=slot, value=value, status="filled",
                 confidence=0.7, quote=quote, turn_n=turn.n))
         if any(word in text for word in ("不清楚", "不知道", "不确定")):
-            previous = next((t for t in reversed(turns[:-1]) if t.speaker == "sales"), None)
+            previous = next((t for t in reversed(turns[:-1]) if t.speaker != "customer"), None)   # 业务员或化言的问话
             if previous:
                 for slot in detect_asked_slots(previous.text, self.seeds.slots):
                     if slot not in {s.slot for s in result.slots}:

@@ -328,6 +328,8 @@ def page(r):
         a = [x["after_k3"][arm] for x in runs]
         lines.append(f"| {arm} | {np.mean([v['avg_asks'] for v in a]):.2f} | {k3[arm]} | "
                      f"{np.mean([v['handled_rate'] for v in a]):.3f} | {np.mean([v['wrong_rate'] for v in a]):.3f} |")
+    after = {arm: {"wrong": np.mean([x["after_k3"][arm]["wrong_rate"] for x in runs])} for arm in ARMS} | {
+        "n": sum(x["after_k3"]["frozen"]["sessions"] for x in runs)}
     l0 = {arm: sum(x["cells"][arm]["W4"].get("ask_slot|L0") == "jue_k" for x in runs) for arm in ("evolving", "unfiltered")}
     w4 = {k: [x["windows"]["W4"]["evolving"][k] - x["windows"]["W4"]["frozen"][k] for x in runs]
           for k in ("handled_rate", "wrong_rate", "avg_asks")}
@@ -339,8 +341,11 @@ def page(r):
               f"{sum(d == 0 for d in w4['handled_rate'])} / {len(runs)} 个种子上正确处理率没有变化。",
               f"- 客户层追问格（ask_slot|L0）到 W4 换上模型的种子数：evolving {l0['evolving']} / {len(runs)}，"
               f"unfiltered {l0['unfiltered']} / {len(runs)}。按层过滤后客户层这一格数据少，没胜过规则；不过滤的合并格数据多，更容易胜出。",
-              "- **不过滤并没有学到客户层不该问的东西**：未授予时 pH 结构上提不出；授予后 unfiltered 问得更少、处理结果相近。"
-              "本模拟里按层过滤换来的是隔离（研发层的结果不影响客户层的排序），代价是客户层学得慢；它没有避免可见的坏结果。", ""]
+              "- **未授予时，不过滤也学不到客户层不该问的东西**：pH 不在客户层视图里，结构上提不出。",
+              f"- **授予后，不过滤会少问已授予的条件**：客户层 pH 追问 unfiltered {k3['unfiltered']} 次、evolving {k3['evolving']} 次；"
+              f"错误推荐率 unfiltered {after['unfiltered']['wrong']:.3f}、evolving {after['evolving']['wrong']:.3f}"
+              f"（{len(runs)} 个种子共 {after['n']} 位色花客户）。研发层的结果混进客户层的训练，会改变客户层对已授予条件的排序；"
+              "按层过滤守住的是这一点，代价是客户层这一格数据少、学得慢。", ""]
     return "\n".join(lines)
 
 

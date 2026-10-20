@@ -48,6 +48,14 @@ def test_l1_recommend_and_escalate(tmp_path):
     assert app.events.query(kinds=["match"])[-1].payload["p_none"] == 1.0
     assert not app.events.query(kinds=["escalate"]) and not app.requirements("rd:R01")
 
+    # 客户自助：化言替觉问（写进对话、一次一个），答「不清楚」记为未知、不再追问，给「可能适用」
+    alone = app.start_session("customer:C02")
+    alone = app.add_turn(alone.id, "customer", "染完布面深一块浅一块，锦纶氨纶的")
+    assert [t.speaker for t in alone.turns] == ["customer", "assistant"] and alone.need.asked == {"equipment": 1}
+    alone = app.add_turn(alone.id, "customer", "设备不清楚")
+    assert alone.need.slots["equipment"].status == "unknown" and alone.turns[-1].speaker == "customer"
+    assert alone.recommendation.product_id == "T-205" and alone.recommendation.candidates[0].status == "possible"
+
     # 助手只写草稿；本人发送才产生发言并清空回复草稿。
     ctx = app.agents.context("sales:S01", other.id)
     reply = app.agents.call_tool(ctx, "save_reply_draft", {"text": "请再确认设备条件。"})

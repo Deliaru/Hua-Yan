@@ -17,7 +17,7 @@ class Turn(BaseModel):
     id: str                                   # "turn:sess:3:2"
     session_id: str
     n: int                                    # 从 1 开始
-    speaker: Literal["customer", "sales"]
+    speaker: Literal["customer", "sales", "assistant"]   # assistant：客户自助时化言发出的追问（Q8 人批准）
     text: str
     ts: datetime
 
@@ -44,7 +44,7 @@ class NeedState(BaseModel):
     phenomenon: str | None = None
     phenomenon_quote: str = ""
     slots: dict[str, SlotFill] = {}
-    asked: dict[str, int] = {}                # 槽位 → 业务员已追问次数
+    asked: dict[str, int] = {}                # 槽位 → 已追问次数（业务员或化言）
     turn_count: int = 0
     profile: CustomerProfile = Field(default_factory=CustomerProfile)
     last_intent: Intent = "need"

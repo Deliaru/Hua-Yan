@@ -157,7 +157,7 @@ function Timeline({ v, lit }: { v: SessionView; lit: string | null }) {
               <li key={t.id} className={`anim-rise flex gap-3 px-4 py-2 transition-colors ${on ? "bg-[rgba(10,108,223,.07)]" : ""}`}>
                 <span className="num w-9 shrink-0 pt-[2px] text-[11px] text-ink-3">{hhmm(t.ts)}</span>
                 <div className="min-w-0 flex-1">
-                  <p className={`text-[11px] font-semibold ${sales ? "text-accent" : "text-ink-2"}`}>{sales ? "业务员" : "客户"}</p>
+                  <p className={`text-[11px] font-semibold ${sales ? "text-accent" : "text-ink-2"}`}>{sales ? "业务员" : t.speaker === "assistant" ? "化言（自助时代问）" : "客户"}</p>
                   <p className={`text-[14px] leading-[21px] ${on ? "font-semibold" : ""}`}>{t.text}</p>
                   {replies(t.id).map((r, j) => (
                     <p key={j} className="mt-1 text-[12px] leading-[18px] text-ink-2">知识助手：{r.text}

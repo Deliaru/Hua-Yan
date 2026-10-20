@@ -80,6 +80,16 @@ def recommendation_note(session, deps):
     return "可能适用：" + "；".join(f"{labels[slot]}为{'、'.join(values)}，请确认" for slot, values in unknown.items())
 
 
+def ask_customer(session, hint, deps):
+    """客户自助时没有业务员替觉问：化言把第一条提示的问法说给客户，写进对话，一次只问一个。"""
+    n = len(session.turns) + 1
+    session.turns.append(Turn(id=f"turn:{session.id}:{n}", session_id=session.id, n=n, speaker="assistant",
+                              text=hint.ask_text, ts=get_clock().now()))
+    session.need.asked[hint.slot] = session.need.asked.get(hint.slot, 0) + 1
+    deps.events.append("turn", "system", {"turn_id": session.turns[-1].id, "speaker": "assistant",
+                                          "text": hint.ask_text}, session_id=session.id)
+
+
 def handle_turn(session, speaker, text, deps, answering=False):
     """回问及已签字升级的会话只抽取和回答；需求单生命周期由门面处理。"""
     n = len(session.turns) + 1
@@ -111,6 +121,8 @@ def handle_turn(session, speaker, text, deps, answering=False):
             recommend(session, deps)
         elif session.status == "recommended":
             session.recommendation, session.status = None, "open"
+        if session.hints and session.sales_id is None:
+            ask_customer(session, session.hints[0], deps)
     if result.intent in ("product_question", "mechanism_request"):
         session.replies.append(answer(session, deps))
     return session

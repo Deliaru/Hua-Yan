@@ -100,20 +100,16 @@ function Chat({ v, route }: { v: SessionView; route: Route | null }) {
             <li key={t.id} className="anim-rise flex flex-col gap-1.5">
               <div className={`flex ${t.speaker === "customer" ? "justify-end" : ""}`}>
                 <p className={`max-w-[85%] rounded-[14px] px-3 py-1.5 text-[14px] leading-[21px] ${
-                  t.speaker === "customer" ? "bg-accent text-white" : "bg-bg"}`}>
-                  {t.speaker === "sales" && <span className="mr-1 text-[11px] font-semibold text-accent">业务员</span>}{t.text}</p>
+                  t.speaker === "customer" ? "bg-accent text-white"
+                    : t.speaker === "assistant" ? "bg-attn-bg shadow-[0_0_0_.5px_rgba(176,80,10,.25)]" : "bg-bg"}`}>
+                  {t.speaker === "sales" && <span className="mr-1 text-[11px] font-semibold text-accent">业务员</span>}
+                  {t.speaker === "assistant" && <span className="mr-1 text-[11px] font-semibold text-attn-ink">化言想确认</span>}{t.text}</p>
               </div>
               {replies(t.id).map((r, j) => (
                 <p key={j} className="max-w-[85%] rounded-[14px] bg-bg px-3 py-1.5 text-[13.5px] leading-[21px]">
                   <span className="mr-1 text-[11px] font-semibold text-ink-2">化言</span>{r.text}</p>
               ))}
               <span className={`num text-[10.5px] text-ink-3 ${t.speaker === "customer" ? "text-right" : ""}`}>{hhmm(t.ts)}</span>
-            </li>
-          ))}
-          {v.status === "open" && v.hints.map((h) => (
-            <li key={h.slot} className="anim-rise">
-              <p className="max-w-[85%] rounded-[14px] bg-attn-bg px-3 py-1.5 text-[14px] leading-[21px] shadow-[0_0_0_.5px_rgba(176,80,10,.25)]">
-                <span className="mr-1 text-[11px] font-semibold text-attn-ink">觉想确认 · {h.label}</span>{h.ask_text}</p>
             </li>
           ))}
         </ol>

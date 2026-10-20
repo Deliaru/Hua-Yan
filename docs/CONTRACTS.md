@@ -324,7 +324,7 @@ class Turn(BaseModel):
     id: str                                   # "turn:sess:3:2"
     session_id: str
     n: int                                    # 从 1 开始
-    speaker: Literal["customer", "sales"]
+    speaker: Literal["customer", "sales", "assistant"]   # assistant：客户自助时化言发出的追问（Q8 人批准）
     text: str
     ts: datetime
 
@@ -348,7 +348,7 @@ class NeedState(BaseModel):
     phenomenon: str | None = None
     phenomenon_quote: str = ""
     slots: dict[str, SlotFill] = {}
-    asked: dict[str, int] = {}                # 槽位 → 业务员已追问次数
+    asked: dict[str, int] = {}                # 槽位 → 已追问次数（业务员或化言）
     turn_count: int = 0
     profile: CustomerProfile = CustomerProfile()
     last_intent: Intent = "need"
@@ -1640,6 +1640,8 @@ class Candidate(BaseModel):
 新增 `claim_confirmed`、`claim_withdrawn`、`capability_granted`、`capability_revoked`、`capability_suspended`、`capability_used`、`evidence_changed`。`retrieve` 的 payload 加 `unanswerable_ku_ids` 与 `n_unanswerable`。`recommend` 的 payload 加 `status` 与 `capability_id`。批准复用现有 `scope_extended`。
 
 （Q8，2026-10-20 人批准）新增 `recommendation_withdrawn`：能力撤销、挂起或产品页收窄后，已推荐的会话按本层现有情境重新匹配不再覆盖时退回 open，记这一事件；payload `{product_id, capability_id}`，`session_id` 为该会话，actor 为触发撤销的人。
+
+（Q8，2026-10-20 人批准）`Turn.speaker` 加 `assistant`：客户自助会话（没有业务员）里，觉算出追问提示后，门面把第一条提示的问法作为化言的发言写进对话（一次只问一个），事件 `turn` 的 actor 为 `system`，并给该槽位的 `asked` 加 1；抽取把它和业务员的问话同样看待（客户答「不清楚」记为未知）。`add_turn` 仍只接受 `customer`、`sales`。
 
 ### 2.5 觉（契约 5.2、5.4、⑨）
 
