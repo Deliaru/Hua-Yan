@@ -12,6 +12,7 @@ W2 起世界偏离专家先验（sim.shifted_world，λ 如实列出），觉看
 """
 import argparse
 import json
+import pickle
 import random
 import shutil
 from bisect import bisect_right
@@ -138,12 +139,17 @@ class Arm:
 
 
 def merged(previous, out, templates, meter, pooled):
-    """新训练没有赢过规则的格沿用上一个模型的格（不退回规则）；不过滤组的并格模型同时用于客户层与业务员层。"""
+    """新训练没有赢过规则的格沿用上一个模型的格（不退回规则）；不过滤组的并格模型同时用于客户层与业务员层。
+    合并结果写回 out，evolving 组 W4 的目录就是进化后的觉。"""
     new = JueK(out, templates, "realtime", meter)
     models, columns = previous.models | new.models, previous.columns | new.columns
     if pooled and "ask_slot|L0" in new.models:
         models["ask_slot|L1"], columns["ask_slot|L1"] = new.models["ask_slot|L0"], new.columns["ask_slot|L0"]
     new.models, new.columns = models, columns
+    with (out / "model.pkl").open("wb") as stream:      # 落盘合并后的模型，回测（Q7.5）直接加载
+        pickle.dump({"models": models}, stream)
+    features = json.loads((out / "features.json").read_text(encoding="utf-8"))
+    (out / "features.json").write_text(json.dumps(features | {"columns": columns}, ensure_ascii=False, indent=2), encoding="utf-8")
     return new
 
 
