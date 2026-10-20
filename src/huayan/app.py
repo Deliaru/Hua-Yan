@@ -1343,7 +1343,7 @@ class HuayanApp:
         owners ={self.kb._units[uid].confirmed_by for uid in capability.based_on}
         if capability.form == "applicable":
             owners.add(capability.approved_by)
-        for owner in owners - {None, "seed", "pm:agent"}:
+        for owner in sorted(owners - {None, "seed", "pm:agent"}):
             self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=owner,
                 points=self.config["points"]["used"], reason="used", ku_id=capability.based_on[0], ref=session_id))
 

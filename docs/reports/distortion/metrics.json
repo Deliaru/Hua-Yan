@@ -20,7 +20,7 @@
     "max_backs": 2
   },
   "calls": {
-    "jue": 169,
+    "jue": 173,
     "llm": 0,
     "s1": 0
   },
@@ -38,7 +38,7 @@
     "G2 一次性翻译": {
       "completeness": 0.4175824175824176,
       "slot_error": 0.0,
-      "mistranslation": 0.1111111111111111,
+      "mistranslation": 0.06593406593406594,
       "asks": 0.0,
       "backs": 0.0,
       "backs_useful": null,
@@ -46,24 +46,24 @@
       "returned": 1.0
     },
     "G3 化言（不含回问）": {
-      "completeness": 0.6868131868131868,
+      "completeness": 0.7087912087912088,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 0.8166666666666667,
+      "asks": 0.8833333333333333,
       "backs": 0.0,
       "backs_useful": null,
       "traceable": 1.0,
-      "returned": 0.7666666666666667
+      "returned": 0.75
     },
     "G3 化言": {
-      "completeness": 0.7692307692307693,
+      "completeness": 0.7912087912087912,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 0.8166666666666667,
-      "backs": 0.7833333333333333,
-      "backs_useful": 0.3404255319148936,
+      "asks": 0.8833333333333333,
+      "backs": 0.6833333333333333,
+      "backs_useful": 0.4146341463414634,
       "traceable": 1.0,
-      "returned": 0.5666666666666667
+      "returned": 0.55
     }
   },
   "labels": {
@@ -75,5 +75,97 @@
     "backs_useful": "回问事后有用比例",
     "traceable": "可回查率",
     "returned": "研发需退回比例"
+  },
+  "by_route": {
+    "escalate": {
+      "n_cards": 5,
+      "metrics": {
+        "G1 业务员转述": {
+          "completeness": 0.5625,
+          "slot_error": 0.0,
+          "mistranslation": null,
+          "asks": 1.0,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 0.0,
+          "returned": 0.8
+        },
+        "G2 一次性翻译": {
+          "completeness": 0.5,
+          "slot_error": 0.0,
+          "mistranslation": 0.1,
+          "asks": 0.0,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 1.0,
+          "returned": 1.0
+        },
+        "G3 化言（不含回问）": {
+          "completeness": 1.0,
+          "slot_error": 0.0,
+          "mistranslation": null,
+          "asks": 1.6,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 1.0,
+          "returned": 0.0
+        },
+        "G3 化言": {
+          "completeness": 1.0,
+          "slot_error": 0.0,
+          "mistranslation": null,
+          "asks": 1.6,
+          "backs": 0.2,
+          "backs_useful": 0.0,
+          "traceable": 1.0,
+          "returned": 0.0
+        }
+      }
+    },
+    "l1": {
+      "n_cards": 55,
+      "metrics": {
+        "G1 业务员转述": {
+          "completeness": 0.4939759036144578,
+          "slot_error": 0.08108108108108109,
+          "mistranslation": null,
+          "asks": 1.0,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 0.0,
+          "returned": 0.9636363636363636
+        },
+        "G2 一次性翻译": {
+          "completeness": 0.40963855421686746,
+          "slot_error": 0.0,
+          "mistranslation": 0.06172839506172839,
+          "asks": 0.0,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 1.0,
+          "returned": 1.0
+        },
+        "G3 化言（不含回问）": {
+          "completeness": 0.6807228915662651,
+          "slot_error": 0.0,
+          "mistranslation": 0.0,
+          "asks": 0.8181818181818182,
+          "backs": 0.0,
+          "backs_useful": null,
+          "traceable": 1.0,
+          "returned": 0.8181818181818182
+        },
+        "G3 化言": {
+          "completeness": 0.7710843373493976,
+          "slot_error": 0.0,
+          "mistranslation": 0.0,
+          "asks": 0.8181818181818182,
+          "backs": 0.7272727272727273,
+          "backs_useful": 0.425,
+          "traceable": 1.0,
+          "returned": 0.6
+        }
+      }
+    }
   }
 }

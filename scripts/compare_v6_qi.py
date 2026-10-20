@@ -26,15 +26,18 @@ OUT = Path("docs/reports/qi_demo")
 SAME = "锦纶氨纶弹力布在经轴缸上染，深一块浅一块"
 OTHER = "纯锦纶在经轴缸上染，深一块浅一块"
 OVERFLOW = "锦氨弹力布在溢流缸上染，深一块浅一块"
+PUBLIC = "纯锦纶在溢流缸上染，深一块浅一块"           # 产品页写明的情境：两边都应能自助
 PARTIAL = [("customer", "锦纶氨纶的布，深一块浅一块"), ("sales", "用的是什么染色设备？"), ("customer", "设备不清楚")]
 # 问题批次：(窗口, 客户, 话, 研发判断的产品)；研发判断 = 进了研发时研发写定的处置。"restart" / "revoke" 是两个时刻。
 BATCH = [
     ("W1", "customer:C01", SAME, "HY-LV205"), ("W1", "customer:C02", OVERFLOW, "HY-LV205"), ("W1", "customer:C03", OTHER, None),
+    ("W1", "customer:C04", PUBLIC, "HY-LV205"),
     ("W2", "customer:C04", SAME, "HY-LV205"), ("W2", "customer:C01", PARTIAL, None), ("W2", "customer:C02", SAME, "HY-LV205"),
     "restart",
     ("W3", "customer:C03", SAME, "HY-LV205"), ("W3", "customer:C04", OTHER, None), ("W3", "customer:C01", SAME, "HY-LV205"),
+    ("W3", "customer:C02", PUBLIC, "HY-LV205"),
     "revoke",       # 研发撤回「LV205 适用锦纶氨纶 × 经轴」：此后这类问题应回到研发，研发判无产品
-    ("W4", "customer:C02", SAME, None), ("W4", "customer:C03", SAME, None),
+    ("W4", "customer:C02", SAME, None), ("W4", "customer:C03", SAME, None), ("W4", "customer:C04", PUBLIC, "HY-LV205"),
 ]
 JUDGED = {"product_id": "HY-LV205", "conditions": {"fiber": ["锦纶氨纶"], "equipment": ["经轴染色机"]}}
 C2 = "ku:claim:2"
@@ -68,7 +71,8 @@ class Driver:
         return next((r for r in self.app._requirements.values() if sid in r.session_ids), None)
 
     def events(self):
-        return [e.model_dump(mode="json") for e in self.app.events.query()]
+        """事件带上所属运行：V6 重启是新的运行，会话号从头开始。"""
+        return [e.model_dump(mode="json") | {"run": self.app.run_id} for e in self.app.events.query()]
 
 
 class QiDriver(Driver):
@@ -145,21 +149,15 @@ def drive(kind):
 
 def metrics(result, products):
     """两边共用：只读事件日志（两边都有的 recommend、requirement_created、project_declined 事件）。"""
-    events = result["events"]
-    key = lambda run, sid: (run, sid)
-    run_of = {}
-    run, by_session = result["runs"][0], {}
-    for e in events:            # 事件按运行顺序；V6 重启后会话号从头开始，按运行区分
-        if e["id"] == "ev:1" and by_session:
-            run = result["runs"][len({r for r, _ in by_session})]
+    by_session, declined, created = {}, {}, set()
+    for e in result["events"]:
         if e["session_id"]:
-            by_session.setdefault(key(run, e["session_id"]), []).append(e)
-            run_of[e["session_id"]] = run
-    declined = {}
-    for e in events:
+            by_session.setdefault((e["run"], e["session_id"]), []).append(e)
         if e["kind"] == "project_declined":
             for sid in e["payload"]["session_ids"]:
-                declined.setdefault(sid, []).append(e["payload"]["product_id"])
+                declined[(e["run"], sid)] = e["payload"]["product_id"]
+        if e["kind"] == "requirement_created":
+            created |= {(e["run"], sid) for sid in e["payload"]["session_ids"]}
     rows, judged, effective = [], set(), True
     for item, batch in zip(result["asked"], BATCH):
         if isinstance(batch, str):
@@ -168,18 +166,17 @@ def metrics(result, products):
                 judged.discard(("锦纶氨纶", "经轴染色机"))
             continue
         window, _, turns, truth = batch
-        evs = by_session.get(key(item["run_id"], item["session_id"]), [])
+        key = (item["run_id"], item["session_id"])
+        evs = by_session.get(key, [])
         rec = [e["payload"] for e in evs if e["kind"] == "recommend"]
         known = rec[-1]["known"] if rec else next((e["payload"]["filled"] for e in reversed(evs) if e["kind"] == "extraction"), {})
-        to_rd = item["session_id"] in declined and any(e["kind"] == "escalate" for e in evs) or any(
-            e["kind"] == "requirement_created" and item["session_id"] in e["payload"]["session_ids"] for e in events
-            if run_of.get(item["session_id"]) == item["run_id"])
+        to_rd = key in created
         cls = (known.get("fiber"), known.get("equipment"))
         self_served = bool(rec) and not to_rd
         confirmed = self_served and rec[-1].get("status", "confirmed") == "confirmed"
-        rd_answer = declined.get(item["session_id"], [None])[-1] if to_rd else None
+        rd_answer = declined.get(key)
         authorized = confirmed and inside(rec[-1]["product_id"], known, products, effective)
-        rows.append({"window": window, "session_id": item["session_id"], "class": cls, "truth": truth,
+        rows.append({"window": window, "session_id": item["session_id"], "class": cls, "truth": truth, "known": known,
                      "self_served": self_served, "confirmed": confirmed, "product": rec[-1]["product_id"] if rec else None,
                      "to_rd": to_rd, "rd_answer": rd_answer, "repeat": to_rd and cls in judged,
                      "unauthorized": confirmed and not authorized,
@@ -195,13 +192,17 @@ def metrics(result, products):
     for w in windows.values():
         w["rd_per_solved"] = round(w["rd"] / w["solved"], 2) if w["solved"] else "—"
     after_revoke = [r for r, b in zip(rows, [b for b in BATCH if not isinstance(b, str)]) if b[0] == "W4"]
-    after_restart = [r for r in rows if r["window"] == "W3" and r["class"] == ("锦纶氨纶", "经轴染色机")]
+    before = {r["class"] for r in rows if r["window"] in ("W1", "W2") and r["confirmed"] and not r["unauthorized"]}
+    after_restart = [r for r in rows if r["window"] == "W3" and r["class"] in before]
+    after_revoke = [r for r in after_revoke if r["class"] == ("锦纶氨纶", "经轴染色机")]
     return {"rows": rows, "windows": windows,
             "correct_self_service": sum(r["self_served"] and r["confirmed"] and r["product"] == r["truth"] for r in rows),
             "rd_repeats": sum(r["repeat"] for r in rows),
             "unauthorized_confirmed": sum(r["unauthorized"] for r in rows),
             "after_revoke_back_to_rd": f"{sum(r['to_rd'] for r in after_revoke)}/{len(after_revoke)}",
-            "after_restart_self_served": f"{sum(r['self_served'] for r in after_restart)}/{len(after_restart)}"}
+            "after_restart_kept": f"{sum(r['confirmed'] for r in after_restart)}/{len(after_restart)}",
+            "in_public_scope": sum(r["truth"] is not None and inside(r["truth"], r["known"], products, False) for r in rows),
+            "needs_judgment": sum(r["truth"] is not None and not inside(r["truth"], r["known"], products, False) for r in rows)}
 
 
 def inside(product, known, products, judged_in_effect):
@@ -219,8 +220,11 @@ def page(qi, v6):
              row("正确的自助处理数", v6["correct_self_service"], qi["correct_self_service"]),
              row("研发重复参与次数（同一类判断第二次及以后仍进研发）", v6["rd_repeats"], qi["rd_repeats"]),
              row("未经授权的确定推荐数（没有落在产品页或有效研发判断的完整情境内）", v6["unauthorized_confirmed"], qi["unauthorized_confirmed"]),
-             row("撤销后同类问题回到研发", v6["after_revoke_back_to_rd"] + "（V6 没有撤销，本来就进研发）", qi["after_revoke_back_to_rd"]),
-             row("重启后同类问题自助解决", v6["after_restart_self_served"], qi["after_restart_self_served"]), "",
+             row("撤销后同类问题回到研发", "不适用（V6 没有撤销；判断本来就记不下，同类问题一直进研发）", qi["after_revoke_back_to_rd"]),
+             row("重启前已能自助的同类问题，重启后仍自助", v6["after_restart_kept"], qi["after_restart_kept"]), "",
+             f"批次构成：{len(qi['rows'])} 个问题，其中 {qi['in_public_scope']} 个落在产品页写明的情境内（两边都能自助），"
+             f"{qi['needs_judgment']} 个要靠研发「已有产品适用」的判断（V6 记不下这类判断，批次有意包含它们，这是对照要看的差别），"
+             "其余是研发判无产品或条件不全。「未经授权」按契的口径：确定推荐的已知条件没有完整落在产品页情境或仍有效的研发判断内。", "",
              "## 每解决一个客户问题需要几次研发判断（按窗口）", "",
              "| 窗口 | V6 研发判断 / 解决 | 契 研发判断 / 解决 |", "|---|---|---|"]
     for w in qi["windows"]:

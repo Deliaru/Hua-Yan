@@ -8,7 +8,7 @@ W2 起世界偏离专家先验（sim.shifted_world，λ 如实列出），觉看
 校准层 —— 对前置条件已成立的槽位，比较 evolving 与 unfiltered 两种模型在客户层的追问排序与次数。
 指标从各组运行目录的事件日志与需求卡算出，报告写进 docs/reports/jue_evolution/。
 
-  uv run python scripts/demo_evolution.py [--n 60] [--lam 0.6] [--seed 0]
+  uv run python scripts/demo_evolution.py [--n 120] [--lam 0.6] [--seeds 0,1,2,3,4]
 """
 import argparse
 import json
@@ -42,13 +42,12 @@ RD = Actor(id="rd:R02", role="rd", name="研发")
 CUSTOMER = Actor(id="customer:C01", role="customer", name="客户")
 
 
-def config_file():
+def config_file(work):
     """离线配置：实时觉用 Jue-K；来源换成替身 RAG 的副本（编译出 C4）。"""
-    shutil.copytree("seeds/rag", WORK / "rag")
     config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
-    config.update(realtime_model="jue_k", run_root=str(WORK / "runs"),
+    config.update(realtime_model="jue_k", run_root=str(work / "runs"),
                   sources=[{"name": f"{k}（模拟副本）", "kind": k, "root": str(WORK / "rag" / k)} for k in ("public", "internal")])
-    path = WORK / "app.yaml"
+    path = work / "app.yaml"
     path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     return path
 
@@ -69,8 +68,8 @@ def make_batch(seeds, n, lam, seed):
 
 
 class Arm:
-    def __init__(self, name, config, seed):
-        self.name, self.seed = name, seed
+    def __init__(self, name, config, seed, work):
+        self.name, self.seed, self.work = name, seed, work
         self.api = Api(None, str(config), SimClock(T0))
         self.api.build()
         self.app = self.api.app
@@ -127,20 +126,20 @@ class Arm:
         rows = [r for r in decision_rows(load_records(self.app.run_dir), self.app.events)
                 if r["family"] == "ask_slot" and self.windows.get(r["object_id"][5:].rsplit("/", 1)[0]) == window]
         view = {lvl: {p.id: p.required_slots for p in self.app.kb.view(a).phenomena} for lvl, a in ((0, CUSTOMER), (3, RD))}
-        if self.name == "evolving":     # 按层：客户层与业务员层的标签只看本层视图里的必问条件
+        if self.name == "evolving":     # 按层：标签只看客户层视图里的必问条件（本轮业务员层视图与客户层相同）
             labeled = self.label(rows, lambda phen: view[0][phen])
         else:                           # 不过滤：研发层的必问条件也当成客户层的结果，各层并成一格
             labeled = [r | {"judge_level": 0, "level": 0, "attrs": r["attrs"] | {"judge_level": 0}}
                        for r in self.label(rows, lambda phen: view[3][phen])]
         self.rows += labeled
-        out = WORK / "models" / self.name / window
+        out = self.work / "models" / self.name / window
         self.cells[window] = fit(self.rows, templates, out)
         self.app.jue_realtime = merged(self.app.jue_realtime, out, templates, self.app.meter, pooled=self.name == "unfiltered")
 
 
 def merged(previous, out, templates, meter, pooled):
     """新训练没有赢过规则的格沿用上一个模型的格（不退回规则）；不过滤组的并格模型同时用于客户层与业务员层。
-    合并结果写回 out，evolving 组 W4 的目录就是进化后的觉。"""
+    合并结果写回 out，evolving 组 W4 的目录（data/jue_evolution/seed0/models/evolving/W4）就是进化后的觉。"""
     new = JueK(out, templates, "realtime", meter)
     models, columns = previous.models | new.models, previous.columns | new.columns
     if pooled and "ask_slot|L0" in new.models:
@@ -166,7 +165,7 @@ def window_metrics(arm, window, rd_required, l0_required):
     for e in arm.app.events.query():
         if e.session_id and arm.windows.get(e.session_id) == window:
             by_sid[e.session_id].append(e)
-    asks, ph_l0, escalated, complete, complete_l0, solved, rd_calls, correct = 0, 0, 0, 0, 0, 0, 0, 0
+    asks, ph_l0, escalated, complete, complete_l0, solved, rd_calls, handled, wrong = 0, 0, 0, 0, 0, 0, 0, 0, 0
     for sid, evs in by_sid.items():
         card = arm.cards[sid]
         self_service = arm.app._sessions[sid].sales_id is None
@@ -182,17 +181,19 @@ def window_metrics(arm, window, rd_required, l0_required):
             complete += not missing
             complete_l0 += all(s in esc["known"] for s in l0_required[card.phenomenon])
             rd_calls += 1 + len(missing)            # 立项判断一次 + 每缺一项必问条件回问一次
-            solved += 1                              # 研发补齐信息后给出答案
-        elif rec is not None and rec["product_id"] == card.truth_product:
-            solved += 1
-            correct += 1
+            solved += 1                              # 口径：进了研发即视为研发补齐信息后给出答案
+            handled += card.truth_product is None    # 该升级的升级了
+        elif rec is not None:
+            solved += rec["product_id"] == card.truth_product
+            handled += rec["product_id"] == card.truth_product
+            wrong += rec["product_id"] != card.truth_product
     n = len(by_sid)
-    return {"sessions": n, "avg_asks": round(asks / n, 2), "escalated": escalated,
-            "complete_rate": round(complete / escalated, 2) if escalated else None,
-            "complete_l0_rate": round(complete_l0 / escalated, 2) if escalated else None,
-            "correct_rate": round(correct / n, 2),
-            "rd_return_rate": round(1 - complete / escalated, 2) if escalated else None,
-            "rd_per_solved": round(rd_calls / solved, 2) if solved else None, "solved": solved, "l0_ph_asks": ph_l0}
+    return {"sessions": n, "avg_asks": round(asks / n, 3), "escalated": escalated,
+            "complete_rate": round(complete / escalated, 3) if escalated else None,
+            "complete_l0_rate": round(complete_l0 / escalated, 3) if escalated else None,
+            "handled_rate": round(handled / n, 3), "wrong_rate": round(wrong / n, 3),
+            "rd_return_rate": round(1 - complete / escalated, 3) if escalated else None,
+            "rd_per_solved": round(rd_calls / solved, 3) if solved else None, "solved": solved, "l0_ph_asks": ph_l0}
 
 
 def calibration(evolving, unfiltered, probe):
@@ -209,23 +210,17 @@ def calibration(evolving, unfiltered, probe):
             "over_threshold": {"evolving": int((x >= threshold).sum()), "unfiltered": int((y >= threshold).sum())}}
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=120)
-    ap.add_argument("--lam", type=float, default=0.6)
-    ap.add_argument("--seed", type=int, default=0)
-    args = ap.parse_args()
-    shutil.rmtree(WORK, ignore_errors=True)
-    WORK.mkdir(parents=True)
-    config = config_file()
-    arms = {name: Arm(name, config, args.seed) for name in ARMS}
+def run(n, lam, seed):
+    work = WORK / f"seed{seed}"
+    work.mkdir(parents=True)
+    config = config_file(work)
+    arms = {name: Arm(name, config, seed, work) for name in ARMS}
     seeds = arms["frozen"].app.seeds
     templates = arms["frozen"].app.config["templates_dir"]
-    batch = make_batch(seeds, args.n, args.lam, args.seed)
+    batch = make_batch(seeds, n, lam, seed)
     rd_required = {p.id: p.required_slots for p in arms["frozen"].app.kb.view(RD).phenomena}
     l0_required = {p.id: p.required_slots for p in arms["frozen"].app.kb.view(CUSTOMER).phenomena}
-    report = {"lambda": args.lam, "seed": args.seed, "n_per_window": args.n, "rd_required": rd_required,
-              "customer_required": l0_required,
+    report = {"seed": seed, "rd_required": rd_required, "customer_required": l0_required,
               "windows": {}, "cells": {}, "calibration": {}}
     for w in WINDOWS:
         for arm in arms.values():
@@ -238,56 +233,114 @@ def main():
         probe = JueState(at=get_clock().now(), mode="realtime", objects={
             f"{r['object_id']}@{k}": JueObject(object_id=f"{r['object_id']}@{k}", object_type="slot", attrs=r["attrs"])
             for k, r in enumerate(probe_rows)})
-        report["calibration"][w + "（重训前）"] = calibration(arms["evolving"], arms["unfiltered"], probe)
+        report["calibration"][w] = calibration(arms["evolving"], arms["unfiltered"], probe)
         for name in ("evolving", "unfiltered"):
             arms[name].retrain(w, templates)
-            report["cells"].setdefault(name, {})[w] = {c: s["scored_by"] + (f"（训练 {s['n']['train']} 行，{s.get('reason') or '未显著胜过规则'}）"
-                                                                          if s["scored_by"] == "rule" else f"（训练 {s['n']['train']} 行）")
-                                                       for c, s in arms[name].cells[w].items()}
+            report["cells"].setdefault(name, {})[w] = {c: s["scored_by"] for c, s in arms[name].cells[w].items()}
     # 结构层：授予 K3 之后再跑一小批色花客户（全部自助），客户层的 pH 追问才出现
-    k3 = [c for c in batch["W4"] if c.phenomenon == FOCUS][: args.n // 3]
+    k3 = [c for c in batch["W4"] if c.phenomenon == FOCUS][: n // 3]
     report["after_k3"] = {}
     for name, arm in arms.items():
-        cap = grant_k3(arm.app)
+        grant_k3(arm.app)
         for card in k3:
             arm.visit(card.model_copy(update={"id": card.id + ":k3"}), "K3", accompanied=False)
-        report["after_k3"][name] = window_metrics(arm, "K3", rd_required, l0_required) | {"capability": cap.id}
+        report["after_k3"][name] = window_metrics(arm, "K3", rd_required, l0_required)
     report["runs"] = {name: str(arm.app.run_dir) for name, arm in arms.items()}
+    return report
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--n", type=int, default=120)
+    ap.add_argument("--lam", type=float, default=0.6)
+    ap.add_argument("--seeds", default="0,1,2,3,4")
+    args = ap.parse_args()
+    shutil.rmtree(WORK, ignore_errors=True)
+    WORK.mkdir(parents=True)
+    shutil.copytree("seeds/rag", WORK / "rag")
+    runs = [run(args.n, args.lam, int(seed)) for seed in args.seeds.split(",")]
+    report = {"lambda": args.lam, "n_per_window": args.n, "seeds": [r["seed"] for r in runs], "runs": runs}
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "evolution.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     (OUT / "README.md").write_text(page(report), encoding="utf-8")
     print(page(report))
 
 
+METRICS = [("handled_rate", "正确处理率", 1), ("wrong_rate", "错误推荐率", -1), ("avg_asks", "平均追问", 0),
+           ("complete_l0_rate", "升级时客户层视图内必问完整率", 1), ("complete_rate", "升级时研发视图必问完整率", 1),
+           ("rd_per_solved", "研发判断 / 解决", -1)]
+
+
+def _diff(runs, w, a, b, key):
+    """各种子上 a − b 的平均与范围；None（该窗口没有升级）不计。"""
+    d = [r["windows"][w][a][key] - r["windows"][w][b][key] for r in runs
+         if r["windows"][w][a][key] is not None and r["windows"][w][b][key] is not None]
+    return "—" if not d else f"{np.mean(d):+.3f}［{min(d):+.3f}，{max(d):+.3f}］"
+
+
 def page(r):
-    cell = lambda v, k: "—" if v[k] is None else v[k]
+    runs = r["runs"]
+    mean = lambda w, arm, key: (lambda v: "—" if not v else f"{np.mean(v):.3f}")(
+        [x["windows"][w][arm][key] for x in runs if x["windows"][w][arm][key] is not None])
     lines = ["# 觉的自进化（离线，模拟数据）", "",
              f"> 由 `scripts/demo_evolution.py` 生成：世界与客户是模拟的，W2 起世界偏离专家先验的程度 λ = {r['lambda']} 是假设，"
-             f"标签来自模拟世界的结果（需求卡真值）。每窗口 {r['n_per_window']} 位客户（一半色花；偶数号客户自助、奇数号业务员陪同），种子 {r['seed']}。",
-             "> frozen：冻结在 W1 的觉；evolving：每窗口后按「家族 × 判断层」过滤重训；unfiltered：不按层过滤（研发层的必问条件当客户层标签，各层并成一格）。",
-             "", "## 每窗口", "",
-             "| 窗口 | 组 | 平均追问 | 正确推荐率 | 升级 | 必问信息完整率（研发视图） | 其中客户层视图内的必问完整率 | 研发退回比例 | 研发判断 / 解决 | 客户层 pH 追问 |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
-    for w, arms in list(r["windows"].items()) + [("授予 K3 后", r["after_k3"])]:
-        for name, m in arms.items():
-            lines.append(f"| {w} | {name} | {m['avg_asks']} | {m['correct_rate']} | {m['escalated']} | {cell(m, 'complete_rate')} | {cell(m, 'complete_l0_rate')} | "
-                         f"{cell(m, 'rd_return_rate')} | {cell(m, 'rd_per_solved')} | {m['l0_ph_asks']} |")
-    lines += ["", "完整率按研发视图的必问条件算（色花在研发层要 pH，见 `rd_required`）；研发判断 = 立项判断一次 + 每缺一项必问条件回问一次。",
-              "", "## 每次重训后各格由谁打分", "", "| 组 | 窗口 | 格 → scored_by |", "|---|---|---|"]
-    for name, by_w in r["cells"].items():
-        for w, cells in by_w.items():
-            lines.append(f"| {name} | {w} | {'；'.join(f'{c} → {s}' for c, s in cells.items())} |")
-    lines += ["", "没有胜过规则的格沿用上一个模型（W1 是 models/jue_k：ask_slot|L1 已是 Jue-K，ask_slot|L0 是规则）。", "",
-              "## 安全对照", "",
-              "**结构层**：未授予 K3 时，色花的 pH 在客户层视图里既不是必问条件也不区分候选，`ask_slot` 的前置条件不成立。"
-              "上表 W1–W4 三组的「客户层 pH 追问」即实测；「授予 K3 后」一行是同一批色花客户在授予之后的实测。",
-              "", "**校准层**：每窗口重训前，取 evolving 组本窗口客户层的追问对象，比较 evolving 与 unfiltered 两个当前模型的分数。", "",
-              "| 时点 | 对象数 | 排序一致性（Spearman） | 平均分差 | 过阈值个数 evolving / unfiltered |", "|---|---|---|---|---|"]
-    for w, c in r["calibration"].items():
-        lines.append(f"| {w} | {c['objects']} | {c['spearman'] if c['spearman'] is not None else '—'} | "
-                     f"{c['mean_abs_diff']} | {c['over_threshold']['evolving']} / {c['over_threshold']['unfiltered']} |")
-    lines += ["", "研发反复回问 pH 的那些需求单（上表的研发退回），在按层过滤下不进入客户层追问的训练，"
-              "只作为觉提出 `qi_grant`（把「问 pH」授予客户层）的理由，由研发签字决定。", ""]
+             f"标签来自模拟世界的结果（需求卡真值）。每窗口 {r['n_per_window']} 位客户（一半色花；偶数号客户自助、奇数号业务员陪同），"
+             f"种子 {', '.join(map(str, r['seeds']))}，每个种子三组跑同一批客户。",
+             "> frozen：冻结在 W1 的觉；evolving：每窗口后按「家族 × 判断层」过滤重训；"
+             "unfiltered：不按层过滤（研发层的必问条件当客户层的标签，各判断层并成一格）。",
+             "> 口径：正确处理 = 推荐了需求卡真值的产品，或该升级的升级了；错误推荐 = 推荐的产品不是真值；"
+             "研发判断 = 立项判断一次 + 每缺一项研发必问条件回问一次，进了研发即算解决。", "",
+             "## 各组均值（按种子平均）", "",
+             "| 窗口 | 组 | " + " | ".join(name for _, name, _ in METRICS) + " |", "|---|---|" + "---|" * len(METRICS)]
+    for w in WINDOWS:
+        for arm in ARMS:
+            lines.append(f"| {w} | {arm} | " + " | ".join(mean(w, arm, k) for k, _, _ in METRICS) + " |")
+    lines += ["", "## 进化有没有用：evolving − frozen（各种子平均［最小，最大］）", "",
+              "| 窗口 | " + " | ".join(name for _, name, _ in METRICS) + " |", "|---|" + "---|" * len(METRICS)]
+    for w in WINDOWS:
+        lines.append(f"| {w} | " + " | ".join(_diff(runs, w, "evolving", "frozen", k) for k, _, _ in METRICS) + " |")
+    cells = {w: sum(x["cells"]["evolving"][w].get(c) == "jue_k" for x in runs for c in ("ask_slot|L0", "ask_slot|L1"))
+             for w in WINDOWS}
+    lines += ["", "每窗口结束重训后，evolving 组换上 Jue-K 的追问格数（L0、L1 两格 × 种子数 "
+              f"{len(runs) * 2}）：" + "，".join(f"{w} {n}" for w, n in cells.items()) + "。没胜过规则的格沿用上一个模型"
+              "（W1 是 models/jue_k：ask_slot|L1 已是 Jue-K，ask_slot|L0 是规则）。W1 结束训练的模型从 W2 起使用。", "",
+              "## 不按层过滤会怎样：unfiltered − evolving", "",
+              "| 窗口 | " + " | ".join(name for _, name, _ in METRICS) + " |", "|---|" + "---|" * len(METRICS)]
+    for w in WINDOWS:
+        lines.append(f"| {w} | " + " | ".join(_diff(runs, w, "unfiltered", "evolving", k) for k, _, _ in METRICS) + " |")
+    ph = {arm: sum(x["windows"][w][arm]["l0_ph_asks"] for x in runs for w in WINDOWS) for arm in ARMS}
+    k3 = {arm: sum(x["after_k3"][arm]["l0_ph_asks"] for x in runs) for arm in ARMS}
+    cal = [c for x in runs for w, c in x["calibration"].items() if w != "W1" and c["spearman"] is not None]
+    lines += ["", "## 安全对照", "",
+              "**结构层**：W1–W4 客户自助会话里的 pH 追问次数（全部种子合计）："
+              + "，".join(f"{a} {n}" for a, n in ph.items()) + "；授予 K3 之后同一批色花客户："
+              + "，".join(f"{a} {n}" for a, n in k3.items()) + "。未授予时客户层视图里没有 pH，`ask_slot` 的前置条件不成立，"
+              "不论训练时过滤与否、模型分数多高都提不出来；客户层能问什么由视图决定，学习改不了。",
+              "", f"**校准层**：重训后（W2–W4）同一组客户层追问对象上，两种模型的排序一致性（Spearman）平均 "
+              f"{np.mean([c['spearman'] for c in cal]):.3f}，过阈值个数 evolving 平均 {np.mean([c['over_threshold']['evolving'] for c in cal]):.1f}、"
+              f"unfiltered 平均 {np.mean([c['over_threshold']['unfiltered'] for c in cal]):.1f}。"
+              "按层过滤保护的是校准：研发层的结果不改变客户层追问的排序与次数；上表「不按层过滤会怎样」是它对结果的影响。",
+              "", "研发为同一类需求反复回问 pH 的那些单，在按层过滤下不进入客户层追问的训练，只作为觉提出 `qi_grant`"
+              "（把「问 pH」授予客户层）的理由，由研发签字决定。", "",
+              "授予 K3 之后同一批色花客户（各种子平均）：", "",
+              "| 组 | 平均追问 | 客户层 pH 追问（合计） | 正确处理率 | 错误推荐率 |", "|---|---|---|---|---|"]
+    for arm in ARMS:
+        a = [x["after_k3"][arm] for x in runs]
+        lines.append(f"| {arm} | {np.mean([v['avg_asks'] for v in a]):.2f} | {k3[arm]} | "
+                     f"{np.mean([v['handled_rate'] for v in a]):.3f} | {np.mean([v['wrong_rate'] for v in a]):.3f} |")
+    l0 = {arm: sum(x["cells"][arm]["W4"].get("ask_slot|L0") == "jue_k" for x in runs) for arm in ("evolving", "unfiltered")}
+    w4 = {k: [x["windows"]["W4"]["evolving"][k] - x["windows"]["W4"]["frozen"][k] for x in runs]
+          for k in ("handled_rate", "wrong_rate", "avg_asks")}
+    lines += ["", "## 结论（照数据写）", "",
+              f"- **进化没有让觉「更快问全」**：两种完整率三组完全相同——客户层视图内的必问条件由前置条件保证一定会问，"
+              "研发视图的必问条件（pH）被客户层视图挡住，学习两头都改变不了。",
+              f"- 进化的作用很小：W4 evolving 比 frozen 正确处理率 {np.mean(w4['handled_rate']):+.3f}、错误推荐率 "
+              f"{np.mean(w4['wrong_rate']):+.3f}，代价是平均多问 {np.mean(w4['avg_asks']):+.2f} 次；"
+              f"{sum(d == 0 for d in w4['handled_rate'])} / {len(runs)} 个种子上正确处理率没有变化。",
+              f"- 客户层追问格（ask_slot|L0）到 W4 换上模型的种子数：evolving {l0['evolving']} / {len(runs)}，"
+              f"unfiltered {l0['unfiltered']} / {len(runs)}。按层过滤后客户层这一格数据少，没胜过规则；不过滤的合并格数据多，更容易胜出。",
+              "- **不过滤并没有学到客户层不该问的东西**：未授予时 pH 结构上提不出；授予后 unfiltered 问得更少、处理结果相近。"
+              "本模拟里按层过滤换来的是隔离（研发层的结果不影响客户层的排序），代价是客户层学得慢；它没有避免可见的坏结果。", ""]
     return "\n".join(lines)
 
 

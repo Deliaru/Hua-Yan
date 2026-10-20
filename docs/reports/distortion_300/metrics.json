@@ -20,7 +20,7 @@
     "max_backs": 2
   },
   "calls": {
-    "jue": 859,
+    "jue": 867,
     "llm": 0,
     "s1": 0
   },
@@ -38,7 +38,7 @@
     "G2 一次性翻译": {
       "completeness": 0.43431053203040176,
       "slot_error": 0.0,
-      "mistranslation": 0.0994263862332696,
+      "mistranslation": 0.07838983050847458,
       "asks": 0.0,
       "backs": 0.0,
       "backs_useful": null,
@@ -46,24 +46,24 @@
       "returned": 0.9833333333333333
     },
     "G3 化言（不含回问）": {
-      "completeness": 0.7133550488599348,
+      "completeness": 0.7220412595005429,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 0.8633333333333333,
+      "asks": 0.89,
       "backs": 0.0,
       "backs_useful": null,
       "traceable": 1.0,
-      "returned": 0.68
+      "returned": 0.7066666666666667
     },
     "G3 化言": {
-      "completeness": 0.7893593919652552,
+      "completeness": 0.7991313789359392,
       "slot_error": 0.0,
       "mistranslation": 0.0,
-      "asks": 0.8633333333333333,
-      "backs": 0.8166666666666667,
-      "backs_useful": 0.37142857142857144,
+      "asks": 0.89,
+      "backs": 0.7566666666666667,
+      "backs_useful": 0.3964757709251101,
       "traceable": 1.0,
-      "returned": 0.5166666666666667
+      "returned": 0.54
     }
   },
   "labels": {
@@ -93,7 +93,7 @@
         "G2 一次性翻译": {
           "completeness": 0.5075757575757576,
           "slot_error": 0.0,
-          "mistranslation": 0.10227272727272728,
+          "mistranslation": 0.06329113924050633,
           "asks": 0.0,
           "backs": 0.0,
           "backs_useful": null,
@@ -101,22 +101,22 @@
           "returned": 0.9512195121951219
         },
         "G3 化言（不含回问）": {
-          "completeness": 0.9015151515151515,
+          "completeness": 0.8939393939393939,
           "slot_error": 0.0,
           "mistranslation": 0.0,
-          "asks": 1.3170731707317074,
+          "asks": 1.2926829268292683,
           "backs": 0.0,
           "backs_useful": null,
           "traceable": 1.0,
-          "returned": 0.1951219512195122
+          "returned": 0.21951219512195122
         },
         "G3 化言": {
           "completeness": 0.9090909090909091,
           "slot_error": 0.0,
           "mistranslation": 0.0,
-          "asks": 1.3170731707317074,
-          "backs": 0.6585365853658537,
-          "backs_useful": 0.2962962962962963,
+          "asks": 1.2926829268292683,
+          "backs": 0.6829268292682927,
+          "backs_useful": 0.32142857142857145,
           "traceable": 1.0,
           "returned": 0.1951219512195122
         }
@@ -138,7 +138,7 @@
         "G2 一次性翻译": {
           "completeness": 0.4220532319391635,
           "slot_error": 0.0,
-          "mistranslation": 0.09885057471264368,
+          "mistranslation": 0.08142493638676845,
           "asks": 0.0,
           "backs": 0.0,
           "backs_useful": null,
@@ -146,24 +146,24 @@
           "returned": 0.9884169884169884
         },
         "G3 化言（不含回问）": {
-          "completeness": 0.6818757921419518,
+          "completeness": 0.6932826362484157,
           "slot_error": 0.0,
           "mistranslation": 0.0,
-          "asks": 0.7915057915057915,
+          "asks": 0.8262548262548263,
           "backs": 0.0,
           "backs_useful": null,
           "traceable": 1.0,
-          "returned": 0.7567567567567568
+          "returned": 0.7837837837837838
         },
         "G3 化言": {
-          "completeness": 0.7693282636248415,
+          "completeness": 0.7807351077313055,
           "slot_error": 0.0,
           "mistranslation": 0.0,
-          "asks": 0.7915057915057915,
-          "backs": 0.8416988416988417,
-          "backs_useful": 0.38073394495412843,
+          "asks": 0.8262548262548263,
+          "backs": 0.7683397683397684,
+          "backs_useful": 0.40703517587939697,
           "traceable": 1.0,
-          "returned": 0.5675675675675675
+          "returned": 0.5945945945945946
         }
       }
     }

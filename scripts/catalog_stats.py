@@ -31,7 +31,7 @@ def main():
                       for l in Path(args.injections).read_text(encoding="utf-8").splitlines()]
     log = EventLog()
     log.events = events
-    result = {"run": str(run), "injections": args.injections,
+    result = {"run": run.as_posix(), "injections": args.injections,
               "templates": template_stats(events, load_templates(args.templates), injections),
               "rows": row_stats(decision_rows(load_records(run), log)),
               "human_decisions": human_decisions(events)}

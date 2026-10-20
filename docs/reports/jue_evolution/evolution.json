@@ -1,364 +1,1883 @@
 {
   "lambda": 0.6,
-  "seed": 0,
   "n_per_window": 120,
-  "rd_required": {
-    "color_unlevel": [
-      "fiber",
-      "equipment",
-      "bath_ph"
-    ],
-    "shade_variation": [
-      "fiber",
-      "water"
-    ],
-    "color_spots": [
-      "dye_class",
-      "water"
-    ],
-    "poor_fastness": [
-      "fiber",
-      "dye_class"
-    ],
-    "harsh_hand": [
-      "fiber",
-      "process"
-    ],
-    "crease_marks": [
-      "fiber",
-      "equipment"
-    ],
-    "low_whiteness": [
-      "fiber",
-      "process"
-    ],
-    "strength_loss": [
-      "fiber",
-      "bath_ph"
-    ],
-    "yellowing": [
-      "fiber",
-      "constraint"
-    ],
-    "bleeding_staining": [
-      "fiber",
-      "dye_class",
-      "process"
-    ]
-  },
-  "customer_required": {
-    "color_unlevel": [
-      "fiber",
-      "equipment"
-    ],
-    "shade_variation": [
-      "fiber",
-      "water"
-    ],
-    "color_spots": [
-      "dye_class",
-      "water"
-    ],
-    "poor_fastness": [
-      "fiber",
-      "dye_class"
-    ],
-    "harsh_hand": [
-      "fiber",
-      "process"
-    ],
-    "crease_marks": [
-      "fiber",
-      "equipment"
-    ],
-    "low_whiteness": [
-      "fiber",
-      "process"
-    ],
-    "strength_loss": [
-      "fiber",
-      "bath_ph"
-    ],
-    "yellowing": [
-      "fiber",
-      "constraint"
-    ],
-    "bleeding_staining": [
-      "fiber",
-      "dye_class",
-      "process"
-    ]
-  },
-  "windows": {
-    "W1": {
-      "frozen": {
-        "sessions": 120,
-        "avg_asks": 1.79,
-        "escalated": 7,
-        "complete_rate": 0.14,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.82,
-        "rd_return_rate": 0.86,
-        "rd_per_solved": 0.12,
-        "solved": 105,
-        "l0_ph_asks": 0
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "runs": [
+    {
+      "seed": 0,
+      "rd_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment",
+          "bath_ph"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
       },
-      "evolving": {
-        "sessions": 120,
-        "avg_asks": 1.79,
-        "escalated": 7,
-        "complete_rate": 0.14,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.82,
-        "rd_return_rate": 0.86,
-        "rd_per_solved": 0.12,
-        "solved": 105,
-        "l0_ph_asks": 0
+      "customer_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
       },
-      "unfiltered": {
-        "sessions": 120,
-        "avg_asks": 1.79,
-        "escalated": 7,
-        "complete_rate": 0.14,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.82,
-        "rd_return_rate": 0.86,
-        "rd_per_solved": 0.12,
-        "solved": 105,
-        "l0_ph_asks": 0
+      "windows": {
+        "W1": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.792,
+            "escalated": 7,
+            "complete_rate": 0.143,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.875,
+            "wrong_rate": 0.0,
+            "rd_return_rate": 0.857,
+            "rd_per_solved": 0.124,
+            "solved": 105,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.792,
+            "escalated": 7,
+            "complete_rate": 0.143,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.875,
+            "wrong_rate": 0.0,
+            "rd_return_rate": 0.857,
+            "rd_per_solved": 0.124,
+            "solved": 105,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.792,
+            "escalated": 7,
+            "complete_rate": 0.143,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.875,
+            "wrong_rate": 0.0,
+            "rd_return_rate": 0.857,
+            "rd_per_solved": 0.124,
+            "solved": 105,
+            "l0_ph_asks": 0
+          }
+        },
+        "W2": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.817,
+            "escalated": 6,
+            "complete_rate": 0.167,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.783,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.833,
+            "rd_per_solved": 0.117,
+            "solved": 94,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.817,
+            "escalated": 6,
+            "complete_rate": 0.167,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.783,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.833,
+            "rd_per_solved": 0.117,
+            "solved": 94,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.817,
+            "escalated": 6,
+            "complete_rate": 0.167,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.783,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.833,
+            "rd_per_solved": 0.117,
+            "solved": 94,
+            "l0_ph_asks": 0
+          }
+        },
+        "W3": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.867,
+            "escalated": 12,
+            "complete_rate": 0.083,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.783,
+            "wrong_rate": 0.008,
+            "rd_return_rate": 0.917,
+            "rd_per_solved": 0.245,
+            "solved": 94,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.867,
+            "escalated": 12,
+            "complete_rate": 0.083,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.783,
+            "wrong_rate": 0.008,
+            "rd_return_rate": 0.917,
+            "rd_per_solved": 0.245,
+            "solved": 94,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.533,
+            "escalated": 10,
+            "complete_rate": 0.1,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.717,
+            "wrong_rate": 0.025,
+            "rd_return_rate": 0.9,
+            "rd_per_solved": 0.221,
+            "solved": 86,
+            "l0_ph_asks": 0
+          }
+        },
+        "W4": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.825,
+            "escalated": 4,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.767,
+            "wrong_rate": 0.075,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.087,
+            "solved": 92,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.992,
+            "escalated": 4,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.792,
+            "wrong_rate": 0.058,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.084,
+            "solved": 95,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.308,
+            "escalated": 4,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.775,
+            "wrong_rate": 0.092,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.086,
+            "solved": 93,
+            "l0_ph_asks": 0
+          }
+        }
+      },
+      "cells": {
+        "evolving": {
+          "W1": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W2": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W3": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          }
+        },
+        "unfiltered": {
+          "W1": {
+            "ask_slot|L0": "rule"
+          },
+          "W2": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W3": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "jue_k"
+          }
+        }
+      },
+      "calibration": {
+        "W1": {
+          "objects": 167,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 167,
+            "unfiltered": 167
+          }
+        },
+        "W2": {
+          "objects": 167,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 167,
+            "unfiltered": 167
+          }
+        },
+        "W3": {
+          "objects": 140,
+          "spearman": 0.929,
+          "mean_abs_diff": 0.2623,
+          "over_threshold": {
+            "evolving": 140,
+            "unfiltered": 88
+          }
+        },
+        "W4": {
+          "objects": 153,
+          "spearman": 0.933,
+          "mean_abs_diff": 0.2321,
+          "over_threshold": {
+            "evolving": 153,
+            "unfiltered": 95
+          }
+        }
+      },
+      "after_k3": {
+        "frozen": {
+          "sessions": 40,
+          "avg_asks": 2.875,
+          "escalated": 6,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.15,
+          "solved": 40,
+          "l0_ph_asks": 43
+        },
+        "evolving": {
+          "sessions": 40,
+          "avg_asks": 2.875,
+          "escalated": 6,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.15,
+          "solved": 40,
+          "l0_ph_asks": 43
+        },
+        "unfiltered": {
+          "sessions": 40,
+          "avg_asks": 1.675,
+          "escalated": 6,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.15,
+          "solved": 40,
+          "l0_ph_asks": 19
+        }
+      },
+      "runs": {
+        "frozen": "data\\jue_evolution\\seed0\\runs\\run-83b3dbbe661e",
+        "evolving": "data\\jue_evolution\\seed0\\runs\\run-a38e9136d373",
+        "unfiltered": "data\\jue_evolution\\seed0\\runs\\run-b55cc12fc7ec"
       }
     },
-    "W2": {
-      "frozen": {
-        "sessions": 120,
-        "avg_asks": 1.82,
-        "escalated": 6,
-        "complete_rate": 0.17,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.73,
-        "rd_return_rate": 0.83,
-        "rd_per_solved": 0.12,
-        "solved": 94,
-        "l0_ph_asks": 0
+    {
+      "seed": 1,
+      "rd_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment",
+          "bath_ph"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
       },
-      "evolving": {
-        "sessions": 120,
-        "avg_asks": 1.82,
-        "escalated": 6,
-        "complete_rate": 0.17,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.73,
-        "rd_return_rate": 0.83,
-        "rd_per_solved": 0.12,
-        "solved": 94,
-        "l0_ph_asks": 0
+      "customer_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
       },
-      "unfiltered": {
-        "sessions": 120,
-        "avg_asks": 1.82,
-        "escalated": 6,
-        "complete_rate": 0.17,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.73,
-        "rd_return_rate": 0.83,
-        "rd_per_solved": 0.12,
-        "solved": 94,
-        "l0_ph_asks": 0
+      "windows": {
+        "W1": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.65,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.104,
+            "solved": 96,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.65,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.104,
+            "solved": 96,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.65,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.104,
+            "solved": 96,
+            "l0_ph_asks": 0
+          }
+        },
+        "W2": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.733,
+            "escalated": 2,
+            "complete_rate": 0.5,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.783,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.5,
+            "rd_per_solved": 0.032,
+            "solved": 94,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.733,
+            "escalated": 2,
+            "complete_rate": 0.5,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.783,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.5,
+            "rd_per_solved": 0.032,
+            "solved": 94,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.733,
+            "escalated": 2,
+            "complete_rate": 0.5,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.783,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.5,
+            "rd_per_solved": 0.032,
+            "solved": 94,
+            "l0_ph_asks": 0
+          }
+        },
+        "W3": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.575,
+            "escalated": 3,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.775,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.054,
+            "solved": 93,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.575,
+            "escalated": 3,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.775,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.054,
+            "solved": 93,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 2.433,
+            "escalated": 3,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.833,
+            "wrong_rate": 0.008,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.05,
+            "solved": 100,
+            "l0_ph_asks": 0
+          }
+        },
+        "W4": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.942,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.817,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.102,
+            "solved": 98,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 2.842,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.833,
+            "wrong_rate": 0.0,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.1,
+            "solved": 100,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 2.458,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.833,
+            "wrong_rate": 0.0,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.1,
+            "solved": 100,
+            "l0_ph_asks": 0
+          }
+        }
+      },
+      "cells": {
+        "evolving": {
+          "W1": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W2": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W3": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          }
+        },
+        "unfiltered": {
+          "W1": {
+            "ask_slot|L0": "rule"
+          },
+          "W2": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W3": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "jue_k"
+          }
+        }
+      },
+      "calibration": {
+        "W1": {
+          "objects": 159,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 159,
+            "unfiltered": 159
+          }
+        },
+        "W2": {
+          "objects": 162,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 162,
+            "unfiltered": 162
+          }
+        },
+        "W3": {
+          "objects": 133,
+          "spearman": 0.886,
+          "mean_abs_diff": 0.2668,
+          "over_threshold": {
+            "evolving": 133,
+            "unfiltered": 114
+          }
+        },
+        "W4": {
+          "objects": 160,
+          "spearman": 0.905,
+          "mean_abs_diff": 0.3001,
+          "over_threshold": {
+            "evolving": 160,
+            "unfiltered": 133
+          }
+        }
+      },
+      "after_k3": {
+        "frozen": {
+          "sessions": 40,
+          "avg_asks": 3.125,
+          "escalated": 3,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.075,
+          "solved": 40,
+          "l0_ph_asks": 43
+        },
+        "evolving": {
+          "sessions": 40,
+          "avg_asks": 3.125,
+          "escalated": 3,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.075,
+          "solved": 40,
+          "l0_ph_asks": 43
+        },
+        "unfiltered": {
+          "sessions": 40,
+          "avg_asks": 2.25,
+          "escalated": 2,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 0.975,
+          "wrong_rate": 0.025,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.051,
+          "solved": 39,
+          "l0_ph_asks": 43
+        }
+      },
+      "runs": {
+        "frozen": "data\\jue_evolution\\seed1\\runs\\run-c2d1b244bd5a",
+        "evolving": "data\\jue_evolution\\seed1\\runs\\run-226c04594ade",
+        "unfiltered": "data\\jue_evolution\\seed1\\runs\\run-3acd190cfe42"
       }
     },
-    "W3": {
-      "frozen": {
-        "sessions": 120,
-        "avg_asks": 1.87,
-        "escalated": 12,
-        "complete_rate": 0.08,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.68,
-        "rd_return_rate": 0.92,
-        "rd_per_solved": 0.24,
-        "solved": 94,
-        "l0_ph_asks": 0
+    {
+      "seed": 2,
+      "rd_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment",
+          "bath_ph"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
       },
-      "evolving": {
-        "sessions": 120,
-        "avg_asks": 1.87,
-        "escalated": 12,
-        "complete_rate": 0.08,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.68,
-        "rd_return_rate": 0.92,
-        "rd_per_solved": 0.24,
-        "solved": 94,
-        "l0_ph_asks": 0
+      "customer_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
       },
-      "unfiltered": {
-        "sessions": 120,
-        "avg_asks": 1.53,
-        "escalated": 10,
-        "complete_rate": 0.1,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.63,
-        "rd_return_rate": 0.9,
-        "rd_per_solved": 0.22,
-        "solved": 86,
-        "l0_ph_asks": 0
+      "windows": {
+        "W1": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.608,
+            "escalated": 6,
+            "complete_rate": 0.167,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.808,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.833,
+            "rd_per_solved": 0.113,
+            "solved": 97,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.608,
+            "escalated": 6,
+            "complete_rate": 0.167,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.808,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.833,
+            "rd_per_solved": 0.113,
+            "solved": 97,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.608,
+            "escalated": 6,
+            "complete_rate": 0.167,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.808,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.833,
+            "rd_per_solved": 0.113,
+            "solved": 97,
+            "l0_ph_asks": 0
+          }
+        },
+        "W2": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.742,
+            "escalated": 23,
+            "complete_rate": 0.174,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.758,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.826,
+            "rd_per_solved": 0.462,
+            "solved": 91,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.742,
+            "escalated": 23,
+            "complete_rate": 0.174,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.758,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.826,
+            "rd_per_solved": 0.462,
+            "solved": 91,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.742,
+            "escalated": 23,
+            "complete_rate": 0.174,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.758,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.826,
+            "rd_per_solved": 0.462,
+            "solved": 91,
+            "l0_ph_asks": 0
+          }
+        },
+        "W3": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.833,
+            "escalated": 17,
+            "complete_rate": 0.059,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.692,
+            "wrong_rate": 0.058,
+            "rd_return_rate": 0.941,
+            "rd_per_solved": 0.398,
+            "solved": 83,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.833,
+            "escalated": 17,
+            "complete_rate": 0.059,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.692,
+            "wrong_rate": 0.058,
+            "rd_return_rate": 0.941,
+            "rd_per_solved": 0.398,
+            "solved": 83,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.833,
+            "escalated": 17,
+            "complete_rate": 0.059,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.692,
+            "wrong_rate": 0.058,
+            "rd_return_rate": 0.941,
+            "rd_per_solved": 0.398,
+            "solved": 83,
+            "l0_ph_asks": 0
+          }
+        },
+        "W4": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.792,
+            "escalated": 20,
+            "complete_rate": 0.1,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.058,
+            "rd_return_rate": 0.9,
+            "rd_per_solved": 0.396,
+            "solved": 96,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.792,
+            "escalated": 20,
+            "complete_rate": 0.1,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.058,
+            "rd_return_rate": 0.9,
+            "rd_per_solved": 0.396,
+            "solved": 96,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 2.042,
+            "escalated": 20,
+            "complete_rate": 0.1,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.008,
+            "rd_return_rate": 0.9,
+            "rd_per_solved": 0.396,
+            "solved": 96,
+            "l0_ph_asks": 0
+          }
+        }
+      },
+      "cells": {
+        "evolving": {
+          "W1": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W2": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W3": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W4": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          }
+        },
+        "unfiltered": {
+          "W1": {
+            "ask_slot|L0": "rule"
+          },
+          "W2": {
+            "ask_slot|L0": "rule"
+          },
+          "W3": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "jue_k"
+          }
+        }
+      },
+      "calibration": {
+        "W1": {
+          "objects": 158,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 158,
+            "unfiltered": 158
+          }
+        },
+        "W2": {
+          "objects": 151,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 151,
+            "unfiltered": 151
+          }
+        },
+        "W3": {
+          "objects": 153,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 153,
+            "unfiltered": 153
+          }
+        },
+        "W4": {
+          "objects": 153,
+          "spearman": 0.816,
+          "mean_abs_diff": 0.2053,
+          "over_threshold": {
+            "evolving": 153,
+            "unfiltered": 125
+          }
+        }
+      },
+      "after_k3": {
+        "frozen": {
+          "sessions": 40,
+          "avg_asks": 2.5,
+          "escalated": 13,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.325,
+          "solved": 40,
+          "l0_ph_asks": 32
+        },
+        "evolving": {
+          "sessions": 40,
+          "avg_asks": 2.5,
+          "escalated": 13,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.325,
+          "solved": 40,
+          "l0_ph_asks": 32
+        },
+        "unfiltered": {
+          "sessions": 40,
+          "avg_asks": 1.675,
+          "escalated": 13,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.325,
+          "solved": 40,
+          "l0_ph_asks": 12
+        }
+      },
+      "runs": {
+        "frozen": "data\\jue_evolution\\seed2\\runs\\run-83dddab720c2",
+        "evolving": "data\\jue_evolution\\seed2\\runs\\run-a22d9acea8e2",
+        "unfiltered": "data\\jue_evolution\\seed2\\runs\\run-2854bea368aa"
       }
     },
-    "W4": {
-      "frozen": {
-        "sessions": 120,
-        "avg_asks": 1.82,
-        "escalated": 4,
-        "complete_rate": 0.0,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.73,
-        "rd_return_rate": 1.0,
-        "rd_per_solved": 0.09,
-        "solved": 92,
-        "l0_ph_asks": 0
+    {
+      "seed": 3,
+      "rd_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment",
+          "bath_ph"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
       },
-      "evolving": {
-        "sessions": 120,
-        "avg_asks": 1.99,
-        "escalated": 4,
-        "complete_rate": 0.0,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.76,
-        "rd_return_rate": 1.0,
-        "rd_per_solved": 0.08,
-        "solved": 95,
-        "l0_ph_asks": 0
+      "customer_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
       },
-      "unfiltered": {
-        "sessions": 120,
-        "avg_asks": 1.31,
-        "escalated": 4,
-        "complete_rate": 0.0,
-        "complete_l0_rate": 1.0,
-        "correct_rate": 0.74,
-        "rd_return_rate": 1.0,
-        "rd_per_solved": 0.09,
-        "solved": 93,
-        "l0_ph_asks": 0
+      "windows": {
+        "W1": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.958,
+            "escalated": 9,
+            "complete_rate": 0.222,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.825,
+            "wrong_rate": 0.025,
+            "rd_return_rate": 0.778,
+            "rd_per_solved": 0.162,
+            "solved": 99,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.958,
+            "escalated": 9,
+            "complete_rate": 0.222,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.825,
+            "wrong_rate": 0.025,
+            "rd_return_rate": 0.778,
+            "rd_per_solved": 0.162,
+            "solved": 99,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.958,
+            "escalated": 9,
+            "complete_rate": 0.222,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.825,
+            "wrong_rate": 0.025,
+            "rd_return_rate": 0.778,
+            "rd_per_solved": 0.162,
+            "solved": 99,
+            "l0_ph_asks": 0
+          }
+        },
+        "W2": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.808,
+            "escalated": 2,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.033,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.042,
+            "solved": 96,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.808,
+            "escalated": 2,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.033,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.042,
+            "solved": 96,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.808,
+            "escalated": 2,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.033,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.042,
+            "solved": 96,
+            "l0_ph_asks": 0
+          }
+        },
+        "W3": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.65,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.742,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.112,
+            "solved": 89,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.65,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.742,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.112,
+            "solved": 89,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.608,
+            "escalated": 5,
+            "complete_rate": 0.0,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.733,
+            "wrong_rate": 0.025,
+            "rd_return_rate": 1.0,
+            "rd_per_solved": 0.114,
+            "solved": 88,
+            "l0_ph_asks": 0
+          }
+        },
+        "W4": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.758,
+            "escalated": 3,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.8,
+            "wrong_rate": 0.017,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.052,
+            "solved": 96,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 2.158,
+            "escalated": 3,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.817,
+            "wrong_rate": 0.025,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.051,
+            "solved": 98,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.617,
+            "escalated": 3,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.792,
+            "wrong_rate": 0.025,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.053,
+            "solved": 95,
+            "l0_ph_asks": 0
+          }
+        }
+      },
+      "cells": {
+        "evolving": {
+          "W1": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W2": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "rule"
+          },
+          "W3": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          }
+        },
+        "unfiltered": {
+          "W1": {
+            "ask_slot|L0": "rule"
+          },
+          "W2": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W3": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "jue_k"
+          }
+        }
+      },
+      "calibration": {
+        "W1": {
+          "objects": 170,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 170,
+            "unfiltered": 170
+          }
+        },
+        "W2": {
+          "objects": 141,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 141,
+            "unfiltered": 141
+          }
+        },
+        "W3": {
+          "objects": 145,
+          "spearman": 0.94,
+          "mean_abs_diff": 0.286,
+          "over_threshold": {
+            "evolving": 145,
+            "unfiltered": 67
+          }
+        },
+        "W4": {
+          "objects": 164,
+          "spearman": 0.968,
+          "mean_abs_diff": 0.2989,
+          "over_threshold": {
+            "evolving": 164,
+            "unfiltered": 112
+          }
+        }
+      },
+      "after_k3": {
+        "frozen": {
+          "sessions": 40,
+          "avg_asks": 2.65,
+          "escalated": 2,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.05,
+          "solved": 40,
+          "l0_ph_asks": 33
+        },
+        "evolving": {
+          "sessions": 40,
+          "avg_asks": 2.65,
+          "escalated": 2,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.05,
+          "solved": 40,
+          "l0_ph_asks": 33
+        },
+        "unfiltered": {
+          "sessions": 40,
+          "avg_asks": 1.025,
+          "escalated": 2,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.05,
+          "solved": 40,
+          "l0_ph_asks": 1
+        }
+      },
+      "runs": {
+        "frozen": "data\\jue_evolution\\seed3\\runs\\run-bb03ad2fdab3",
+        "evolving": "data\\jue_evolution\\seed3\\runs\\run-cf37ae71e3e7",
+        "unfiltered": "data\\jue_evolution\\seed3\\runs\\run-1d87654dcf62"
+      }
+    },
+    {
+      "seed": 4,
+      "rd_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment",
+          "bath_ph"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
+      },
+      "customer_required": {
+        "color_unlevel": [
+          "fiber",
+          "equipment"
+        ],
+        "shade_variation": [
+          "fiber",
+          "water"
+        ],
+        "color_spots": [
+          "dye_class",
+          "water"
+        ],
+        "poor_fastness": [
+          "fiber",
+          "dye_class"
+        ],
+        "harsh_hand": [
+          "fiber",
+          "process"
+        ],
+        "crease_marks": [
+          "fiber",
+          "equipment"
+        ],
+        "low_whiteness": [
+          "fiber",
+          "process"
+        ],
+        "strength_loss": [
+          "fiber",
+          "bath_ph"
+        ],
+        "yellowing": [
+          "fiber",
+          "constraint"
+        ],
+        "bleeding_staining": [
+          "fiber",
+          "dye_class",
+          "process"
+        ]
+      },
+      "windows": {
+        "W1": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.675,
+            "escalated": 6,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.833,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.1,
+            "solved": 100,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 1.675,
+            "escalated": 6,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.833,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.1,
+            "solved": 100,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.675,
+            "escalated": 6,
+            "complete_rate": 0.333,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.833,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.667,
+            "rd_per_solved": 0.1,
+            "solved": 100,
+            "l0_ph_asks": 0
+          }
+        },
+        "W2": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.708,
+            "escalated": 9,
+            "complete_rate": 0.556,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.767,
+            "wrong_rate": 0.05,
+            "rd_return_rate": 0.444,
+            "rd_per_solved": 0.141,
+            "solved": 92,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 0.867,
+            "escalated": 9,
+            "complete_rate": 0.556,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.625,
+            "wrong_rate": 0.075,
+            "rd_return_rate": 0.444,
+            "rd_per_solved": 0.173,
+            "solved": 75,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 2.0,
+            "escalated": 6,
+            "complete_rate": 0.5,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.758,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.5,
+            "rd_per_solved": 0.099,
+            "solved": 91,
+            "l0_ph_asks": 0
+          }
+        },
+        "W3": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 1.592,
+            "escalated": 15,
+            "complete_rate": 0.2,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.758,
+            "wrong_rate": 0.017,
+            "rd_return_rate": 0.8,
+            "rd_per_solved": 0.297,
+            "solved": 91,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 2.6,
+            "escalated": 15,
+            "complete_rate": 0.2,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.817,
+            "wrong_rate": 0.0,
+            "rd_return_rate": 0.8,
+            "rd_per_solved": 0.276,
+            "solved": 98,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.942,
+            "escalated": 15,
+            "complete_rate": 0.2,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.817,
+            "wrong_rate": 0.0,
+            "rd_return_rate": 0.8,
+            "rd_per_solved": 0.276,
+            "solved": 98,
+            "l0_ph_asks": 0
+          }
+        },
+        "W4": {
+          "frozen": {
+            "sessions": 120,
+            "avg_asks": 2.083,
+            "escalated": 16,
+            "complete_rate": 0.188,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.717,
+            "wrong_rate": 0.042,
+            "rd_return_rate": 0.812,
+            "rd_per_solved": 0.337,
+            "solved": 86,
+            "l0_ph_asks": 0
+          },
+          "evolving": {
+            "sessions": 120,
+            "avg_asks": 2.458,
+            "escalated": 16,
+            "complete_rate": 0.188,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.742,
+            "wrong_rate": 0.0,
+            "rd_return_rate": 0.812,
+            "rd_per_solved": 0.326,
+            "solved": 89,
+            "l0_ph_asks": 0
+          },
+          "unfiltered": {
+            "sessions": 120,
+            "avg_asks": 1.975,
+            "escalated": 16,
+            "complete_rate": 0.188,
+            "complete_l0_rate": 1.0,
+            "handled_rate": 0.742,
+            "wrong_rate": 0.058,
+            "rd_return_rate": 0.812,
+            "rd_per_solved": 0.326,
+            "solved": 89,
+            "l0_ph_asks": 0
+          }
+        }
+      },
+      "cells": {
+        "evolving": {
+          "W1": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          },
+          "W2": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          },
+          "W3": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "rule",
+            "ask_slot|L1": "jue_k"
+          }
+        },
+        "unfiltered": {
+          "W1": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W2": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W3": {
+            "ask_slot|L0": "jue_k"
+          },
+          "W4": {
+            "ask_slot|L0": "jue_k"
+          }
+        }
+      },
+      "calibration": {
+        "W1": {
+          "objects": 144,
+          "spearman": 1.0,
+          "mean_abs_diff": 0.0,
+          "over_threshold": {
+            "evolving": 144,
+            "unfiltered": 144
+          }
+        },
+        "W2": {
+          "objects": 149,
+          "spearman": 0.842,
+          "mean_abs_diff": 0.3979,
+          "over_threshold": {
+            "evolving": 149,
+            "unfiltered": 107
+          }
+        },
+        "W3": {
+          "objects": 134,
+          "spearman": 0.933,
+          "mean_abs_diff": 0.1489,
+          "over_threshold": {
+            "evolving": 134,
+            "unfiltered": 103
+          }
+        },
+        "W4": {
+          "objects": 154,
+          "spearman": 0.91,
+          "mean_abs_diff": 0.1454,
+          "over_threshold": {
+            "evolving": 154,
+            "unfiltered": 115
+          }
+        }
+      },
+      "after_k3": {
+        "frozen": {
+          "sessions": 40,
+          "avg_asks": 2.925,
+          "escalated": 10,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 0.975,
+          "wrong_rate": 0.025,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.256,
+          "solved": 39,
+          "l0_ph_asks": 44
+        },
+        "evolving": {
+          "sessions": 40,
+          "avg_asks": 2.925,
+          "escalated": 10,
+          "complete_rate": 1.0,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 0.975,
+          "wrong_rate": 0.025,
+          "rd_return_rate": 0.0,
+          "rd_per_solved": 0.256,
+          "solved": 39,
+          "l0_ph_asks": 44
+        },
+        "unfiltered": {
+          "sessions": 40,
+          "avg_asks": 1.85,
+          "escalated": 11,
+          "complete_rate": 0.909,
+          "complete_l0_rate": 1.0,
+          "handled_rate": 1.0,
+          "wrong_rate": 0.0,
+          "rd_return_rate": 0.091,
+          "rd_per_solved": 0.3,
+          "solved": 40,
+          "l0_ph_asks": 28
+        }
+      },
+      "runs": {
+        "frozen": "data\\jue_evolution\\seed4\\runs\\run-4980af5920b7",
+        "evolving": "data\\jue_evolution\\seed4\\runs\\run-5ba8996b775e",
+        "unfiltered": "data\\jue_evolution\\seed4\\runs\\run-c55190a311b4"
       }
     }
-  },
-  "cells": {
-    "evolving": {
-      "W1": {
-        "ask_slot|L0": "rule（训练 119 行，未显著胜过规则）",
-        "ask_slot|L1": "rule（训练 184 行，未显著胜过规则）"
-      },
-      "W2": {
-        "ask_slot|L0": "rule（训练 226 行，未显著胜过规则）",
-        "ask_slot|L1": "rule（训练 369 行，未显著胜过规则）"
-      },
-      "W3": {
-        "ask_slot|L0": "rule（训练 331 行，未显著胜过规则）",
-        "ask_slot|L1": "jue_k（训练 578 行）"
-      },
-      "W4": {
-        "ask_slot|L0": "rule（训练 435 行，未显著胜过规则）",
-        "ask_slot|L1": "jue_k（训练 774 行）"
-      }
-    },
-    "unfiltered": {
-      "W1": {
-        "ask_slot|L0": "rule（训练 303 行，未显著胜过规则）"
-      },
-      "W2": {
-        "ask_slot|L0": "jue_k（训练 595 行）"
-      },
-      "W3": {
-        "ask_slot|L0": "jue_k（训练 899 行）"
-      },
-      "W4": {
-        "ask_slot|L0": "jue_k（训练 1157 行）"
-      }
-    }
-  },
-  "calibration": {
-    "W1（重训前）": {
-      "objects": 167,
-      "spearman": 1.0,
-      "mean_abs_diff": 0.0,
-      "over_threshold": {
-        "evolving": 167,
-        "unfiltered": 167
-      }
-    },
-    "W2（重训前）": {
-      "objects": 167,
-      "spearman": 1.0,
-      "mean_abs_diff": 0.0,
-      "over_threshold": {
-        "evolving": 167,
-        "unfiltered": 167
-      }
-    },
-    "W3（重训前）": {
-      "objects": 140,
-      "spearman": 0.929,
-      "mean_abs_diff": 0.2623,
-      "over_threshold": {
-        "evolving": 140,
-        "unfiltered": 88
-      }
-    },
-    "W4（重训前）": {
-      "objects": 153,
-      "spearman": 0.933,
-      "mean_abs_diff": 0.2321,
-      "over_threshold": {
-        "evolving": 153,
-        "unfiltered": 95
-      }
-    }
-  },
-  "after_k3": {
-    "frozen": {
-      "sessions": 40,
-      "avg_asks": 2.88,
-      "escalated": 6,
-      "complete_rate": 1.0,
-      "complete_l0_rate": 1.0,
-      "correct_rate": 0.85,
-      "rd_return_rate": 0.0,
-      "rd_per_solved": 0.15,
-      "solved": 40,
-      "l0_ph_asks": 43,
-      "capability": "cap:3"
-    },
-    "evolving": {
-      "sessions": 40,
-      "avg_asks": 2.88,
-      "escalated": 6,
-      "complete_rate": 1.0,
-      "complete_l0_rate": 1.0,
-      "correct_rate": 0.85,
-      "rd_return_rate": 0.0,
-      "rd_per_solved": 0.15,
-      "solved": 40,
-      "l0_ph_asks": 43,
-      "capability": "cap:3"
-    },
-    "unfiltered": {
-      "sessions": 40,
-      "avg_asks": 1.68,
-      "escalated": 6,
-      "complete_rate": 1.0,
-      "complete_l0_rate": 1.0,
-      "correct_rate": 0.85,
-      "rd_return_rate": 0.0,
-      "rd_per_solved": 0.15,
-      "solved": 40,
-      "l0_ph_asks": 19,
-      "capability": "cap:3"
-    }
-  },
-  "runs": {
-    "frozen": "data\\jue_evolution\\runs\\run-d091c9efc188",
-    "evolving": "data\\jue_evolution\\runs\\run-8daee78242c8",
-    "unfiltered": "data\\jue_evolution\\runs\\run-7bca0b8a3820"
-  }
+  ]
 }

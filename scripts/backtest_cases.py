@@ -7,7 +7,7 @@
 问答样例（可选，YAML）：questions: [同一个业务问题, ...]
 
   uv run python scripts/backtest_cases.py --cases data/backtest/cases.yaml [--qa data/backtest/qa.yaml]
-      [--evolved data/jue_evolution/models/evolving/W4] [--live]
+      [--evolved data/jue_evolution/seed0/models/evolving/W4] [--live]
 --live：一次性翻译组走真实强模型（config/models.yaml）；默认离线，该组为桩，报告标注。
 """
 import argparse
@@ -42,7 +42,7 @@ def main():
     ap.add_argument("--cases", default=str(WORK / "cases.yaml"))
     ap.add_argument("--qa")
     ap.add_argument("--frozen", default="models/jue_k")
-    ap.add_argument("--evolved", default="data/jue_evolution/models/evolving/W4")
+    ap.add_argument("--evolved", default="data/jue_evolution/seed0/models/evolving/W4")
     ap.add_argument("--live", action="store_true")
     args = ap.parse_args()
     set_clock(SimClock(T0))

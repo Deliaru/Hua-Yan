@@ -8,5 +8,5 @@ precondition: "attrs.n_escalations >= 3"
 worth_prompt: "{object} 升级 {attrs.n_escalations} 次，是否立项？"
 title: "{object} 升级 {attrs.n_escalations} 次，是否立项？"
 owner_role: pm
-signer_role: rd
+signer_role: pm   # 与 config/templates/opportunity.yaml 一致（v6）：基线只在发现规则上不同
 bounty_points: 10

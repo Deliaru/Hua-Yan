@@ -39,7 +39,7 @@ def main():
     theme = next(i.object_id for i in injections if i.family == "opportunity" and not i.hard_negative)
     runs = {(d, p): run_week(args.week, p, d, args.run_root) for d in DISCOVERERS for p in POLICIES}
     result = {"week": args.week, "placeholder_seeds": seeds.placeholder, "opportunity_theme": theme,
-              "runs": {f"{d}/{p}": str(run) for (d, p), run in runs.items()},
+              "runs": {f"{d}/{p}": run.as_posix() for (d, p), run in runs.items()},
               "detection": {d: summary(runs[(d, "ignore")], injections) for d in DISCOVERERS},
               "consequences": {f"{d}/{p}": consequences(runs[(d, p)], theme, seeds) for d in DISCOVERERS for p in POLICIES},
               "handling": {d: [r for r in map(json.loads, (runs[(d, "handle")] / "week_log.jsonl")

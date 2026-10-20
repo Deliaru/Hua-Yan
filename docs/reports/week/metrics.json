@@ -311,7 +311,7 @@
         "2026-10-13": 1,
         "2026-10-15": 1
       },
-      "all_escalations": 15
+      "all_escalations": 17
     },
     "jue_proto/handle": {
       "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
@@ -322,7 +322,7 @@
         "2026-10-12": 3,
         "2026-10-13": 1
       },
-      "all_escalations": 14
+      "all_escalations": 16
     },
     "jue_k/ignore": {
       "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
@@ -334,7 +334,7 @@
         "2026-10-13": 1,
         "2026-10-15": 1
       },
-      "all_escalations": 15
+      "all_escalations": 17
     },
     "jue_k/handle": {
       "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
@@ -345,7 +345,7 @@
         "2026-10-12": 3,
         "2026-10-13": 1
       },
-      "all_escalations": 14
+      "all_escalations": 16
     },
     "rule_alert/ignore": {
       "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
@@ -357,7 +357,7 @@
         "2026-10-13": 1,
         "2026-10-15": 1
       },
-      "all_escalations": 15
+      "all_escalations": 17
     },
     "rule_alert/handle": {
       "theme": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
@@ -368,7 +368,7 @@
         "2026-10-12": 3,
         "2026-10-13": 1
       },
-      "all_escalations": 16
+      "all_escalations": 18
     }
   },
   "handling": {
@@ -378,7 +378,7 @@
         "family": "opportunity",
         "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
         "action": "merge",
-        "by": "rd:R02",
+        "by": "pm:P01",
         "question_id": "q:13",
         "note": "req:2 ← ['req:4']"
       },
@@ -451,7 +451,7 @@
         "object_id": "actor:sales:S01",
         "action": "dismiss",
         "by": "supervisor:M01",
-        "question_id": "q:35",
+        "question_id": "q:38",
         "note": ""
       },
       {
@@ -460,7 +460,7 @@
         "object_id": "actor:sales:S02",
         "action": "sign",
         "by": "supervisor:M01",
-        "question_id": "q:36",
+        "question_id": "q:42",
         "note": ""
       },
       {
@@ -469,7 +469,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:37",
+        "question_id": "q:43",
         "note": ""
       }
     ],
@@ -479,7 +479,7 @@
         "family": "opportunity",
         "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
         "action": "merge",
-        "by": "rd:R02",
+        "by": "pm:P01",
         "question_id": "q:13",
         "note": "req:2 ← ['req:4']"
       },
@@ -543,7 +543,7 @@
         "object_id": "actor:sales:S02",
         "action": "sign",
         "by": "supervisor:M01",
-        "question_id": "q:34",
+        "question_id": "q:40",
         "note": ""
       },
       {
@@ -552,7 +552,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:35",
+        "question_id": "q:41",
         "note": ""
       }
     ],
@@ -562,7 +562,7 @@
         "family": "opportunity",
         "object_id": "theme:color_unlevel|equipment=气流染色机,fiber=锦纶氨纶",
         "action": "merge",
-        "by": "rd:R02",
+        "by": "pm:P01",
         "question_id": "q:16",
         "note": "req:2 ← ['req:4', 'req:5']"
       },
@@ -608,7 +608,7 @@
         "object_id": "requirement:req:2",
         "action": "sign",
         "by": "sales:S02",
-        "question_id": "q:29",
+        "question_id": "q:32",
         "note": ""
       },
       {
@@ -617,7 +617,7 @@
         "object_id": "requirement:req:2",
         "action": "sign",
         "by": "rd:R02",
-        "question_id": "q:30",
+        "question_id": "q:33",
         "note": ""
       },
       {
@@ -626,7 +626,7 @@
         "object_id": "requirement:req:2",
         "action": "sign",
         "by": "rd:R02",
-        "question_id": "q:31",
+        "question_id": "q:34",
         "note": ""
       },
       {
@@ -635,7 +635,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:35",
+        "question_id": "q:38",
         "note": ""
       },
       {
@@ -644,7 +644,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:36",
+        "question_id": "q:39",
         "note": ""
       },
       {
@@ -653,7 +653,7 @@
         "object_id": "actor:sales:S01",
         "action": "dismiss",
         "by": "supervisor:M01",
-        "question_id": "q:37",
+        "question_id": "q:40",
         "note": ""
       },
       {
@@ -662,7 +662,16 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:38",
+        "question_id": "q:41",
+        "note": ""
+      },
+      {
+        "at": "2026-10-14T09:55:00+08:00",
+        "family": "knowledge_conflict",
+        "object_id": "knowledge:HY-LV101|fiber=涤棉",
+        "action": "sign",
+        "by": "rd:R01",
+        "question_id": "q:45",
         "note": ""
       },
       {
@@ -671,7 +680,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:43",
+        "question_id": "q:50",
         "note": ""
       },
       {
@@ -680,7 +689,7 @@
         "object_id": "actor:sales:S02",
         "action": "sign",
         "by": "supervisor:M01",
-        "question_id": "q:44",
+        "question_id": "q:51",
         "note": ""
       },
       {
@@ -689,7 +698,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:46",
+        "question_id": "q:53",
         "note": ""
       },
       {
@@ -698,7 +707,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:47",
+        "question_id": "q:54",
         "note": ""
       },
       {
@@ -707,47 +716,11 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:52",
-        "note": ""
-      },
-      {
-        "at": "2026-10-14T15:00:00+08:00",
-        "family": "knowledge_conflict",
-        "object_id": "knowledge:HY-LV101|fiber=涤棉",
-        "action": "sign",
-        "by": "rd:R01",
-        "question_id": "q:54",
-        "note": ""
-      },
-      {
-        "at": "2026-10-14T15:00:00+08:00",
-        "family": "leak_risk",
-        "object_id": "actor:sales:S01",
-        "action": "dismiss",
-        "by": "supervisor:M01",
-        "question_id": "q:55",
-        "note": ""
-      },
-      {
-        "at": "2026-10-14T16:52:00+08:00",
-        "family": "knowledge_conflict",
-        "object_id": "knowledge:HY-LV101|fiber=涤棉",
-        "action": "sign",
-        "by": "rd:R01",
         "question_id": "q:59",
         "note": ""
       },
       {
-        "at": "2026-10-14T17:00:00+08:00",
-        "family": "knowledge_conflict",
-        "object_id": "knowledge:HY-LV101|fiber=涤棉",
-        "action": "sign",
-        "by": "rd:R01",
-        "question_id": "q:60",
-        "note": ""
-      },
-      {
-        "at": "2026-10-15T11:00:00+08:00",
+        "at": "2026-10-14T15:00:00+08:00",
         "family": "knowledge_conflict",
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
@@ -756,34 +729,34 @@
         "note": ""
       },
       {
-        "at": "2026-10-15T13:00:00+08:00",
-        "family": "knowledge_conflict",
-        "object_id": "knowledge:HY-LV101|fiber=涤棉",
-        "action": "sign",
-        "by": "rd:R01",
+        "at": "2026-10-14T15:00:00+08:00",
+        "family": "leak_risk",
+        "object_id": "actor:sales:S01",
+        "action": "dismiss",
+        "by": "supervisor:M01",
         "question_id": "q:62",
         "note": ""
       },
       {
-        "at": "2026-10-15T15:00:00+08:00",
+        "at": "2026-10-14T16:52:00+08:00",
         "family": "knowledge_conflict",
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:63",
+        "question_id": "q:66",
         "note": ""
       },
       {
-        "at": "2026-10-15T17:00:00+08:00",
+        "at": "2026-10-14T17:00:00+08:00",
         "family": "knowledge_conflict",
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:64",
+        "question_id": "q:67",
         "note": ""
       },
       {
-        "at": "2026-10-15T17:25:00+08:00",
+        "at": "2026-10-15T11:00:00+08:00",
         "family": "knowledge_conflict",
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
@@ -792,12 +765,48 @@
         "note": ""
       },
       {
+        "at": "2026-10-15T13:00:00+08:00",
+        "family": "knowledge_conflict",
+        "object_id": "knowledge:HY-LV101|fiber=涤棉",
+        "action": "sign",
+        "by": "rd:R01",
+        "question_id": "q:69",
+        "note": ""
+      },
+      {
+        "at": "2026-10-15T15:00:00+08:00",
+        "family": "knowledge_conflict",
+        "object_id": "knowledge:HY-LV101|fiber=涤棉",
+        "action": "sign",
+        "by": "rd:R01",
+        "question_id": "q:70",
+        "note": ""
+      },
+      {
+        "at": "2026-10-15T17:00:00+08:00",
+        "family": "knowledge_conflict",
+        "object_id": "knowledge:HY-LV101|fiber=涤棉",
+        "action": "sign",
+        "by": "rd:R01",
+        "question_id": "q:71",
+        "note": ""
+      },
+      {
+        "at": "2026-10-15T17:25:00+08:00",
+        "family": "knowledge_conflict",
+        "object_id": "knowledge:HY-LV101|fiber=涤棉",
+        "action": "sign",
+        "by": "rd:R01",
+        "question_id": "q:75",
+        "note": ""
+      },
+      {
         "at": "2026-10-15T17:25:00+08:00",
         "family": "opportunity",
         "object_id": "theme:bleeding_staining|fiber=锦纶氨纶",
         "action": "dismiss",
-        "by": "rd:R02",
-        "question_id": "q:69",
+        "by": "pm:P01",
+        "question_id": "q:76",
         "note": ""
       },
       {
@@ -806,7 +815,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:73",
+        "question_id": "q:80",
         "note": ""
       },
       {
@@ -815,7 +824,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:74",
+        "question_id": "q:81",
         "note": ""
       },
       {
@@ -824,7 +833,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:78",
+        "question_id": "q:85",
         "note": ""
       },
       {
@@ -833,7 +842,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:79",
+        "question_id": "q:86",
         "note": ""
       },
       {
@@ -842,7 +851,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:80",
+        "question_id": "q:87",
         "note": ""
       },
       {
@@ -851,7 +860,7 @@
         "object_id": "knowledge:HY-AY901|fiber=锦纶",
         "action": "dismiss",
         "by": "rd:R02",
-        "question_id": "q:81",
+        "question_id": "q:88",
         "note": ""
       },
       {
@@ -860,7 +869,7 @@
         "object_id": "knowledge:HY-AY901|constraint=无特殊要求",
         "action": "dismiss",
         "by": "rd:R02",
-        "question_id": "q:82",
+        "question_id": "q:89",
         "note": ""
       },
       {
@@ -869,7 +878,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:83",
+        "question_id": "q:90",
         "note": ""
       },
       {
@@ -878,7 +887,7 @@
         "object_id": "knowledge:HY-LV101|fiber=涤棉",
         "action": "sign",
         "by": "rd:R01",
-        "question_id": "q:87",
+        "question_id": "q:94",
         "note": ""
       }
     ]

@@ -178,7 +178,7 @@ def page(o):
              f"- 候选结论：{'；'.join(a['title'] + '（L' + str(a['level']) + '）' for a in o['compile']['admitted'])}",
              f"- 丢弃（引文与原文不符）：{'；'.join(o['compile']['dropped']) or '无'}；与现有能力相同：{'；'.join(o['compile']['duplicates']) or '无'}",
              f"- 三态之前：{len(o['prep']['tickets'])} 位客户自助升级，研发 {o['prep']['tickets'][0]['rd']} 接单并确认 C4；"
-             f"研发层回问 {len(o['prep']['ask_back'])} 次 → 觉提出 `qi_grant`（{o['prep']['qi_grant']['object_id']}，签字人 {o['prep']['qi_grant']['signer']}）", "",
+             f"两张单在研发层都缺 pH，觉为客户层提出回问 {len(o['prep']['ask_back'])} 次 → 觉提出把「追问 pH」授予客户层的 `qi_grant`（{o['prep']['qi_grant']['object_id']}，签字人 {o['prep']['qi_grant']['signer']}）", "",
              f"## 三态：同一句「{PHRASE}」", "",
              "| 状态 | 会话 | 客户被追问 | 用到的能力 | 问原理得到 | 含机理原文 |", "|---|---|---|---|---|---|"]
     for f in o["three_states"]:
