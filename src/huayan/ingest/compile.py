@@ -99,7 +99,9 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
             for text in p.conditions:
                 for slot, (value, _) in find_slot_values(text, kb.seeds.slots).items():
                     conditions.setdefault(slot, []).append(value)
-            payload = {"product_id": product.id, "phenomenon": found[0], "conditions": conditions} if conditions else None
+            # 原文不限条件 → 不限（同种子 applicable 为空）；写了条件却一个也认不出 → 对不上
+            payload = ({"product_id": product.id, "phenomenon": found[0], "conditions": conditions}
+                       if conditions or not p.conditions else None)
         if found is None or confirmer is None or (p.product and product is None) or (p.form and payload is None):
             report["unaligned"].append(p.title)        # 新概念或待认领：交人决定是否扩展结构
             continue

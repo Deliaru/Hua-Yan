@@ -60,7 +60,7 @@ def write_report(path, kb, fragments, proposals, report, changed, args):
              f"- 丢弃（引文与原文不符）：{'；'.join(report['dropped']) or '无'}",
              f"- 与现有能力完全相同（已挂为其依据）：{'；'.join(report['duplicates']) or '无'}",
              f"- 冲突（同一目标不同取值）：{'；'.join(report['conflicts']) or '无'}",
-             f"- 对不上的新概念或待认领：{'；'.join(report['unaligned']) or '无'}",
+             f"- 对不上的新概念或待认领（交产品经理审定种子时决定是否扩展词表）：{'；'.join(report['unaligned']) or '无'}",
              f"- 依据已变化、待复核：{'、'.join(changed) or '无'}", "",
              "## 候选结论", "", "| 编号 | 层级 | 形式 | 能力提议 | 标题 |", "|---|---|---|---|---|"]
     lines += [f"| {a['ku_id']} | L{a['level']} | {a['form'] or '只是结论'} | {a['capability_id'] or '—'} | {a['title']} |"
