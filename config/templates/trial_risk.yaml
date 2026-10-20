@@ -1,0 +1,13 @@
+id: trial_risk
+family: trial_risk
+kind: advance
+object_type: requirement
+decision_label: 是否先回问再试样
+# v8：闸门只写阶段——转译已确认、还没试样；提不提由打分决定（规则冷启动，有数据换 Jue-K）
+precondition: "attrs.status == 'rd_confirmed' and attrs.n_trials == 0"
+# 规则：有必问条件客户答过「不清楚」就报（也是状态机对照组的候选规则 R1）
+rule_score: "0.6 * (attrs.n_unknown_required >= 1)"
+worth_prompt: "需求单 {object} 转译已确认、即将试样。客户对 {attrs.n_unknown_required} 个必问条件答过「不清楚」，{attrs.n_unquoted_slots} 个已知条件没有客户原话依据；同现象历史试样中因需求条件缺失失败的比例为 {attrs.hist_req_fail_rate:.0%}，同产品同条件历史试样 {attrs.hist_n_trials} 次、失败率 {attrs.hist_fail_rate:.0%}。是否先退回、向客户回问缺口条件再试样？"
+title: "{object}：试样前是否先回问缺口条件？"
+owner_role: rd
+signer_role: rd

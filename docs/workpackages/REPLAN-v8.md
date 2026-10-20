@@ -127,6 +127,16 @@ signer_role: rd
 - `test_wp_b1`：家族数 23。
 - 真实跑：`make_jue_k_data.py` + `train_jue_k.py` 后，`docs/reports/jue_k/` 的格表里有 `trial_risk|L3`，写明它是否赢过规则。
 
+**现状（2026-10-21，已完成）**
+
+- 模板、属性、门面 `return_for_conditions`、研发工作面「先回问」（勾选要回问的条件）全部接通；`test_wp_a3`、`test_wp_b1`（家族数 23）通过，11 个测试全绿。
+- 世界规律在 `sim/world.py`：缺口只在交叉条件下要命（设备缺口 × 锦纶类面料、pH 缺口 × 酸性染料、水质缺口 × 活性染料浸染、工艺缺口 × 冷轧堆），每个缺口按「卡 × 槽位」固定抽签，可回答「原条件本会不会失败」。第 0 周历史试样 300 次（`history_trials`）。
+- 训练数据：轨迹里每张应升级的卡在转译确认时出一行，共 3366 行（train 1878、正例 609）。训练结果（`data/models_v8/metrics.json`）：**`trial_risk|L3` 测试集 AUC 0.732，规则 0.490，AUC 差 95% 区间 [0.184, 0.287]，Brier 0.197 对 0.356，换上 Jue-K**。留出的两个现象上 0.497 对 0.502：这两个现象不要求问染料类别，染料常常没问到，而决定失败的恰恰是染料，可观测的信息不足以预判。
+- **补了一处契约属性（人已批准）**：`missing:<slot>`、`value:<slot>=<取值>` 两组独热。没有它们，模型看不到「缺了哪个条件 × 其他条件是什么」，学不到交叉规律。
+- 这一格**暂不并入入库的 `models/jue_k/`**：演示配置都用 `jue_k`，并入后演示主线里可能多出问题卡，而演示缓存不重录。Q9.4 的业务月用 `data/models_v8`。其余各格这次重训的数字与入库模型略有出入（入库模型用的是更早生成的样本），不替换。
+- 真实链路回归：5 天业务周重跑，发现与处置结果与 `docs/reports/week/metrics.json` 逐项一致。
+- 引导页（`Guide.tsx`）没加：它只为演示故事的步骤服务，试样风险不在现有故事里。
+
 ### Q9.2 判断过时 `stale_capability`
 
 `config/templates/stale_capability.yaml`（新）、`config/templates/knowledge_conflict.yaml`、`jue/state.py`、`jue/publish.py`、`app.py`、`sim/trajectory.py`、`sim/week.py`、`web/src/pages/Rd.tsx`、`web/src/ctx.tsx`、`web/src/pages/Jue.tsx`、`web/src/components/Guide.tsx`、`tests/test_wp_b1.py`

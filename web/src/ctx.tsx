@@ -29,7 +29,7 @@ export function Side({ children }: { children: React.ReactNode }) {
 
 // ── 显示用标签：界面上不出现内部 id 与枚举 ─────────────────
 export const FAMILY: Record<string, string> = {
-  qi_grant: "授予能力", qi_review: "依据复核", trial_rework: "退回重新转译",
+  qi_grant: "授予能力", qi_review: "依据复核", trial_rework: "退回重新转译", trial_risk: "试样风险",
   ask_slot: "追问", escalate_need: "推荐还是升级", reuse_product: "现成产品审定", opportunity: "机会汇聚",
   accept_requirement: "接单", ask_back: "回问", distortion: "转译失真", confirm_translation: "确认化学要点",
   contribution: "沉淀", market_eval: "客户评价", seal_points: "封存 / 放出", seal_leak: "说明书泄密",

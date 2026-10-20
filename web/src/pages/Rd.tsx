@@ -419,6 +419,7 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
   const body = (() => {
     if (q.family === "trial_rework") return <>{evidence}<div className="row gap-2">
       <Act label="退回重新转译" run={() => api.rework(q.refs.requirement_id, me)} />{dismiss}</div></>;
+    if (q.family === "trial_risk") return <TrialRiskReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant" && q.refs.form === "statement") return <StatementGrant q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant") return <>{evidence}<div className="row gap-2">
       <Act label="签字授予" run={() => api.grantCapability(q.id, me)} />{dismiss}</div></>;
@@ -730,6 +731,25 @@ function TrialFail({ reqId }: { reqId: string }) {
         <div><Act kind="quiet" label="录入不通过" run={() => api.trial(reqId, "fail", me, cause, cause === "requirement" ? missing : [])} /></div>
       </div>
     </div>
+  );
+}
+
+function TrialRiskReview({ q, dismiss, evidence }: { q: Question; dismiss: React.ReactNode; evidence: React.ReactNode }) {
+  const { me } = useApp();
+  const [slots, setSlots] = useState<string[]>([]);
+  return (
+    <>
+      {evidence}
+      <div className="row !items-start">
+        <span className="w-[110px] shrink-0 text-[13px] text-ink-2">先回问哪些条件</span>
+        <div className="flex flex-1 flex-col gap-2">
+          <SlotPicker value={slots} onChange={setSlots} />
+          <div className="flex flex-wrap gap-2">
+            <Act label="先回问" run={() => api.returnForConditions(q.refs.requirement_id, slots, me)} />{dismiss}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 

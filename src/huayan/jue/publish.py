@@ -64,6 +64,9 @@ def _summary(family: str, a: dict) -> str:
         return f"本层有 {a['n_unmapped_constraints']} 项上层约束未承接，{a['n_unquoted_items']} 条条目缺少客户原话"
     if family == "seal_leak":
         return f"说明书与用法中有 {a['n_leak_hits']} 句命中封存项、L3 术语或研发方向假设"
+    if family == "trial_risk":
+        return (f"必问条件答不清楚 {a['n_unknown_required']} 个、无原话依据 {a['n_unquoted_slots']} 个；"
+                f"同现象历史试样因需求条件缺失失败 {a['hist_req_fail_rate']:.0%}，同产品同条件失败率 {a['hist_fail_rate']:.0%}")
     if family == "contribution":
         return f"研发修改过、未被已有转化知识覆盖的条目 {a['n_edited_uncovered']} 条"
     return "上一步已签字、本步未签（规则到点）"

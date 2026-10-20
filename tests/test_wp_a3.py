@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -5,7 +6,7 @@ import yaml
 
 from huayan.app import HuayanApp
 from huayan.clock import get_clock
-from huayan.contracts import ReqItem, SheetDraft, Trial
+from huayan.contracts import ReqItem, SheetDraft, SlotFill, Trial
 from huayan.knowledge import PermissionDenied
 
 
@@ -69,6 +70,21 @@ def test_translation_release_and_ownership(tmp_path):
     prepare("confirm_translation", f"requirement:{req.id}")
     req = app.confirm_translation(req.id, rd)
     assert req.product_id == "T-206"
+    # v8 试样风险：客户对必问的设备答过「不清楚」（模拟）→ 觉在试样前提出 trial_risk → 研发先回问 →
+    # 回到待重新转译、觉对设备提出回问 → 回答后重新确认，不再提出
+    app._requirements[req.id].known_slots.pop("equipment")
+    app._sessions[session.id].need.slots["equipment"] = SlotFill(slot="equipment", value=None, status="unknown",
+                                                                 confidence=0.7, quote="不清楚", turn_id="turn:x")
+    app._after(req_ids=[req.id])
+    prepare("trial_risk", f"requirement:{req.id}")
+    assert app.return_for_conditions(req.id, ["equipment"], rd).status == "rd_accepted"
+    assert any(q.object_id == f"slot:{req.id}/equipment" for q in app.bus.list(family="ask_back"))
+    app.add_turn(session.id, "customer", "设备是气流缸")
+    assert app.requirement_view(req.id, rd).requirement.known_slots["equipment"] == "气流染色机"
+    prepare("confirm_translation", f"requirement:{req.id}")
+    req = app.confirm_translation(req.id, rd)
+    assert not app.bus.list(family="trial_risk")
+    get_clock().advance_to(get_clock().now() + timedelta(hours=1))   # 之后的试样失败晚于这次回答
     cited_owners = {e.owner for e in app.ledger.list() if e.reason == "cited"}
     assert {"rd:R01", "rd:R02"} <= cited_owners
     assert any(e.reason == "contributed" for e in app.ledger.list(rd))

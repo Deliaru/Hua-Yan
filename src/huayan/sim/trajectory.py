@@ -8,6 +8,7 @@ from huayan.contracts import (CustomerProfile, JueObject, JueState, NeedCard, Ne
 from huayan.domain import correct_product
 from huayan.events import EventLog
 from huayan.jue.state import realtime_state, requirement_state, trans_hits
+from huayan.sim.world import trial_outcome
 
 TURNS = 6
 WRONG, MISS = 0.10, 0.05      # 抽取噪声：填错（同槽位另一个取值，低置信度）、漏填
@@ -67,11 +68,12 @@ def _sales_asks(need: NeedState, phen: Phenomenon, seeds: Seeds, rng: random.Ran
     return rng.sample(pool, min(len(pool), rng.randint(1, 2)))
 
 
-def _rows(model: QuestionModel, state: JueState, label, source_id: str) -> list[dict]:
-    """只收追问、回问（槽位对象）；需求单对象上的推进决策由规则到点，不训练。"""
+def _rows(model: QuestionModel, state: JueState, label, source_id: str,
+          families=("ask_slot", "ask_back")) -> list[dict]:
+    """只收追问、回问（槽位对象）与 v8 试样风险；需求单对象上的其余推进决策由规则到点，不训练。"""
     rows = []
     for d in model.propose(state).decisions:
-        if d.precondition_passed and d.family in ("ask_slot", "ask_back"):
+        if d.precondition_passed and d.family in families:
             obj: JueObject = state.objects[d.object_id]
             rows.append({"family": d.family, "object_type": obj.object_type, "object_id": d.object_id,
                          "at": state.at.isoformat(), "source_id": source_id, "label": label(obj), **obj.attrs})
@@ -106,4 +108,10 @@ def trajectory(card: NeedCard, seeds: Seeds, kb, model: QuestionModel, rng: rand
             state = requirement_state(req, need, seeds, kb, start + timedelta(minutes=TURNS + layer), EventLog())
             rows += _rows(model, state,
                           lambda o: back_label(req, need, card, o.attrs["slot"], phen, kb, layer), card.id)
+        # v8 试样风险：转译确认、即将试样；标签 = 按世界规律试样会因需求条件缺失而失败
+        solvers = sorted((p for p in seeds.products if card.phenomenon in p.solves), key=lambda p: (p.status != "project", p.id))
+        req.status, req.product_id = "rd_confirmed", solvers[0].id if solvers else None
+        state = requirement_state(req, need, seeds, kb, start + timedelta(minutes=TURNS + 4), EventLog())
+        rows += _rows(model, state, lambda o: int(trial_outcome(card, req.known_slots)[1] == "requirement"),
+                      card.id, ("trial_risk",))
     return rows

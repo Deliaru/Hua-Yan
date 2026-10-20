@@ -89,7 +89,8 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
         "n_edited_uncovered": _edited_uncovered(req, seeds, kb),
         "n_pm_edited_uncovered": _pm_edited_uncovered(req, seeds, kb),
         "n_contributed": len({e.payload["ku_id"] for e in own if e.kind == "knowledge_contributed"}),
-        **_trial_attrs(req, kb, own), "n_missing": len(missing), "last_result": last_result,
+        **_trial_attrs(req, kb, own), **_risk_attrs(req, need, seeds, kb),
+        "n_missing": len(missing), "last_result": last_result,
         "points_set": any(e.kind == "points_set" for e in own),
         "n_sealed": len(req.sealed), "sheet_ready": req.sheet is not None,
         "n_leak_hits": len({h.index for h in leak_hits(req.sheet.sheet + "\n" + req.sheet.usage,
@@ -139,13 +140,36 @@ def _trial_attrs(req: Requirement, kb: KnowledgeBase, own: list) -> dict:
             "market_eval": evaluation}
 
 
+def _risk_attrs(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBase) -> dict:
+    """v8 试样风险（契约 ⑯）：客户答不清楚、没问到的条件，已知条件取值，以及同产品、同现象的历史试样。"""
+    phen = next(p for p in seeds.phenomena if p.id == req.phenomenon)
+    unknown = {s for s, f in need.slots.items() if f.status == "unknown" and s not in req.known_slots}
+    product = next((p for p in seeds.products if p.id == req.product_id), None)
+    matched = match_candidates(req.phenomenon, req.known_slots, [product.model_copy(update={"status": "released"})]) if product else []
+    solvers = {p.id for p in seeds.products if req.phenomenon in p.solves}
+    trials = [t for t in (Trial.model_validate_json(u.text) for u in kb.list(_INTERNAL, kinds=["trial"]))
+              if t.requirement_id != req.id]
+    same = [t for t in trials if t.product_id == req.product_id
+            and all(t.conditions.get(s) == v for s, v in req.known_slots.items() if s in t.conditions)]
+    phen_trials = [t for t in trials if t.product_id in solvers]
+    return {"n_unknown_required": len(unknown & set(phen.required_slots)),
+            "n_unquoted_slots": sum(not (need.slots.get(s) and need.slots[s].quote) for s in req.known_slots),
+            "match_possible": bool(matched) and matched[0].status == "possible",
+            "hist_n_trials": len(same), "hist_fail_rate": sum(t.result == "fail" for t in same) / len(same) if same else 0.0,
+            "hist_req_fail_rate": sum(t.cause == "requirement" for t in phen_trials) / len(phen_trials) if phen_trials else 0.0,
+            **{f"unknown:{s.id}": int(s.id in unknown) for s in seeds.slots},
+            **{f"missing:{s.id}": int(s.id not in req.known_slots and s.id not in unknown) for s in seeds.slots},
+            **{f"value:{s}={v}": 1 for s, v in req.known_slots.items()}}
+
+
 def _missing(req: Requirement, kb: KnowledgeBase, own: list, history: list) -> tuple[frozenset[str], str]:
-    """最近一次试样失败（原因为需求条件缺失）或客户评价不通过所指向、此后还没回问答过的槽位。"""
+    """最近一次试样失败（原因为需求条件缺失）、客户评价不通过或试样前回问（v8）所指向、此后还没回问答过的槽位。"""
     trials = {t.id: t for t in (Trial.model_validate_json(u.text) for u in kb.list(_INTERNAL, kinds=["trial"]))
               if t.requirement_id == req.id}
     failures = [(t.at, t.missing_slots, "试样失败") for t in trials.values() if t.result == "fail" and t.cause == "requirement"]
     failures += [(e.ts, trials[e.payload["trial_id"]].market_eval_missing, "客户评价不通过") for e in own
                  if e.kind == "market_eval" and e.payload["result"] == "fail"]
+    failures += [(e.ts, e.payload["slots"], "试样前回问") for e in own if e.kind == "requirement_returned" and e.payload.get("slots")]
     if not failures:
         return frozenset(), "none"
     at, slots, label = max(failures, key=lambda f: f[0])

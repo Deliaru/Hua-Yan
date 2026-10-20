@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from huayan.contracts import SHANGHAI
+from huayan.contracts import SHANGHAI, KnowledgeUnit
 from huayan.domain import load_seeds
 from huayan.eval.week import chain_events
 from huayan.events import EventLog
@@ -20,6 +20,7 @@ from huayan.jue.proto import JueProto
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.sim import make_cards, make_week
 from huayan.sim.trajectory import trajectory
+from huayan.sim.world import history_trials
 from huayan.sim.week_events import week_rows
 
 META = ["family", "object_type", "object_id", "at", "source_id", "label", "split"]
@@ -30,6 +31,7 @@ def main():
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--n-cards", type=int, default=2000)
     ap.add_argument("--n-back-cards", type=int, default=3000, help="额外的应升级卡，只取回问样本")
+    ap.add_argument("--n-history", type=int, default=300, help="v8：第 0 周导入的历史试样数")
     ap.add_argument("--weeks", type=int, default=40)
     ap.add_argument("--week-days", type=int, default=5)
     ap.add_argument("--heldout", default="crease_marks,low_whiteness")
@@ -45,6 +47,12 @@ def main():
     heldout = set(args.heldout.split(","))
     rng = random.Random(args.seed)
 
+    # v8：第 0 周导入的历史试样（模拟 ELN 记录），试样风险的历史属性从这里来
+    for trial in history_trials(seeds, make_cards(seeds, args.n_history, random.Random(args.seed + 1)), start,
+                                random.Random(args.seed + 2)):
+        kb.add(KnowledgeUnit(id=f"ku:trial:{trial.id}", level=3, kind="trial", title=f"试样 {trial.id}",
+                             text=trial.model_dump_json(), product_id=trial.product_id, owner=trial.rd,
+                             source="trial", created_at=trial.at))
     realtime = JueProto(args.templates, None, "realtime")
 
     def split_of(card):
@@ -63,7 +71,7 @@ def main():
         card = card.model_copy(update={"id": f"back:{k + 1}"})
         split = split_of(card)
         rows += [{**row, "split": split} for row in trajectory(card, seeds, kb, realtime, rng, start)
-                 if row["family"] == "ask_back"]
+                 if row["family"] in ("ask_back", "trial_risk")]
 
     scheduled = JueProto(args.templates, None, "scheduled")
     with tempfile.TemporaryDirectory() as work:

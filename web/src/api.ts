@@ -80,6 +80,7 @@ export const api = {
   marketEval: (req_id: string, result: "pass" | "fail", note: string, by: string, missing_slots: string[] = []) =>
     call("market-eval", { req_id, result, note, by, missing_slots }),
   rework: (req_id: string, by: string) => call("rework", { req_id, by }),
+  returnForConditions: (req_id: string, slots: string[], by: string) => call("return_for_conditions", { req_id, slots, by }),
 
   // 契的签字入口
   capabilities: (viewer: string) => call<Capability[]>(`capabilities?${q({ viewer })}`),

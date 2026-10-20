@@ -1707,7 +1707,7 @@ Jue-K 模型按「家族 × 判断层」保存：`models: {"<family>|L<k>": (cla
 依据 `docs/workpackages/REPLAN-v8.md`。
 
 - **属性（契约 5.2）**
-  - requirement 加：`n_unknown_required` int（现象必问槽位里客户答「不清楚」的个数）、`unknown:<slot>` 0/1（每个槽位是否答了「不清楚」）、`n_unquoted_slots` int（已填条件里没有客户原话依据的个数）、`match_possible` bool（需求单产品在当前条件下只是「可能适用」）、`hist_n_trials` int 与 `hist_fail_rate` float（同产品、条件被本单条件覆盖的历史试样数与失败率）、`hist_req_fail_rate` float（同现象历史试样里因需求条件缺失失败的比率）。
+  - requirement 加：`n_unknown_required` int（现象必问槽位里客户答「不清楚」的个数）、`unknown:<slot>` 0/1（每个槽位是否答了「不清楚」）、`n_unquoted_slots` int（已填条件里没有客户原话依据的个数）、`match_possible` bool（需求单产品在当前条件下只是「可能适用」）、`hist_n_trials` int 与 `hist_fail_rate` float（同产品、条件被本单条件覆盖的历史试样数与失败率）、`hist_req_fail_rate` float（同现象历史试样里因需求条件缺失失败的比率）。实施 Q9.1 时补（人已批准，2026-10-21）：`missing:<slot>` 0/1（未填且客户没答过「不清楚」）、`value:<slot>=<取值>` 1（已知条件的取值独热）；没有这两组，学习模型看不到「哪个条件缺了 × 其他条件是什么」的交叉。
   - 新增定时对象「能力效果」`knowledge:stale:<cap_id>`（对象类型 `knowledge`），只针对运行中由人签出、生效中的适用能力（`approved_by != "seed"`）：`n_used`、`n_outcomes`、`n_fail` int，`fail_rate`、`recent_fail_rate`（最近 7 天）、`early_fail_rate`（此前）、`fail_concentration`（失败集中在某一「槽位 = 取值」上的最大比例）float，`days_since_grant` float，`n_market_fail` int。
   - knowledge（知识冲突）的 `claimed` 只认第 0 天情境。
 - **家族**：新增 `trial_risk`（推进类，对象 `requirement`，主人与签字人为研发）、`stale_capability`（推进类，对象 `knowledge`，主人与签字人为授予人），家族数 22 → **24**；`auto_action` 不变。

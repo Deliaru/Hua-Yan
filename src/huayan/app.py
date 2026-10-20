@@ -1117,6 +1117,25 @@ class HuayanApp:
         self._after(req_ids=[req_id])
         return self.requirement_view(req_id, by).requirement
 
+    def return_for_conditions(self, req_id, slots, by):
+        """v8 研发签 trial_risk「先回问」：需求单退回到已接单、待重新转译；这些条件的回问由觉提出。"""
+        req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
+        self._check_slots(slots, True)
+        if not slots:
+            raise ValueError("请勾选要回问的条件")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
+        question = self._decision("trial_risk", "return_for_conditions", state.objects[f"requirement:{req_id}"], by)
+        reason = f"试样前回问：{'、'.join(slots)}"
+        req.status = "rd_accepted"
+        req.return_notes.append(reason)
+        self.events.append("requirement_returned", by, {"requirement_id": req_id, "reason": reason, "slots": list(slots)})
+        if question:
+            self._settle(question.id, Resolution(action="sign", by=by, note=reason))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
     def record_trial(self, trial: Trial):
         actor = self._actor(trial.rd, {"rd"})
         if self.kb.is_frozen(actor.id):
