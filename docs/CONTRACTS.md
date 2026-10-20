@@ -1701,3 +1701,16 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 补充 caller：`ingest:draft`（公开来源起草种子）；`eval:one_shot`（真实案例的一次性翻译对照）。
 
 Jue-K 模型按「家族 × 判断层」保存：`models: {"<family>|L<k>": (classifier, calibrator)}`。对象属性 `judge_level` 标明代谁判断；每格只使用同家族、同判断层且结果层级不高于该层的行训练，无模型的格按规则打分。
+
+## ⑯ 觉的预判与业务月 v8（2026-10-21，人已批准，之后冻结）
+
+依据 `docs/workpackages/REPLAN-v8.md`。
+
+- **属性（契约 5.2）**
+  - requirement 加：`n_unknown_required` int（现象必问槽位里客户答「不清楚」的个数）、`unknown:<slot>` 0/1（每个槽位是否答了「不清楚」）、`n_unquoted_slots` int（已填条件里没有客户原话依据的个数）、`match_possible` bool（需求单产品在当前条件下只是「可能适用」）、`hist_n_trials` int 与 `hist_fail_rate` float（同产品、条件被本单条件覆盖的历史试样数与失败率）、`hist_req_fail_rate` float（同现象历史试样里因需求条件缺失失败的比率）。
+  - 新增定时对象「能力效果」`knowledge:stale:<cap_id>`（对象类型 `knowledge`），只针对运行中由人签出、生效中的适用能力（`approved_by != "seed"`）：`n_used`、`n_outcomes`、`n_fail` int，`fail_rate`、`recent_fail_rate`（最近 7 天）、`early_fail_rate`（此前）、`fail_concentration`（失败集中在某一「槽位 = 取值」上的最大比例）float，`days_since_grant` float，`n_market_fail` int。
+  - knowledge（知识冲突）的 `claimed` 只认第 0 天情境。
+- **家族**：新增 `trial_risk`（推进类，对象 `requirement`，主人与签字人为研发）、`stale_capability`（推进类，对象 `knowledge`，主人与签字人为授予人），家族数 22 → **24**；`auto_action` 不变。
+- **门面（契约 ⑫）**：新增 `return_for_conditions(req_id, slots, by)`（研发；`rd_confirmed` → `rd_accepted`，写 `requirement_returned`，payload 带 `slots`）、`narrow_capability(cap_id, conditions, by)`（授予人；撤销原能力并按更窄条件授予，依据不变）、`timeline(day, by)`（主管只读；L3 内容只给存根）。
+- **网关（契约 ⑩）**：新 caller `sim:sales`、`sim:rd`、`sim:pm`（业务月里大模型扮演的业务员、研发、产品经理）。
+- **事件**：不新增；`requirement_returned` 的 payload 可带 `slots`。
