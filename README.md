@@ -44,7 +44,7 @@ AI＋功能化学赛道 · 项目总览、技术论证、业务证据与可复�
 
 <sub>**读数说明：**前两项来自 300 张程序生成的模拟需求卡中应进入研发的 41 张；第三项的「传统流转」按黑线流程定义计数，「逐岗协作」与「化言」是同一套代码以两种协作方式运行、由业务事件日志计出；第四项来自含 3 个正例和 4 个困难负样本的一周模拟。全部为模拟数据上的真实运行结果，**不是传化真实业务数据，也不是实际产品研发返工率或节约工时**；各项口径与不利结果见 [§12](#12-48-小时交付范围与试点验证路线) 及 [失真对照](docs/reports/distortion/README.md) · [协作方式对照](docs/reports/v6_routes/metrics.json) · [业务周评测](docs/reports/week/README.md)。</sub>
 
-**阅读入口：** [方案价值与产业逻辑](docs/PITCH.md) · [技术架构](docs/ARCHITECTURE.md) · [Jue-K 模型卡与评测](models/jue_k/model_card.md) · [OneJev 开源项目](https://github.com/OmniJev/OneJev) · [真实模型录制](runs/demo_record/README.md) · **[在线 Demo](https://www.soranori.com/huayan-demo/)** · [本地运行与试用说明](#10-运行与试用三种模式一套系统) · [测试结果](#106-测试结果) · [团队](#166-团队)
+**阅读入口：** [方案价值与产业逻辑](docs/PITCH.md) · [技术架构](docs/ARCHITECTURE.md) · [Jue-K 模型卡与评测](models/jue_k/model_card.md) · [OneJev 开源项目](https://github.com/OmniJev/OneJev) · [真实模型录制](runs/demo_record/README.md) · **[在线 Demo](https://www.soranori.com/huayan-demo/)** · [本地运行与试用说明](#10-运行与试用三种模式一套系统) · [测试结果](#107-测试结果) · [团队](#166-团队)
 
 ### 五项评审标准速读
 
@@ -938,7 +938,20 @@ uv run python scripts/translate_cli.py              # 规则骨架的分层转�
 
 报告所在位置：[失真对照](docs/reports/distortion/README.md) · [Jue-K](docs/reports/jue_k/README.md) · [业务周](docs/reports/week/README.md) · [协作方式对照](docs/reports/v6_routes/metrics.json)。
 
-### 10.5 第一次打开应该怎么体验？
+### 10.5 契：能力层演示
+
+契把「能读」和「能用」分开：研发的判断经授予成为前台可用的能力，前台用得上、读不到背后的资料。每一次正式适用判断都落在某个已授权的完整情境内，条件没问全只说「可能适用」；撤销或依据变化后行为立即停止，状态跨重启保留。觉从运行中的处置里按层重训，客户层学不到没被授予的东西。
+
+```bash
+uv run python scripts/demo_qi.py            # 三态 + 四步 + 重启 → docs/reports/qi_demo/demo.md
+git worktree add --detach ../Huayan-v6 351c2c9
+uv run python scripts/compare_v6_qi.py      # 同一批问题与 V6 对照 → docs/reports/qi_demo/compare.md
+uv run python scripts/demo_evolution.py     # 觉的自进化与安全对照 → docs/reports/jue_evolution/
+```
+
+报告：[契的主演示](docs/reports/qi_demo/demo.md) · [与 V6 对照](docs/reports/qi_demo/compare.md) · [觉的自进化](docs/reports/jue_evolution/README.md) · 设计见 [`docs/QI.md`](docs/QI.md)。全部为模拟数据，离线运行。
+
+### 10.6 第一次打开应该怎么体验？
 
 建议评委先看左侧的**「演示讲解」**，选择「一个上午」或某条 A / B / C / C′ / D 路径：
 
@@ -951,7 +964,7 @@ uv run python scripts/translate_cli.py              # 规则骨架的分层转�
 
 **演示最值得看的是「同一套业务状态会因为一个真实判断而变化」**，而不是让评委盲点十几个工具按钮。
 
-### 10.6 测试结果
+### 10.7 测试结果
 
 `uv run pytest`：**11 passed in 2.94s**（2026-10-12 本地运行；离线、不访问网络，只用 `tests/fixtures/mini_seeds/` 夹具与 `MockGateway`、`MockSystem1Client` 两个桩）。测试只守关键不变量与端到端行为：
 

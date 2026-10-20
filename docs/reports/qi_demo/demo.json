@@ -1,0 +1,252 @@
+{
+  "run_id": "run-a3db0614bd63",
+  "compile": {
+    "admitted": [
+      {
+        "ku_id": "ku:claim:1",
+        "level": 3,
+        "title": "锦氨色花要问染浴 pH（模拟）",
+        "capability_id": "cap:1",
+        "form": "ask"
+      },
+      {
+        "ku_id": "ku:claim:2",
+        "level": 3,
+        "title": "HY-LV205 适用锦氨经轴染色（模拟）",
+        "capability_id": "cap:2",
+        "form": "applicable"
+      }
+    ],
+    "dropped": [
+      "纯锦纶经轴同样适用（模拟，引文与原文不符，用于展示校验）"
+    ],
+    "duplicates": [
+      "HY-LV205 产品页适用范围（模拟）"
+    ]
+  },
+  "prep": {
+    "tickets": [
+      {
+        "session_id": "sess:1",
+        "requirement_id": "req:1",
+        "rd": "rd:R02"
+      },
+      {
+        "session_id": "sess:2",
+        "requirement_id": "req:2",
+        "rd": "rd:R02"
+      }
+    ],
+    "ask_back": [
+      "slot:req:1/bath_ph",
+      "slot:req:2/bath_ph"
+    ],
+    "qi_grant": {
+      "question_id": "q:12",
+      "object_id": "knowledge:grant:cap:1|L0",
+      "signer": "rd:R02"
+    }
+  },
+  "three_states": [
+    {
+      "session_id": "sess:3",
+      "customer": "customer:C03",
+      "sales": null,
+      "asked": [],
+      "capabilities_used": [],
+      "candidates": [],
+      "recommended": null,
+      "recommend_status": null,
+      "escalated": true,
+      "reply": "这部分需要专业人员解答。",
+      "status": "escalated",
+      "state": "A 未授予",
+      "mechanism_leaked": false
+    },
+    {
+      "session_id": "sess:4",
+      "customer": "customer:C04",
+      "sales": null,
+      "asked": [
+        "bath_ph"
+      ],
+      "capabilities_used": [
+        "cap:3"
+      ],
+      "candidates": [],
+      "recommended": null,
+      "recommend_status": null,
+      "escalated": false,
+      "reply": "这部分需要专业人员解答。",
+      "status": "open",
+      "state": "B 已授予 K3",
+      "mechanism_leaked": false
+    },
+    {
+      "session_id": "sess:5",
+      "customer": "customer:C01",
+      "sales": null,
+      "asked": [],
+      "capabilities_used": [],
+      "candidates": [],
+      "recommended": null,
+      "recommend_status": null,
+      "escalated": true,
+      "reply": "这部分需要专业人员解答。",
+      "status": "escalated",
+      "state": "C 已撤销 K3",
+      "mechanism_leaked": false
+    }
+  ],
+  "k3": "cap:3",
+  "four_steps": [
+    {
+      "session_id": "sess:6",
+      "customer": "customer:C02",
+      "sales": null,
+      "asked": [],
+      "capabilities_used": [],
+      "candidates": [],
+      "recommended": null,
+      "recommend_status": null,
+      "escalated": true,
+      "reply": null,
+      "status": "recommended",
+      "requirement_id": "req:5",
+      "declined_by": "rd:R02",
+      "k5": "cap:4",
+      "k5_status": "active",
+      "approved_by": "pm:P01"
+    },
+    {
+      "session_id": "sess:7",
+      "customer": "customer:C03",
+      "sales": null,
+      "asked": [],
+      "capabilities_used": [
+        "cap:4"
+      ],
+      "candidates": [
+        "HY-LV205"
+      ],
+      "recommended": "HY-LV205",
+      "recommend_status": "confirmed",
+      "escalated": false,
+      "reply": null,
+      "status": "open",
+      "used_by": [
+        "pm:P01",
+        "rd:R02"
+      ]
+    },
+    {
+      "session_id": "sess:8",
+      "customer": "customer:C04",
+      "sales": null,
+      "asked": [],
+      "capabilities_used": [],
+      "candidates": [],
+      "recommended": null,
+      "recommend_status": null,
+      "escalated": true,
+      "reply": null,
+      "status": "escalated"
+    },
+    {
+      "session_id": "sess:9",
+      "customer": "customer:C01",
+      "sales": "sales:S01",
+      "asked": [
+        "equipment"
+      ],
+      "capabilities_used": [
+        "cap:applicable:HY-LV205:color_unlevel",
+        "cap:ask:color_unlevel:equipment",
+        "cap:prior:color_unlevel:equipment"
+      ],
+      "candidates": [
+        "HY-LV205"
+      ],
+      "recommended": "HY-LV205",
+      "recommend_status": "possible",
+      "escalated": false,
+      "reply": null,
+      "status": "recommended",
+      "note": "可能适用：染色设备为溢流染色机、卷染机、经轴染色机，请确认"
+    },
+    {
+      "session_id": "sess:10",
+      "customer": "customer:C02",
+      "sales": null,
+      "asked": [],
+      "capabilities_used": [],
+      "candidates": [],
+      "recommended": null,
+      "recommend_status": null,
+      "escalated": true,
+      "reply": null,
+      "status": "escalated",
+      "evidence_changed": [
+        "ku:claim:2"
+      ],
+      "k5_after_recheck": "suspended",
+      "qi_review": [
+        "q:27"
+      ],
+      "k5_after_revoke": "revoked"
+    }
+  ],
+  "restart": {
+    "before": {
+      "caps": {
+        "cap:3": "revoked",
+        "cap:4": "revoked"
+      },
+      "ledger": {
+        "pm:P01": 12,
+        "rd:R02": 2,
+        "rd:R01": 7
+      },
+      "open_requirements": [
+        "req:1",
+        "req:2",
+        "req:3",
+        "req:4",
+        "req:6",
+        "req:7"
+      ]
+    },
+    "after": {
+      "caps": {
+        "cap:3": "revoked",
+        "cap:4": "revoked"
+      },
+      "ledger": {
+        "pm:P01": 12,
+        "rd:R02": 2,
+        "rd:R01": 7
+      },
+      "open_requirements": [
+        "req:1",
+        "req:2",
+        "req:3",
+        "req:4",
+        "req:6",
+        "req:7"
+      ]
+    },
+    "replay": {
+      "session_id": "sess:11",
+      "customer": "customer:C03",
+      "sales": null,
+      "asked": [],
+      "capabilities_used": [],
+      "candidates": [],
+      "recommended": null,
+      "recommend_status": null,
+      "escalated": true,
+      "reply": null,
+      "status": "escalated"
+    }
+  }
+}

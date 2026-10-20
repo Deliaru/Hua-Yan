@@ -1,0 +1,453 @@
+{
+  "qi": {
+    "rows": [
+      {
+        "window": "W1",
+        "session_id": "sess:1",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": "HY-LV205",
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W1",
+        "session_id": "sess:2",
+        "class": [
+          "锦纶氨纶",
+          "溢流染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": true,
+        "confirmed": true,
+        "product": "HY-LV205",
+        "to_rd": false,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W1",
+        "session_id": "sess:3",
+        "class": [
+          "锦纶",
+          "经轴染色机"
+        ],
+        "truth": null,
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W2",
+        "session_id": "sess:4",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": true,
+        "confirmed": true,
+        "product": "HY-LV205",
+        "to_rd": false,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W2",
+        "session_id": "sess:5",
+        "class": [
+          "锦纶氨纶",
+          null
+        ],
+        "truth": null,
+        "self_served": true,
+        "confirmed": false,
+        "product": "HY-LV205",
+        "to_rd": false,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": false
+      },
+      {
+        "window": "W2",
+        "session_id": "sess:6",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": true,
+        "confirmed": true,
+        "product": "HY-LV205",
+        "to_rd": false,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W3",
+        "session_id": "sess:7",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": true,
+        "confirmed": true,
+        "product": "HY-LV205",
+        "to_rd": false,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W3",
+        "session_id": "sess:8",
+        "class": [
+          "锦纶",
+          "经轴染色机"
+        ],
+        "truth": null,
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": true,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W3",
+        "session_id": "sess:9",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": true,
+        "confirmed": true,
+        "product": "HY-LV205",
+        "to_rd": false,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W4",
+        "session_id": "sess:10",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": null,
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W4",
+        "session_id": "sess:11",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": null,
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": true,
+        "unauthorized": false,
+        "solved": true
+      }
+    ],
+    "windows": {
+      "W1": {
+        "questions": 3,
+        "solved": 3,
+        "rd": 2,
+        "rd_per_solved": 0.67
+      },
+      "W2": {
+        "questions": 3,
+        "solved": 2,
+        "rd": 0,
+        "rd_per_solved": 0.0
+      },
+      "W3": {
+        "questions": 3,
+        "solved": 3,
+        "rd": 1,
+        "rd_per_solved": 0.33
+      },
+      "W4": {
+        "questions": 2,
+        "solved": 2,
+        "rd": 2,
+        "rd_per_solved": 1.0
+      }
+    },
+    "correct_self_service": 5,
+    "rd_repeats": 2,
+    "unauthorized_confirmed": 0,
+    "after_revoke_back_to_rd": "2/2",
+    "after_restart_self_served": "2/2",
+    "runs": [
+      "run-b73dababbba5"
+    ]
+  },
+  "v6": {
+    "rows": [
+      {
+        "window": "W1",
+        "session_id": "sess:1",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": false
+      },
+      {
+        "window": "W1",
+        "session_id": "sess:2",
+        "class": [
+          "锦纶氨纶",
+          "溢流染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": true,
+        "confirmed": true,
+        "product": "HY-LV205",
+        "to_rd": false,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W1",
+        "session_id": "sess:3",
+        "class": [
+          "锦纶",
+          "经轴染色机"
+        ],
+        "truth": null,
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W2",
+        "session_id": "sess:4",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": true,
+        "unauthorized": false,
+        "solved": false
+      },
+      {
+        "window": "W2",
+        "session_id": "sess:5",
+        "class": [
+          "锦纶氨纶",
+          null
+        ],
+        "truth": null,
+        "self_served": true,
+        "confirmed": true,
+        "product": "HY-LV205",
+        "to_rd": false,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": true,
+        "solved": false
+      },
+      {
+        "window": "W2",
+        "session_id": "sess:6",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": true,
+        "unauthorized": false,
+        "solved": false
+      },
+      {
+        "window": "W3",
+        "session_id": "sess:1",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": true,
+        "unauthorized": false,
+        "solved": false
+      },
+      {
+        "window": "W3",
+        "session_id": "sess:2",
+        "class": [
+          "锦纶",
+          "经轴染色机"
+        ],
+        "truth": null,
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": true,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W3",
+        "session_id": "sess:3",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": "HY-LV205",
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": true,
+        "unauthorized": false,
+        "solved": false
+      },
+      {
+        "window": "W4",
+        "session_id": "sess:4",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": null,
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": false,
+        "unauthorized": false,
+        "solved": true
+      },
+      {
+        "window": "W4",
+        "session_id": "sess:5",
+        "class": [
+          "锦纶氨纶",
+          "经轴染色机"
+        ],
+        "truth": null,
+        "self_served": false,
+        "confirmed": false,
+        "product": null,
+        "to_rd": true,
+        "rd_answer": null,
+        "repeat": true,
+        "unauthorized": false,
+        "solved": true
+      }
+    ],
+    "windows": {
+      "W1": {
+        "questions": 3,
+        "solved": 2,
+        "rd": 2,
+        "rd_per_solved": 1.0
+      },
+      "W2": {
+        "questions": 3,
+        "solved": 0,
+        "rd": 2,
+        "rd_per_solved": "—"
+      },
+      "W3": {
+        "questions": 3,
+        "solved": 1,
+        "rd": 3,
+        "rd_per_solved": 3.0
+      },
+      "W4": {
+        "questions": 2,
+        "solved": 2,
+        "rd": 2,
+        "rd_per_solved": 1.0
+      }
+    },
+    "correct_self_service": 1,
+    "rd_repeats": 6,
+    "unauthorized_confirmed": 1,
+    "after_revoke_back_to_rd": "2/2",
+    "after_restart_self_served": "0/2",
+    "runs": [
+      "run-d1ce7bb4416f",
+      "run-b6e81aae9ed4"
+    ]
+  }
+}

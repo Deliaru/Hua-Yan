@@ -1,0 +1,364 @@
+{
+  "lambda": 0.6,
+  "seed": 0,
+  "n_per_window": 120,
+  "rd_required": {
+    "color_unlevel": [
+      "fiber",
+      "equipment",
+      "bath_ph"
+    ],
+    "shade_variation": [
+      "fiber",
+      "water"
+    ],
+    "color_spots": [
+      "dye_class",
+      "water"
+    ],
+    "poor_fastness": [
+      "fiber",
+      "dye_class"
+    ],
+    "harsh_hand": [
+      "fiber",
+      "process"
+    ],
+    "crease_marks": [
+      "fiber",
+      "equipment"
+    ],
+    "low_whiteness": [
+      "fiber",
+      "process"
+    ],
+    "strength_loss": [
+      "fiber",
+      "bath_ph"
+    ],
+    "yellowing": [
+      "fiber",
+      "constraint"
+    ],
+    "bleeding_staining": [
+      "fiber",
+      "dye_class",
+      "process"
+    ]
+  },
+  "customer_required": {
+    "color_unlevel": [
+      "fiber",
+      "equipment"
+    ],
+    "shade_variation": [
+      "fiber",
+      "water"
+    ],
+    "color_spots": [
+      "dye_class",
+      "water"
+    ],
+    "poor_fastness": [
+      "fiber",
+      "dye_class"
+    ],
+    "harsh_hand": [
+      "fiber",
+      "process"
+    ],
+    "crease_marks": [
+      "fiber",
+      "equipment"
+    ],
+    "low_whiteness": [
+      "fiber",
+      "process"
+    ],
+    "strength_loss": [
+      "fiber",
+      "bath_ph"
+    ],
+    "yellowing": [
+      "fiber",
+      "constraint"
+    ],
+    "bleeding_staining": [
+      "fiber",
+      "dye_class",
+      "process"
+    ]
+  },
+  "windows": {
+    "W1": {
+      "frozen": {
+        "sessions": 120,
+        "avg_asks": 1.79,
+        "escalated": 7,
+        "complete_rate": 0.14,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.82,
+        "rd_return_rate": 0.86,
+        "rd_per_solved": 0.12,
+        "solved": 105,
+        "l0_ph_asks": 0
+      },
+      "evolving": {
+        "sessions": 120,
+        "avg_asks": 1.79,
+        "escalated": 7,
+        "complete_rate": 0.14,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.82,
+        "rd_return_rate": 0.86,
+        "rd_per_solved": 0.12,
+        "solved": 105,
+        "l0_ph_asks": 0
+      },
+      "unfiltered": {
+        "sessions": 120,
+        "avg_asks": 1.79,
+        "escalated": 7,
+        "complete_rate": 0.14,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.82,
+        "rd_return_rate": 0.86,
+        "rd_per_solved": 0.12,
+        "solved": 105,
+        "l0_ph_asks": 0
+      }
+    },
+    "W2": {
+      "frozen": {
+        "sessions": 120,
+        "avg_asks": 1.82,
+        "escalated": 6,
+        "complete_rate": 0.17,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.73,
+        "rd_return_rate": 0.83,
+        "rd_per_solved": 0.12,
+        "solved": 94,
+        "l0_ph_asks": 0
+      },
+      "evolving": {
+        "sessions": 120,
+        "avg_asks": 1.82,
+        "escalated": 6,
+        "complete_rate": 0.17,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.73,
+        "rd_return_rate": 0.83,
+        "rd_per_solved": 0.12,
+        "solved": 94,
+        "l0_ph_asks": 0
+      },
+      "unfiltered": {
+        "sessions": 120,
+        "avg_asks": 1.82,
+        "escalated": 6,
+        "complete_rate": 0.17,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.73,
+        "rd_return_rate": 0.83,
+        "rd_per_solved": 0.12,
+        "solved": 94,
+        "l0_ph_asks": 0
+      }
+    },
+    "W3": {
+      "frozen": {
+        "sessions": 120,
+        "avg_asks": 1.87,
+        "escalated": 12,
+        "complete_rate": 0.08,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.68,
+        "rd_return_rate": 0.92,
+        "rd_per_solved": 0.24,
+        "solved": 94,
+        "l0_ph_asks": 0
+      },
+      "evolving": {
+        "sessions": 120,
+        "avg_asks": 1.87,
+        "escalated": 12,
+        "complete_rate": 0.08,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.68,
+        "rd_return_rate": 0.92,
+        "rd_per_solved": 0.24,
+        "solved": 94,
+        "l0_ph_asks": 0
+      },
+      "unfiltered": {
+        "sessions": 120,
+        "avg_asks": 1.53,
+        "escalated": 10,
+        "complete_rate": 0.1,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.63,
+        "rd_return_rate": 0.9,
+        "rd_per_solved": 0.22,
+        "solved": 86,
+        "l0_ph_asks": 0
+      }
+    },
+    "W4": {
+      "frozen": {
+        "sessions": 120,
+        "avg_asks": 1.82,
+        "escalated": 4,
+        "complete_rate": 0.0,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.73,
+        "rd_return_rate": 1.0,
+        "rd_per_solved": 0.09,
+        "solved": 92,
+        "l0_ph_asks": 0
+      },
+      "evolving": {
+        "sessions": 120,
+        "avg_asks": 1.99,
+        "escalated": 4,
+        "complete_rate": 0.0,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.76,
+        "rd_return_rate": 1.0,
+        "rd_per_solved": 0.08,
+        "solved": 95,
+        "l0_ph_asks": 0
+      },
+      "unfiltered": {
+        "sessions": 120,
+        "avg_asks": 1.31,
+        "escalated": 4,
+        "complete_rate": 0.0,
+        "complete_l0_rate": 1.0,
+        "correct_rate": 0.74,
+        "rd_return_rate": 1.0,
+        "rd_per_solved": 0.09,
+        "solved": 93,
+        "l0_ph_asks": 0
+      }
+    }
+  },
+  "cells": {
+    "evolving": {
+      "W1": {
+        "ask_slot|L0": "rule（训练 119 行，未显著胜过规则）",
+        "ask_slot|L1": "rule（训练 184 行，未显著胜过规则）"
+      },
+      "W2": {
+        "ask_slot|L0": "rule（训练 226 行，未显著胜过规则）",
+        "ask_slot|L1": "rule（训练 369 行，未显著胜过规则）"
+      },
+      "W3": {
+        "ask_slot|L0": "rule（训练 331 行，未显著胜过规则）",
+        "ask_slot|L1": "jue_k（训练 578 行）"
+      },
+      "W4": {
+        "ask_slot|L0": "rule（训练 435 行，未显著胜过规则）",
+        "ask_slot|L1": "jue_k（训练 774 行）"
+      }
+    },
+    "unfiltered": {
+      "W1": {
+        "ask_slot|L0": "rule（训练 303 行，未显著胜过规则）"
+      },
+      "W2": {
+        "ask_slot|L0": "jue_k（训练 595 行）"
+      },
+      "W3": {
+        "ask_slot|L0": "jue_k（训练 899 行）"
+      },
+      "W4": {
+        "ask_slot|L0": "jue_k（训练 1157 行）"
+      }
+    }
+  },
+  "calibration": {
+    "W1（重训前）": {
+      "objects": 167,
+      "spearman": 1.0,
+      "mean_abs_diff": 0.0,
+      "over_threshold": {
+        "evolving": 167,
+        "unfiltered": 167
+      }
+    },
+    "W2（重训前）": {
+      "objects": 167,
+      "spearman": 1.0,
+      "mean_abs_diff": 0.0,
+      "over_threshold": {
+        "evolving": 167,
+        "unfiltered": 167
+      }
+    },
+    "W3（重训前）": {
+      "objects": 140,
+      "spearman": 0.929,
+      "mean_abs_diff": 0.2623,
+      "over_threshold": {
+        "evolving": 140,
+        "unfiltered": 88
+      }
+    },
+    "W4（重训前）": {
+      "objects": 153,
+      "spearman": 0.933,
+      "mean_abs_diff": 0.2321,
+      "over_threshold": {
+        "evolving": 153,
+        "unfiltered": 95
+      }
+    }
+  },
+  "after_k3": {
+    "frozen": {
+      "sessions": 40,
+      "avg_asks": 2.88,
+      "escalated": 6,
+      "complete_rate": 1.0,
+      "complete_l0_rate": 1.0,
+      "correct_rate": 0.85,
+      "rd_return_rate": 0.0,
+      "rd_per_solved": 0.15,
+      "solved": 40,
+      "l0_ph_asks": 43,
+      "capability": "cap:3"
+    },
+    "evolving": {
+      "sessions": 40,
+      "avg_asks": 2.88,
+      "escalated": 6,
+      "complete_rate": 1.0,
+      "complete_l0_rate": 1.0,
+      "correct_rate": 0.85,
+      "rd_return_rate": 0.0,
+      "rd_per_solved": 0.15,
+      "solved": 40,
+      "l0_ph_asks": 43,
+      "capability": "cap:3"
+    },
+    "unfiltered": {
+      "sessions": 40,
+      "avg_asks": 1.68,
+      "escalated": 6,
+      "complete_rate": 1.0,
+      "complete_l0_rate": 1.0,
+      "correct_rate": 0.85,
+      "rd_return_rate": 0.0,
+      "rd_per_solved": 0.15,
+      "solved": 40,
+      "l0_ph_asks": 19,
+      "capability": "cap:3"
+    }
+  },
+  "runs": {
+    "frozen": "data\\jue_evolution\\runs\\run-053a8b348433",
+    "evolving": "data\\jue_evolution\\runs\\run-e59fda5b43bf",
+    "unfiltered": "data\\jue_evolution\\runs\\run-f83bfe876279"
+  }
+}

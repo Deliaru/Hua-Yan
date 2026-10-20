@@ -8,6 +8,7 @@ items:
     product: HY-LV205
     form: ask
     slot: bath_ph
+    author: rd:R02
   - title: HY-LV205 适用锦氨经轴染色（模拟）
     text: （模拟）HY-LV205 在经轴染色机上对锦纶氨纶弹力面料匀染良好，适用于锦纶氨纶的经轴染色。
     evidence: [{doc_id: RPT-044, span: p3, quote: HY-LV205 适用于锦纶氨纶的经轴染色}]
@@ -15,6 +16,7 @@ items:
     product: HY-LV205
     form: applicable
     conditions: [锦纶氨纶, 经轴染色机]
+    author: rd:R02
   - title: HY-LV205 产品页适用范围（模拟）
     text: （模拟）HY-LV205 用于锦纶及锦纶氨纶，适合溢流染色机和卷染机。
     evidence: [{doc_id: LV205, span: p2, quote: 适合溢流染色机和卷染机}]
