@@ -1294,14 +1294,14 @@ class HuayanApp:
     def recheck_evidence(self):
         """重取依据比指纹：变了的结论待复核、依赖它的能力挂起，由觉提出 qi_review。"""
         changed = recheck(self.kb, self.kb.sources)
-        self._invalidate_capabilities()
+        self._invalidate_capabilities("system")
         self.scan()
         return changed
 
     def revoke_capability(self, cap_id, by):
         self._actor(by, {"rd"})
         self.kb.revoke(cap_id, by)
-        self._invalidate_capabilities()
+        self._invalidate_capabilities(by)
         self.scan()
 
     def withdraw_claim(self, ku_id, by):
@@ -1310,10 +1310,10 @@ class HuayanApp:
         for q in self.bus.list(family="qi_review"):
             if q.refs["ku_id"] == ku_id:
                 self._settle(q.id, Resolution(action="answered", by=by, note="撤回结论"))
-        self._invalidate_capabilities()
+        self._invalidate_capabilities(by)
         self.scan()
 
-    def _invalidate_capabilities(self):
+    def _invalidate_capabilities(self, by):
         active = {c.id for c in self.kb.capabilities() if c.status == "active"}
         for session in self._sessions.values():
             if session.status in {"escalated", "closed"}:
@@ -1325,6 +1325,8 @@ class HuayanApp:
                     c.product_id for c in match_candidates(session.need.phenomenon, session.need.known(),
                         self.kb.view(self._actor(session.sales_id or session.customer_id)).products)}:
                 session.recommendation, session.status = None, "open"
+                self.events.append("recommendation_withdrawn", by, {"product_id": rec.product_id,
+                                   "capability_id": selected.capability_id}, session_id=session.id)
             session.hints = self.ask_hints(session.need)
             self._save_session(session)
 
@@ -1430,7 +1432,7 @@ class HuayanApp:
                     payload = {**capability.payload, "conditions": {**conditions, slot: [v for v in current if v != value]}}
                     self.kb.grant(capability.model_copy(update={"id": self.kb.next_cap_id(), "payload": payload}))
             self.events.append("sheet_updated", by, {"product_id": pid, "slot": slot, "removed": value})
-            self._invalidate_capabilities()
+            self._invalidate_capabilities(by)
         elif q.family == "qi_review" and action == "sign":
             self.kb.confirm([q.refs["ku_id"]], by)
         elif action == "freeze_access":

@@ -1639,6 +1639,8 @@ class Candidate(BaseModel):
 
 新增 `claim_confirmed`、`claim_withdrawn`、`capability_granted`、`capability_revoked`、`capability_suspended`、`capability_used`、`evidence_changed`。`retrieve` 的 payload 加 `unanswerable_ku_ids` 与 `n_unanswerable`。`recommend` 的 payload 加 `status` 与 `capability_id`。批准复用现有 `scope_extended`。
 
+（Q8，2026-10-20 人批准）新增 `recommendation_withdrawn`：能力撤销、挂起或产品页收窄后，已推荐的会话按本层现有情境重新匹配不再覆盖时退回 open，记这一事件；payload `{product_id, capability_id}`，`session_id` 为该会话，actor 为触发撤销的人。
+
 ### 2.5 觉（契约 5.2、5.4、⑨）
 
 - `collect_scheduled(events, at, seeds, products, windows=None, caps=())`：加 `caps`，供 `qi_grant`、`qi_review`、`scope_update` 读能力状态。
