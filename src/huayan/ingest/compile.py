@@ -71,6 +71,11 @@ def _cited(sources, ev):
     return fragment if fragment and ev.quote in fragment.text else None
 
 
+def _key(payload) -> dict:
+    """比较用：适用条件的取值按集合比，顺序不同算相同。"""
+    return payload | {"conditions": {k: frozenset(v) for k, v in payload.get("conditions", {}).items()}}
+
+
 def admit(proposals: list[Proposal], sources, kb) -> dict:
     """核对引文、定级、对齐，写入候选结论与同层能力提议；返回报告。"""
     report = {"admitted": [], "dropped": [], "duplicates": [], "conflicts": [], "unaligned": []}
@@ -106,7 +111,7 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
             product_id=product.id if product else None, phenomenon_ids=[found[0]], owner=confirmer,
             confirmed_by=confirmer, status="candidate", source="contributed", created_at=at,
             evidence=[f"{f.doc_id}#{f.span}@{f.fingerprint}" for f in fragments])
-        same = next((c for c in existing if c.payload == payload), None)
+        same = next((c for c in existing if _key(c.payload) == _key(payload)), None)
         if same:                                       # 与已有能力完全相同：挂为它的依据（第 0 天内容也有指纹）
             kb.attach_evidence(same.id, unit)
             report["duplicates"].append(p.title)
