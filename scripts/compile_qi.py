@@ -37,6 +37,9 @@ def main():
         gateway = build_gateway("config/models.yaml", False, FileMeter(Path(args.out).parent, "compile_qi"))
         gateway.cache_dir = None                    # 编译不缓存资料片段
         proposals = propose(fragments, gateway, kb.seeds)
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)   # 留下提议，可用 --proposals 回放
+        (Path(args.out).parent / "proposals.yaml").write_text(yaml.safe_dump(
+            {"items": [p.model_dump() for p in proposals]}, allow_unicode=True, sort_keys=False), encoding="utf-8")
     changed = recheck(kb, kb.sources)
     report = admit(proposals, kb.sources, kb)
     write_report(Path(args.out), kb, fragments, proposals, report, changed, args)
