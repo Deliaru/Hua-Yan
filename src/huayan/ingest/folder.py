@@ -1,5 +1,5 @@
 """替身 RAG：一个来源就是一个文件夹。.md/.txt 按空行分段（span 为 p<序号>）；
-.csv 每条记录是一个文档（doc_id 为 <文件名>#<首列>），每列一段（span 为列名）。"""
+.csv 每条记录是一个文档（doc_id 为 <文件名>#<首个取值不重复的列>），每列一段（span 为列名）。"""
 from __future__ import annotations
 
 import csv
@@ -27,9 +27,10 @@ class FolderSource:
                 docs[stem] = [(f"p{n}", text) for n, text in enumerate(parts, 1)]
             elif path.suffix == ".csv":
                 with path.open(encoding="utf-8-sig", newline="") as f:
-                    for row in csv.DictReader(f):
-                        key = next(iter(row.values()))
-                        docs[f"{stem}#{key}"] = [(col, text) for col, text in row.items() if text]
+                    rows = list(csv.DictReader(f))
+                key = next(c for c in rows[0] if len({r[c] for r in rows}) == len(rows))
+                for row in rows:
+                    docs[f"{stem}#{row[key]}"] = [(col, text) for col, text in row.items() if text]
         return docs
 
     def _level(self, doc_id):

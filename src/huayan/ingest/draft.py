@@ -45,7 +45,7 @@ class ProductDrafts(BaseModel):
 
 
 def _ask(gateway, prompt, data, schema):
-    output, _ = gateway.structured(LLMRequest(tier=Tier.FAST, caller="ingest:draft", temperature=0,
+    output, _ = gateway.structured(LLMRequest(tier=Tier.FAST, caller="ingest:draft", temperature=0, timeout_s=180,
         messages=[Message(role="system", content=prompt),
                   Message(role="user", content=json.dumps(data, ensure_ascii=False))]), schema)
     return output
