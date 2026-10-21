@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from huayan.bus import QuestionBus
-from huayan.contracts import (JueObject, JueOutput, JueRecord, JueState, NeedState, Requirement, ReuseProposal,
+from huayan.contracts import (Capability, JueObject, JueOutput, JueRecord, JueState, NeedState, Requirement, ReuseProposal,
                               ScoredDecision, Session)
 from huayan.events import EventLog
 from huayan.jev.system1 import MockSystem1Client
@@ -16,7 +16,7 @@ from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import ask_hints, publish
 from huayan.jue.records import decision_rows, rows_for
 from huayan.jue.scan import scan
-from huayan.jue.state import requirement_state, session_state
+from huayan.jue.state import collect_scheduled, requirement_state, session_state
 from huayan.jue.train import fit
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.meter import FileMeter
@@ -81,12 +81,30 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     attrs = session_state(session, session_events, t0).objects["session:sess:20"].attrs
     assert attrs["escalated"] and not evaluate(templates_all["escalate_need"].precondition, attrs, boolean=True)
 
-    # 模板目录：Q2 新增 qi_grant、qi_review，Q5.5 新增 trial_rework，共 22 个；自动动作仍只有两种。
+    # 模板目录：Q2 新增 qi_grant、qi_review，Q5.5 新增 trial_rework，v8 新增 trial_risk、stale_capability，共 24 个；自动动作仍只有两种。
     templates = load_templates(TEMPLATES)
-    assert len({t.family for t in templates.values()}) == 23
+    assert len({t.family for t in templates.values()}) == 24
     assert {t.auto_action for t in templates.values() if t.auto_action} == {"escalate", "assign_sales"}
     for name in ("b1_required", "b2_info_value", "rule_alert"):
         load_templates(ROOT / "config" / "baselines" / name)
+
+    # v8 判断过时：研发签出两条说明书没有声称的适用判断（锦纶氨纶），knowledge_conflict 不管；一条之后 3 次在气流染色机上因产品本身失败，另一条只有 1 次设备原因失败
+    stale_events, caps = EventLog(), [Capability(id=f"cap:{i}", form="applicable", audience=0, payload={
+        "product_id": pid, "phenomenon": "color_unlevel", "conditions": {"fiber": ["锦纶氨纶"]}},
+        based_on=["ku:claim:1"], granted_by="rd:R01", approved_by="pm:P01", status="active", at=t0)
+        for i, pid in ((1, "T-101"), (2, "T-301"))]
+    for i, (cap, equipment, result, cause) in enumerate([*[(caps[0], "气流染色机", "fail", "product")] * 3,
+            (caps[0], "溢流染色机", "pass", "none"), (caps[1], "气流染色机", "fail", "equipment"),
+            (caps[1], "溢流染色机", "pass", "none")]):
+        ts = t0 + timedelta(days=1 + i)
+        stale_events.append("capability_used", "sales:S01", {"capability_id": cap.id}, session_id=f"sess:s{i}", ts=ts)
+        stale_events.append("trial", "rd:R01", {"trial_id": f"t{i}", "product_id": cap.payload["product_id"],
+            "conditions": {"fiber": "锦纶氨纶", "equipment": equipment}, "result": result, "cause": cause}, ts=ts)
+    state, refs = collect_scheduled(stale_events, t0 + timedelta(days=8), mini_seeds, mini_seeds.products, caps=caps)
+    found = publish(model.propose(state), state, templates, QuestionBus(stale_events), 0.5, seeds=mini_seeds, refs=refs)
+    assert [(q.family, q.object_id, q.signer_id) for q in found] == [
+        ("stale_capability", "knowledge:stale:cap:1", "rd:R01")]
+    assert found[0].refs["fail_values"] == "equipment=气流染色机"     # 范围里只有一个取值的纤维不算
 
     # 需求单 4 个状态只到点对应的推进决策
     kb = KnowledgeBase.from_seeds(mini_seeds, EventLog(), AuditLog())

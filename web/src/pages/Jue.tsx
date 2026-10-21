@@ -68,6 +68,7 @@ const WHY: Record<string, string> = {
   seal_leak: "对外说明命中了封存项或 L3 术语",
   knowledge_conflict: "某产品在某个条件下试样反复失败，说明书可能要更新",
   trial_risk: "转译已确认、即将试样，客户没说清的条件可能让试样失败",
+  stale_capability: "研发签出的适用判断被用过之后，结果开始在某个条件上集中失败",
   leak_risk: "有人短时间内反复检索同一产品的高层级内容",
 };
 

@@ -168,6 +168,17 @@ signer_role: rd
 - `test_wp_b1`：家族数 24；在 `mini_seeds` 上授予一条能力，随后 3 次落在同一取值上的产品原因失败 → 觉提出 `stale_capability`；另一条能力只有 1 次设备原因失败 → 不提出。
 - 真实跑：Jue-K 格表里有 `stale_capability|L3`，写明是否赢过规则。
 
+**现状（2026-10-21，已完成）**
+
+- 模板、能力效果对象、门面 `narrow_capability`（路由 `/api/qi/narrow`）、研发工作面「收窄 / 撤销 / 忽略」全部接通；`knowledge_conflict` 的 `claimed` 只认第 0 天情境（运行中人签出的情境不算说明书声称）。`test_wp_b1` 家族数 24，过时能力命中、只有一次设备失败的能力不碰；11 个测试全绿。
+- 实施时定下的三处口径（契约 ⑯ 没写细，人已确认，2026-10-21）：
+  1. `n_fail` 只计产品原因的失败：设备、操作、需求条件缺失的失败说明不了「这条判断错了」；`fail_rate`、`recent_fail_rate`、`early_fail_rate` 同此。
+  2. `fail_concentration` 只在还能收窄的取值上算：能力范围里只有一个取值的槽位（如「锦纶氨纶」），每次失败都落在它上面，算进去恒为 1。
+  3. 主人与签字人走已有的 `refs.signer`（= 授予人），`publish.py` 不另加 `granted_by` 分支。
+- 收窄与撤销都会结束这条过时问题；收窄后的新能力沿用原批准人，不再走产品经理批准（范围只缩不扩，与「更新适用表」一致）。真实跑：`mini_seeds` 上授予「T-101 适用锦纶氨纶（设备不限）」，3 次在气流染色机上产品原因失败 → 觉提出、可收窄取值只列出「设备 = 气流染色机」→ 收窄为溢流染色机后，「锦氨 + 气流」不再匹配 T-101，「锦氨 + 溢流」照旧匹配。
+- 训练数据：800 条能力的四周生命周期（四成本来就对、三成在某个取值上本来就错、三成在第 7～21 天漂移后变错），每次试样后看一眼，共 11243 行（train 6361、正例 1811）。结果（`data/models_v8/metrics.json`）：**`stale_capability|L3` 测试集 AUC 0.748，规则 0.703，AUC 差 95% 区间 [0.028, 0.065]，Brier 0.187 对 0.241，换上 Jue-K**；留出现象上 0.782 对 0.709。规则看的是累计失败率，Jue-K 多看了「最近 7 天比此前高」「失败集中在一个取值上」，漂移后的能力它报得更早。同等拦截下少打扰多少，放到 Q9.4 的业务月里用事件日志算。
+- 同 Q9.1：不并入 `models/jue_k/`；5 天业务周重跑，指标与 `docs/reports/week/metrics.json` 逐项一致；`sim/week.py`、`Guide.tsx` 没动（过时能力要几周的使用才出现，放进 Q9.4 的业务月）。
+
 ### Q9.3 企业编制与模拟人
 
 `scripts/make_enterprise.py`（新）、`prompts/sim_sales.md`、`prompts/sim_rd.md`、`prompts/sim_pm.md`、`prompts/personas.yaml`（新）、`prompts/sim_customer.md`、`sim/humans.py`（新）、`eval/week.py`、`gateway/` 的 caller 校验（随契约 ⑩）

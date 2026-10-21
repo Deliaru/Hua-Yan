@@ -1,0 +1,16 @@
+id: stale_capability
+family: stale_capability
+kind: advance
+object_type: knowledge
+decision_label: 是否收窄或撤销已签出的适用判断
+# v8：闸门只写阶段：运行中人签出的适用能力被用过、也有了结果；提不提由打分决定
+precondition: "attrs.n_used >= 1 and attrs.n_outcomes >= 1"
+# 规则冷启动（状态机组的候选规则 S1）：授予后至少两次产品原因失败，按失败率报
+rule_score: "(attrs.n_fail >= 2) * attrs.fail_rate"
+worth_prompt: "产品 {attrs.product_id} 对 {attrs.value} 的适用判断授予 {attrs.days_since_grant:.0f} 天、被使用 {attrs.n_used} 次；之后 {attrs.n_outcomes} 次试样里产品原因失败 {attrs.n_fail} 次（最近 7 天失败率 {attrs.recent_fail_rate:.0%}，此前 {attrs.early_fail_rate:.0%}），失败集中在同一可收窄取值上的比例 {attrs.fail_concentration:.0%}，客户评价不通过 {attrs.n_market_fail} 次。这条判断是否已经走偏、需要收窄或撤销？"
+title: "{object}：你签出的适用判断可能走偏了，要不要收窄？"
+owner_role: rd
+signer_role: rd
+# 还在被使用，损害在扩大
+urgency: "min(1, attrs.n_used / 10)"
+bounty_points: 5

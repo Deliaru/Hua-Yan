@@ -81,6 +81,7 @@ export const api = {
     call("market-eval", { req_id, result, note, by, missing_slots }),
   rework: (req_id: string, by: string) => call("rework", { req_id, by }),
   returnForConditions: (req_id: string, slots: string[], by: string) => call("return_for_conditions", { req_id, slots, by }),
+  narrowCapability: (cap_id: string, conditions: Record<string, string[]>, by: string) => call("qi/narrow", { cap_id, conditions, by }),
 
   // 契的签字入口
   capabilities: (viewer: string) => call<Capability[]>(`capabilities?${q({ viewer })}`),

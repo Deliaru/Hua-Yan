@@ -1,7 +1,7 @@
 """生成 Jue-K 训练数据 data/jue_k/samples.csv（契约 ⑨），并打印每类样本数与正例数。
 
 uv run python scripts/make_jue_k_data.py [--n-cards 2000 --weeks 40 --heldout crease_marks,low_whiteness]
-追问 / 回问：程序轨迹，按卡 70/15/15 划分，另留 2 个现象为 heldout；定时三类：多周业务周在真实链路上跑出的事件，按周 28/6/6 划分
+追问 / 回问：程序轨迹，按卡 70/15/15 划分，另留 2 个现象为 heldout；判断过时：能力生命周期，按能力划分；定时三类：多周业务周在真实链路上跑出的事件，按周 28/6/6 划分
 （data/week/w1 由 make_sim.py 用另一个种子生成，不参与训练，留给 run_week.py 评估）。
 """
 import argparse
@@ -19,7 +19,7 @@ from huayan.events import EventLog
 from huayan.jue.proto import JueProto
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.sim import make_cards, make_week
-from huayan.sim.trajectory import trajectory
+from huayan.sim.trajectory import capability_rows, trajectory
 from huayan.sim.world import history_trials
 from huayan.sim.week_events import week_rows
 
@@ -32,6 +32,7 @@ def main():
     ap.add_argument("--n-cards", type=int, default=2000)
     ap.add_argument("--n-back-cards", type=int, default=3000, help="额外的应升级卡，只取回问样本")
     ap.add_argument("--n-history", type=int, default=300, help="v8：第 0 周导入的历史试样数")
+    ap.add_argument("--n-caps", type=int, default=800, help="v8：判断过时样本用的能力生命周期数")
     ap.add_argument("--weeks", type=int, default=40)
     ap.add_argument("--week-days", type=int, default=5)
     ap.add_argument("--heldout", default="crease_marks,low_whiteness")
@@ -74,6 +75,12 @@ def main():
                  if row["family"] in ("ask_back", "trial_risk")]
 
     scheduled = JueProto(args.templates, None, "scheduled")
+    # v8 判断过时：每条能力一段四周生命周期，按能力划分；能力所属现象在 heldout 里的整段进 heldout
+    for k in range(args.n_caps):
+        cap_rows = capability_rows(f"cap:life:{k}", seeds, scheduled, rng, start)
+        r = rng.random()
+        split = "train" if r < 0.7 else "val" if r < 0.85 else "test"
+        rows += [{**row, "split": "heldout" if row["value"] in heldout else split} for row in cap_rows]
     with tempfile.TemporaryDirectory() as work:
         for w in range(args.weeks):
             items, cards, injections = make_week(seeds, start, args.week_days, random.Random(1000 + w))

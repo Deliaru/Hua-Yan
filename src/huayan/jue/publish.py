@@ -67,6 +67,10 @@ def _summary(family: str, a: dict) -> str:
     if family == "trial_risk":
         return (f"必问条件答不清楚 {a['n_unknown_required']} 个、无原话依据 {a['n_unquoted_slots']} 个；"
                 f"同现象历史试样因需求条件缺失失败 {a['hist_req_fail_rate']:.0%}，同产品同条件失败率 {a['hist_fail_rate']:.0%}")
+    if family == "stale_capability":
+        return (f"授予 {a['days_since_grant']:.0f} 天、被使用 {a['n_used']} 次；之后 {a['n_outcomes']} 次试样产品原因失败 {a['n_fail']} 次，"
+                f"最近 7 天失败率 {a['recent_fail_rate']:.0%}（此前 {a['early_fail_rate']:.0%}），"
+                f"失败集中在同一可收窄取值的比例 {a['fail_concentration']:.0%}，客户评价不通过 {a['n_market_fail']} 次")
     if family == "contribution":
         return f"研发修改过、未被已有转化知识覆盖的条目 {a['n_edited_uncovered']} 条"
     return "上一步已签字、本步未签（规则到点）"

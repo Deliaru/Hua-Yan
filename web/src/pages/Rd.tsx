@@ -420,6 +420,7 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
     if (q.family === "trial_rework") return <>{evidence}<div className="row gap-2">
       <Act label="退回重新转译" run={() => api.rework(q.refs.requirement_id, me)} />{dismiss}</div></>;
     if (q.family === "trial_risk") return <TrialRiskReview q={q} dismiss={dismiss} evidence={evidence} />;
+    if (q.family === "stale_capability") return <StaleReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant" && q.refs.form === "statement") return <StatementGrant q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant") return <>{evidence}<div className="row gap-2">
       <Act label="签字授予" run={() => api.grantCapability(q.id, me)} />{dismiss}</div></>;
@@ -746,6 +747,46 @@ function TrialRiskReview({ q, dismiss, evidence }: { q: Question; dismiss: React
           <SlotPicker value={slots} onChange={setSlots} />
           <div className="flex flex-wrap gap-2">
             <Act label="先回问" run={() => api.returnForConditions(q.refs.requirement_id, slots, me)} />{dismiss}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// 判断过时（stale_capability）：失败集中的取值默认勾掉，研发确认后收窄；也可整条撤销或保留
+function StaleReview({ q, dismiss, evidence }: { q: Question; dismiss: React.ReactNode; evidence: React.ReactNode }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const scope: Record<string, string[]> = JSON.parse(q.refs.scope);
+  const failing = q.refs.fail_values ? q.refs.fail_values.split(",") : [];
+  const [drop, setDrop] = useState<string[]>(failing.slice(0, 1));
+  const toggle = (k: string) => setDrop(drop.includes(k) ? drop.filter((x) => x !== k) : [...drop, k]);
+  const conditions = Object.fromEntries(Object.entries(scope)
+    .map(([s, vs]) => [s, vs.filter((v) => !drop.includes(`${s}=${v}`))] as const)
+    .filter(([s, vs]) => vs.length !== scope[s].length));
+  return (
+    <>
+      {evidence}
+      <div className="row !items-start">
+        <span className="w-[110px] shrink-0 text-[13px] text-ink-2">收窄：去掉哪些取值</span>
+        <div className="flex flex-1 flex-col gap-2">
+          {Object.entries(scope).map(([s, vs]) => (
+            <div key={s} className="flex flex-wrap items-center gap-2 text-[13px]">
+              <span className="text-ink-2">{L.slot(s)}</span>
+              {vs.map((v) => {
+                const k = `${s}=${v}`;
+                return (
+                  <label key={k} className={failing.includes(k) ? "text-red-600" : ""}>
+                    <input type="checkbox" checked={!drop.includes(k)} onChange={() => toggle(k)} /> {v}
+                  </label>
+                );
+              })}
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            <Act label="收窄" run={() => api.narrowCapability(q.refs.capability_id, conditions, me)} />
+            <Act kind="plain" label="撤销" run={() => api.revokeCapability(q.refs.capability_id, me)} />{dismiss}
           </div>
         </div>
       </div>

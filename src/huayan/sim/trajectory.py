@@ -3,11 +3,11 @@
 import random
 from datetime import datetime, timedelta
 
-from huayan.contracts import (CustomerProfile, JueObject, JueState, NeedCard, NeedState, Phenomenon, Product,
+from huayan.contracts import (Capability, CustomerProfile, JueObject, JueState, NeedCard, NeedState, Phenomenon, Product,
                               QuestionModel, Requirement, ReuseProposal, Seeds, SlotFill)
 from huayan.domain import correct_product
 from huayan.events import EventLog
-from huayan.jue.state import realtime_state, requirement_state, trans_hits
+from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, trans_hits
 from huayan.sim.world import trial_outcome
 
 TURNS = 6
@@ -114,4 +114,45 @@ def trajectory(card: NeedCard, seeds: Seeds, kb, model: QuestionModel, rng: rand
         state = requirement_state(req, need, seeds, kb, start + timedelta(minutes=TURNS + 4), EventLog())
         rows += _rows(model, state, lambda o: int(trial_outcome(card, req.known_slots)[1] == "requirement"),
                       card.id, ("trial_risk",))
+    return rows
+
+
+DAYS, BAD_FAIL, NOISE_PRODUCT, NOISE_EQUIPMENT, BAD_SHARE = 28, 0.65, 0.04, 0.06, 0.4
+
+
+def capability_rows(cap_id: str, seeds: Seeds, model: QuestionModel, rng: random.Random, start: datetime) -> list[dict]:
+    """v8 判断过时：造一条运行中人签出的适用判断的四周生命周期。四成本来就对；三成在某个「槽位 = 取值」上
+    本来就错；三成在第 7～21 天的世界漂移之后才在那个取值上变错。每次使用后试样一次，结果按这条规律抽签；
+    每次试样后看一眼，标签 = 接下来 5 次试样的产品原因失败率 ≥ 0.4（不足 5 次的不出样本）。"""
+    product = rng.choice([p for p in seeds.products if p.status == "released"])
+    phenomenon = rng.choice(product.solves)
+    values = {s.id: s.values for s in seeds.slots}
+    scope = {"fiber": rng.sample(values["fiber"], rng.randint(1, 2))}
+    cap = Capability(id=cap_id, form="applicable", audience=0, payload={"product_id": product.id,
+        "phenomenon": phenomenon, "conditions": scope}, based_on=[f"ku:claim:{cap_id}"], granted_by=product.owner,
+        approved_by="pm:P01", status="active", at=start)
+    kind, slot = rng.random(), rng.choice([s for s in values if s != "fiber"])
+    bad, wrong_from = rng.choice(values[slot]), (start if kind < 0.7 else start + timedelta(days=rng.uniform(7, 21)))
+    events, outcomes = EventLog(), []
+    for i, day in enumerate(sorted(rng.uniform(0.2, DAYS) for _ in range(rng.randint(8, 30)))):
+        at = start + timedelta(days=day)
+        conditions = {s: rng.choice(scope.get(s, vs)) for s, vs in values.items()}
+        if rng.random() < BAD_SHARE:
+            conditions[slot] = bad
+        hit = kind >= 0.4 and at >= wrong_from and conditions[slot] == bad
+        r = rng.random()
+        result, cause = (("fail", "product") if r < (BAD_FAIL if hit else NOISE_PRODUCT) else
+                         ("fail", "equipment") if r < (BAD_FAIL if hit else NOISE_PRODUCT) + NOISE_EQUIPMENT else ("pass", "none"))
+        events.append("capability_used", "sales:S01", {"capability_id": cap_id}, session_id=f"{cap_id}/s{i}", ts=at)
+        events.append("trial", product.owner, {"trial_id": f"{cap_id}/t{i}", "product_id": product.id,
+            "conditions": conditions, "result": result, "cause": cause}, ts=at + timedelta(hours=2))
+        if result == "pass" and hit and rng.random() < 0.5:        # 试样过了，客户大货上仍不满意
+            events.append("market_eval", "sales:S01", {"trial_id": f"{cap_id}/t{i}", "result": "fail"},
+                          ts=at + timedelta(days=2))
+        outcomes.append((at + timedelta(hours=3), cause == "product"))
+    rows = []
+    for k, (at, _) in enumerate(outcomes[:-5]):
+        state = collect_scheduled(events, at, seeds, [], caps=[cap])[0]
+        label = int(sum(f for _, f in outcomes[k + 1:k + 6]) / 5 >= 0.4)
+        rows += _rows(model, state, lambda o, y=label: y, cap_id, ("stale_capability",))
     return rows

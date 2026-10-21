@@ -1320,8 +1320,36 @@ class HuayanApp:
     def revoke_capability(self, cap_id, by):
         self._actor(by, {"rd"})
         self.kb.revoke(cap_id, by)
+        self._settle_stale(cap_id, by, "撤销")
         self._invalidate_capabilities(by)
         self.scan()
+
+    def narrow_capability(self, cap_id, conditions, by):
+        """v8 研发签 stale_capability「收窄」：撤销原适用能力，按更窄的条件授予一条新能力，依据与批准人不变。"""
+        self._actor(by, {"rd"})
+        cap = _find(self.kb._caps, cap_id, "能力")
+        if cap.form != "applicable" or cap.status != "active":
+            raise ValueError("只能收窄生效中的适用能力")
+        self._check_slots(conditions, True)
+        values = {s.id: s.values for s in self.seeds.slots}
+        old = {slot: cap.payload["conditions"].get(slot, values[slot]) for slot in conditions}
+        if not conditions or any(not v or not set(v) <= set(old[s]) for s, v in conditions.items()) \
+                or all(set(v) == set(old[s]) for s, v in conditions.items()):
+            raise ValueError("新条件必须比原条件窄，且每个条件至少留一个取值")
+        self.kb.revoke(cap_id, by)
+        payload = {**cap.payload, "conditions": {**cap.payload["conditions"], **conditions}}
+        new = self.kb.grant(cap.model_copy(update={"id": self.kb.next_cap_id(), "payload": payload, "status": "active",
+                                                   "granted_by": by, "at": get_clock().now()}))
+        self._settle_stale(cap_id, by, f"收窄为 {new.id}")
+        self._invalidate_capabilities(by)
+        self.scan()
+        return new
+
+    def _settle_stale(self, cap_id, by, note):
+        question = next((q for q in self.bus.list(family="stale_capability")
+                         if q.object_id == f"knowledge:stale:{cap_id}"), None)
+        if question:      # 能力已撤销，问题随之结束（产品归属研发代为撤销时也一样）
+            self._settle(question.id, Resolution(action="sign", by=by, note=note))
 
     def withdraw_claim(self, ku_id, by):
         self._actor(by, {"rd"})

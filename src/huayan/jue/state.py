@@ -254,7 +254,8 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
     w = {**WINDOWS, **(windows or {})}
     objects, refs = {}, {}
     for obj, ref in [*_themes(events, at, seeds, at - timedelta(days=w["theme_days"])),
-                     *_knowledge(events, at, products, at - timedelta(days=w["knowledge_days"])),
+                     *_knowledge(events, at, products, caps, at - timedelta(days=w["knowledge_days"])),
+                     *_stale(events, at, caps, seeds),
                      *_scope(events, at, caps),
                      *_qi(events, at, caps, units or {}),
                      *_actors(events, at, at - timedelta(hours=w["actor_hours"]))]:
@@ -313,8 +314,10 @@ def _themes(events, at, seeds, since):
              "assigned_rd": req_rd[esc[0].payload["requirement_id"]] if esc else None}
 
 
-def _knowledge(events, at, products, since):
-    by_id = {p.id: p for p in products}
+def _knowledge(events, at, products, caps, since):
+    # v8：说明书声称的只算第 0 天迁移进来的情境；运行中人签出的判断归 stale_capability
+    signed = {c.id for c in caps if c.form == "applicable" and c.approved_by not in (None, "seed")}
+    claimed = {p.id: [s.conditions for s in p.situations if s.capability_id not in signed] for p in products}
     trials, recs = defaultdict(list), Counter()
     for e in events.query(["trial"], since=since, until=at):
         for slot, value in e.payload["conditions"].items():
@@ -324,14 +327,52 @@ def _knowledge(events, at, products, since):
             recs[(e.payload["product_id"], slot, value)] += 1
     for (pid, slot, value), evs in trials.items():
         fails = [e for e in evs if e.payload["result"] == "fail"]
-        product = by_id.get(pid)
         yield JueObject(object_id=f"knowledge:{pid}|{slot}={value}", object_type="knowledge", attrs={
             "product_id": pid, "slot": slot, "value": value,
-            "claimed": product is not None and any(value in s.conditions.get(slot, []) for s in product.situations),
+            "claimed": any(value in c.get(slot, []) for c in claimed.get(pid, [])),
             "n_trials": len(evs), "n_fail": len(fails),
             "n_fail_product": sum(e.payload["cause"] == "product" for e in fails),
             "fail_ratio": len(fails) / len(evs), "n_recommended": recs[(pid, slot, value)],
         }), {"event_ids": [e.id for e in fails], "session_ids": []}
+
+
+def _stale(events, at, caps, seeds):
+    """v8 判断过时：运行中由人签出的生效适用能力，看授予之后的使用与结果。失败只计产品原因
+    （判断本身错了），设备、操作、需求条件缺失的失败不计；客户评价不通过另计。"""
+    history = events.query(["capability_used", "trial", "market_eval"], until=at)
+    values = {s.id: s.values for s in seeds.slots}
+    for cap in caps:
+        if cap.form != "applicable" or cap.status != "active" or cap.approved_by in (None, "seed"):
+            continue
+        pid, scope = cap.payload["product_id"], cap.payload["conditions"]
+        after = [e for e in history if e.ts >= cap.at]
+        used = [e for e in after if e.kind == "capability_used" and e.payload["capability_id"] == cap.id]
+        trials = [e for e in after if e.kind == "trial" and e.payload["product_id"] == pid
+                  and all(v in scope[s] for s, v in e.payload["conditions"].items() if s in scope)]
+        failed = {e.id for e in trials if e.payload["result"] == "fail" and e.payload["cause"] == "product"}
+        ids = {e.payload["trial_id"] for e in trials}
+        recent = [e for e in trials if e.ts >= at - timedelta(days=7)]
+        early = [e for e in trials if e.ts < at - timedelta(days=7)]
+        rate = lambda evs: sum(e.id in failed for e in evs) / len(evs) if evs else 0.0
+        # 只看还能收窄的取值：范围里只剩一个取值的槽位，所有失败都落在它上面，不说明问题
+        spots = Counter(f"{s}={v}" for e in trials if e.id in failed for s, v in e.payload["conditions"].items()
+                        if len(scope.get(s, values[s])) > 1)
+        yield JueObject(object_id=f"knowledge:stale:{cap.id}", object_type="knowledge", attrs={
+            "product_id": pid, "slot": "phenomenon", "value": cap.payload["phenomenon"],
+            "n_used": len(used), "n_outcomes": len(trials), "n_fail": len(failed), "fail_rate": rate(trials),
+            "recent_fail_rate": rate(recent), "early_fail_rate": rate(early),
+            "fail_concentration": max(spots.values()) / len(failed) if spots else 0.0,
+            "days_since_grant": (at - cap.at).total_seconds() / 86400,
+            "n_market_fail": sum(e.kind == "market_eval" and e.payload["result"] == "fail"
+                                 and e.payload["trial_id"] in ids for e in after),
+        }), {"signer": cap.granted_by, "capability_id": cap.id,
+             "event_ids": [e.id for e in trials if e.id in failed],
+             "session_ids": sorted({e.session_id for e in used if e.session_id}),
+             # 界面收窄用：原条件、失败集中的取值（多到少）与这些槽位可选的取值
+             "conditions": json.dumps(scope, ensure_ascii=False),
+             "fail_values": [k for k, _ in spots.most_common()],
+             "scope": json.dumps({s: scope.get(s, values[s]) for s in dict.fromkeys(
+                 [*scope, *(k.split("=")[0] for k in spots)])}, ensure_ascii=False)}
 
 
 def _scope(events, at, caps):

@@ -255,6 +255,7 @@ POST = {
                                                               p.get("missing_slots", ())),
     "/api/rework": lambda app, p: app.rework_requirement(p["req_id"], p["by"]),
     "/api/return_for_conditions": lambda app, p: app.return_for_conditions(p["req_id"], p["slots"], p["by"]),
+    "/api/qi/narrow": lambda app, p: app.narrow_capability(p["cap_id"], p["conditions"], p["by"]),
     "/api/points": lambda app, p: app.set_public_points(p["req_id"], p["text"], p["sealed"], p["by"]),
     "/api/sheet": lambda app, p: app.save_sheet(p["req_id"], SheetDraft.model_validate(p["sheet"]), p["by"]),
     "/api/release": lambda app, p: app.release_product(p["req_id"], p["by"]),
