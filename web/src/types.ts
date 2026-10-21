@@ -220,6 +220,7 @@ export interface JueTimeline {
 // ⑭ Agent
 export interface AgentMessage { role: "principal" | "assistant" | "system"; text: string; at: string; pending_action_ids: string[]; target: string | null }
 export interface Conversation { id: string; principal: string; role: Role; session_id: string | null; messages: AgentMessage[] }
+export interface MemoryEntry { id: string; principal: string; kind: "habit" | "fact" | "lesson"; text: string; why: string; refs: string[]; at: string }
 export interface PendingAction { id: string; principal: string; tool: string; summary: string; status: string }
 
 // 回放部署的台词（demo/mainline.yaml 的一个动作，原样转发）：{ start | customer | send | chat | sign | edit | trial: {...} }

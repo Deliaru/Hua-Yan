@@ -4,15 +4,17 @@ import { useState } from "react";
 import { api } from "../api";
 import { useGuideArg } from "./Guide";
 import { useApp, useData } from "../ctx";
-import type { AgentMessage, AgentRun } from "../types";
+import type { AgentMessage, AgentRun, MemoryEntry } from "../types";
 import { ArrowUp, ChevronRight } from "./Icons";
 import { Group } from "./ui";
 import { LiveLine, RunLine } from "./Process";
 
-// 当前身份与这条会话（业务员）或收件箱（研发）的对话；批注按 target 挂到工作面对应位置
-export function useConversation(sessionId: string | null) {
+// 当前身份与这条会话（业务员）或收件箱（研发）的对话；批注按 target 挂到工作面对应位置。
+// v8：thread = 工作面打开的对象，助手收件箱按对象分段时取这一段
+export function useConversation(sessionId: string | null, thread: string | null = null) {
   const { me, agentOnline } = useApp();
-  return useData(() => (agentOnline ? api.conversation(me, sessionId) : Promise.resolve(null)), [me, sessionId, agentOnline]);
+  return useData(() => (agentOnline ? api.conversation(me, sessionId, thread) : Promise.resolve(null)),
+                 [me, sessionId, thread, agentOnline]);
 }
 
 export function notesFor(messages: AgentMessage[] | undefined, target: string) {
@@ -37,7 +39,7 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
   sessionId: string | null; focus: string | null; external?: boolean; title: string; children?: React.ReactNode;
 }) {
   const { me, agentOnline, refresh, meta } = useApp();
-  const conv = useConversation(sessionId);
+  const conv = useConversation(sessionId, focus);
   // 每轮回复的过程（步骤、工具、用时），按回复在对话里的位置对应
   const runs = useData(() => (conv ? api.agentProcess(conv.id, me) : Promise.resolve({} as Record<string, AgentRun>)), [conv?.id, me]);
   const [open, setOpen] = useState(false);
@@ -64,6 +66,7 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
         <div className="flex flex-col gap-5">{children}</div>
       </div>
       <div className="px-4 pb-4">
+        <AgentMemory />
         <AgentTip />
         <div className="dock overflow-hidden">
           <button type="button" onClick={() => setOpen(!open)} disabled={!history.length}
@@ -105,6 +108,32 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
         </div>
       </div>
     </aside>
+  );
+}
+
+// v8：助手的记忆（助手自己记、每天收工归纳）。人能看、能删；没有记忆时不显示。
+const KIND: Record<MemoryEntry["kind"], string> = { habit: "习惯", fact: "事实", lesson: "教训" };
+
+function AgentMemory() {
+  const { me, agentOnline, refresh, fail } = useApp();
+  const memory = useData(() => (agentOnline ? api.memory(me) : Promise.resolve([] as MemoryEntry[])), [me, agentOnline]);
+  const [open, setOpen] = useState(false);
+  if (!memory?.length) return null;
+  return (
+    <div className="mb-2.5 rounded-[10px] bg-[rgba(118,118,128,.06)] px-3 py-2 text-[12px] leading-[18px]">
+      <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center gap-1 text-left font-semibold">
+        Agent 记得的 {memory.length} 条<ChevronRight open={open} />
+      </button>
+      {open && <ul className="mt-1 flex max-h-[180px] flex-col gap-1 overflow-y-auto">
+        {memory.map((m) => (
+          <li key={m.id} className="flex items-start gap-2 text-ink-2" title={m.why}>
+            <span className="shrink-0 text-ink-3">{KIND[m.kind]}</span>
+            <span className="flex-1">{m.text}</span>
+            <button type="button" className="shrink-0 text-accent" onClick={() => api.forget(m.id, me).then(refresh, fail)}>删除</button>
+          </li>
+        ))}
+      </ul>}
+    </div>
   );
 }
 

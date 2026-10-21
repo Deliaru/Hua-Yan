@@ -9,6 +9,10 @@ extractor: llm
 realtime_model: jue_proto
 scheduled_model: jue_proto
 jue_k_dir: models/jue_k
+models_config: config/models.yaml
+pm_lines: {}
+agent_threads: inbox
+agent_memory: false
 llm_cache_dir: null          # 本配置强制新请求，用于验证真实服务
 replay: false
 thresholds: {ask: 0.5, max_asks: 2, match: 0.5, publish: 0.5}

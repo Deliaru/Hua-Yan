@@ -1,6 +1,8 @@
 """应用门面：负责身份与视图边界，界面只调用这里。"""
 import json
+import threading
 import time
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -11,9 +13,9 @@ from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
 from huayan.contracts import (KIND_LEVEL, Actor, Capability, AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
-    Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
+    Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, MemoryEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
-    JueTimeline, TimelineNode, TimelinePoint)
+    JueTimeline, Product, Situation, TimelineNode, TimelinePoint)
 from huayan.domain import consistent, load_seeds, match_candidates
 from huayan.escalation import flow
 from huayan.escalation.translate import leak_hits
@@ -47,6 +49,10 @@ def _human_events(events):
     merges = {(e.actor, e.ts) for e in events if e.kind == "requirements_merged"}
     return [e for e in events if e.kind in _HUMAN_STEPS and e.actor.split(":")[0] in {"sales", "pm", "rd"}
             and e.actor != "pm:agent" and not (e.kind == "requirement_edited" and (e.actor, e.ts) in merges)]
+
+
+class _Held(threading.local):
+    ids = None      # 助手起草期间暂存的 (会话, 需求单)；None = 不暂存。按线程分开，模拟器并发准备互不影响
 
 
 def _read_dir(path):
@@ -91,7 +97,7 @@ class HuayanApp:
             app.gateway = byok.gateway(app.meter)
             app.system1 = byok.system1(app.gateway, app.meter)
         else:
-            app.gateway = build_gateway("config/models.yaml", app.config["gateway_mock"], app.meter)
+            app.gateway = build_gateway(app.config["models_config"], app.config["gateway_mock"], app.meter)
             if not app.config["gateway_mock"]:
                 cache = app.config.get("llm_cache_dir")
                 app.gateway.cache_dir = Path(cache) if cache else None
@@ -102,6 +108,10 @@ class HuayanApp:
                          else LLMExtractor(app.seeds, app.gateway))
         app._sessions = {s.id: s for s in map(Session.model_validate_json, _read_dir(app.run_dir / "sessions"))}
         app._requirements = {r.id: r for r in map(Requirement.model_validate_json, _read_dir(app.run_dir / "requirements"))}
+        app.seeds.products += [Product.model_validate(e.payload["product"]) for e in app.events.query(["project_opened"])]
+        memory = app.run_dir / "memory.json"
+        app._memory = {m.id: m for m in map(MemoryEntry.model_validate,
+                                            json.loads(memory.read_text(encoding="utf-8")) if memory.exists() else [])}
         app._trials = {t.id: t for t in (Trial.model_validate_json(u.text) for u in app.kb._units.values()
                                          if u.kind == "trial" and u.source == "trial")}
         app.templates = load_templates(app.config["templates_dir"])
@@ -110,6 +120,7 @@ class HuayanApp:
         app._jue_trace, app._answers = {}, {}
         app._last_scan = None
         app._agent_drafting = False  # Hub 工具执行期间的来源标记，不由模型或 HTTP 参数指定。
+        app._held = _Held()
         app.progress = None          # 界面过程面板的进度回调（ui.server 设置）；只报「谁在做什么、用时」
         app.agents = AgentHub(app)
         return app
@@ -165,15 +176,37 @@ class HuayanApp:
             raise PermissionDenied("当前身份无权执行此动作")
         return actor
 
-    def _close_anomalies(self, out, object_ids):
-        inactive = {(d.family, d.object_id) for d in out.decisions if not d.precondition_passed}
-        anomalies = {t.family for t in self.templates.values() if t.kind == "anomaly"}
+    def _close_stale(self, out, object_ids, req_ids=()):
+        """觉再看（v8 收口，所有问题）：评估过的对象上，前提不再成立或对象已不在活动中的问题由觉结案；
+        签字人的签字由门面方法结案自己的问题，门面方法不替别的问题结案。"""
+        live = {(d.family, d.object_id) for d in out.decisions if d.precondition_passed}
+        prefixes = tuple(f"slot:{rid}/" for rid in req_ids)
         for q in self.bus.list():
-            if q.object_id in object_ids and q.family in anomalies and (q.family, q.object_id) in inactive:
-                self.bus.resolve(q.id, Resolution(action="answered", by="jue"), out.at)
+            seen = q.object_id in object_ids or (prefixes and q.object_id.startswith(prefixes))
+            if seen and (q.family, q.object_id) not in live:
+                self.bus.resolve(q.id, Resolution(action="answered", by="jue", note="情况已变"), out.at)
+
+    @contextmanager
+    def drafting(self):
+        """v8 收口：助手起草期间写后评估先记下受影响的会话与需求单，起草结束后评估一次——觉看的是准备好的对象，
+        不是中间稿。可嵌套，最外层结束时评估。"""
+        if self._held.ids is not None:
+            yield
+            return
+        self._held.ids = (set(), set())
+        try:
+            yield
+        finally:
+            (session_ids, req_ids), self._held.ids = self._held.ids, None
+            if session_ids or req_ids:
+                self._after(session_ids, req_ids)
 
     def _after(self, session_ids=(), req_ids=()):
         """写后评估会话及关联需求单；只提出决策，不派单或执行下一步。"""
+        if self._held.ids is not None:
+            self._held.ids[0].update(session_ids)
+            self._held.ids[1].update(req_ids)
+            return []
         at = get_clock().now()
         session_ids = set(session_ids)
         req_ids = set(req_ids) | {r.id for r in self._requirements.values()
@@ -190,17 +223,22 @@ class HuayanApp:
             sess = self._sessions[req.session_ids[0]]
             objects = requirement_state(req, sess.need, self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, at, self.events).objects
             state.objects.update(objects)
-            refs.update({oid: {"session_id": sess.id, "sales_id": sess.sales_id,
-                               "requirement_id": rid, "assigned_rd": req.assigned_rd} for oid in objects})
+            refs.update({oid: {"session_id": sess.id, "sales_id": sess.sales_id, "requirement_id": rid,
+                               "account_sales": self.config["customer_sales"].get(sess.customer_id),
+                               "assigned_rd": req.assigned_rd, "pm": self._line_pm(req.phenomenon)} for oid in objects})
         out = self._propose(self.jue_realtime, state)
         for sid in session_ids:
             self._jue_trace.setdefault(sid, []).append(out)
-        self._close_anomalies(out, set(state.objects) | {f"requirement:{rid}" for rid in req_ids})
+        self._close_stale(out, set(state.objects) | {f"requirement:{rid}" for rid in req_ids}, req_ids)
         thresholds = self.config["thresholds"]
         ready = out.model_copy(update={"decisions": [d for d in out.decisions
             if d.p_need is not None and d.p_need >= thresholds[
                 "ask_jue_k" if d.family == "ask_back" and out.model == "jue_k" else "publish"]]})
         return publish(ready, state, self.templates, self.bus, 0, seeds=self.seeds, refs=refs)
+
+    def _line_pm(self, phenomenon):
+        """v8 企业编制：分管该现象产品线的产品经理；没有配置时为 None，解析表取唯一的真人产品经理。"""
+        return self.config["pm_lines"].get(phenomenon)
 
     def _save_session(self, session):
         path = self.run_dir / "sessions"
@@ -238,13 +276,14 @@ class HuayanApp:
         asks = [q for q in self.bus.list(family="ask_back") if q.refs["session_id"] == session_id]
         session = handle_turn(current, speaker, text, self, answering=bool(asks))
         answered = self._answer_ask_back(session, asks) if speaker == "customer" else set()
-        if (previous.phenomenon, previous.known()) != (session.need.phenomenon, session.need.known()):
-            for req in self._requirements.values():
-                if req.status == "draft" and session_id in req.session_ids and req.id not in answered:
-                    req.phenomenon, req.known_slots = session.need.phenomenon, session.need.known()
-                    req.product_lang = [item for item in req.product_lang if item.edited_by]
-                    self._return_to_preparation(req)
-                    self._save_requirement(req)
+        # v8 收口：客户补条件只走一条路——会话里补的、回问答的，起草中的单都按会话条件重写，未经人改的条目清掉重写
+        changed = (previous.phenomenon, previous.known()) != (session.need.phenomenon, session.need.known())
+        for req in self._requirements.values():
+            if req.status == "draft" and session_id in req.session_ids and (changed or req.id in answered):
+                req.phenomenon, req.known_slots = session.need.phenomenon, session.need.known()
+                req.product_lang = [item for item in req.product_lang if item.edited_by]
+                self._return_to_preparation(req)
+                self._save_requirement(req)
         if speaker == "sales":
             session.reply_draft = ""
         self._save_session(session)
@@ -277,15 +316,19 @@ class HuayanApp:
 
     def _answer_ask_back(self, session, asks):
         """回问结案并回填条件；已有待签问题退回准备，由 hub 再派给主人。"""
-        turn, answered = session.turns[-1], set()
+        # v8：回问提出之后客户开口时，这个槽位已有答案（填上或答了不清楚）就结案，不论答案出自哪一句——
+        # 客户一句答好几项、或在研发回问之前就顺口说过时，槽位的出处是更早的一句。
+        # 结案时把客户在会话里已说清、需求单还没有的条件一并补上，研发不必再为它们回问。
+        answered = set()
         for q in asks:
             fill = session.need.slots.get(q.refs["slot"])
-            if fill is None or fill.turn_id != turn.id:
+            if fill is None:
                 continue
             req = self._requirements[q.refs["requirement_id"]]
-            if fill.status == "filled":
-                req.known_slots[fill.slot] = fill.value
-            self._answers.setdefault(req.id, {})[fill.slot] = turn.id
+            for f in session.need.slots.values():
+                if f.status == "filled" and (f.slot == fill.slot or f.slot not in req.known_slots):
+                    req.known_slots[f.slot] = f.value
+            self._answers.setdefault(req.id, {})[fill.slot] = fill.turn_id
             self.bus.resolve(q.id, Resolution(action="answered", by=session.customer_id,
                                               note=fill.value or "客户不清楚"), get_clock().now())
             self._return_to_preparation(req)
@@ -302,7 +345,9 @@ class HuayanApp:
     def view_session(self, session_id, viewer_id):
         viewer, session = self._actor(viewer_id), _find(self._sessions, session_id, "会话")
         level = level_of(viewer)
-        if level <= 1 and viewer_id not in (session.customer_id, session.sales_id):
+        # v8 收口：客户的归属业务员可以看自己客户的自助会话（自助单的客户评价由他跟进）
+        if level <= 1 and viewer_id not in (session.customer_id, session.sales_id,
+                                            self.config["customer_sales"].get(session.customer_id)):
             raise PermissionDenied("只能查看自己参与的会话")
         rec = session.recommendation
         card = None
@@ -444,13 +489,10 @@ class HuayanApp:
         return req.model_copy(deep=True)  # 此时为空单，仅有业务员原话与归属。
 
     def accept_requirement(self, req_id, by):
+        """v8 收口：接单是研发的判断，同单的回问、失真提示只作证据，不挡接单；它们由觉再看结案。"""
         req, actor = self._requirement(req_id, by, {"rd"}, {"draft"})
         if not req.product_lang or req.reuse is None or (req.reuse.product_id and not req.reuse.declined_reason):
             raise ValueError("接单需要产品需求草稿，且现成产品检查已结束")
-        blockers = [q for q in self.bus.list() if q.refs.get("requirement_id") == req_id
-                    and q.family in {"ask_back", "distortion"}]
-        if blockers:
-            raise ValueError(f"还有 {len(blockers)} 条未答回问或未处理失真")
         for item in req.product_lang:
             self._validate_item(req, item, actor)
         units = [self.kb.get(ref, actor) for ref in sorted({ref for item in req.product_lang for ref in item.ku_refs})]
@@ -459,6 +501,13 @@ class HuayanApp:
                                   self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("accept_requirement", "accept_requirement", state.objects[f"requirement:{req_id}"], by)
         req.status, req.rd_accepted_by = "rd_accepted", by
+        if not self._covering_projects(req):      # 接单即立项：没有覆盖本单的研发中项目就立一个（契约 ⑯）
+            project = Product(id=f"proj:{req.id}", name=f"{next(p.label for p in self.seeds.phenomena if p.id == req.phenomenon)}在研项目（{req.id}）",
+                category=next((p.category for p in self.seeds.products if req.phenomenon in p.solves), "在研"),
+                solves=[req.phenomenon], applicable={s: [v] for s, v in req.known_slots.items()},
+                sheet="", usage="", mechanism="", formula="", owner=by, status="project")
+            self.seeds.products.append(project)
+            self.events.append("project_opened", by, {"requirement_id": req.id, "product": project.model_dump()})
         for unit in units:
             if unit.owner != "pm:agent" and not self.ledger.has(unit.owner, unit.id, req.id):
                 self.ledger.add(LedgerEntry(ts=get_clock().now(), owner=unit.owner, ku_id=unit.id, ref=req.id,
@@ -467,9 +516,6 @@ class HuayanApp:
             "phenomenon": req.phenomenon, "known": req.known_slots, "ku_refs": [u.id for u in units]})
         if question:
             self._settle(question.id, Resolution(action="accept", by=by))
-        for q in self.bus.list(family="opportunity"):
-            if req_id in q.refs.get("requirement_ids", "").split(","):
-                self.bus.resolve(q.id, Resolution(action="accept", by=by), get_clock().now())
         self._save_requirement(req)
         self._after(req_ids=[req.id])
         return self.requirement_view(req.id, by).requirement
@@ -491,6 +537,25 @@ class HuayanApp:
         self._after(req_ids=[req_id])
         return self.requirement_view(req_id, by).requirement
 
+    def ask_before_accept(self, req_id, slots, by):
+        """v8 研发签接单「先回问客户」：缺的是客户才知道的条件时，不接单、不退回产品经理；单子仍待接单，
+        这些条件的回问由觉提出，客户答完后觉再提接单（模板前提 n_missing == 0）。"""
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
+        self._check_slots(slots, True)
+        if not slots:
+            raise ValueError("请勾选要回问的条件")
+        state = requirement_state(req, self._sessions[req.session_ids[0]].need,
+                                  self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
+        question = self._decision("accept_requirement", "ask_before_accept", state.objects[f"requirement:{req_id}"], by)
+        reason = f"接单前回问：{'、'.join(slots)}"
+        req.return_notes.append(reason)
+        self.events.append("requirement_returned", by, {"requirement_id": req_id, "reason": reason, "slots": list(slots)})
+        if question:
+            self._settle(question.id, Resolution(action="return", by=by, note=reason))
+        self._save_requirement(req)
+        self._after(req_ids=[req_id])
+        return self.requirement_view(req_id, by).requirement
+
     def save_reuse_proposal(self, req_id, product_id, ku_refs, customer_note, note, by):
         req, actor = self._requirement(req_id, by, {"pm"}, {"draft"})
         if by != "pm:agent":
@@ -506,14 +571,8 @@ class HuayanApp:
             raise ValueError([hit.model_dump() for hit in hits])
         req.reuse = ReuseProposal(product_id=product_id, ku_refs=ku_refs, customer_note=customer_note, note=note)
         self.events.append("reuse_proposed", by, {"requirement_id": req_id, "product_id": product_id, "ku_refs": ku_refs})
-        if product_id is None:
-            for q in self.bus.list(family="reuse_product"):
-                if q.object_id == f"requirement:{req_id}":
-                    self.bus.resolve(q.id, Resolution(action="answered", by=by), get_clock().now())
         self._save_requirement(req)
-        self._after(req_ids=[req_id])
-        if product_id is None:
-            self.scan()
+        self._after(req_ids=[req_id])      # 查无产品时复用问题的前提不再成立，由觉结案
         return self.requirement_view(req_id, by).requirement
 
     def update_reuse_note(self, req_id, text, by):
@@ -648,9 +707,6 @@ class HuayanApp:
             "session_ids": req.session_ids})
         if question:
             self._settle(question.id, Resolution(action="dismiss", by=by, note=reason))
-        for q in self.bus.list():
-            if q.refs.get("requirement_id") == req_id:
-                self.bus.resolve(q.id, Resolution(action="answered", by=by, note="研发不立项"), at)
         self._save_requirement(req)
         self._after(req.session_ids, [req_id])
         if applicable_product:
@@ -822,9 +878,6 @@ class HuayanApp:
         for member in members:
             req.session_ids.extend(sid for sid in member.session_ids if sid not in req.session_ids)
             member.status, member.merged_into = "merged", req.id
-            for question in self.bus.list():
-                if question.refs.get("requirement_id") == member.id:
-                    self.bus.resolve(question.id, Resolution(action="answered", by=by, note=f"已并入 {req.id}"), at)
             self._save_requirement(member)
         before = {"product_lang": [item.model_dump() for item in req.product_lang], "direction": req.direction}
         req.known_slots, req.direction = known, ""
@@ -842,7 +895,9 @@ class HuayanApp:
     def record_market_eval(self, req_id, result, note, by, missing_slots=()):
         """missing_slots：评价不通过时，业务员按客户反馈勾选的没问到的条件。"""
         req, _ = self._requirement(req_id, by, {"sales"}, {"rd_confirmed"})
-        self._sales_session(req.session_ids[0], by)
+        session = self._sessions[req.session_ids[0]]
+        if by not in {session.sales_id, self.config["customer_sales"].get(session.customer_id)}:   # v8 收口：自助单由客户的归属业务员跟进
+            raise PermissionDenied("只能录入自己客户的评价")
         if result not in {"pass", "fail"}:
             raise ValueError("客户评价必须为 pass 或 fail")
         self._check_slots(missing_slots, result == "fail")
@@ -953,19 +1008,19 @@ class HuayanApp:
         self._after(req_ids=[req_id])
         return self.requirement_view(req_id, by).requirement
 
+    def _covering_projects(self, req):
+        return sorted((p for p in self.seeds.products if p.status == "project"
+            and req.phenomenon in p.solves and consistent(p, req.known_slots)), key=lambda p: p.id)
+
     def confirm_translation(self, req_id, by):
         req, actor = self._requirement(req_id, by, {"rd"}, {"rd_accepted"})
         if not req.chem_lang:
             raise ValueError("请先起草化学语言条目")
         for item in req.chem_lang:
             self._validate_item(req, item, actor)
-        products = sorted((p for p in self.seeds.products if p.status == "project"
-            and req.phenomenon in p.solves and consistent(p, req.known_slots)), key=lambda p: p.id)
+        products = self._covering_projects(req) or [p for p in self.seeds.products if p.id == f"proj:{req.id}"]
         if not products:
             raise ValueError("没有覆盖该需求的研发中产品，暂不能确认")
-        if any(q.family in {"ask_back", "distortion"} and q.refs.get("requirement_id") == req_id
-               for q in self.bus.list()):
-            raise ValueError("仍有未答回问或未处理失真")
         state = requirement_state(req, self._sessions[req.session_ids[0]].need,
                                   self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("confirm_translation", "confirm_translation", state.objects[f"requirement:{req_id}"], by)
@@ -1063,7 +1118,8 @@ class HuayanApp:
             unit = self.kb._units[ref]
             readable = (viewer.id == req.assigned_rd and ref in req.engine_refs) or self.kb._readable(viewer, unit)
             cited.append(CitedKnowledge(ku_id=ref, owner=unit.owner, level=unit.level,
-                title=unit.title if readable else f"{self.actors[unit.owner].name}的知识（L{unit.level}，仅显示归属）",
+                title=unit.title if readable else      # 第 0 天迁移的现象结论归属 seed，不是某个人
+                    f"{'种子' if unit.owner == 'seed' else self.actors[unit.owner].name}的知识（L{unit.level}，仅显示归属）",
                 text=unit.text if readable else None,
                 n_cited=sum(e.reason == "cited" and e.ku_id == ref for e in self.ledger.list())))
         quote_refs = {ref for item in req.product_lang + req.chem_lang for ref in item.quote_refs}
@@ -1202,7 +1258,13 @@ class HuayanApp:
                                   self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, get_clock().now(), self.events)
         question = self._decision("release", "release_product", state.objects[f"requirement:{req_id}"], by)
         seed = next(p for p in self.seeds.products if p.id == req.product_id)
-        product = seed.model_copy(update={"sheet": req.sheet.sheet, "usage": req.sheet.usage}, deep=True)
+        update = {"sheet": req.sheet.sheet, "usage": req.sheet.usage}
+        if seed.id == f"proj:{req.id}":          # 接单时立的项目：机理取化学语言条目，第一条适用情境取通过试样的条件
+            passed = next(t for t in self._trials.values() if t.requirement_id == req.id and t.result == "pass")
+            update |= {"mechanism": "\n".join(i.text for i in req.chem_lang), "formula": "（模拟）配方不录入本系统",
+                       "situations": [Situation(phenomenon=req.phenomenon, capability_id=self.kb.next_cap_id(),
+                                                conditions={s: [v] for s, v in passed.conditions.items()})]}
+        product = seed.model_copy(update=update, deep=True)
         released = flow.release_product(req, product, self.kb, self.ledger, self.events, by, get_clock().now())
         if question:
             self._settle(question.id, Resolution(action="sign", by=by))
@@ -1451,8 +1513,11 @@ class HuayanApp:
         at = at or get_clock().now()
         state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"],
                                         self.kb.capabilities(), self.kb._units)
+        for oid, obj in state.objects.items():      # v8：机会汇聚、适用范围扩展派给分管该现象的产品经理
+            a = obj.attrs
+            refs[oid]["pm"] = self._line_pm(a.get("phenomenon") or (a["value"] if a.get("slot") == "phenomenon" else None))
         out = self._propose(self.jue_scheduled, state)
-        self._close_anomalies(out, set(state.objects))
+        self._close_stale(out, set(state.objects))
         self._last_scan = at
         return publish(out, state, self.templates, self.bus, self.config["thresholds"]["publish"],
                        seeds=self.seeds, refs=refs)
@@ -1736,7 +1801,99 @@ class HuayanApp:
             raise PermissionDenied("只有问题主人能标记准备完成")
         if question.status != "open" or question.signer_role is None:
             raise ValueError("只有待处理的签字问题能标记准备完成")
+        gap = self.preparation_gap(question_id)
+        if gap:
+            raise ValueError(gap)
         return self.bus.set_prepared(question_id, get_clock().now()).model_copy(deep=True)
+
+    def preparation_gap(self, question_id):
+        """v8：准备是否已经落在对象上——Agent 说做完了不算。缺什么返回什么，齐了返回空串；
+        只查签字时门面要求先有的草稿，其余问题主人只需告知委托人。"""
+        q = _find(self.bus.questions, question_id, "问题")
+        req = self._requirements.get(q.refs.get("requirement_id"))
+        if q.family == "accept_requirement" and not req.product_lang:
+            return f"{req.id} 还没有产品需求条目，请用 draft_product_need 起草"
+        # 接单前回问（带 slots）不是退回给产品经理，不要求改条目
+        if q.family == "accept_requirement" and (last := ([
+                e for e in self.events.query(["requirement_returned", "requirement_edited"])
+                if e.payload["requirement_id"] == req.id and not e.payload.get("slots")] or [None])[-1])                 and last.kind == "requirement_returned":
+            return f"{req.id} 被研发退回（{last.payload['reason']}），还没按理由修改产品需求条目，请用 edit_item 修改"
+        if q.family == "reuse_product" and req.reuse is None:
+            return f"{req.id} 还没有复用建议，查过后请用 propose_reuse 写下（没有可用产品也要写下）"
+        if q.family == "confirm_translation" and not req.chem_lang:
+            return f"{req.id} 还没有化学语言条目，请用 draft_chem_need 起草"
+        if q.family == "release" and req.sheet is None:
+            return f"{req.id} 还没有说明书草稿，请用 package_sheet 生成"
+        if q.family in {"release", "seal_leak"} and (hits := self.leak_check(req.id, req.assigned_rd)):
+            return (f"{req.id} 的说明书与用法仍有 {len(hits)} 句命中保密内容（句序号 "
+                    f"{'、'.join(str(h.index) for h in hits)}，按「。；！？换行」切句、用法接续说明书编号），请用 edit_sheet 改写")
+        if q.family == "opportunity" and not any(e.payload["question_id"] == q.id
+                                                 for e in self.events.query(["merge_proposed"])):
+            return "还没有合并建议，请用 propose_merge 写下"
+        return ""
+
+    # ---- v8：助手记忆（按委托人存；助手自己记，收工时归纳；人能看能删）----
+
+    def memories(self, by):
+        return [m.model_copy(deep=True) for m in self._memory.values() if m.principal == by and m.status == "active"]
+
+    def recall_memory(self, query, by):
+        grams = {query[i:i + 2] for i in range(len(query) - 1)}
+        score = lambda m: len(grams & {t[i:i + 2] for t in [m.text + m.why] for i in range(len(t) - 1)})
+        return sorted((m for m in self.memories(by) if score(m)), key=score, reverse=True)[:5]
+
+    def remember(self, kind, text, why, refs, by):
+        actor = self._actor(by, {"sales", "pm", "rd"})
+        if not text.strip():
+            raise ValueError("记忆不能为空")
+        if leak_hits(f"{text}。{why}", [], [], self.kb, audience=level_of(actor)):
+            raise ValueError("记忆里有高于委托人层级的内容，不能记")
+        entry = MemoryEntry(id=f"mem:{len(self._memory) + 1}", principal=by, kind=kind, text=text.strip(),
+                            why=why.strip(), refs=refs, at=get_clock().now())
+        self._memory[entry.id] = entry
+        self._save_memory()
+        return entry.model_copy(deep=True)
+
+    def forget(self, memory_id, by):
+        entry = _find(self._memory, memory_id, "记忆")
+        if entry.principal != by:
+            raise PermissionDenied("只能删自己助手的记忆")
+        entry.status = "deleted"
+        self._save_memory()
+
+    def _save_memory(self):
+        (self.run_dir / "memory.json").write_text(json.dumps([m.model_dump(mode="json") for m in self._memory.values()],
+                                                              ensure_ascii=False), encoding="utf-8")
+
+    def decision_records(self, by, since):
+        """收工归纳的材料，程序从事件生成、不调用大模型：这位委托人主人或签字的问题怎么被处理的、
+        研发的退回理由、业务员当天的会话；只含委托人这一层看得到的内容。"""
+        actor = self._actor(by, {"sales", "pm", "rd"})
+        rows = []
+        for e in self.events.query(["question_resolved"], since=since):
+            q = self.bus.questions[e.payload["question_id"]]
+            if by in (q.owner_id, q.signer_id):
+                note = q.resolution.note if q.resolution else ""
+                rows.append(f"{q.id} {q.title}｜主人 {q.owner_id}，签字人 {q.signer_id}｜{e.payload['by']} 处理：{e.payload['action']}"
+                            + (f"，说明：{note}" if note else ""))
+        mine = {q.refs.get("requirement_id") for q in self.bus.questions.values() if by in (q.owner_id, q.signer_id)}
+        rows += [f"{e.payload['requirement_id']} 被 {e.actor} 退回：{e.payload['reason']}"
+                 for e in self.events.query(["requirement_returned"], since=since) if e.payload["requirement_id"] in mine]
+        if actor.role == "sales":
+            for s in self._sessions.values():
+                if s.sales_id == by and s.started_at >= since:
+                    known = "、".join(f"{k}={v.value}" for k, v in s.need.slots.items() if v.status == "filled") or "无"
+                    unknown = "、".join(k for k, v in s.need.slots.items() if v.status == "unknown") or "无"
+                    rows.append(f"{s.id} 客户 {s.customer_id}：现象 {s.need.phenomenon}；说清的 {known}；说不清的 {unknown}；"
+                                f"结果 {s.status}")
+        return rows
+
+    def close_day(self, since):
+        """v8：收工时各助手归纳当天的记忆（agent_memory 打开时）；只整理助手自己的记忆，不推进业务。"""
+        if not self.config["agent_memory"]:
+            return {}
+        principals = [a.id for a in self.seeds.actors if a.role in ("sales", "rd")] + ["pm:agent"]
+        return {p: self.agents.consolidate(p, since) for p in principals}
 
     def tick(self):
         now = get_clock().now()

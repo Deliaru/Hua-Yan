@@ -95,7 +95,7 @@ export function AgentMark({ who = "Agent 起草" }: { who?: string }) {
 
 // 觉的打分：模型打分显示概率与细条，规则打分显示「到点」（不冒充概率）
 // 异常类决策（决策目录 kind: anomaly）：规则打分命中阈值才提出；其余推进类到点即提出
-const ANOMALY = new Set(["distortion", "seal_leak", "knowledge_conflict", "leak_risk"]);
+export const ANOMALY = new Set(["distortion", "seal_leak", "knowledge_conflict", "leak_risk", "qi_review"]);
 
 export function Score({ q }: { q: Pick<Question, "p_need" | "scored_by" | "family"> }) {
   const L = useLabels();

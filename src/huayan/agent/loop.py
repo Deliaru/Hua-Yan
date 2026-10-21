@@ -9,6 +9,7 @@ from huayan.knowledge import level_of
 from .tools import ToolContext, openai_schemas
 
 MAX_STEPS = 8
+MEMORY_INDEX = 30          # v8：每段对话开头注入的记忆索引条数（最近的在后）
 PROMPTS = Path(__file__).resolve().parents[3] / "prompts"
 OUT_OF_STEPS = "步数用完，已完成的部分见上。"
 
@@ -23,6 +24,10 @@ def system_prompt(ctx: ToolContext, pending: list) -> str:
                  "理解本轮指代时以当前对象为准，历史消息的工作对象仅用于回看；对象不明确时先澄清。")
     if pending:
         lines.append("委托人尚未确认的动作：" + "；".join(f"{a.id} {a.summary}" for a in pending))
+    if ctx.app.config["agent_memory"]:
+        entries = ctx.app.memories(me.id)[-MEMORY_INDEX:]
+        lines.append("你的记忆索引（记下时为真，用前以对象现状核实；细节用 recall_memory 查；值得以后用的用 remember 记下）："
+                     + ("".join(f"\n- {m.id}（{m.kind}）{m.text}" for m in entries) or "暂无"))
     return "\n".join(lines)
 
 
@@ -41,7 +46,8 @@ def run_turn(conv: Conversation, ctx: ToolContext, hub, gateway) -> list[AgentMe
     created, reply = [], OUT_OF_STEPS
     for step in range(1, MAX_STEPS + 1):
         response = gateway.complete(LLMRequest(tier=Tier.FAST, caller=f"agent:{role}", messages=messages,
-                                               tools=openai_schemas(role), temperature=0))
+                                               tools=openai_schemas(role, ctx.app.config["agent_memory"]),
+                                               temperature=0))
         messages.append(Message(role="assistant", content=response.content or "", tool_calls=response.tool_calls))
         if not response.tool_calls:
             reply = response.content or ""

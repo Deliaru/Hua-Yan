@@ -87,15 +87,16 @@ def validate_extraction(result, seeds, turns):
     slots = {s.id: s for s in seeds.slots}
     by_n = {t.n: t for t in turns}
     result = result.model_copy(deep=True)
+    # 大模型偶尔回现象的中文名而不是编号（试用接口实测），按名换回编号
+    result.phenomenon = {p.label: p.id for p in seeds.phenomena}.get(result.phenomenon, result.phenomenon)
     if result.phenomenon is not None and result.phenomenon not in {p.id for p in seeds.phenomena}:
         raise ValueError("抽取返回未知现象")
     result.slots = [s for s in result.slots if s.slot in slots
                     and ((s.status == "unknown" and s.value is None)
                          or (s.status == "filled" and s.value in slots[s.slot].values))]
-    for slot in result.slots:
-        source = by_n.get(slot.turn_n)
-        if source is None or source.speaker != "customer" or not slot.quote or slot.quote not in source.text:
-            raise ValueError("槽位必须引用真实客户发言")
+    # 槽位必须引用真实客户发言；引不上原话的不填（试用接口实测：大模型偶尔改写引文），与取值不合法同样处理
+    result.slots = [s for s in result.slots if (src := by_n.get(s.turn_n)) is not None and src.speaker == "customer"
+                    and s.quote and s.quote in src.text]
     result.asked_slots = [s for s in result.asked_slots if s in slots]
     if turns[-1].speaker != "sales":
         result.asked_slots = []

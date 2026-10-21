@@ -113,17 +113,18 @@ class OpenAICompatGateway:
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_text(response.model_dump_json(), encoding="utf-8")
                     return response
-                except (openai.APIConnectionError, openai.APIStatusError) as exc:
+                # v8 Q9.3：服务偶尔返回非 JSON 正文（SDK 给出字符串）或截断的工具参数，与连接错误一样重试
+                except (openai.APIConnectionError, openai.APIStatusError, AttributeError, json.JSONDecodeError) as exc:
                     last_error = exc
                     if self.meter is not None:
                         self.meter.record(caller=req.caller, kind="llm", model=cfg["model"], ok=False,
                                           latency_ms=(time.perf_counter() - started) * 1000,
                                           fallback_used=tier != req.tier.value, degraded=tier != req.tier.value)
-                    retryable = isinstance(exc, openai.APIConnectionError) or exc.status_code == 429 or exc.status_code >= 500
+                    retryable = not isinstance(exc, openai.APIStatusError) or exc.status_code == 429 or exc.status_code >= 500
                     if not retryable:
                         raise
                     if attempt < 3:
-                        self.sleep(2 ** attempt)
+                        self.sleep(5 * 4 ** attempt)        # 5、20、80 秒：试用接口过载时要求至少退避 60 秒
         raise last_error
 
     def complete(self, req):

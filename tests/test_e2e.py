@@ -41,6 +41,8 @@ def test_mainline_offline(tmp_path):
         prepared("accept_requirement", f"requirement:{req.id}")
         sessions.append(sid)
         reqs.append(req)
+    app.scan()                                   # 机会汇聚由定时扫描提出（v8 收口：门面不再顺手扫描）
+    app.agents.dispatch()
     opportunity = app.bus.list(family="opportunity")[0]
     assert opportunity.prepared_at is not None
     main, member = reqs

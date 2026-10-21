@@ -13,6 +13,7 @@ class ReqItem(BaseModel):
     quote_refs: list[str] = []                # turn id，可回查客户原话
     ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
     edited_by: str | None = None              # 最后一次由人修改的 actor id；None = 骨架或 Agent 起草
+                                              # v8 收口：委托人在对话里交代、助手当轮改的，记委托人；派单准备时仍为 None
 
 
 class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理 Agent 编辑）
@@ -85,7 +86,7 @@ class Requirement(BaseModel):
     public_points: str = ""                   # 研发签字放出的对外要点：L3 内容流向 L2/L1 的唯一出口
     sealed: list[str] = []                    # 研发签字封存的窗户纸，只对 L3 可见
     sheet: SheetDraft | None = None           # 反向包装草稿
-    product_id: str | None = None             # 目标产品：L3 确认时关联种子中 status=project 的产品；发布后即新产品
+    product_id: str | None = None             # 目标产品：L3 确认时关联研发中项目（种子 status=project，或接单时立的 proj:<req_id>，v8 Q9.3）；发布后即新产品
     created_at: datetime
 
 

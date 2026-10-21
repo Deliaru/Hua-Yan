@@ -593,7 +593,7 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState: ..
 | `n_chem_items` | int | L3 条目数 |
 | `n_returns` | int | 被研发退回次数 |
 | `n_open_ask_back` | int | 本单未答复的回问数（由 `question_published / resolved` 事件算） |
-| `n_unmapped_constraints` | int | 上一层已有、本层条目未承接的已知槽位数（按 `ReqItem.slot` 计） |
+| `n_conflicting_refs` | int | v8 收口：本层条目中，所引案例（`ku:case:*`）的槽位取值与本单已知条件冲突的条数（替代 `n_unmapped_constraints`） |
 | `n_unquoted_items` | int | 本层没有 `quote_refs` 的条目数 |
 | `n_edited_uncovered` | int | L3 条目中 `edited_by` 为研发、且未被已有 L3 转化对照的 `chem_term` 覆盖的条数 |
 | `n_contributed` | int | 本单已沉淀的转化知识数 |
@@ -694,9 +694,9 @@ def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], 
 
 | 角色 | 对象 | 解析为 |
 |---|---|---|
-| sales | session / requirement / slot | 会话的业务员（需求单取首个会话） |
-| pm（主人） | 任意 | `pm:agent`（v6：需求单已被研发退回过时为真人产品经理，纠偏不走 Agent 起草） |
-| pm（签字人，v6） | 任意 | 真人产品经理（种子中 id 最小的非 Agent 产品经理，`pm:P01`） |
+| sales | session / requirement / slot | 会话的业务员（需求单取首个会话）；v8 收口：自助单没有会话业务员时，requirement 上的问题（客户评价）取客户的归属业务员（`customer_sales`），session / slot 仍为空 |
+| pm（主人） | 任意 | `pm:agent`（v8 Q9.3：被研发退回的单也由 `pm:agent` 按理由重写；v6 的「退回后归真人产品经理纠偏」取消） |
+| pm（签字人，v6） | 任意 | 真人产品经理（v8：门面按产品线传入分管的产品经理，没有时取种子中 id 最小的非 Agent 产品经理）；只签产品生命周期类决策（适用范围扩展、机会汇聚） |
 | rd | requirement / slot（layer 2/3） | `req.assigned_rd` |
 | rd | knowledge | 产品归属研发 |
 | rd | theme（v5.2，机会汇聚） | `refs.assigned_rd`（候选需求单中最早一张的研发） |
@@ -738,8 +738,8 @@ class Resolution(BaseModel):
                     "approve_decrypt", "reject_decrypt", "dismiss", "auto"]
     # v6：auto = 觉按模板 auto_action 自动执行，by = "jue:auto"；
     # v5：sign = 签字人在工作面签字（升级、确认转译、沉淀、客户评价、封存 / 放出、发布；v5.2：机会汇聚的合并）；
-    # accept / return = 研发接单 / 退回（accept 同时关闭关联的 opportunity）；
-    # answered = 回问已由客户回答，或异常类问题的前置条件不再成立；删除 draft_requirement、approve_project（立项 ≡ 接单）
+    # accept / return = 研发接单 / 退回；
+    # answered = 回问已由客户回答，或觉再看时问题的前置条件不再成立（v8 收口：所有问题，by = "jue"）；删除 draft_requirement、approve_project（立项 ≡ 接单）
     by: str
     note: str = ""
 
@@ -814,6 +814,7 @@ class ReqItem(BaseModel):
     quote_refs: list[str] = []                # turn id，可回查客户原话
     ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
     edited_by: str | None = None              # v5：最后一次由人修改的 actor id；None = 骨架或 Agent 起草（界面标「Agent 起草」）
+                                              # v8 收口：委托人在对话里交代、助手当轮改的，记委托人；派单准备时 Agent 起草的仍为 None
 
 class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理 Agent 编辑）
     direction: str                            # 产品方向，如「低浴比条件下的锦纶氨纶匀染助剂」
@@ -877,7 +878,7 @@ class Requirement(BaseModel):
     public_points: str = ""                   # 研发签字放出的对外要点：L3 内容流向 L2/L1 的唯一出口
     sealed: list[str] = []                    # v5：研发签字封存的窗户纸，只对 L3 可见
     sheet: SheetDraft | None = None           # 反向包装草稿
-    product_id: str | None = None             # 目标产品：L3 确认时关联种子中 status=project 的产品；发布后即新产品
+    product_id: str | None = None             # 目标产品：L3 确认时关联研发中项目（种子 status=project，或接单时立的 proj:<req_id>，v8 Q9.3）；发布后即新产品
     created_at: datetime
 
 class Trial(BaseModel):
@@ -1001,14 +1002,14 @@ class EventLog:
 | `match`（v5） | `phenomenon, known, customer_id, candidate_ids, p_choice: {product_id: p}, p_none, scored_by` |
 | `recommend` | `product_id, version, p_choice, candidate_ids, phenomenon, known: {slot: value}, customer_id` |
 | `escalate` | `question_id, requirement_id, phenomenon, known, customer_id, p_none`（v5：只在业务员签字后写） |
-| `retrieve` | `query, intent, actor_level, hit_ku_ids, n_blocked, blocked_product_ids` |
+| `retrieve` | `query, intent, actor_level, hit_ku_ids, n_blocked, blocked_product_ids`；v8：`principal`（权限所属的身份）；`actor` 是真正提问的一方：客户说的话记客户，助手的检索记 `agent:<委托人>` |
 | `access_denied` | `object_id, reason` |
 | `decrypt_request` / `decrypt_approve` | `question_id, customer_id, product_id` |
 | `question_published` / `question_resolved` | `question_id, family, object_id, template_id`；resolved 时另有 `action, by` |
 | `question_prepared`（v5） | `question_id, family, by` |
 | `requirement_created`（v5） | `requirement_id, question_id, phenomenon, session_ids, assigned_rd` |
 | `requirement_accepted`（v5） | `requirement_id, phenomenon, known, ku_refs`（研发接单；ku_refs 为 L2 所引） |
-| `requirement_returned`（v5） | `requirement_id, reason` |
+| `requirement_returned`（v5） | `requirement_id, reason`；v8 可带 `slots`（研发「试样前回问」或「接单前回问」勾选的条件，觉据此对这些条件提出回问） |
 | `requirement_edited`（v5） | `requirement_id, layer, index, before, after`（index = -1 追加；after 为空 = 删除） |
 | `requirement_translated` | `requirement_id, ku_refs`（研发确认 L3） |
 | `knowledge_contributed` | `ku_id, owner, requirement_id` |
@@ -1021,6 +1022,7 @@ class EventLog:
 | `merge_proposed`（v5.2） | `question_id, target, members`（members 为空 = 判断不是同一件事） |
 | `requirements_merged`（v5.2） | `question_id, target, members` |
 | `product_released` | `product_id, requirement_id, phenomenon, applicable` |
+| `project_opened`（v8 Q9.3） | `requirement_id, product`（接单即立项：没有覆盖本单的研发中项目时立 `proj:<req_id>`；product 为项目快照，说明书、机理、配方为空，续跑时据此重建） |
 | `sheet_updated` | `product_id, slot, values` |
 | `access_frozen` | `actor_id` |
 | `human_decision`（v5） | `action, object_id, object_type, attrs`（人执行生效动作时同一对象上没有对应的 open 问题；attrs 为当时的属性快照） |
@@ -1286,6 +1288,7 @@ class HuayanApp:
         # v5：不再自动升级。业务员发言先过发送拦截：leak_hits(text, 全部需求单的 sealed, [], kb) 有命中则抛 ValueError
         # （消息只含命中句序号与类别），不写入；客户发言答复了 open 回问时：resolve(answered)，取值写入需求单 known_slots，
         # 并把该需求单上已待签的问题 bus.set_prepared(None) 退回准备中
+        # （v8）「答复了」= 客户开口时该槽位已有答案（填上或不清楚），不论出自哪一句；会话里已填、需求单还没有的条件一并写入
     def recommend_now(self, session_id: str) -> Session: ...
     def view_session(self, session_id: str, viewer_id: str) -> SessionView: ...
     def sessions(self) -> list[Session]: ...
@@ -1317,8 +1320,9 @@ class HuayanApp:
     def draft_requirement(self, req_id: str, by: str) -> Requirement: ...
         # v5：by 必须是 pm:agent；对空单（draft）写入 L2 规则骨架
     def accept_requirement(self, req_id: str, by: str) -> Requirement: ...
-        # v5：by = assigned_rd；可签条件：无 open 回问、无 open 失真；→ rd_accepted；给所引 L2 知识记 cited；
-        # resolve accept_requirement(accept)，并关闭 refs 指向本单的 opportunity(accept)；写 requirement_accepted
+        # v5：by = assigned_rd；→ rd_accepted；给所引 L2 知识记 cited；
+        # v8 收口：不因 open 回问或失真被拒（二者只作证据）；机会汇聚由觉再看结案
+        # resolve accept_requirement(accept)；写 requirement_accepted
     def return_requirement(self, req_id: str, reason: str, by: str) -> Requirement: ...
         # v5：by = assigned_rd；reason 过 leak_hits（只看 l3_term），命中抛 ValueError；追加 return_notes；resolve(return)；状态仍为 draft
     def edit_req_item(self, req_id: str, index: int, item: ReqItem, by: str) -> Requirement: ...
@@ -1343,7 +1347,7 @@ class HuayanApp:
         # v5：assigned_rd（Agent）；自动填 self_check = leak_hits(public, sealed, hypotheses, kb)
     def save_contribution_draft(self, req_id: str, draft: ContributionDraft, by: str) -> Requirement: ...   # v5：assigned_rd（Agent）
     def record_market_eval(self, req_id: str, result: Literal["pass", "fail"], note: str, by: str) -> Trial: ...
-        # v5：需求单首个会话的业务员签字；写到最近一次通过的试样上；写 market_eval
+        # v5：需求单首个会话的业务员签字（v8 收口：自助单由客户的归属业务员签）；写到最近一次通过的试样上；写 market_eval
     def leak_check(self, req_id: str, viewer_id: str) -> list[LeakHit]: ...
         # v5：说明书与用法的命中；L2 查看者也可调用（只得到序号与类别）
     def requirements(self, viewer_id: str) -> list[Requirement]: ...      # L1 调用抛 PermissionDenied
@@ -1380,7 +1384,7 @@ class HuayanApp:
         # 界面在每次操作之后、脚本在每一步之后调用
 ```
 
-**写后评估（v5）**：每个改状态的方法结束时，门面对受影响的 session / requirement（及其 slot）构建状态 → 实时模型 `propose` → `publish`，每次追加一条 `JueRecord`；前置条件不再成立的异常类 open 问题 resolve(answered)；执行生效动作时若同一对象上没有对应的 open 问题，写 `human_decision`。门面方法内部不推进下一步（AGENTS.md 铁律 14）。
+**写后评估（v5）**：每个改状态的方法结束时，门面对受影响的 session / requirement（及其 slot）构建状态 → 实时模型 `propose` → `publish`，每次追加一条 `JueRecord`；被评估对象（及需求单的 slot）上前置条件不再成立、或对象已不活动的 open 问题 resolve(answered, by="jue")（v8 收口：从异常类扩到全部问题；门面方法只结案本次签字对应的问题，不替别的问题结案）；执行生效动作时若同一对象上没有对应的 open 问题，写 `human_decision`。v8 收口：助手起草期间（`AgentHub` 的一轮对话，派单准备含退回再做）门面先记下受影响的会话与需求单，起草结束后评估一次（门面 `drafting()` 上下文，按线程分开），中间稿不触发问题。门面方法内部不推进下一步（AGENTS.md 铁律 14）。
 
 ---
 
@@ -1394,7 +1398,7 @@ class HuayanApp:
 
 v5：业务员、研发各有一个**协作 Agent**，产品经理由**产品经理 Agent**（`pm:agent`）担任。三者都是 **Agent Loop + 原子工具**：觉的问题派给主人后，Agent 查会话、检索、起草，把草稿写进领域对象（需求单、会话的草稿字段）；人在工作面上看、改、按按钮签字。私聊用于开放式请求与查询。
 
-- 助手**没有自己的身份和权限**，借用委托人的权限：工具在代码里绑定委托人，模型看不到也改不了；
+- 助手**没有自己的权限**，借用委托人的权限：工具在代码里绑定委托人，模型看不到也改不了；v8：助手以自己的名义（`agent:<委托人>`，产品经理 Agent 为 `pm:agent`）记检索事件与错误，它的错不算到委托人头上；
 - `read` / `draft` 工具自动执行，草稿未生效；
 - `effect` 工具**只能提议**，且只用于对话里的提议：Loop 创建 `PendingAction`，确认卡出现在工作面签字区，**委托人点确认后才执行**；助手没有、也不能有「确认」工具。工作面上的签字按钮直接调门面原子方法，不经过 `PendingAction`；
 - **没有委托人的 Agent 没有生效工具**：`pm:agent` 只有 read / draft 工具；
@@ -1448,7 +1452,7 @@ class AgentMessage(BaseModel):
     target: str | None = None                 # v5：批注挂的位置，如 "req:3/chem/2"、"sess:5/reply"；None = 普通消息
 
 class Conversation(BaseModel):
-    id: str                                   # "conv:<actor_id>:<session_id 或 inbox>"
+    id: str                                   # "conv:<actor_id>:<session_id 或 inbox>"；v8 agent_threads=object 时收件箱按对象分段 "conv:<actor_id>:<req_id 或 object_id>"
     principal: str                            # v5：产品经理 Agent 为 pm:agent
     role: Role                                # sales / pm / rd
     session_id: str | None = None             # 业务员助手绑定的客户会话
@@ -1504,7 +1508,7 @@ class AgentHub:                               # HuayanApp.agents
 | `list_my_questions()` | read | sales pm rd | `app.bus.list(owner_role=角色)`，只留 owner_id 为空或为本人的 |
 | `get_session(session_id)` | read | pm rd | `app.view_session(session_id, principal)` |
 | `match_translations(text)` | read | pm rd | `translate.match_translations` |
-| `find_products(phenomenon, slots)` | read | pm rd | `domain.match_candidates(phenomenon, slots, kb.products())` |
+| `find_products(phenomenon, slots)` | read | sales pm rd | `domain.match_candidates(phenomenon, slots, kb.products())` |
 | `propose_reuse(req_id, product_id, ku_refs, customer_note, note)` | draft | pm | `app.save_reuse_proposal`（v5.1） |
 | `edit_reuse_note(req_id, text)` | draft | pm rd | `app.update_reuse_note`（v5.3） |
 | `propose_merge(question_id, target_req_id, member_ids, note)` | draft | pm | `app.save_merge_proposal`（v5.2） |
@@ -1714,3 +1718,26 @@ Jue-K 模型按「家族 × 判断层」保存：`models: {"<family>|L<k>": (cla
 - **门面（契约 ⑫）**：新增 `return_for_conditions(req_id, slots, by)`（研发；`rd_confirmed` → `rd_accepted`，写 `requirement_returned`，payload 带 `slots`）、`narrow_capability(cap_id, conditions, by)`（授予人；撤销原能力并按更窄条件授予，依据不变）、`timeline(day, by)`（主管只读；L3 内容只给存根）。
 - **网关（契约 ⑩）**：新 caller `sim:sales`、`sim:rd`、`sim:pm`（业务月里大模型扮演的业务员、研发、产品经理）。
 - **事件**：不新增；`requirement_returned` 的 payload 可带 `slots`。
+
+实施 Q9.3 时补（人已批准，2026-10-21）：
+
+- **准备以对象为准**：门面 `preparation_gap(question_id) -> str` 返回主人准备还缺什么（接单要产品需求条目、复用要复用建议、确认转译要化学语言条目、发布要说明书草稿、机会汇聚要合并建议），齐了返回空串；`mark_prepared` 有缺口时抛 `ValueError`。`AgentHub.dispatch` 在 Agent 回复后按缺口退回给它再做一次（`PUSHBACKS = 1`），同一问题最多派 2 次（`ATTEMPTS`），仍没准备好就留在「准备中」并记 Agent 错误；Agent 说「已就绪」不算。
+- **Agent 的错误记在 Agent 名下**：`runs/<run_id>/agent_errors.jsonl`，每行 `at, agent, principal, kind, …`；`kind`：`tool_rejected`（门面或参数拒绝）、`prepare_missing`（准备后对象上缺草稿）、`prepare_failed`、`out_of_steps`、`memory_rejected`。不进事件日志（不改事件编号）。`retrieve` 事件的 `actor` 是真正提问的一方（见第 ⑧ 节）。
+- **助手记忆（契约 ⑭）**：`MemoryEntry{id, principal, kind: habit|fact|lesson, text, why, refs, at, status}`，按委托人存，写 `runs/<run_id>/memory.json`、重启读回。门面：`memories(by)`、`recall_memory(query, by)`、`remember(kind, text, why, refs, by)`（`leak_hits` 按委托人层级校验，含上层内容拒绝）、`forget(memory_id, by)`（只能删自己助手的）、`decision_records(by, since)`（程序生成的当天决策记录，不调用大模型）、`close_day(since)`（收工时各助手归纳）。工具：`remember`（draft）、`recall_memory`（read），三类角色都有。`agent_memory` 打开时，每段对话开头注入最近 30 条记忆索引；`AgentHub.consolidate(principal, since)` 用该助手自己的 caller（`agent:<role>`）归纳：增、删记忆，写入仍经门面校验。
+- **AgentHub**：`conversation(actor_id, session_id, thread)`、`conversation_of(question)`、`pending_dispatch()`、`dispatch(only=None)`（只派这几个问题，模拟器按对话分组并发用）、`error(principal, kind, **detail)`、`errors(principal)`。
+- **配置**：`agent_threads: inbox | object`、`agent_memory: bool`。演示与默认配置为 `inbox` / `false`（录制缓存是旧对话结构）；企业编制为 `object` / `true`。
+- **界面接口**：`GET /api/agents/conversation` 加 `thread`；`GET /api/agents/memory`；`POST /api/agents/forget`。
+- **接单即立项**：`accept_requirement` 时若没有覆盖本单的研发中项目（`status=project`、解决本现象、与已知条件一致），门面立一个 `proj:<req_id>`（适用条件为接单时的已知条件，归属接单研发，说明书、机理、配方为空），写 `project_opened` 事件，续跑时据此重建；已有覆盖的项目则不立，技术确认照旧关联它。`confirm_translation` 先找覆盖的研发中项目，没有就用本单立的项目。发布接单时立的项目：机理取化学语言条目，配方为模拟占位，第一条适用情境取本单通过试样的条件。立项是研发接单这次签字的效果，不另设决策点。
+- **产品经理退出逐单转述**（依据 2026-10-12 与研发研究员的交流：目标是客户—研发需求直达，产品经理专注产品全生命周期）：被研发退回的单主人仍为 `pm:agent`，按退回理由重写；`preparation_gap` 对接单要求最近一次退回之后有产品需求条目被修改，否则返回缺口。真人产品经理只签适用范围扩展与机会汇聚。
+- **说明书清干净才算准备好**：`release` 与 `seal_leak` 的 `preparation_gap` 在说明书或用法仍有泄密命中时返回缺口（只给句序号），主人用 `edit_sheet` 改写；命中清除后 `seal_leak` 由觉自动结案。
+- **接单前先回问客户**（人已批准，2026-10-21）：门面 `ask_before_accept(req_id, slots, by)`（接单研发签 `accept_requirement`；单子仍为 `draft`，写 `return_notes` 与带 `slots` 的 `requirement_returned`，接单问题以 `return` 结案，不经产品经理）；觉对勾选的条件向业务员提出 `ask_back`。模板 `accept_requirement` 的前提加 `attrs.n_missing == 0`：客户答完之前不再提接单。界面接口 `POST /api/ask_before_accept`。缺的是只有客户知道的条件时用它；需求写得不清楚才 `return_requirement` 退回产品经理 Agent。
+- **收口（人已批准，2026-10-21，见 REPLAN-v8 Q9.3 收口方案 A–G）**：
+  - 门面只拒绝权限、做不到、红线三类；「该不该、何时」只在觉的模板。`accept_requirement(req_id, by)` 不再有 `note`，接单与 `confirm_translation` 不因未答回问或失真提示被拒，二者只作证据列在签字区；撤回上面「越过失真提示接单」一条。
+  - 觉再看统一结案（写后评估与定时扫描，见第 ⑫ 节）；`accept_requirement` 不再关闭机会汇聚，`save_reuse_proposal` 不再关复用问题、不再调用 `scan()`，`decline_project`、`merge_requirements` 不再关同单问题。模板 `reuse_product` 前提为 `status == 'draft' and (not reuse_checked or reuse_pending)`。
+  - 推进类问题没有「忽略」，不想处理就留在待办；异常类问题可「越过」，`resolve(dismiss)` 带理由。
+  - requirement 属性 `n_unmapped_constraints` 改为 `n_conflicting_refs`（契约 5.2）；模板 `distortion` 前提改用它与 `n_unquoted_items`。
+  - `ReqItem.edited_by`：委托人在对话里交代（`AgentHub.chat`）、助手当轮改的条目记委托人；派单准备时仍为 `None`。
+  - 自助单的客户评价由客户的归属业务员签（解析表见 5.4 节），`record_market_eval` 允许会话业务员或归属业务员；`view_session` 允许归属业务员查看自己客户的自助会话（其助手准备客户评价要绑定该会话）。
+  - 写后评估在助手起草结束后做（见第 ⑫ 节）：Agent 一次准备里的中间稿不再让觉提出又结案。
+  - 客户补条件只走一条路：会话里补的与回问答的，起草中的单都按会话条件更新已知条件、清掉未经人改的产品需求条目，由产品经理 Agent 重写；已接单的单照旧只把答复补进已知条件。
+- **步数用完也看对象**：Agent 步数用完时同样按 `preparation_gap` 判断，对象齐了照常标记已准备，有缺口才记 `out_of_steps`。派单文字以对象编号开头（需求单、会话），问题编号放在后面。

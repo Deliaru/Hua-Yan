@@ -46,7 +46,9 @@ def answer(session, deps, *, check_grounding=False):
     targets = target_products(session, deps, products)
     query = turn.text + " " + " ".join(targets)
     # 先记完整检索事件；明确型号不受当前会话现象筛选，以免查别的产品时答错。
-    found = deps.kb.explore(query, actor, session_id=session.id,
+    # v8：检索用的是这句话，记在说这句话的人名下（客户问的不算业务员的）；权限仍按会话身份
+    asker = session.customer_id if turn.speaker == "customer" else actor.id
+    found = deps.kb.explore(query, actor, session_id=session.id, asked_by=asker,
                             phenomenon=None if targets else session.need.phenomenon)
     # 研发授予这一层的话（statement）：前台可以说这句话，看不到它依据的结论
     statements = [c for c in found.capabilities if c.form == "statement"]

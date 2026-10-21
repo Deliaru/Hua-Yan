@@ -68,3 +68,14 @@ class Conversation(BaseModel):
     role: Role                                # sales / pm / rd；产品经理 Agent 的 principal 为 pm:agent
     session_id: str | None = None             # 业务员助手绑定的客户会话
     messages: list[AgentMessage] = []
+
+
+class MemoryEntry(BaseModel):                 # v8（人批准 2026-10-21）：助手记忆，按委托人存，写 runs/<run_id>/memory.json
+    id: str                                   # "mem:<n>"
+    principal: str                            # 委托人；产品经理 Agent 为 pm:agent
+    kind: Literal["habit", "fact", "lesson"]  # 委托人的习惯 / 业务事实 / 教训
+    text: str                                 # 一句话，进每段对话开头的索引
+    why: str = ""                             # 来由与怎么用
+    refs: list[str] = []                      # 依据：需求单、会话、问题编号
+    at: datetime
+    status: Literal["active", "deleted"] = "active"

@@ -4,10 +4,11 @@ kind: advance
 object_type: session
 decision_label: 是否交业务员（商务）
 # v6：客户自助会话里客户提出报价、采购、送样等商务诉求，按客户归属自动交业务员，原话与推荐原样带过去
+# v8：客户点名要业务员或人工，同样交业务员
 precondition: "attrs.self_serve and attrs.purchase_intent and not attrs.sales_assigned"
 rule_score: "1"
-worth_prompt: "客户自助会话 {object} 中客户提出了报价、采购或送样等商务诉求，尚无业务员跟进。是否按客户归属自动交给业务员？"
-title: "{object}：客户有商务诉求，交业务员"
+worth_prompt: "客户自助会话 {object} 中客户提出了报价、采购、送样等商务诉求或要找业务员，尚无业务员跟进。是否按客户归属自动交给业务员？"
+title: "{object}：客户有商务诉求或要找人，交业务员"
 owner_role: sales
 signer_role: null
 auto_action: assign_sales

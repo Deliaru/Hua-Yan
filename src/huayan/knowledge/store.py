@@ -342,7 +342,7 @@ class KnowledgeBase:
         return sorted(hits, key=lambda hit: (-hit.score, hit.ku.id))
 
     def search(self, query: str, actor: Actor, *, phenomenon: str | None = None, k: int = 5,
-               session_id: str | None = None) -> list[KnowledgeHit]:
+               session_id: str | None = None, asked_by: str | None = None) -> list[KnowledgeHit]:
         ranked = self._rank(query, phenomenon)
         visible = [h for h in ranked if self._readable(actor, h.ku)]
         blocked = [h for h in ranked if not self._readable(actor, h.ku)]
@@ -353,7 +353,8 @@ class KnowledgeBase:
             self._deny(actor, [h.ku.id for h in blocked] or [actor.id], "高层级访问已冻结", session_id)
             visible = []
         result = visible[:max(0, k)]
-        self.events.append("retrieve", actor.id, {"query": query, "intent": intent,
+        # v8：事件记在真正提问的人或助手名下（asked_by），委托人记在 principal；权限仍按委托人
+        self.events.append("retrieve", asked_by or actor.id, {"query": query, "intent": intent, "principal": actor.id,
             "actor_level": level_of(actor), "hit_ku_ids": [h.ku.id for h in result],
             "n_blocked": len(above),
             "blocked_product_ids": [h.ku.product_id for h in above if h.ku.product_id]},
@@ -374,7 +375,7 @@ class KnowledgeBase:
                        and any(e.rsplit("@", 1)[0].rsplit("#", 1)[0] in docs for e in u.evidence)]
 
     def explore(self, query: str, actor: Actor, *, phenomenon: str | None = None, k: int = 5,
-                session_id: str | None = None) -> ExploreResult:
+                session_id: str | None = None, asked_by: str | None = None) -> ExploreResult:
         """分层召回（只读）：本层可读的结论给原文，授予本层的能力给能力，命中却没有能力的只记「不可答」；
         内部各层给存根，客户层什么都不给，与没找到相同。"""
         level = level_of(actor)
@@ -396,8 +397,8 @@ class KnowledgeBase:
         covered = {ku_id for c in caps for ku_id in c.based_on}
         # 转化对照走升级转译，配方永不对下；其余越层命中没有能力的才算「不可答」
         unanswerable = [u.id for u in above if u.id not in covered and u.kind not in ("formula", "translation")]
-        self.events.append("retrieve", actor.id, {"query": query, "intent": _intent(query),
-            "actor_level": level, "hit_ku_ids": [u.id for u in units], "n_blocked": len(above),
+        self.events.append("retrieve", asked_by or actor.id, {"query": query, "intent": _intent(query),
+            "principal": actor.id, "actor_level": level, "hit_ku_ids": [u.id for u in units], "n_blocked": len(above),
             "blocked_product_ids": [u.product_id for u in above if u.product_id],
             "unanswerable_ku_ids": unanswerable, "n_unanswerable": len(unanswerable)}, session_id=session_id)
         if level == 0:

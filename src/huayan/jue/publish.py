@@ -61,7 +61,7 @@ def _summary(family: str, a: dict) -> str:
     if family in ("escalate_need", "route_rd"):
         return f"最近一次匹配中「都不合适」概率 {a['p_none']:.2f}，高于最好的候选产品 {a['p_top']:.2f}；已了解 {a['n_filled']} 项信息"
     if family == "distortion":
-        return f"本层有 {a['n_unmapped_constraints']} 项上层约束未承接，{a['n_unquoted_items']} 条条目缺少客户原话"
+        return f"本层有 {a['n_conflicting_refs']} 条条目依据的案例条件与客户已知条件不符，{a['n_unquoted_items']} 条条目缺少客户原话"
     if family == "seal_leak":
         return f"说明书与用法中有 {a['n_leak_hits']} 句命中封存项、L3 术语或研发方向假设"
     if family == "trial_risk":
@@ -104,16 +104,17 @@ def _label(obj: JueObject, seeds: Seeds | None) -> str:
 
 
 def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None, signer: bool = False) -> str | None:
-    """契约 5.4 解析表：角色 × 对象 → 具体的人。v6：pm 作签字人为真人产品经理；
-    需求单被研发退回过、尚未接单时，pm 作主人也解析为真人产品经理（例外纠偏不走 Agent 起草）。"""
+    """契约 5.4 解析表：角色 × 对象 → 具体的人。v6：pm 作签字人为真人产品经理；pm 作主人为产品经理 Agent。
+    v8：被研发退回的单也由产品经理 Agent 按理由重写（真人产品经理退出逐单转述，只签产品生命周期类决策）；
+    门面按产品线传入 ref["pm"]（分管该现象的产品经理）；没有时取唯一的真人产品经理。"""
     if role is None:
         return None
     if role == "pm":
-        human = signer or (obj.object_type == "requirement" and obj.attrs.get("n_returns", 0) >= 1
-                           and obj.attrs["status"] == "draft")
-        return min(a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent") if human else "pm:agent"
-    if role == "sales":
-        return ref["sales_id"]
+        if not signer:
+            return "pm:agent"
+        return ref.get("pm") or min(a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent")
+    if role == "sales":     # v8 收口：自助单没有会话业务员时，需求单上的事（客户评价）归客户的归属业务员跟进
+        return ref["sales_id"] or (ref["account_sales"] if obj.object_type == "requirement" else None)
     if role == "supervisor":
         return min(a.id for a in seeds.actors if a.role == "supervisor")
     if obj.object_type == "knowledge":

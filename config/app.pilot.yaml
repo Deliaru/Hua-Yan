@@ -8,6 +8,10 @@ extractor: llm               # rule | llm
 realtime_model: jue_proto     # jue_proto | jue_k
 scheduled_model: jue_proto    # jue_proto | jue_k
 jue_k_dir: models/jue_k
+models_config: config/models.yaml
+pm_lines: {}
+agent_threads: inbox
+agent_memory: false
 llm_cache_dir: null
 replay: false                 # true = 记录回放模式，界面标明
 thresholds: {ask: 0.5, ask_jue_k: 0.15, max_asks: 2, match: 0.5, publish: 0.5}  # ask_jue_k：Jue-K 输出校准概率，漏问代价高，实时追问阈值取 0.15（见 models/jue_k/model_card.md）

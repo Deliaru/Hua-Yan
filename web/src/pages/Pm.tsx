@@ -135,7 +135,6 @@ function Scope({ q, onDone }: { q: Question; onDone: (t: string) => void }) {
             <div className="flex gap-2">
               <Act label="扩展适用范围" disabled={!note.trim()} glow={!!scripted && note === scripted} run={() => api.extendScope(q.id, note, me).then(() =>
                 onDone(`已把「${L.phen(s.phenomenon)}」加进 ${L.product(s.product)} 的适用范围。此后同类需求在客户自助阶段就直接得到推荐，研发不再收到这类单——去客户子工作面开 C′ 看。`))} />
-              <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />
             </div>
           </div>
         </div>
@@ -178,7 +177,6 @@ function Opportunity({ q, onDone }: { q: Question; onDone: (t: string) => void }
             <div className="flex gap-2">
               <Act label="合并为一个课题" disabled={!note.trim()} glow={!!scripted && note === scripted} run={() => api.merge(q.id, me, note).then(() =>
                 onDone(`已合并为一个课题交研发，附你的商业判断。研发收件箱只有一张单——切到研发看。`))} />
-              <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />
             </div>
           </div>
         </div>

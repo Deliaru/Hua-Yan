@@ -15,8 +15,11 @@ _PLAIN_ASK = ["行，那你直接跟我说它是怎么起作用的，我们自�
 
 
 class SimCustomer:
-    def __init__(self, card: NeedCard, seeds: Seeds, rng: random.Random, gateway=None):
-        self.card, self.seeds, self.rng, self.gateway = card, seeds, rng, gateway
+    def __init__(self, card: NeedCard, seeds: Seeds, rng: random.Random, gateway=None, persona: str = "",
+                 channel: str = ""):
+        # persona、channel：v8 业务月的客户人设与沟通渠道；只在给出时追加到系统提示词末尾，原有录制缓存的请求不变
+        self.card, self.seeds, self.rng, self.gateway, self.persona = card, seeds, rng, gateway, persona
+        self.channel = channel
         self.slots = {s.id: s for s in seeds.slots}
         self.phen = next(p for p in seeds.phenomena if p.id == card.phenomenon)
         self.history: list[Message] = []
@@ -28,9 +31,9 @@ class SimCustomer:
     def _phrase(self, slot: str) -> str:
         return self.rng.choice(self.slots[slot].customer_phrases[self.card.slots[slot]])
 
-    def opening(self) -> str:
+    def opening(self, cue: str = "（你刚和业务员接通，请用一两句话说出你遇到的问题。）") -> str:
         if self.gateway is not None:
-            return self._llm("（你刚和业务员接通，请用一两句话说出你遇到的问题。）")
+            return self._llm(cue)
         parts = [self.rng.choice(_OPENERS).format(p=self.rng.choice(self.phen.customer_phrases))]
         parts += [self._phrase(s) for s in self.card.opening_slots]
         if self.card.chem_savvy:
@@ -69,6 +72,10 @@ class SimCustomer:
                 phenomenon="、".join(self.phen.customer_phrases), facts=facts,
                 opening="、".join(self.slots[s].label for s in self.card.opening_slots) or "无",
                 savvy=self._savvy_text())
+            if self.persona:
+                system += "\n你的性格：" + self.persona
+            if self.channel:
+                system += "\n" + self.channel
             self.history.append(Message(role="system", content=system))
         self.history.append(Message(role="user", content=sales_text))
         resp = self.gateway.complete(LLMRequest(tier=Tier.FAST, caller="sim:customer", messages=self.history,

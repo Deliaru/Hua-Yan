@@ -1,7 +1,7 @@
 // 前端唯一的数据入口：src/huayan/ui/server.py 的 JSON 接口，每个接口对应一个门面方法（WP-C 第 5 项）。
 // 身份由界面选择后作为 viewer / by 传入，裁剪与可签条件都在门面里；门面拒绝时原样显示它返回的 error。
 import type {
-  Capability, Claim, Conversation, ContributionStat, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
+  Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun,
   Route, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem,
 } from "./types";
@@ -81,6 +81,7 @@ export const api = {
     call("market-eval", { req_id, result, note, by, missing_slots }),
   rework: (req_id: string, by: string) => call("rework", { req_id, by }),
   returnForConditions: (req_id: string, slots: string[], by: string) => call("return_for_conditions", { req_id, slots, by }),
+  askBeforeAccept: (req_id: string, slots: string[], by: string) => call("ask_before_accept", { req_id, slots, by }),
   narrowCapability: (cap_id: string, conditions: Record<string, string[]>, by: string) => call("qi/narrow", { cap_id, conditions, by }),
 
   // 契的签字入口
@@ -134,7 +135,11 @@ export const api = {
   demoLedger: () => call<LedgerItem[]>("demo/ledger"),
 
   // Agent 协作（契约 ⑭）
-  conversation: (actor: string, session_id: string | null) => call<Conversation | null>(`agents/conversation?${q({ actor, session_id })}`),
+  // v8：thread = 工作面打开的对象；按对象分段时取这一段对话
+  conversation: (actor: string, session_id: string | null, thread: string | null = null) =>
+    call<Conversation | null>(`agents/conversation?${q({ actor, session_id, thread })}`),
+  memory: (actor: string) => call<MemoryEntry[]>(`agents/memory?${q({ actor })}`),
+  forget: (id: string, by: string) => call<null>("agents/forget", { id, by }),
   chat: (actor: string, text: string, session_id: string | null, focus: string | null) =>
     call<Conversation>("agents/chat", { actor, text, session_id, focus }),
   pending: (actor: string) => call<PendingAction[]>(`agents/pending?${q({ actor })}`),

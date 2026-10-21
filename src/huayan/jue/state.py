@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 WINDOWS = {"theme_days": 7, "knowledge_days": 7, "actor_hours": 48}   # 与 config/app.yaml 的 windows 一致
 _PRODUCT_KU = {"sheet", "usage", "mechanism", "formula"}
 _INTERNAL = Actor(id="system:jue", role="rd", name="觉（内部身份，只用于属性计数）")
-_PURCHASE = re.compile("报价|价格|采购|下单|送样")   # v6：商务诉求，纯规则
+_PURCHASE = re.compile("报价|价格|采购|下单|送样|业务员|人工")   # v6：商务诉求；v8：客户要找人，纯规则
 
 
 def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: datetime) -> JueState:
@@ -67,7 +67,10 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
     missing, last_result = _missing(req, kb, own, history)
     objects = _slot_objects(req.id, req.known_slots, need, seeds, kb.products(), layer, kb, missing) if layer else {}
     items = {2: req.product_lang, 3: req.chem_lang}.get(layer, [])
-    upstream = set(req.known_slots) if layer == 2 else {i.slot for i in req.product_lang if i.slot} if layer == 3 else set()
+    # v8 收口：失真量真实内容——条目所引案例的条件与本单已知条件冲突（依据的先例不是这位客户的情况）
+    case_slots = {f"ku:case:{c.id}": c.slots for c in seeds.cases}
+    conflicting = lambda item: any(req.known_slots.get(s, v) != v for ref in item.ku_refs
+                                   for s, v in case_slots.get(ref, {}).items())
     open_backs = set()
     for e in history:
         p = e.payload
@@ -84,7 +87,7 @@ def requirement_state(req: Requirement, need: NeedState, seeds: Seeds, kb: Knowl
         "status": req.status, "layer": layer,
         "n_product_items": len(req.product_lang), "n_chem_items": len(req.chem_lang),
         "n_returns": len(req.return_notes), "n_open_ask_back": len(open_backs),
-        "n_unmapped_constraints": len(upstream - {i.slot for i in items if i.slot}),
+        "n_conflicting_refs": sum(map(conflicting, items)),
         "n_unquoted_items": sum(not i.quote_refs for i in items),
         "n_edited_uncovered": _edited_uncovered(req, seeds, kb),
         "n_pm_edited_uncovered": _pm_edited_uncovered(req, seeds, kb),
@@ -189,7 +192,7 @@ def _slot_objects(owner: str, known: dict[str, str], need: NeedState, seeds: See
         fill = need.slots.get(slot.id)
         filled = slot.id in known
         splits = 0 if filled or ph is None else len({ids({**known, slot.id: v}) for v in slot.values})
-        trans = 0 if filled or kb is None else _trans_splits(phen, known, slot, kb, layer)
+        trans = 0 if filled or kb is None or phen is None else _trans_splits(phen, known, slot, kb, layer)
         prior = phen.slot_priors.get(slot.id, {}) if phen else {}
         p_fix = 0.0 if filled or phen is None or layer != 1 else _p_fix(phen, known, slot.id, seeds, products)
         oid = f"slot:{owner}/{slot.id}"

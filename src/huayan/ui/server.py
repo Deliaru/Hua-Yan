@@ -219,12 +219,13 @@ GET = {
     "/api/ledger": lambda app, p: app.ledger.totals(),
     "/api/contributions": lambda app, p: app.contributions(p["viewer"]),
     "/api/report": report,
-    "/api/agents/conversation": lambda app, p: next((c for c in app.agents.conversations(p["actor"])
-                                                if c.session_id == p.get("session_id")), None),
+    "/api/agents/conversation": lambda app, p: app.agents.conversation(p["actor"], p.get("session_id"), p.get("thread")),
+    "/api/agents/memory": lambda app, p: app.memories(p["actor"]),           # v8：助手记忆，人能看能删
     "/api/agents/trace": lambda app, p: app.agents.trace(p["conversation_id"]),
     "/api/agents/pending": lambda app, p: app.agents.pending(p["actor"]),
 }
 POST = {
+    "/api/agents/forget": lambda app, p: app.forget(p["id"], p["by"]),
     "/api/qi/confirm": lambda app, p: app.confirm_claims(p["req_id"], p["ku_ids"], p["by"]),
     "/api/qi/grant": lambda app, p: app.sign_qi_grant(p["question_id"], p["by"], p.get("claim_ids", ()), p.get("note", "")),
     "/api/qi/revoke": lambda app, p: app.revoke_capability(p["cap_id"], p["by"]),
@@ -255,6 +256,7 @@ POST = {
                                                               p.get("missing_slots", ())),
     "/api/rework": lambda app, p: app.rework_requirement(p["req_id"], p["by"]),
     "/api/return_for_conditions": lambda app, p: app.return_for_conditions(p["req_id"], p["slots"], p["by"]),
+    "/api/ask_before_accept": lambda app, p: app.ask_before_accept(p["req_id"], p["slots"], p["by"]),
     "/api/qi/narrow": lambda app, p: app.narrow_capability(p["cap_id"], p["conditions"], p["by"]),
     "/api/points": lambda app, p: app.set_public_points(p["req_id"], p["text"], p["sealed"], p["by"]),
     "/api/sheet": lambda app, p: app.save_sheet(p["req_id"], SheetDraft.model_validate(p["sheet"]), p["by"]),

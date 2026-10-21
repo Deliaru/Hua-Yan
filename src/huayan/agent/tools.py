@@ -18,9 +18,16 @@ class ToolContext:
     conversation_id: str
     session_id: str | None = None
     focus: str | None = None                  # 本轮工作面打开的对象，不改变委托人权限
+    instructed: bool = False                  # v8 收口：本轮是委托人亲口交代的，起草记在委托人名下
 
 
 TOOLS: dict[str, tuple[ToolSpec, Callable[[ToolContext, BaseModel], ToolResult]]] = {}
+MEMORY_TOOLS = {"remember", "recall_memory"}          # v8：agent_memory 打开时才给模型
+
+
+def agent_id(principal: str) -> str:
+    """v8：助手借委托人的权限，但以自己的名义记事件与错误；产品经理 Agent 本身就是 pm:agent。"""
+    return principal if principal == "pm:agent" else f"agent:{principal}"
 
 
 def tool(name: str, kind: ToolKind, roles: list[Role], description: str, params: type[BaseModel], confirm_text: str = ""):
@@ -31,10 +38,10 @@ def tool(name: str, kind: ToolKind, roles: list[Role], description: str, params:
     return register
 
 
-def openai_schemas(role: Role) -> list[dict]:
+def openai_schemas(role: Role, memory: bool = False) -> list[dict]:
     return [{"type": "function", "function": {"name": spec.name, "description": spec.description,
                                               "parameters": spec.params.model_json_schema()}}
-            for spec, _ in TOOLS.values() if role in spec.roles]
+            for spec, _ in TOOLS.values() if role in spec.roles and (memory or spec.name not in MEMORY_TOOLS)]
 
 
 def _items(items: list[ReqItem]) -> list[dict]:
@@ -80,7 +87,8 @@ class SearchArgs(BaseModel):
       "在你委托人这一层检索：可读的结论、授予这一层的话（写给下层时只写 [[编号]]）、相关提示；"
       "越权命中只告诉你归属人与层级（谁知道），不给内容", SearchArgs)
 def search_knowledge(ctx: ToolContext, args: SearchArgs) -> ToolResult:
-    found = ctx.app.kb.explore(args.query, ctx.principal, k=5, session_id=ctx.session_id)
+    found = ctx.app.kb.explore(args.query, ctx.principal, k=5, session_id=ctx.session_id,
+                               asked_by=agent_id(ctx.principal.id))
     return ToolResult(data={"hits": [{"ku_id": u.id, "kind": u.kind, "level": u.level, "title": u.title,
                                       "text": u.text[:160], "owner": u.owner} for u in found.units if args.kind in (None, u.kind)],
                             "statements": [{"ref": c.id, "text": c.payload["text"]} for c in found.capabilities if c.form == "statement"],
@@ -172,7 +180,7 @@ class ProductArgs(BaseModel):
     slots: dict[str, str] = {}
 
 
-@tool("find_products", "read", ["pm", "rd"], "按现象与已知条件查已发布产品中的候选（含还不知道的限定条件）", ProductArgs)
+@tool("find_products", "read", ["sales", "pm", "rd"], "按现象与已知条件查已发布产品中的候选（含还不知道的限定条件）", ProductArgs)
 def find_products(ctx: ToolContext, args: ProductArgs) -> ToolResult:
     found = match_candidates(args.phenomenon, args.slots, ctx.app.kb.view(ctx.principal).products)
     return ToolResult(data=[c.model_dump() for c in found])
@@ -385,3 +393,26 @@ class DecryptArgs(BaseModel):
 def decide_decrypt(ctx: ToolContext, args: DecryptArgs) -> ToolResult:
     q = ctx.app.decide_decrypt(args.question_id, ctx.principal.id, args.approve)
     return ToolResult(data={"question_id": q.id, "status": q.status, "action": q.resolution.action})
+
+
+# ---- v8：记忆（按委托人存；只记委托人这一层看得到的内容，门面校验）----
+
+class RememberArgs(BaseModel):
+    kind: Literal["habit", "fact", "lesson"]
+    text: str
+    why: str = ""
+    refs: list[str] = []
+
+
+@tool("remember", "draft", ["sales", "pm", "rd"],
+      "记下一条以后用得上的记忆：委托人的习惯（habit）、业务事实（fact）或教训（lesson）。一句话，why 写来由与怎么用，"
+      "refs 写依据的需求单、会话或问题编号；只记已经发生、对象上查得到的事，不记你的打算。", RememberArgs)
+def remember(ctx: ToolContext, args: RememberArgs) -> ToolResult:
+    return ToolResult(data={"id": ctx.app.remember(args.kind, args.text, args.why, args.refs, ctx.principal.id).id})
+
+
+@tool("recall_memory", "read", ["sales", "pm", "rd"],
+      "按关键词查委托人的记忆细节（来由与依据编号）。记忆是记下时为真，用之前以对象现状核实。", SearchArgs)
+def recall_memory(ctx: ToolContext, args: SearchArgs) -> ToolResult:
+    return ToolResult(data=[m.model_dump(mode="json", include={"id", "kind", "text", "why", "refs"})
+                            for m in ctx.app.recall_memory(args.query, ctx.principal.id)])

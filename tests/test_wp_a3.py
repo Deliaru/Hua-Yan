@@ -47,12 +47,22 @@ def test_translation_release_and_ownership(tmp_path):
     prepare("accept_requirement", f"requirement:{req.id}")
     returned = app.return_requirement(req.id, "请突出客户的无APEO要求", rd)
     assert returned.status == "draft" and returned.return_notes == ["请突出客户的无APEO要求"]
-    # v6：退回后的纠偏派给真人产品经理（不走 Agent 起草），改完标记准备、回到研发接单
+    # v8：退回后由产品经理 Agent 按理由重写（真人产品经理退出逐单转述）；没改之前不算准备好
     accept = next(q for q in app.bus.list(family="accept_requirement") if q.object_id == f"requirement:{req.id}")
-    assert accept.owner_id == "pm:P01"
-    fixed = app.edit_req_item(req.id, 0, returned.product_lang[0].model_copy(
-        update={"text": returned.product_lang[0].text + "；突出无APEO"}), "pm:P01")
-    assert fixed.product_lang[0].edited_by == "pm:P01"
+    assert accept.owner_id == "pm:agent" and "还没按理由修改" in app.preparation_gap(accept.id)
+    app.edit_req_item(req.id, 0, returned.product_lang[0].model_copy(
+        update={"text": returned.product_lang[0].text + "；突出无APEO"}), "pm:agent")
+    prepare("accept_requirement", f"requirement:{req.id}")
+    # v8 接单前先回问客户：研发勾选设备 → 仍待接单、觉对设备提出回问、答完之前不再提接单 → 客户答后再提接单
+    assert app.ask_before_accept(req.id, ["equipment"], rd).status == "draft"
+    assert any(q.object_id == f"slot:{req.id}/equipment" for q in app.bus.list(family="ask_back"))
+    assert not any(q.object_id == f"requirement:{req.id}" for q in app.bus.list(family="accept_requirement"))
+    app.add_turn(session.id, "customer", "设备是气流缸")
+    assert any(q.object_id == f"requirement:{req.id}" for q in app.bus.list(family="accept_requirement"))
+    # v8 收口：回问答复与会话补条件同一条路——未经人改的产品需求条目清掉，由产品经理 Agent 按新条件重写
+    assert app.requirement_view(req.id, rd).requirement.product_lang == []
+    get_clock().advance_to(get_clock().now() + timedelta(hours=1))   # 之后的退回晚于这次回答
+    app.draft_requirement(req.id, "pm:agent")
     prepare("accept_requirement", f"requirement:{req.id}")
     app.accept_requirement(req.id, rd)
     req = app.translate_requirement(req.id, rd)

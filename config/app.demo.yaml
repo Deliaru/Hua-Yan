@@ -8,6 +8,10 @@ extractor: llm
 realtime_model: jue_k
 scheduled_model: jue_k
 jue_k_dir: models/jue_k
+models_config: config/models.yaml
+pm_lines: {}
+agent_threads: inbox
+agent_memory: false
 llm_cache_dir: runs/demo_record/llm_cache_v5
 replay: false
 thresholds: {ask: 0.5, ask_jue_k: 0.15, max_asks: 2, match: 0.5, publish: 0.5}

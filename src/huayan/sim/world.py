@@ -40,6 +40,12 @@ def trial_outcome(card: NeedCard, known: dict[str, str], drift: bool = False) ->
     return "pass", "none", []
 
 
+def market_outcome(card: NeedCard, known: dict[str, str], drift: bool = False) -> tuple[str, list[str]]:
+    """v8 收口：试样过了，客户按真实条件上大货；试样单上的缺口另抽一次签（种子与试样不同），中了即客户评价不通过。"""
+    fired = [s for s in gaps(card, known) if random.Random(f"{card.id}:{s}:market").random() < gap_risk(card, s, drift)]
+    return ("fail" if fired else "pass"), fired
+
+
 def recorded(card: NeedCard, seeds: Seeds, rng: random.Random) -> dict[str, str]:
     """历史试样单上记下的条件：必问条件都问了（一成记错），其余条件四成问到；客户说不清的不记。"""
     phen = next(p for p in seeds.phenomena if p.id == card.phenomenon)

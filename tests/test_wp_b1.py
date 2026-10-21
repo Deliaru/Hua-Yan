@@ -119,7 +119,7 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     req.reuse = ReuseProposal(product_id=None)
     assert due() == ["accept_requirement"]
     req.reuse = ReuseProposal(product_id="T-205", customer_note="（模拟）待研发审定")
-    assert due() == []
+    assert due() == ["reuse_product"]            # v8 收口：找到产品后复用问题一直挂着，等研发签
     req.status = "rd_accepted"
     assert due() == ["confirm_translation"]
 

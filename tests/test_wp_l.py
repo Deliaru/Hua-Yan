@@ -71,7 +71,7 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     # 手工待处理问题只验准备权限：主人准备，签字人查看；准备不等于签字。
     q = app.bus.publish(Question(id="", family="release", template_id="release", title="审定发布",
         object_id=f"requirement:{req.id}", owner_role="pm", owner_id="pm:agent",
-        signer_role="rd", signer_id="rd:R01", scored_by="rule", discoverer="jue_proto",
+        signer_role="rd", signer_id="rd:R01", scored_by="rule", discoverer="jue_proto", refs={"requirement_id": req.id},
         dedup_key=f"release:{req.id}", created_at=get_clock().now()))
     assert [x.id for x in app.questions("pm:agent")] == [q.id]
     assert [x.id for x in app.questions("rd:R01") if x.family == "release"] == [q.id]
@@ -79,6 +79,10 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
     assert not app.questions("rd:R02")
     with pytest.raises(PermissionDenied):
         app.mark_prepared(q.id, "rd:R01")
+    stored = app._requirements[req.id]
+    with pytest.raises(ValueError, match="命中保密"):   # v8：准备以对象为准，说明书仍泄密不算准备好
+        app.mark_prepared(q.id, "pm:agent")
+    stored.sheet = stored.sheet.model_copy(update={"sheet": "（模拟）适用于涤纶染色。", "usage": "（模拟）按常规用量。"})
     prepared = app.mark_prepared(q.id, "pm:agent")
     assert prepared.prepared_at == get_clock().now() and prepared.status == "open"
     assert req.status == "rd_confirmed" and prepared.resolution is None

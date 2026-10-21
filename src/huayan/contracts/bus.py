@@ -20,9 +20,9 @@ class Evidence(BaseModel):
 class Resolution(BaseModel):
     action: Literal["sign", "accept", "return", "answered", "update_sheet", "freeze_access",
                     "approve_decrypt", "reject_decrypt", "dismiss", "auto"]
-    # sign：签字人在工作面签字（v5.2：机会汇聚的 sign = 研发签字合并）；accept / return：研发接单 / 退回（accept 同时关闭关联的 opportunity）；
+    # sign：签字人在工作面签字（v5.2：机会汇聚的 sign = 研发签字合并）；accept / return：研发接单 / 退回；
     # auto（v6）：觉按模板 auto_action 自动执行，by = "jue:auto"；
-    # answered：回问已答，或异常类问题的前置条件不再成立
+    # answered：回问已答，或觉再看时问题的前置条件不再成立（v8 收口：所有问题，by = "jue"）
     by: str
     note: str = ""
 

@@ -8,7 +8,7 @@ import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "..
 import { ChevronRight } from "../components/Icons";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
 import { useGlow, useGuide, useGuideArg } from "../components/Guide";
-import { Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip, SlotPicker } from "../components/ui";
+import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip, SlotPicker } from "../components/ui";
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
@@ -54,7 +54,7 @@ export function Rd() {
 function RdDesk({ question, reqId }: { question: Question | null; reqId: string | null }) {
   const { me } = useApp();
   const view = useData(() => (reqId ? api.requirement(reqId, me) : Promise.resolve(null)), [reqId, me]);
-  const conv = useConversation(null);
+  const conv = useConversation(null, reqId);
   const [itemIndex, setItemIndex] = useState<number | null>(null);
   const focus = itemIndex === null ? reqId : `${reqId}/chem/${itemIndex}`;
   const onThis = !!question && (!view || reqsOf(question).includes(view.requirement.id));
@@ -396,7 +396,8 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
   const { me } = useApp();
   const L = useLabels();
   const glow = useGlow(`sign:${q.family}`);
-  const dismiss = <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />;
+  // v8 收口：推进类问题不给「忽略」，不想处理就先放着；异常类问题可以写理由越过
+  const dismiss = ANOMALY.has(q.family) ? <Overrule q={q} /> : null;
   const head = (
     <div className="row attn-edge">
       <span className="tag tag-attn">{L.family(q.family)}</span>
@@ -443,6 +444,18 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
   return <Group title="待你签字" className={glow ? "guide-scope" : ""}>{head}{body}</Group>;
 }
 
+// 越过异常提示：理由留在结案说明里，作为觉的标签
+function Overrule({ q }: { q: Question }) {
+  const { me } = useApp();
+  const [note, setNote] = useState("");
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-2">
+      <Field value={note} onChange={setNote} rows={1} placeholder="判断无须处理的理由" />
+      <Act kind="quiet" label="越过" disabled={!note.trim()} run={() => api.resolve(q.id, "dismiss", me, note)} />
+    </span>
+  );
+}
+
 // 确认化学要点（confirm_translation）：签的是「下方化学要点就是研发要做的事」；这里说清转了什么、依据谁、还缺什么
 function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: React.ReactNode }) {
   const { me } = useApp();
@@ -453,7 +466,7 @@ function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: Reac
   const owners = [...new Set(points.flatMap((it) => it.ku_refs.map((r) => cited[r]?.owner).filter(Boolean)))] as string[];
   const edited = points.filter((it) => it.edited_by != null).length;
   const known = Object.entries(req.known_slots);
-  // 回问还没答复时门面会拒绝确认；这里提前说明在等什么（是否可签仍由门面判断）
+  // 回问、失真提示只作参考：是否等客户答复再确认由研发判断
   const t = useData(() => api.timeline(req.id, me), [req.id, me]);
   const waiting = (t?.nodes ?? []).filter((n) => (n.family === "ask_back" || n.family === "distortion") && n.resolved_at == null);
   return (
@@ -476,7 +489,7 @@ function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: Reac
           <p className="text-[13px] text-ink-2">每条的来历（客户原话）在下方「化学要点 · L3」，理解有偏差可以直接「修改」。确认后按这几条安排试样。</p>
           {!!waiting.length && <p className="rounded-[8px] bg-attn-bg px-3 py-2 text-[13px] leading-5 text-attn-ink">
             还在等客户补充信息：{waiting.map((n) => n.family === "ask_back" ? `${L.name(n.owner_id)} 正在回头问客户（回问）` : "转译和客户原话对不上，待核对").join("；")}。
-            答复回填需求单后再确认，否则确认会被拒绝；这期间可以先看、先改。</p>}
+            可以等答复回填需求单后再确认，这期间可以先看、先改。</p>}
           <div className="flex flex-wrap gap-2"><Act label="确认" run={() => api.confirm(req.id, me)} />{dismiss}</div>
         </div>
       </div>
@@ -487,8 +500,11 @@ function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: Reac
 function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: React.ReactNode; evidence: React.ReactNode }) {
   const { me, meta } = useApp();
   const L = useLabels();
-  const [mode, setMode] = useState<"accept" | "applicable" | "other" | "return">("accept");
+  const { all } = useInbox();
+  const distortions = all.filter((d) => d.family === "distortion" && d.refs.requirement_id === reqId);
+  const [mode, setMode] = useState<"accept" | "applicable" | "other" | "ask" | "return">("accept");
   const [reason, setReason] = useState("");
+  const [slots, setSlots] = useState<string[]>([]);
   const [product, setProduct] = useState(meta.products[0]?.id ?? "");
   // 演示讲解：研发判「已有产品适用」要选的产品与依据，由「演示自动填入」填好（录制回放里须与录制一致）
   const scripted = useGuideArg("decline");
@@ -505,10 +521,11 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
       <div className="row !items-start">
         <div className="flex flex-1 flex-col gap-2.5">
           <div className="inline-flex w-fit gap-0.5 rounded-[9px] bg-fill p-0.5">
-            {tab("accept", "接单立项")}{tab("applicable", "不立项：已有产品适用")}{tab("other", "不立项：其他原因")}{tab("return", "退回补充")}
+            {tab("accept", "接单立项")}{tab("applicable", "不立项：已有产品适用")}{tab("other", "不立项：其他原因")}{tab("ask", "先回问客户")}{tab("return", "退回补充")}
           </div>
           {mode === "accept" && <>
             <p className="text-[13px] text-ink-2">接单即立项：被引用的 L2 知识给归属人记分。</p>
+            {distortions.length > 0 && <p className="text-[13px] leading-5 text-ink-2">供参考，同单的失真提示：{distortions.flatMap((d) => d.evidence.map((e) => L.scrub(e.summary))).join("；")}。要不要先回问客户由您判断。</p>}
             <div className="flex flex-wrap gap-2"><Act label="接单立项" run={() => api.accept(reqId, me)} />{dismiss}</div>
           </>}
           {mode === "applicable" && <>
@@ -524,8 +541,13 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
             <Field value={reason} onChange={setReason} placeholder="不立项原因（客户会收到「已记录，暂无方案」）" />
             <div><Act kind="plain" label="不立项" disabled={!reason.trim()} run={() => api.decline(reqId, reason, me, null)} /></div>
           </>}
+          {mode === "ask" && <>
+            <p className="text-[13px] text-ink-2">缺的是客户才知道的条件：勾选后由业务员向客户回问，答完觉再提接单；不经过产品经理。</p>
+            <SlotPicker value={slots} onChange={setSlots} />
+            <div><Act kind="plain" label="先回问客户" disabled={!slots.length} run={() => api.askBeforeAccept(reqId, slots, me)} /></div>
+          </>}
           {mode === "return" && <>
-            <p className="text-[13px] text-ink-2">需求定义有问题：退回给真人产品经理修正，不让 Agent 自己重写。</p>
+            <p className="text-[13px] text-ink-2">需求写得不清楚：退回给产品经理 Agent 按理由重写。</p>
             <Field value={reason} onChange={setReason} placeholder="退回理由（提交前做研发术语自查，产品经理可见）" />
             <div><Act kind="plain" label="退回" disabled={!reason.trim()} run={() => api.returnReq(reqId, reason, me)} /></div>
           </>}

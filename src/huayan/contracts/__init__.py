@@ -1,6 +1,6 @@
 """契约代码，与 docs/CONTRACTS.md 一致；只能由人修改。"""
 from ._base import SHANGHAI, BaseModel
-from .agent import AgentMessage, AgentStep, Conversation, PendingAction, ToolKind, ToolResult, ToolSpec
+from .agent import AgentMessage, AgentStep, Conversation, MemoryEntry, PendingAction, ToolKind, ToolResult, ToolSpec
 from .app import JueTimeline, ReuseView, RunStatus, SessionView, TimelineNode, TimelinePoint
 from .bus import Evidence, QFamily, Question, Resolution
 from .escalation import (CitedKnowledge, ContributionDraft, ContributionStat, LeakHit, PMDraft, PointsDraft, RDDraft,
@@ -38,5 +38,5 @@ __all__ = [
     "Tier", "Message", "LLMRequest", "LLMToolCall", "Usage", "LLMResponse", "ModelGateway",
     "MeterRecord", "Meter",
     "SessionView", "ReuseView", "RunStatus", "TimelinePoint", "TimelineNode", "JueTimeline",
-    "ToolKind", "ToolSpec", "ToolResult", "PendingAction", "AgentStep", "AgentMessage", "Conversation",
+    "ToolKind", "ToolSpec", "ToolResult", "PendingAction", "AgentStep", "AgentMessage", "Conversation", "MemoryEntry",
 ]
