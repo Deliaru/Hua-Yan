@@ -67,7 +67,6 @@ class LLMHumans:
         self.looks: list[dict] = []                         # 每次查看：谁、何时、待办几件
         self.log: list[dict] = []
         self.slot_label = {s.id: s.label for s in app.seeds.slots}
-        self.slot_ask = {s.id: s.ask_text for s in app.seeds.slots}
         self.answered: set[str] = set()                     # 客户在自助页答过的回问
         self.seen: dict[str, str | None] = {}               # 客户在自助页看过的推荐
         self.called: set[str] = set()                       # 业务员打过电话的会话
@@ -132,13 +131,13 @@ class LLMHumans:
         view = app.view_session(sid, cid)
         if self._handed(sid):
             return False
-        asks = [q for q in app.bus.list(family="ask_back") if q.refs["session_id"] == sid and q.id not in self.answered]
+        asks = [a for a in view.asks if a.question_id not in self.answered]       # 客户只看得到自助页上的回问
         last = view.turns[-1]
         if view.status == "escalated" and not view.card and not asks:
             return False
         if asks:
-            self.answered.add(asks[0].id)
-            text = f"化言：研发想确认一下——{self.slot_ask[asks[0].refs['slot']]}"
+            self.answered.add(asks[0].question_id)
+            text = f"化言：研发想确认一下——{asks[0].ask_text}"
         elif last.speaker == "assistant":
             text = f"化言：{last.text}"
         elif view.replies and view.replies[-1].turn_id == last.id:
@@ -154,7 +153,7 @@ class LLMHumans:
         return True
 
     def _handed(self, sid: str) -> bool:
-        return any(q.family == "handoff_sales" and q.refs["session_id"] == sid for q in self.app.bus.list(status=None))
+        return any(s.id == sid and s.sales_id for s in self.app.sessions())    # 自助会话有了业务员 = 已交业务员
 
     def customer_look(self, customer: str) -> None:
         """客户隔一阵回自助页看看：研发的回问、新品推荐，有就回一句（交给业务员的会话不再看）。"""
@@ -241,8 +240,12 @@ class LLMHumans:
             self.trials.append((get_clock().now() + TRIAL_DELAY, a.args["req_id"], by))
 
     # 研发的试样：结果由世界规律给出 -----------------------------------------------------------------
-    def trial(self, req_id: str, rd: str) -> None:
+    def trial(self, req_id: str, rd: str, due: datetime) -> None:
+        """到点试样；单子已不在技术确认（研发先回问、退回重新转译），或之后又重新确认排了新的一次，这次就不做。"""
         req = self.app.requirement_view(req_id, rd).requirement
+        if req.status != "rd_confirmed" or due != max(d for d, r, _ in self.trials if r == req_id):
+            self._log("trial", req_id, "试样取消", rd, note=f"单子状态 {req.status}，或已重新确认另排")
+            return
         result, cause, missing = trial_outcome(self.cards[req.session_ids[0]], req.known_slots, self.drift)
         self.tested[req_id] = dict(req.known_slots)
         self.app.record_trial(Trial(id=f"trial:{req_id}:{len(self.log)}", product_id=req.product_id,

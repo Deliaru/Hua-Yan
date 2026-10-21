@@ -24,17 +24,37 @@ def _human_level(by: str) -> int | None:
     return None if by == "pm:agent" or role not in ROLE_LEVEL else ROLE_LEVEL[role]
 
 
+OUTCOME_FAMILIES = {"trial_risk", "stale_capability"}
+
+
+def _outcome_label(family: str, object_id: str, ts, scored, trials) -> int | None:
+    """v8 收口：预判家族的问题没有人处置（放着、由觉结案）时，用之后的结果补标签，口径同 Q9.1、Q9.2 的轨迹：
+    试样风险 = 之后这张单的第一次试样因需求条件缺失而失败；判断过时 = 之后 5 次以上结果里产品原因失败占比 ≥ 0.4。
+    结果还没出来时为 None。"""
+    if family == "trial_risk":
+        rid = object_id.removeprefix("requirement:")
+        first = next((e.payload for e in trials if e.payload.get("requirement_id") == rid and e.ts >= ts), None)
+        return None if first is None else int(first["result"] == "fail" and first["cause"] == "requirement")
+    attrs = [(at, r.state.objects[object_id].attrs) for at, r, _ in scored[object_id]]
+    base = [a for at, a in attrs if at <= ts][-1]
+    later = next((a for at, a in attrs if at > ts and a["n_outcomes"] - base["n_outcomes"] >= 5), None)
+    if later is None:
+        return None
+    return int((later["n_fail"] - base["n_fail"]) / (later["n_outcomes"] - base["n_outcomes"]) >= 0.4)
+
+
 def decision_rows(records: list[JueRecord], events: EventLog) -> list[dict]:
     """决策投影（纯函数，不落盘）。一行 = 觉提出的一个决策点：当时的属性与 p_need、谁怎么处置、用到的能力；
     追问每次打分各一行（标签留空，模拟运行由 sim 按需求卡真值补）；
     另加与觉无关的结果：试样因需求条件缺失失败、客户评价不通过所指向的条件，作为该需求单回问对象的正例。
-    label：人处置为 dismiss 记 0，其余处置记 1，没有人的处置为 None；
+    label：人处置为 dismiss 记 0，其余处置记 1，没有人的处置为 None（v8 收口：试样风险、判断过时用之后的结果补）；
     judge_level：代哪一层判断（槽位对象自带，其余取处置人所在层）；level：结果来自哪一层的判断（不低于 judge_level）。"""
     scored = defaultdict(list)
     for record in records:
         for d in record.output.decisions:
             scored[d.object_id].append((record.state.at, record, d))
     resolved = {e.payload["question_id"]: e for e in events.query(["question_resolved"])}
+    trials = events.query(["trial"])
     used = defaultdict(list)
     for e in events.query(["capability_used"]):
         used[e.session_id].append(e.payload["capability_id"])
@@ -61,6 +81,9 @@ def decision_rows(records: list[JueRecord], events: EventLog) -> list[dict]:
         by, action = (res.payload["by"], res.payload["action"]) if res else (None, None)
         level = _human_level(by) if by else None
         label = None if level is None else int(action != "dismiss")
+        if label is None and p["family"] in OUTCOME_FAMILIES:     # 没有人的处置：结果补标签，结果是研发层的判断
+            label = _outcome_label(p["family"], p["object_id"], pub.ts, scored, trials)
+            level = None if label is None else 3
         rows.append(row(*earlier[-1], by, action, label, level) | {"capabilities": used[pub.session_id] if pub.session_id else []})
     # 结果：哪个条件导致失败是研发的判断（L3）；客户评价不通过时由业务员按客户反馈勾选（L1）
     for e in events.query(["trial", "market_eval"]):

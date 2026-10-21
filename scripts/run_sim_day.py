@@ -112,7 +112,7 @@ def main():
             for due, req_id, rd in sorted(humans.trials):  # 确认后次日试样，结果由世界给出
                 if due < nxt and (req_id, due) not in tried:
                     tried.add((req_id, due))
-                    humans.trial(req_id, rd)
+                    humans.trial(req_id, rd, due)
             if t in scans:
                 app.scan(t)
             humans.prepare(gate.run)

@@ -21,6 +21,13 @@ class ReuseView(BaseModel):                   # v5.1：业务员看到的现成�
     status: Literal["pending", "adopted", "declined", "none"]
 
 
+class PendingAsk(BaseModel):                 # v8：研发对本会话需求单的未答回问，只给槽位问法（不含研发内容）
+    question_id: str
+    slot: str
+    label: str
+    ask_text: str
+
+
 class SessionView(BaseModel):
     session_id: str
     viewer: str
@@ -36,6 +43,7 @@ class SessionView(BaseModel):
     reply_draft: str = ""
     escalate_note: str = ""
     reuse: ReuseView | None = None            # v5.1：会话所升级需求单上的现成产品建议
+    asks: list[PendingAsk] = []               # v8：待答回问；客户在自助页直接回答，研发的问题直达客户
 
 
 class RunStatus(BaseModel):

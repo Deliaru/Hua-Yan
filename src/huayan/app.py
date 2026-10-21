@@ -13,7 +13,7 @@ from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
 from huayan.contracts import (KIND_LEVEL, Actor, Capability, AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
-    Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, MemoryEntry, NeedState, PointsDraft, Question, Recommendation, ReqItem, Requirement,
+    Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, MemoryEntry, NeedState, PendingAsk, PointsDraft, Question, Recommendation, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
     JueTimeline, Product, Situation, TimelineNode, TimelinePoint)
 from huayan.domain import consistent, load_seeds, match_candidates
@@ -121,6 +121,7 @@ class HuayanApp:
         app._last_scan = None
         app._agent_drafting = False  # Hub 工具执行期间的来源标记，不由模型或 HTTP 参数指定。
         app._held = _Held()
+        app._drafts = {}     # 线程 → 它正在起草的需求单；别的线程写后评估时跳过，由起草的线程结束时评估
         app.progress = None          # 界面过程面板的进度回调（ui.server 设置）；只报「谁在做什么、用时」
         app.agents = AgentHub(app)
         return app
@@ -194,10 +195,12 @@ class HuayanApp:
             yield
             return
         self._held.ids = (set(), set())
+        self._drafts[threading.get_ident()] = self._held.ids[1]
         try:
             yield
         finally:
             (session_ids, req_ids), self._held.ids = self._held.ids, None
+            self._drafts.pop(threading.get_ident())
             if session_ids or req_ids:
                 self._after(session_ids, req_ids)
 
@@ -211,6 +214,7 @@ class HuayanApp:
         session_ids = set(session_ids)
         req_ids = set(req_ids) | {r.id for r in self._requirements.values()
                                  if session_ids.intersection(r.session_ids)}
+        req_ids -= set().union(*list(self._drafts.values()))     # 别的线程还在起草的单，等它起草完再评估
         state = JueState(at=at, mode="realtime", objects={})
         refs = {}
         for sid in sorted(session_ids):
@@ -319,12 +323,16 @@ class HuayanApp:
         # v8：回问提出之后客户开口时，这个槽位已有答案（填上或答了不清楚）就结案，不论答案出自哪一句——
         # 客户一句答好几项、或在研发回问之前就顺口说过时，槽位的出处是更早的一句。
         # 结案时把客户在会话里已说清、需求单还没有的条件一并补上，研发不必再为它们回问。
+        # 重问（单上已有这个条件，或客户先前答过不清楚——试样失败、客户评价不通过后再问）只认回问提出之后的答复。
         answered = set()
+        said_at = {t.id: t.ts for t in session.turns}
         for q in asks:
             fill = session.need.slots.get(q.refs["slot"])
             if fill is None:
                 continue
             req = self._requirements[q.refs["requirement_id"]]
+            if said_at[fill.turn_id] < q.created_at and (fill.slot in req.known_slots or fill.status == "unknown"):
+                continue
             for f in session.need.slots.values():
                 if f.status == "filled" and (f.slot == fill.slot or f.slot not in req.known_slots):
                     req.known_slots[f.slot] = f.value
@@ -341,6 +349,13 @@ class HuayanApp:
         self._save_session(session)
         self._after([session_id])
         return session.model_copy(deep=True)
+
+    def _pending_asks(self, session_id):
+        """v8：本会话上未答的回问，只给槽位问法；自助会话里客户直接在自助页回答。"""
+        slots = {s.id: s for s in self.seeds.slots}
+        return [PendingAsk(question_id=q.id, slot=q.refs["slot"], label=slots[q.refs["slot"]].label,
+                           ask_text=slots[q.refs["slot"]].ask_text)
+                for q in self.bus.list(family="ask_back") if q.refs["session_id"] == session_id]
 
     def view_session(self, session_id, viewer_id):
         viewer, session = self._actor(viewer_id), _find(self._sessions, session_id, "会话")
@@ -392,7 +407,7 @@ class HuayanApp:
         return SessionView(session_id=session_id, viewer=viewer_id, viewer_level=level, turns=session.turns,
             slots=list(session.need.slots.values()), hints=session.hints, replies=session.replies,
             card=card, status=session.status, escalation_question_id=rec.escalated_question_id if rec else None,
-            requirement=req, reuse=reuse,
+            requirement=req, reuse=reuse, asks=self._pending_asks(session_id),
             reply_draft=session.reply_draft if viewer_id == session.sales_id else "",
             escalate_note=session.escalate_note if viewer_id == session.sales_id or level > 1 else ""
             ).model_copy(deep=True)
@@ -1877,8 +1892,13 @@ class HuayanApp:
                 rows.append(f"{q.id} {q.title}｜主人 {q.owner_id}，签字人 {q.signer_id}｜{e.payload['by']} 处理：{e.payload['action']}"
                             + (f"，说明：{note}" if note else ""))
         mine = {q.refs.get("requirement_id") for q in self.bus.questions.values() if by in (q.owner_id, q.signer_id)}
-        rows += [f"{e.payload['requirement_id']} 被 {e.actor} 退回：{e.payload['reason']}"
-                 for e in self.events.query(["requirement_returned"], since=since) if e.payload["requirement_id"] in mine]
+        returned = [e for e in self.events.query(["requirement_returned"], since=since) if e.payload["requirement_id"] in mine]
+        if actor.role == "sales":          # 退回理由是研发的话（L2/L3）；业务员只看要回问客户的条件
+            labels = {s.id: s.label for s in self.seeds.slots}
+            rows += [f"{e.payload['requirement_id']} 研发要回问客户：{'、'.join(labels[s] for s in e.payload['slots'])}"
+                     for e in returned if e.payload.get("slots")]
+        else:
+            rows += [f"{e.payload['requirement_id']} 被 {e.actor} 退回：{e.payload['reason']}" for e in returned]
         if actor.role == "sales":
             for s in self._sessions.values():
                 if s.sales_id == by and s.started_at >= since:

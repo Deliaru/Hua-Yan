@@ -1,7 +1,7 @@
 """契约代码，与 docs/CONTRACTS.md 一致；只能由人修改。"""
 from ._base import SHANGHAI, BaseModel
 from .agent import AgentMessage, AgentStep, Conversation, MemoryEntry, PendingAction, ToolKind, ToolResult, ToolSpec
-from .app import JueTimeline, ReuseView, RunStatus, SessionView, TimelineNode, TimelinePoint
+from .app import JueTimeline, PendingAsk, ReuseView, RunStatus, SessionView, TimelineNode, TimelinePoint
 from .bus import Evidence, QFamily, Question, Resolution
 from .escalation import (CitedKnowledge, ContributionDraft, ContributionStat, LeakHit, PMDraft, PointsDraft, RDDraft,
                          ReqItem, Requirement, RequirementView, ReuseProposal, SheetDraft, Trial)
@@ -37,6 +37,6 @@ __all__ = [
     "NeedCard", "Injection", "WeekItem",
     "Tier", "Message", "LLMRequest", "LLMToolCall", "Usage", "LLMResponse", "ModelGateway",
     "MeterRecord", "Meter",
-    "SessionView", "ReuseView", "RunStatus", "TimelinePoint", "TimelineNode", "JueTimeline",
+    "SessionView", "PendingAsk", "ReuseView", "RunStatus", "TimelinePoint", "TimelineNode", "JueTimeline",
     "ToolKind", "ToolSpec", "ToolResult", "PendingAction", "AgentStep", "AgentMessage", "Conversation", "MemoryEntry",
 ]

@@ -814,7 +814,7 @@ class ReqItem(BaseModel):
     quote_refs: list[str] = []                # turn id，可回查客户原话
     ku_refs: list[str] = []                   # 依据的知识单元（转化对照、案例、机理）；其归属人记 cited
     edited_by: str | None = None              # v5：最后一次由人修改的 actor id；None = 骨架或 Agent 起草（界面标「Agent 起草」）
-                                              # v8 收口：委托人在对话里交代、助手当轮改的，记委托人；派单准备时 Agent 起草的仍为 None
+                                              # v8 收口：委托人在对话里交代、助手当轮改他这一轮打开的那张单（focus），记委托人；派单准备或顺手改别的单仍为 None
 
 class PMDraft(BaseModel):                     # L2：场景语言 → 产品需求语言（规则骨架，产品经理 Agent 编辑）
     direction: str                            # 产品方向，如「低浴比条件下的锦纶氨纶匀染助剂」
@@ -1212,6 +1212,13 @@ class SessionView(BaseModel):
     reply_draft: str = ""                     # v5
     escalate_note: str = ""                   # v5
     reuse: ReuseView | None = None            # v5.1：会话所升级需求单上的现成产品建议
+    asks: list[PendingAsk] = []               # v8：待答回问（open 的 ask_back）；客户在自助页直接回答，研发的问题直达客户
+
+class PendingAsk(BaseModel):                 # v8：只给槽位问法，不含研发内容
+    question_id: str
+    slot: str
+    label: str
+    ask_text: str
 
 class RunStatus(BaseModel):
     run_id: str
@@ -1384,7 +1391,7 @@ class HuayanApp:
         # 界面在每次操作之后、脚本在每一步之后调用
 ```
 
-**写后评估（v5）**：每个改状态的方法结束时，门面对受影响的 session / requirement（及其 slot）构建状态 → 实时模型 `propose` → `publish`，每次追加一条 `JueRecord`；被评估对象（及需求单的 slot）上前置条件不再成立、或对象已不活动的 open 问题 resolve(answered, by="jue")（v8 收口：从异常类扩到全部问题；门面方法只结案本次签字对应的问题，不替别的问题结案）；执行生效动作时若同一对象上没有对应的 open 问题，写 `human_decision`。v8 收口：助手起草期间（`AgentHub` 的一轮对话，派单准备含退回再做）门面先记下受影响的会话与需求单，起草结束后评估一次（门面 `drafting()` 上下文，按线程分开），中间稿不触发问题。门面方法内部不推进下一步（AGENTS.md 铁律 14）。
+**写后评估（v5）**：每个改状态的方法结束时，门面对受影响的 session / requirement（及其 slot）构建状态 → 实时模型 `propose` → `publish`，每次追加一条 `JueRecord`；被评估对象（及需求单的 slot）上前置条件不再成立、或对象已不活动的 open 问题 resolve(answered, by="jue")（v8 收口：从异常类扩到全部问题；门面方法只结案本次签字对应的问题，不替别的问题结案）；执行生效动作时若同一对象上没有对应的 open 问题，写 `human_decision`。v8 收口：助手起草期间（`AgentHub` 的一轮对话，派单准备含退回再做）门面先记下受影响的会话与需求单，起草结束后评估一次（门面 `drafting()` 上下文，按线程分开），中间稿不触发问题；别的线程这时的写后评估跳过正在起草的需求单，由起草的线程结束时评估。门面方法内部不推进下一步（AGENTS.md 铁律 14）。
 
 ---
 
@@ -1740,4 +1747,10 @@ Jue-K 模型按「家族 × 判断层」保存：`models: {"<family>|L<k>": (cla
   - 自助单的客户评价由客户的归属业务员签（解析表见 5.4 节），`record_market_eval` 允许会话业务员或归属业务员；`view_session` 允许归属业务员查看自己客户的自助会话（其助手准备客户评价要绑定该会话）。
   - 写后评估在助手起草结束后做（见第 ⑫ 节）：Agent 一次准备里的中间稿不再让觉提出又结案。
   - 客户补条件只走一条路：会话里补的与回问答的，起草中的单都按会话条件更新已知条件、清掉未经人改的产品需求条目，由产品经理 Agent 重写；已接单的单照旧只把答复补进已知条件。
+- **评审后修正（人已批准，2026-10-22）**：
+  - 研发的问题直达客户：`SessionView.asks`（`PendingAsk`：问题编号、槽位、槽位名、问法，不含研发内容）列出本会话上未答的回问；客户自助页显示「研发想确认」，客户直接在自助页回答，归属业务员不必先接手会话。
+  - 重问只认回问之后的答复：单上已有这个条件、或客户先前答过「不清楚」时（试样失败、客户评价不通过后再问），回问只由回问提出之后的那句答复结案。
+  - `ReqItem.edited_by` 记委托人只限他这一轮打开的那张单（对话的 `focus`，`req:3` 或 `req:3/chem/2`）；助手顺手改别的单仍记 Agent 起草。
+  - `decision_records`（收工归纳材料）给业务员时不含研发的退回理由，只列要回问客户的条件名。
+  - 决策投影（5.4）：`trial_risk`、`stale_capability` 的问题没有人的处置时，用之后的结果补标签（口径同 Q9.1、Q9.2 轨迹），`level = 3`；结果未出为 `None`。
 - **步数用完也看对象**：Agent 步数用完时同样按 `preparation_gap` 判断，对象齐了照常标记已准备，有缺口才记 `out_of_steps`。派单文字以对象编号开头（需求单、会话），问题编号放在后面。

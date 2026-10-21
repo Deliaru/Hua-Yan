@@ -74,6 +74,7 @@ export interface SessionView {
   reply_draft: string;
   escalate_note: string;
   reuse: ReuseView | null;
+  asks: { question_id: string; slot: string; label: string; ask_text: string }[];
 }
 
 export interface SessionSummary { id: string; customer_id: string; sales_id: string | null; status: string; phenomenon: string | null; origin: "sales" | "customer" }

@@ -95,7 +95,9 @@ class AgentHub:
             return ToolResult(ok=False, error=f"你的委托人没有工具 {name}")
         spec, fn = TOOLS[name]
         if spec.kind != "effect":
-            self.app._agent_drafting = spec.kind == "draft" and not ctx.instructed
+            # 委托人亲口交代、且改的是他这一轮打开的那张单，才记在委托人名下；顺手改别的单仍是 Agent 起草
+            own = ctx.instructed and args.get("req_id") == (ctx.focus or "").split("/")[0]
+            self.app._agent_drafting = spec.kind == "draft" and not own
             try:
                 result = _run(fn, ctx, spec.params, args)
             finally:
