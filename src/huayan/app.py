@@ -94,20 +94,7 @@ class HuayanApp:
         app._load_public(Path(app.config["seeds_dir"]) / "public.yaml")
         app.kb.sources = [FolderSource(s["name"], s["kind"], s["root"], s.get("level"), app.kb._doc_levels)
                           for s in app.config["sources"]]
-        if byok:
-            app.gateway = byok.gateway(app.meter)
-            app.system1 = byok.system1(app.gateway, app.meter)
-        else:
-            app.gateway = build_gateway(app.config["models_config"], app.config["gateway_mock"], app.meter)
-            if not app.config["gateway_mock"]:
-                cache = app.config.get("llm_cache_dir")
-                app.gateway.cache_dir = Path(cache) if cache else None
-                app.gateway.replay = app.config["replay"]
-            app.system1 = build_system1(app.config["system1_impl"], app.config.get("system1_config", "config/system1.yaml"),
-                                        app.gateway, app.meter)
-        app.jev = Jev(app.system1, app.config["thresholds"]["match"])
-        app.extractor = (RuleExtractor(app.seeds) if app.config["extractor"] == "rule"
-                         else LLMExtractor(app.seeds, app.gateway))
+        app._wire_models(byok)
         app._sessions = {s.id: s for s in map(Session.model_validate_json, _read_dir(app.run_dir / "sessions"))}
         app._requirements = {r.id: r for r in map(Requirement.model_validate_json, _read_dir(app.run_dir / "requirements"))}
         app.seeds.products += [Product.model_validate(e.payload["product"]) for e in app.events.query(["project_opened"])]
@@ -117,8 +104,7 @@ class HuayanApp:
         app._trials = {t.id: t for t in (Trial.model_validate_json(u.text) for u in app.kb._units.values()
                                          if u.kind == "trial" and u.source == "trial")}
         app.templates = load_templates(app.config["templates_dir"])
-        app.jue_realtime = app._jue_model(app.config["realtime_model"], "realtime")
-        app.jue_scheduled = app._jue_model(app.config["scheduled_model"], "scheduled")
+        app._wire_jue()
         app._jue_trace, app._answers = {}, {}
         app._last_scan = None
         app._agent_drafting = False  # Hub 工具执行期间的来源标记，不由模型或 HTTP 参数指定。
@@ -127,6 +113,47 @@ class HuayanApp:
         app.progress = None          # 界面过程面板的进度回调（ui.server 设置）；只报「谁在做什么、用时」
         app.agents = AgentHub(app)
         return app
+
+    def _wire_models(self, byok=None):
+        """网关、Jev（System 1）与抽取器；换模型配置时只重接这几样，业务对象原样保留。"""
+        if byok:
+            self.gateway = byok.gateway(self.meter)
+            self.system1 = byok.system1(self.gateway, self.meter)
+        else:
+            self.gateway = build_gateway(self.config["models_config"], self.config["gateway_mock"], self.meter)
+            if not self.config["gateway_mock"]:
+                cache = self.config.get("llm_cache_dir")
+                self.gateway.cache_dir = Path(cache) if cache else None
+                self.gateway.replay = self.config["replay"]
+            self.system1 = build_system1(self.config["system1_impl"], self.config.get("system1_config", "config/system1.yaml"),
+                                         self.gateway, self.meter)
+        self.jev = Jev(self.system1, self.config["thresholds"]["match"])
+        self.extractor = (RuleExtractor(self.seeds) if self.config["extractor"] == "rule"
+                          else LLMExtractor(self.seeds, self.gateway))
+
+    def _wire_jue(self):
+        self.jue_realtime = self._jue_model(self.config["realtime_model"], "realtime")
+        self.jue_scheduled = self._jue_model(self.config["scheduled_model"], "scheduled")
+
+    def switch_models(self, **changes):
+        """V9.1：试用中换模型配置（models_config、system1_impl、system1_config）。新客户端建好后才替换，门面与业务原样保留。"""
+        unknown = set(changes) - {"models_config", "system1_impl", "system1_config"}
+        if unknown:
+            raise ValueError(f"只能换模型配置：{sorted(unknown)}")
+        names = ("config", "gateway", "system1", "jev", "extractor", "jue_realtime", "jue_scheduled")
+        old = {n: getattr(self, n) for n in names}
+        self.config = old["config"] | changes
+        try:
+            self._wire_models()
+            self._wire_jue()
+        except Exception:
+            if self.system1 is not old["system1"]:
+                self.system1.close()
+            for n, v in old.items():
+                setattr(self, n, v)
+            raise
+        old["system1"].close()
+        return self.status()
 
     def _load_public(self, path):
         """v6：L0 公开案例与 L1 内部评价（seeds/public.yaml，不属于 Seeds 契约）；测试夹具没有该文件。"""

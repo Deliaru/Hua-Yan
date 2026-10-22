@@ -39,6 +39,7 @@ export interface Meta {
   slots: { id: string; label: string }[];
   phenomena: { id: string; label: string }[];
   products: { id: string; name: string }[];
+  trial?: { actor: string | null };   // V9.1 试用实例：本浏览器选定的身份（服务端记住，读写都以它为主体）
 }
 
 // ③ 会话

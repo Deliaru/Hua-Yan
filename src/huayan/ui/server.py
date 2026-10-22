@@ -4,7 +4,9 @@
 web/dist 存在时同时提供构建后的前端页面。
 会话隔离：界面每个浏览器带一个会话号（请求头 X-Huayan-Session），每个会话有自己的门面与业务时钟，
 多人同时试用互不干扰、互不排队；不带会话号的调用（脚本、curl）共用 default。
-运行方式按会话选择：录制回放（默认），或填自己的大模型 / OneJev 接口真实运行（BYOK，见 huayan.gateway.byok）。"""
+运行方式按会话选择：录制回放（默认），或填自己的大模型 / OneJev 接口真实运行（BYOK，见 huayan.gateway.byok）。
+V9.1 试用实例（--trial <运行号>）：全部浏览器共用一个门面与固定运行目录，启动即续跑，真实时间；
+每个浏览器进入时选一次身份，服务端记住，写操作的 by、读操作的 viewer 由服务端填。"""
 import importlib.util
 import json
 import os
@@ -16,7 +18,7 @@ import traceback
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock, RLock, local
+from threading import Lock, RLock, Thread, local
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
@@ -24,7 +26,7 @@ import openai
 import yaml
 
 from huayan.app import HuayanApp, _human_events
-from huayan.clock import SimClock, get_clock, set_clock
+from huayan.clock import SimClock, WallClock, get_clock, set_clock
 from huayan.contracts import ReqItem, SheetDraft, SHANGHAI
 from huayan.knowledge import PermissionDenied
 from huayan.gateway.byok import Byok, public_url
@@ -41,6 +43,8 @@ STORY = Path("demo/story.yaml")       # V6-5.5 演示讲解：一个上午 / 按
 REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week", "v6_routes")   # 评测页只读这几份报告（WP-E；v6_routes 为 V6-5 岗位对照）；300 张卡用于按「应升级」拆开；single_card 经门面按查看者读取
 
 RESUME = None      # 命令行 --run <id> --resume：默认会话续跑该运行
+TRIAL = None       # 命令行 --trial <id>：试用实例的运行号（V9.1）
+TICK_SECONDS = int(os.environ.get("HUAYAN_TICK_SECONDS", "60"))   # 试用实例里觉按真实时间周期检查（扫描本身每 30 分钟一次）
 MAX_SESSIONS = int(os.environ.get("HUAYAN_MAX_SESSIONS", "30"))   # 超出时淘汰最久未用的会话
 
 T0 = datetime(2026, 10, 12, 9, 0, tzinfo=SHANGHAI)
@@ -379,12 +383,18 @@ class Api:
             return self._call(method, path, params)
 
     def build(self, resume=None):
-        """resume：续跑已有运行（--run <id> --resume），业务时间接着最后一条事件。"""
-        self.clock = SimClock(T0)
-        use_clock(self.clock)
-        self.app, self.writes = HuayanApp.build(self.config_path, run_id=resume, byok=self.byok, resume=bool(resume)), 0
-        if self.app.events.events:
-            self.clock.advance_to(self.app.events.events[-1].ts)
+        """resume：续跑已有运行（--run <id> --resume），业务时间接着最后一条事件。试用实例用真实时间，运行目录已有就续跑。"""
+        if TRIAL:
+            self.clock = WallClock()
+            use_clock(self.clock)
+            run_root = Path(yaml.safe_load(Path(self.config_path).read_text(encoding="utf-8"))["run_root"])
+            self.app, self.writes = HuayanApp.build(self.config_path, run_id=TRIAL, resume=(run_root / TRIAL).exists()), 0
+        else:
+            self.clock = SimClock(T0)
+            use_clock(self.clock)
+            self.app, self.writes = HuayanApp.build(self.config_path, run_id=resume, byok=self.byok, resume=bool(resume)), 0
+            if self.app.events.events:
+                self.clock.advance_to(self.app.events.events[-1].ts)
         self.activity, self.agent_runs = None, {}
         self.story_done, self.story_handles, self.story_last, self.story_mark = 0, {}, None, None
         self.attach(self.app)
@@ -554,6 +564,10 @@ class Api:
         return {"page": v["page"], "focus": None, "who": v.get("who")}
 
     def _call(self, method, path, params):
+        if TRIAL and (path in TRIAL_BLOCKED or path.startswith("/api/demo/")):
+            if method == "GET":
+                return [] if path == "/api/demo/checkpoints" else None
+            raise ValueError("试用实例是大家共用的一份业务，不能重置或走演示讲解")
         if method == "GET" and path == "/api/demo/checkpoints":
             return self.checkpoints()
         if method == "GET" and path == "/api/demo/next-action":
@@ -578,15 +592,17 @@ class Api:
         if method == "GET":
             return route(self.app, params)
         before = self.clock.now()
-        self.clock.advance_to(before + timedelta(minutes=1))
+        if not TRIAL:                   # 试用实例是真实时间，不推进
+            self.clock.advance_to(before + timedelta(minutes=1))
         activity = self.activity = Activity(path)
         try:
             try:
                 result = route(self.app, params)
             except (PermissionDenied, ValueError, KeyError, StopIteration):
                 # 被门面拒绝的写操作不占业务时间：误点不会让回放台词的时刻错位
-                self.clock = SimClock(before)
-                use_clock(self.clock)
+                if not TRIAL:
+                    self.clock = SimClock(before)
+                    use_clock(self.clock)
                 raise
             self.app.tick()
         except Exception as e:
@@ -597,6 +613,26 @@ class Api:
         self.writes += 1
         return result
 
+    def switch_models(self, changes):
+        """V9.1：试用中换模型配置，只重接网关与 Jev，门面与业务原样保留。配置文件只取仓库 config/ 与 data/ 下已有的。"""
+        for key in ("models_config", "system1_config"):
+            if key in changes:
+                path = Path(changes[key])
+                if path.suffix != ".yaml" or not path.is_file() or not path.resolve().is_relative_to(Path.cwd()) \
+                        or path.resolve().relative_to(Path.cwd()).parts[0] not in ("config", "data"):
+                    raise ValueError(f"{key} 要是 config/ 或 data/ 下已有的 yaml 文件")
+        with self.lock:
+            use_clock(self.clock)
+            status = self.app.switch_models(**changes)
+            self.attach(self.app)
+            return {"status": status, "mode": self.mode()}
+
+    def tick(self):
+        """试用实例的后台周期：觉按真实时间检查到点的扫描，并派发待准备的问题。"""
+        with self.lock:
+            use_clock(self.clock)
+            self.app.tick()
+
     def mode(self):
         """本会话的运行方式与所用模型名（不含密钥）。"""
         b, config = self.byok, self.app.config
@@ -604,6 +640,72 @@ class Api:
         jev = (b.jev_model if b.jev_base_url else None) if b else self.app.system1.model if config["system1_impl"] == "onejev" else None
         return {"kind": "replay" if config["replay"] else "byok" if b else "local", "llm_model": llm, "jev_model": jev,
                 "jev_fallback": bool(b and b.jev_base_url and b.jev_fallback)}
+
+
+TRIAL_BLOCKED = {"/api/reset", "/api/mode"}
+trial_roles: dict[str, str] = {}      # 浏览器会话号 → 身份；存在运行目录的 roles.json，重启后不用重选
+trial_lock = Lock()
+
+
+def _roles_path():
+    return session_api("default").app.run_dir / "roles.json"
+
+
+def load_trial_roles():
+    path = _roles_path()
+    trial_roles.update(json.loads(path.read_text(encoding="utf-8")) if path.exists() else {})
+
+
+def set_trial_role(sid, p):
+    """进入试用时选身份（人，不含 Agent）；actor 为空表示退出、重选。"""
+    if not SESSION_ID.fullmatch(sid):
+        raise ValueError("会话号格式不对")
+    actor = p.get("actor")
+    app = session_api(sid).app
+    if actor is not None and (actor not in app.actors or actor == "pm:agent"):
+        raise ValueError("没有这个身份")
+    with trial_lock:
+        if actor is None:
+            trial_roles.pop(sid, None)
+        else:
+            trial_roles[sid] = actor
+        _roles_path().write_text(json.dumps(trial_roles, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"actor": actor}
+
+
+SPEAKERS = {"customer": {"customer"}, "sales": {"customer", "sales"}}   # 业务员可以替客户录入原话
+
+
+def trial_params(sid, method, path, params):
+    """试用实例：主体由服务端认定。读写都用本会话选定的身份，覆盖请求里带的 viewer / by / actor；权限照旧由门面执行。"""
+    role = trial_roles.get(sid)
+    if role is None:
+        if method == "GET" and path in ("/api/meta", "/api/status"):
+            return params
+        raise PermissionDenied("请先选择你在试用中的身份")
+    params = params | {"viewer": role, "by": role}
+    if path.startswith("/api/agents/"):
+        params["actor"] = role
+    kind = role.split(":")[0]
+    if method == "POST" and path == "/api/sessions":
+        if kind == "customer":
+            params["customer_id"] = role
+        elif kind == "sales":
+            params["sales_id"] = role
+        else:
+            raise PermissionDenied("客户会话由客户或业务员发起")
+    if method == "POST" and path == "/api/turn" and params.get("speaker") not in SPEAKERS.get(kind, set()):
+        raise PermissionDenied("只有客户本人或业务员能在客户会话里说话")
+    return params
+
+
+def trial_ticker():
+    while True:
+        time.sleep(TICK_SECONDS)
+        try:
+            session_api("default").tick()
+        except Exception:
+            traceback.print_exc()
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -615,8 +717,14 @@ class Handler(SimpleHTTPRequestHandler):
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
             sid = self.headers.get("X-Huayan-Session", "default")
+            if TRIAL and url.path not in MONTH and not url.path.startswith("/api/trial/"):
+                params = trial_params(sid, method, url.path, params)
+            if TRIAL and url.path == "/api/trial/role":
+                result = set_trial_role(sid, params)
+            elif TRIAL and url.path == "/api/trial/models":
+                result = session_api(sid).switch_models(params)
             # 过程面板的两个读接口不排会话锁：会话锁正被那次耗时的写操作占着
-            if url.path == "/api/mode":
+            elif url.path == "/api/mode":
                 result = set_mode(sid, params)
             elif url.path == "/api/progress":
                 result = session_api(sid).progress(params["viewer"])
@@ -626,6 +734,8 @@ class Handler(SimpleHTTPRequestHandler):
                 result = session_api(sid).agent_process(params["conversation_id"], params["viewer"])
             else:
                 result = session_api(sid).call(method, url.path, params)
+            if TRIAL and url.path == "/api/meta":
+                result = dump(result) | {"trial": {"actor": trial_roles.get(sid)}}
             status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
@@ -735,6 +845,8 @@ apis_lock = Lock()
 def session_api(sid, byok=None, rebuild=False):
     if sid != "default" and not SESSION_ID.fullmatch(sid):
         raise ValueError("会话号格式不对")
+    if TRIAL:
+        sid = "default"            # 试用实例：所有浏览器共用一个门面，身份另记在 trial_roles
     with apis_lock:
         if sid not in apis or rebuild:
             api = Api(None, CONFIG, byok=byok)
@@ -751,6 +863,8 @@ def session_api(sid, byok=None, rebuild=False):
 
 def set_mode(sid, p):
     """切换本会话的运行方式：replay = 录制回放；byok = 用试用者填的大模型与（可选）OneJev 真实运行。切换后从头开始。"""
+    if TRIAL:
+        raise ValueError("试用实例的模型由项目方在服务端切换（/api/trial/models），业务原样保留")
     if p["mode"] == "replay":
         return session_api(sid, rebuild=True).mode()
     jev = (p.get("jev_base_url") or "").strip()
@@ -768,10 +882,25 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", help="运行目录名（runs/ 下）；与 --resume 一起用")
     ap.add_argument("--resume", action="store_true", help="在 --run 指定的运行上续跑：默认会话读回事件、问题、知识与需求单")
+    ap.add_argument("--trial", help="试用实例的运行号：全部浏览器共用一份业务，运行目录已有就续跑（V9.1）")
+    ap.add_argument("--config", help="应用配置（默认 HUAYAN_CONFIG 或 config/app.yaml）")
+    ap.add_argument("--host", default="127.0.0.1", help="监听地址；试用时让同一网络里的人访问可设 0.0.0.0")
     args = ap.parse_args()
     if args.resume != bool(args.run):
         ap.error("--run 与 --resume 要一起给")
-    RESUME = args.run
+    if args.trial and args.run:
+        ap.error("--trial 自带续跑，不和 --run 一起用")
+    if args.trial and not re.fullmatch(r"[\w-]+", args.trial):
+        ap.error("--trial 运行号只用字母、数字、下划线和短横线")
+    CONFIG = args.config or CONFIG
+    RESUME, TRIAL = args.run, args.trial
     session_api("default")   # 先构建一次：Jue-K 模型等首次加载较慢
-    print(f"化言界面后端：http://127.0.0.1:{PORT}（每个浏览器一个会话，最多 {MAX_SESSIONS} 个）")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    if TRIAL:
+        load_trial_roles()
+        Thread(target=trial_ticker, daemon=True).start()
+        app = session_api("default").app
+        print(f"化言试用实例：http://{args.host}:{PORT}（运行 {app.run_dir}，{len(app.sessions())} 个会话、"
+              f"{len(app._requirements)} 张需求单，已登记身份 {len(trial_roles)} 个）")
+    else:
+        print(f"化言界面后端：http://{args.host}:{PORT}（每个浏览器一个会话，最多 {MAX_SESSIONS} 个）")
+    ThreadingHTTPServer((args.host, PORT), Handler).serve_forever()

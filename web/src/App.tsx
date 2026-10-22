@@ -3,6 +3,7 @@
 // 看的人在四个角色之间自由切换，靠「同一份需求在哪些工作面出现、在哪些没出现」看流程被缩短。
 // 旧主线（v5 演示故事 + 带导览的沉浸工作面）沿 v5 流程，与 v6 冲突，V6-5.5 起不在侧栏出现；代码与 #story / #desk 地址保留。
 // V6-5.5「演示讲解」：左侧导航换成讲解栏（components/Demo.tsx），中、右两栏仍是真实工作面。
+// V9.1 试用实例（meta.trial）：进入先选身份，之后身份固定（服务端以它为主体），只显示这个身份的工作面；不出现讲解与重置。
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
@@ -35,6 +36,7 @@ const PAGES = [
   ["sales", "业务员", NavSales, "工作面"],
   ["pm", "产品经理", NavPm, "工作面"],
   ["rd", "研发", NavRd, "工作面"],
+  ["supervisor", "研发负责人", NavDesk, "工作面"],
   ["jue", "觉视图", NavJue, null],
   ["month", "化言的一个月", NavLedger, null],
   ["layers", "三层对照", NavLayers, null],
@@ -46,14 +48,15 @@ const PAGES = [
 type Page = (typeof PAGES)[number][0];
 const HIDDEN: Page[] = ["story", "desk"];   // 不在侧栏出现的旧页面
 const HUMANS: Role[] = ["sales", "pm", "rd", "supervisor"];   // 觉视图、三层对照、知识与积分、旧沉浸工作面可选的身份（产品经理为真人 P01，不含 Agent）
-const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd" };
-const ROLE_NAME: Record<string, string> = { customer: "客户", sales: "业务员", pm: "产品经理", rd: "研发", supervisor: "主管" };
+const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd", supervisor: "supervisor" };
+const ROLE_NAME: Record<string, string> = { customer: "客户", sales: "业务员", pm: "产品经理", rd: "研发", supervisor: "研发负责人" };
+const TRIAL_ROLES: Role[] = ["sales", "pm", "rd", "supervisor", "customer"];
 const DEFAULT_WHO: Record<Role, string> = { customer: "customer:C03", sales: "sales:S01", pm: "pm:P01", rd: "rd:R01", supervisor: "supervisor:M01" };
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const fromHash = () => PAGES.find(([k]) => `#${k}` === location.hash)?.[0] ?? "overview";
-  const [page, setPageState] = useState<Page>(fromHash);
+  const [rawPage, setPageState] = useState<Page>(fromHash);
   const setPage = (p: Page) => { location.hash = p; setPageState(p); };
   useEffect(() => {
     const sync = () => setPageState(fromHash());
@@ -76,12 +79,25 @@ export default function App() {
   useEffect(() => { api.meta().then(setMeta, fail); }, []);
   if (busy) return <p role="status" className="p-10 text-ink-2">{busy}</p>;
   if (!meta) return error ? <p className="p-10 text-danger">{error}</p> : null;
+  const trial = meta.trial;
+  const trialActor = meta.actors.find((a) => a.id === trial?.actor);
+  const enter = (id: string | null) => api.trialRole(id).then(() => api.meta()).then((m) => {
+    setMeta(m); setFocus(null); setVersion((v) => v + 1);
+    const role = m.actors.find((a) => a.id === m.trial?.actor)?.role;
+    const own = PAGES.find(([k]) => ROLE_PAGES[k] === role)?.[0];
+    if (own) setPage(own);
+  }, fail);
+  if (trial && !trialActor) return <RolePicker meta={meta} onPick={enter} error={error} />;
+  // 试用实例里别的身份的工作面不出现；地址栏指过去时回到自己的工作面
+  const visible = (k: Page) => !trialActor || !ROLE_PAGES[k] || ROLE_PAGES[k] === trialActor.role;
+  const page: Page = visible(rawPage) ? rawPage : PAGES.find(([k]) => ROLE_PAGES[k] === trialActor!.role)?.[0] ?? "jue";
+  const inDemo = demo && !trial;
 
   const pageRole = ROLE_PAGES[page];
   const human = (r: Role) => meta.actors.filter((a) => a.role === r && a.id !== "pm:agent");
   const people = pageRole ? human(pageRole) : meta.actors.filter((a) => HUMANS.includes(a.role) && a.id !== "pm:agent");
-  const actor = pageRole ? people.find((a) => a.id === (who[pageRole] ?? DEFAULT_WHO[pageRole])) ?? people[0]
-    : people.find((a) => a.id === me) ?? people[0];
+  const actor = trialActor ?? (pageRole ? people.find((a) => a.id === (who[pageRole] ?? DEFAULT_WHO[pageRole])) ?? people[0]
+    : people.find((a) => a.id === me) ?? people[0]);
   const pick = (id: string) => (pageRole ? setWho((w) => ({ ...w, [pageRole]: id })) : setMe(id));
   const restart = (label: string, p: Promise<unknown>) => {
     setError(null);
@@ -102,7 +118,7 @@ export default function App() {
     },
   };
   const key = `${meta.status.run_id}:${actor.id}`;
-  const sideW = demo ? 400 : 232;
+  const sideW = inDemo ? 400 : 232;
   // 讲解每执行一步：从头重建过的要重读 meta（run_id 变了），再切到该看的工作面与对象
   const onView = async (v: { page: string; focus: string | null; who: string | null } | null, rebuilt: boolean) => {
     if (rebuilt) setMeta(await api.meta());
@@ -130,7 +146,12 @@ export default function App() {
               <span className="text-ink-2"><ChevronDown /></span>
             </button>
           )}>
-            {(close) => (pageRole ? [pageRole] : HUMANS).map((r) => (
+            {(close) => trial ? (
+              <div className="w-[220px] p-1">
+                <p className="px-2.5 pb-1 pt-1.5 text-[12px] text-ink-2">试用身份：{ROLE_NAME[actor.role]}</p>
+                <button className="menu-item" onClick={() => { close(); enter(null); }}>换一个身份…</button>
+              </div>
+            ) : (pageRole ? [pageRole] : HUMANS).map((r) => (
               <div key={r}>
                 <p className="px-2.5 pb-0.5 pt-1.5 text-[12px] text-ink-2">{ROLE_NAME[r]}</p>
                 {people.filter((a) => a.role === r).map((a) => (
@@ -141,18 +162,18 @@ export default function App() {
               </div>
             ))}
           </Popover>
-          <button className="btn btn-plain gap-1.5" title="清空你这个浏览器里的会话与需求单，从头开始（其他试用者不受影响）"
+          {!trial && <button className="btn btn-plain gap-1.5" title="清空你这个浏览器里的会话与需求单，从头开始（其他试用者不受影响）"
                   onClick={() => confirm("重置进度：清空你这个浏览器里的客户会话、需求单和签字记录，从头开始（其他试用者不受影响）。确定吗？") && restart("正在重置进度……", api.reset())}>
-            <Refresh />重置进度</button>
+            <Refresh />重置进度</button>}
         </div>
       </header>
 
       <aside style={{ width: sideW }} className="sidebar fixed bottom-0 left-0 top-[52px] z-20 flex flex-col overflow-y-auto border-r border-sep pb-4 pt-2">
-        {demo ? <DemoPanel onExit={() => setDemo(false)} onView={onView} side={setSide} /> : <>
-        <button onClick={() => setDemo(true)} className="side-row nav-row">
+        {inDemo ? <DemoPanel onExit={() => setDemo(false)} onView={onView} side={setSide} /> : <>
+        {!trial && <button onClick={() => setDemo(true)} className="side-row nav-row">
           <NavStory /><span className="text-[13px] font-semibold">演示讲解</span><span className="tag tag-accent ml-auto !h-[18px] !text-[11px]">推荐</span>
-        </button>
-        {PAGES.filter(([k]) => !HIDDEN.includes(k)).map(([k, label, Icon, group], i, shown) => (
+        </button>}
+        {PAGES.filter(([k]) => !HIDDEN.includes(k) && visible(k)).map(([k, label, Icon, group], i, shown) => (
           <div key={k}>
             {group && shown[i - 1][3] !== group && <p className="side-head !pb-1 !pt-3">{group}</p>}
             <button onClick={() => { setFocus(null); setPage(k); }} className={`side-row nav-row ${page === k ? "on" : ""} ${group ? "!pl-[30px]" : ""}`}>
@@ -174,6 +195,7 @@ export default function App() {
         {page === "sales" && <Sales key={key} />}
         {page === "pm" && <Pm key={key} />}
         {page === "rd" && <Rd key={key} />}
+        {page === "supervisor" && <Supervisor key={key} />}
         {page === "story" && <Story toDesk={() => setPage("desk")} />}
         {page === "desk" && (actor.role === "sales" ? <Sales key={key} /> : actor.role === "rd" ? <Rd key={key} /> : <Supervisor key={key} />)}
         {page === "jue" && <JuePage key={key} />}
@@ -196,6 +218,29 @@ export default function App() {
         </div>
       )}
     </AppCtx.Provider>
+  );
+}
+
+// 试用实例的入口：选一次身份，服务端记住；之后读写都以这个身份为主体
+function RolePicker({ meta, onPick, error }: { meta: Meta; onPick: (id: string) => void; error: string | null }) {
+  return (
+    <div className="mx-auto max-w-[560px] px-6 pt-20">
+      <Logo />
+      <h1 className="mt-6 text-[22px] font-semibold">选择你在这次试用中的身份</h1>
+      <p className="mt-1.5 text-[13px] text-ink-2">大家处理的是同一份业务。选定后，这个浏览器里的查看和操作都以这个身份进行。</p>
+      {TRIAL_ROLES.map((r) => {
+        const people = meta.actors.filter((a) => a.role === r && a.id !== "pm:agent");
+        return people.length ? (
+          <div key={r} className="mt-5">
+            <p className="eyebrow pb-1.5">{ROLE_NAME[r]}</p>
+            <div className="flex flex-wrap gap-2">
+              {people.map((a) => <button key={a.id} className="btn btn-plain" onClick={() => onPick(a.id)}>{a.name.replace("（模拟）", "")}</button>)}
+            </div>
+          </div>
+        ) : null;
+      })}
+      {error && <p className="mt-5 text-[13px] text-danger">{error}</p>}
+    </div>
   );
 }
 

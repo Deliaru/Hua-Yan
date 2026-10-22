@@ -49,6 +49,7 @@ const q = (params: Record<string, string | null | undefined>) =>
 export const api = {
   meta: () => call<Meta>("meta"),
   reset: () => call<{ run_id: string }>("reset", {}),
+  trialRole: (actor: string | null) => call<{ actor: string | null }>("trial/role", { actor }),
   // 切换本会话的运行方式（回放 / 自带密钥）；密钥只发给本服务，服务端只存在内存里
   setMode: (body: Record<string, string | boolean>) => call<RunMode>("mode", body),
   // 处理过程：不排会话锁，处理中也能读
