@@ -98,6 +98,13 @@ Agent 调用失败时给出清楚提示，整项重试；进程中断后业务�
 
 完成：工作区干净；试用业务、资料位置和模型接口写成一段说明，人确认。
 
+**起点说明（2026-10-22，人已确认）**
+
+- 工作区：`demo/story.yaml`、`Demo.tsx` 已随 efe59a6 提交；#33 的 `rejected.json` 调试代码已不在，`.git/info/exclude` 剩下的两行对应真实存在的本地目录，保留。
+- 试用业务：首选向传化研发要一至两条当前真实需求。拿到之前，开发者走链用访谈中来源清楚的例子「染完色布面深一块浅一块」：锦纶／氨纶面料色花（`uneven_dyeing`），第一单按目录推荐锦纶或混纺匀染剂，目录覆盖不了的条件转研发 `rd:R02` 判断，判断授予后由下一单条件相同的需求复用，再换面料或染料验证交回研发。研发判断与限制由真人研发给出，开发者走链时标为模拟。
+- 资料位置：产品目录用 `data/finals/public/catalog.csv` 起草的 `data/pilot/seeds`（177 个产品、现象与槽位草稿）；案例与人物仍是占位，真实需求、人员和试样记录放 `data/pilot/` 下，不入库。
+- 模型接口：大模型走现有网关，主用本轮试用接口（fast 与 strong 都用 `deepseek-v4.1-flash`，密钥 `TRIAL_API_KEY`），失败按 fallbacks 退到备用服务（`BACKUP_API_KEY`），配置在 `data/pilot/models.yaml`。Jev 的 System 1 接 Cloudflare Workers AI 上的 `@cf/cloudflare/clef`（`ClefClient`，与 OneJev 同一套 state + questions 协议，配置 `config/system1.clef.yaml`，账户 ID 与令牌读 `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_AUTH_TOKEN`；本账户开放 `clef`）。实测文本与图片输入都正常，单次约 1–2 秒。clef 给 Jev 匹配和觉的机会、知识冲突、泄露风险三个家族打分，其余家族用规则与本地 Jue-K，模型合并在 V9.6 做。
+
 ### V9.1 一份共享业务
 
 - 服务端加试用启动方式：全部请求共用一个门面，运行目录固定（`data/pilot/runs/<id>`），启动即续跑。

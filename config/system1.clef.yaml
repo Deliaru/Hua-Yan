@@ -1,0 +1,7 @@
+# Cloudflare Workers AI 上的 @cf/cloudflare/clef，与 OneJev 同一套 state + questions 协议。账户 ID 与令牌只从环境变量读，不入库。
+kind: cloudflare
+account_id_env: CLOUDFLARE_ACCOUNT_ID
+api_key_env: CLOUDFLARE_AUTH_TOKEN
+model: "clef"                # 本账户只开放 clef（clef-flash 返回 Unsupported model）
+timeout_s: 120
+max_questions_per_call: 64

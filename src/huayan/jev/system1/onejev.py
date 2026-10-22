@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import mimetypes
+import os
 import time
 from pathlib import Path
 
@@ -35,6 +36,8 @@ def _expected(probabilities, levels):
 
 class OneJevClient:
     """`POST /v1/systemone`: one request answers every question about one state."""
+
+    path = "/v1/systemone"
 
     def __init__(self, base_url, model, meter, timeout_s=120, gpu_price_per_hour=None, evidence_dir=None, media_root=None, deadline=None):
         self.http = httpx.Client(base_url=base_url, timeout=timeout_s, trust_env=False)
@@ -97,10 +100,10 @@ class OneJevClient:
                 timeout = min(timeout, self.deadline - time.time())
                 if timeout <= 0:
                     raise TimeoutError("Request deadline exhausted")
-            response = self.http.post("/v1/systemone", json=body, timeout=timeout)
+            response = self.http.post(self.path, json=self._wire(body), timeout=timeout)
             raw_text = response.text
             response.raise_for_status()
-            raw = self.last_response = response.json()
+            raw = self.last_response = self._unwrap(response.json())
             if raw["model"] != self.model or set(raw["answers"]) != set(questions):
                 raise ValueError("Served model or question IDs do not match the request")
             answers = {}
@@ -142,6 +145,41 @@ class OneJevClient:
                     stream.write(json.dumps({"request": body, "response_text": raw_text, "latency_ms": elapsed, "ok": ok, "error": error,
                                              "response_sha256": hashlib.sha256((raw_text or "").encode("utf-8")).hexdigest()},
                                             ensure_ascii=False) + "\n")
+
+
+    def _wire(self, body):
+        return body
+
+    def _unwrap(self, raw):
+        return raw
+
+    def health(self):
+        self.http.get("/health").raise_for_status()
+
+
+class ClefClient(OneJevClient):
+    """Cloudflare Workers AI `@cf/cloudflare/clef`: the same state-and-questions protocol behind the account REST API."""
+
+    path = "/ai/run/@cf/cloudflare/clef"
+
+    def __init__(self, account_id, token, model, meter, timeout_s=120, media_root=None):
+        super().__init__(f"https://api.cloudflare.com/client/v4/accounts/{account_id}", model, meter, timeout_s, media_root=media_root)
+        self.http.headers["Authorization"] = f"Bearer {token}"
+
+    def _wire(self, body):
+        # Cloudflare 收 images（内嵌 data URL），不收 media
+        wire = {k: v for k, v in body.items() if k != "media"}
+        if body["media"]:
+            wire["images"] = [item["data"] for item in body["media"]]
+        return wire
+
+    def _unwrap(self, raw):
+        if not raw.get("success"):
+            raise ValueError(f"Cloudflare error: {raw.get('errors')}")
+        return raw["result"]
+
+    def health(self):
+        pass   # 没有健康检查端点，首个请求即探测
 
 
 class _FallbackProbabilities(BaseModel):
@@ -189,7 +227,11 @@ def build_system1(impl, config_path, gateway, meter):
     if impl != "onejev":
         raise ValueError(f"Unknown System 1 implementation: {impl}")
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
-    client = OneJevClient(cfg["base_url"], cfg["model"], meter, cfg["timeout_s"], cfg.get("gpu_price_per_hour"), media_root=cfg.get("media_root"))
+    if cfg.get("kind") == "cloudflare":
+        client = ClefClient(os.environ[cfg["account_id_env"]], os.environ[cfg["api_key_env"]], cfg["model"], meter,
+                            cfg["timeout_s"], media_root=cfg.get("media_root"))
+    else:
+        client = OneJevClient(cfg["base_url"], cfg["model"], meter, cfg["timeout_s"], cfg.get("gpu_price_per_hour"), media_root=cfg.get("media_root"))
     # 独立探测脚本传 gateway=None；离线网关也没有录制缓存。
     client.replay = getattr(gateway, "replay", False)
     cache = getattr(gateway, "cache_dir", None)
@@ -197,7 +239,7 @@ def build_system1(impl, config_path, gateway, meter):
     if client.replay:
         return client
     try:
-        client.http.get("/health").raise_for_status()
+        client.health()
     except Exception:
         client.close()
         raise
