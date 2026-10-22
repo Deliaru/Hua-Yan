@@ -336,7 +336,8 @@ class KnowledgeBase:
                 continue
             if phenomenon and ku.phenomenon_ids and phenomenon not in ku.phenomenon_ids:
                 continue
-            score = len(grams & _grams(ku.title + " " + ku.text)) / len(grams)
+            # 产品编号也入索引：按编号问（「TF-217A 用量」）要命中这支产品，而不是名字相近的别的产品
+            score = len(grams & _grams(f"{ku.product_id or ''} {ku.title} {ku.text}")) / len(grams)
             if score > 0:
                 score += 0.25 if phenomenon and phenomenon in ku.phenomenon_ids else 0
                 hits.append(KnowledgeHit(ku=ku.model_copy(deep=True), score=score))

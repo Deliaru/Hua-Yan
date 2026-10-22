@@ -1,0 +1,30 @@
+{
+ "columns": {
+  "opportunity|L2": [
+   "days_active",
+   "family=opportunity",
+   "mean_p_none",
+   "n_customers",
+   "n_escalations",
+   "n_matched",
+   "object_type=theme",
+   "open_project"
+  ],
+  "stale_capability|L3": [
+   "days_since_grant",
+   "early_fail_rate",
+   "fail_concentration",
+   "fail_rate",
+   "family=stale_capability",
+   "n_fail",
+   "n_market_fail",
+   "n_outcomes",
+   "n_used",
+   "object_type=knowledge",
+   "recent_fail_rate",
+   "slot=phenomenon"
+  ]
+ },
+ "encoding": "utf-8",
+ "sklearn": "1.9.1"
+}

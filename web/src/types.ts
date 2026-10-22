@@ -39,7 +39,8 @@ export interface Meta {
   slots: { id: string; label: string }[];
   phenomena: { id: string; label: string }[];
   products: { id: string; name: string }[];
-  trial?: { actor: string | null };   // V9.1 试用实例：本浏览器选定的身份（服务端记住，读写都以它为主体）
+  trial?: { actor: string | null };
+  jue?: { realtime: string; scheduled: string; cells: string[] };   // V9.6：实际加载的觉模型与学习格   // V9.1 试用实例：本浏览器选定的身份（服务端记住，读写都以它为主体）
 }
 
 // ③ 会话

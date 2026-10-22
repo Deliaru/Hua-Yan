@@ -69,7 +69,8 @@ export const hhmm = (iso: string) => iso.slice(11, 16);
 
 export function useLabels() {
   const { meta } = useApp();
-  const actors = Object.fromEntries(meta.actors.map((a) => [a.id, a.name.replace("（模拟）", "")]));
+  const actors: Record<string, string> = { jue: "觉", "jue:auto": "觉", system: "系统",
+    ...Object.fromEntries(meta.actors.map((a) => [a.id, a.name.replace("（模拟）", "")])) };
   const slot = (id: string) => meta.slots.find((s) => s.id === id)?.label ?? id;
   const phen = (id: string | null | undefined) => meta.phenomena.find((p) => p.id === id)?.label ?? "未识别现象";
   const name = (id: string | null | undefined) => (id ? actors[id] ?? "（未知身份）" : "—");

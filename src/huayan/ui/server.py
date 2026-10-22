@@ -130,7 +130,10 @@ def meta(app, _):
     return {"status": app.status(), "actors": list(app.actors.values()), "mainline_available": False,
             "slots": [{"id": s.id, "label": s.label} for s in app.seeds.slots],
             "phenomena": [{"id": p.id, "label": p.label} for p in app.seeds.phenomena],
-            "products": [{"id": p.id, "name": p.name} for p in app.kb.products()]}
+            "products": [{"id": p.id, "name": p.name} for p in app.kb.products()],
+            # V9.6：实际加载的觉模型与学习格，其余家族规则打分
+            "jue": {"realtime": app.jue_realtime.name, "scheduled": app.jue_scheduled.name,
+                    "cells": sorted({*getattr(app.jue_realtime, "models", {}), *getattr(app.jue_scheduled, "models", {})})}}
 
 
 def sessions(app, _):

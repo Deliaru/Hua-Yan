@@ -399,7 +399,8 @@ def _scope(events, at, caps):
         yield JueObject(object_id=f"knowledge:cap:{cap.id}", object_type="knowledge", attrs={
             "product_id": pid, "slot": "phenomenon", "value": ph, "conditions": json.dumps(cap.payload["conditions"], ensure_ascii=False),
             "n_applicable": len(evs), "pending": True,
-        }), {"capability_id": cap.id, "product_id": pid, "event_ids": [e.id for e in evs],
+        }), {"capability_id": cap.id, "product_id": pid, "phenomenon": ph, "event_ids": [e.id for e in evs],
+             "conditions": json.dumps(cap.payload["conditions"], ensure_ascii=False), "limits": cap.payload.get("limits", ""),
              "session_ids": sorted({sid for e in evs for sid in e.payload.get("session_ids", [])}),
              "requirement_ids": [e.payload["requirement_id"] for e in evs]}
 

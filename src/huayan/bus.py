@@ -31,6 +31,7 @@ class QuestionBus:
         for existing in same:
             if existing.status == "open":
                 existing.evidence.extend(e for e in q.evidence if e not in existing.evidence)
+                existing.refs.update(q.refs)        # 引用随对象最新状态（如又有一张单判过同一适用）
                 self._snapshot(existing)
                 return existing
         if any(x.status == "dismissed" and q.created_at - x.resolved_at < self.suppress for x in same):

@@ -10,12 +10,12 @@ import { Popover } from "../components/Controls";
 import { ChevronDown } from "../components/Icons";
 import { Disclosure, EmptyState, Group, LayerChip, PageHead } from "../components/ui";
 
-// 业务员选自己的会话，研发选需求单（需求单线程含其全部会话）；按时间顺序，默认第一条（演示主线所在的线程）
+// 业务员选自己的会话，研发、产品经理、研发负责人选需求单（需求单线程含其全部会话）；按时间顺序，默认第一条
 export function JuePage() {
   const { me, role } = useApp();
   const L = useLabels();
   const sessions = useData(() => (role === "sales" ? api.sessions() : Promise.resolve([])), [role]) ?? [];
-  const reqs = useData(() => (role === "rd" ? api.requirements(me) : Promise.resolve([])), [role, me]) ?? [];
+  const reqs = useData(() => (["rd", "pm", "supervisor"].includes(role) ? api.requirements(me) : Promise.resolve([])), [role, me]) ?? [];
   const targets = role === "sales"
     ? sessions.filter((s) => s.sales_id === me)
       .map((s) => ({ id: s.id, label: `${s.customer_id ? L.name(s.customer_id) : "样例客户"} · ${s.phenomenon ? L.phen(s.phenomenon) : "尚未识别现象"}` }))
@@ -24,14 +24,17 @@ export function JuePage() {
 }
 
 function Jue({ targets }: { targets: { id: string; label: string }[] }) {
-  const { me } = useApp();
+  const { me, meta } = useApp();
+  const L = useLabels();
+  const cells = meta.jue?.cells ?? [];
   const [chosen, choose] = useState<string | null>(null);
   const target = targets.find((t) => t.id === chosen) ?? targets[0] ?? null;
   const tl = useData(() => (target ? api.timeline(target.id, me) : Promise.resolve(null)), [target?.id, me]);
   return (
     <div className="mx-auto flex max-w-[1080px] flex-col gap-6 px-8 pb-24 pt-7">
       <PageHead title="觉视图"
-                subtitle="觉是本地小模型：看着整条需求链，只在「此刻需要有人决定」时提出，交给主人准备、签字人签字；流程就这样一步步推进。"
+                subtitle={<>觉是本地小模型：看着整条需求链，只在「此刻需要有人决定」时提出，交给主人准备、签字人签字；流程就这样一步步推进。
+                  {meta.jue && <><br />实际加载：{cells.length ? `Jue-K 学习模型打分 ${cells.map((c) => L.family(c.split("|")[0])).join("、")}` : "没有学习模型"}；其余家族规则打分，逐条标「规则」。</>}</>}
                 aside={target && (
                   <Popover align="right" trigger={(toggle) => (
                     <button onClick={toggle} className="btn btn-plain">{target.label}<ChevronDown /></button>
@@ -43,11 +46,14 @@ function Jue({ targets }: { targets: { id: string; label: string }[] }) {
                     ))}
                   </Popover>
                 )} />
-      {!target ? <EmptyState title="还没有需求线程" text="觉视图跟着演示进度走：到「沉浸工作面」按导览走几步，这里就会出现觉的每一次判断；想先看完整的例子，看「演示工作面」。" />
+      {!target ? <EmptyState title="还没有需求线程" text="业务员有了会话、或有需求转到研发之后，这里按条显示觉在这条线上的每一次判断。" />
         : tl && <Timeline tl={tl} />}
     </div>
   );
 }
+
+// 研发判「不立项」以 dismiss 结案接单问题，日志里照实写不立项
+const said = (n: TimelineNode) => (n.family === "accept_requirement" && n.action === "dismiss" ? "不立项" : ACTION[n.action ?? ""]);
 
 const W = 1000, LEFT = 150, RIGHT = 24, LANE = 76, TOP = 28;
 
@@ -156,7 +162,7 @@ function Entry({ n, point }: { n: TimelineNode; point?: TimelinePoint }) {
   const steps: [string, string | null, boolean][] = [
     ["提出", hhmm(n.created_at), true],
     ...(n.resolved_at && !n.prepared_at ? [] : [[`${L.name(n.owner_id)} 准备`, n.prepared_at && hhmm(n.prepared_at), !!n.prepared_at] as [string, string | null, boolean]]),
-    [n.signer_id ? `${L.name(n.resolved_at ? n.by : n.signer_id)} ${n.resolved_at ? ACTION[n.action ?? ""] ?? "已处置" : "签字"}` : "提示类，无需签字",
+    [n.signer_id ? `${L.name(n.resolved_at ? n.by : n.signer_id)} ${n.resolved_at ? said(n) ?? "已处置" : "签字"}` : "提示类，无需签字",
      n.resolved_at && hhmm(n.resolved_at), !!n.resolved_at],
   ];
   return (
@@ -304,7 +310,7 @@ function NodeDetail({ n }: { n: TimelineNode }) {
     ["签字人", n.signer_id ? L.name(n.signer_id) : "提示类，无需签字"],
     ["提出", hhmm(n.created_at)],
     ["准备完成", n.prepared_at ? hhmm(n.prepared_at) : "准备中"],
-    ["处置", n.resolved_at ? `${hhmm(n.resolved_at)} · ${L.name(n.by)} ${ACTION[n.action ?? ""] ?? ""}` : "待签"],
+    ["处置", n.resolved_at ? `${hhmm(n.resolved_at)} · ${L.name(n.by)} ${said(n) ?? ""}` : "待签"],
   ];
   return (
     <Group title="节点">

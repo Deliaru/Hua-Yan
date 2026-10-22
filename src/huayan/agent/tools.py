@@ -91,7 +91,7 @@ class SearchArgs(BaseModel):
 def search_knowledge(ctx: ToolContext, args: SearchArgs) -> ToolResult:
     found = ctx.app.kb.explore(args.query, ctx.principal, k=5, session_id=ctx.session_id,
                                asked_by=agent_id(ctx.principal.id), intent=args.purpose)
-    return ToolResult(data={"hits": [{"ku_id": u.id, "kind": u.kind, "level": u.level, "title": u.title,
+    return ToolResult(data={"hits": [{"ku_id": u.id, "product_id": u.product_id, "kind": u.kind, "level": u.level, "title": u.title,
                                       "text": u.text[:160], "owner": u.owner} for u in found.units if args.kind in (None, u.kind)],
                             "statements": [{"ref": c.id, "text": c.payload["text"]} for c in found.capabilities if c.form == "statement"],
                             "hints": found.hints, "candidates": [{"ku_id": u.id, "title": u.title} for u in found.candidates],

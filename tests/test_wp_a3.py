@@ -254,6 +254,10 @@ def test_translation_release_and_ownership(tmp_path):
                                  {"phenomenon": "color_unlevel", "slots": known})
     assert result.ok and not result.data
     assert app.view_session(reuse.id, "customer:C01").card is None
+    # 撤回后重新匹配留下 match 事件：自助会话没有别的产品时由觉直达研发，不停在没有下文的会话里
+    assert app.events.query(["match"])[-1].session_id == reuse.id
+    app.tick()
+    assert app._sessions[reuse.id].status == "escalated"
 
     # 解密撤销沿用披露上限，原推荐卡立即不再包含机理。
     decrypted = app.start_session("customer:C02", "sales:S01")

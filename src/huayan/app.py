@@ -1485,7 +1485,7 @@ class HuayanApp:
         self.scan()
 
     def _invalidate_capabilities(self, by):
-        active = {c.id for c in self.kb.capabilities() if c.status == "active"}
+        active, withdrawn = {c.id for c in self.kb.capabilities() if c.status == "active"}, []
         for session in self._sessions.values():
             if session.status in {"escalated", "closed"}:
                 continue
@@ -1495,11 +1495,14 @@ class HuayanApp:
             if selected and selected.capability_id not in active and rec.product_id not in {
                     c.product_id for c in match_candidates(session.need.phenomenon, session.need.known(),
                         self.kb.view(self._actor(session.sales_id or session.customer_id)).products)}:
-                session.recommendation, session.status = None, "open"
                 self.events.append("recommendation_withdrawn", by, {"product_id": rec.product_id,
                                    "capability_id": selected.capability_id}, session_id=session.id)
+                # 重新匹配并留下 match 事件：仍无合适产品时觉照常提出升级，客户不会停在没有下文的会话里
+                recommend(session, self)
+                withdrawn.append(session.id)
             session.hints = self.ask_hints(session.need)
             self._save_session(session)
+        self._after(withdrawn)
 
     def _use_capability(self, cap_id, session_id, by):
         capability = self.kb._caps[cap_id]
