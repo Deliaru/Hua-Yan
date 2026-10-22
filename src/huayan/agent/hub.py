@@ -3,9 +3,13 @@ import json
 import re
 from typing import Literal
 
+import httpx
+import openai
+
 from huayan.clock import get_clock
 from huayan.contracts import AgentMessage, AgentStep, Conversation, LLMRequest, Message, PendingAction, Tier, ToolResult
 from huayan.contracts._base import BaseModel
+from huayan.gateway.client import StructuredOutputError
 from huayan.knowledge import PermissionDenied
 
 from .loop import OUT_OF_STEPS, PROMPTS, run_turn
@@ -14,6 +18,8 @@ from .tools import TOOLS, ToolContext, agent_id
 OFFLINE = "助手需要大模型（当前离线）。"
 PUSHBACKS = 1          # v8：准备没落在对象上时，把缺什么退回给 Agent 再做的次数
 ATTEMPTS = 2           # 同一问题最多派几次；仍没准备好就留在「准备中」，记一条 Agent 错误
+# V9.2：模型接口出的错（断网、超时、限流、结构化输出不合格）。这类失败不占派单次数，整项留着重跑
+MODEL_ERRORS = (openai.APIError, httpx.HTTPError, StructuredOutputError, TimeoutError)
 
 
 class MemoryOp(BaseModel):
@@ -37,6 +43,7 @@ class AgentHub:
         self._steps: list[AgentStep] = []
         self._dispatched: set[tuple[str, int]] = set()
         self._attempts: dict[str, int] = {}
+        self.failures: dict[str, dict] = {}     # V9.2：问题 → 最近一次因模型接口失败没准备成的原因；准备成了就清掉
 
     # ---- 对话 ----
 
@@ -78,8 +85,14 @@ class AgentHub:
         else:
             self.app.emit("agent_start", actor=ctx.principal.id, conversation_id=conv.id)
             ctx.instructed = message.role == "principal"      # v8 收口：委托人亲口交代的这一轮，起草记在委托人名下
-            with self.app.drafting():                       # 这一轮起草完再由觉评估
-                conv.messages += run_turn(conv, ctx, self, self.app.gateway)
+            try:
+                with self.app.drafting():                       # 这一轮起草完再由觉评估
+                    conv.messages += run_turn(conv, ctx, self, self.app.gateway)
+            except MODEL_ERRORS:
+                # V9.2：模型失败时这一轮整个撤回，委托人重发同一句就是重跑；已经落在对象上的草稿以对象为准
+                conv.messages.remove(message)
+                self.app.emit("agent_end", actor=ctx.principal.id, conversation_id=conv.id, index=len(conv.messages) - 1)
+                raise
             self.app.emit("agent_end", actor=ctx.principal.id, conversation_id=conv.id, index=len(conv.messages) - 1)
         self._save(conv)
         return conv.model_copy(deep=True)
@@ -195,49 +208,73 @@ class AgentHub:
                     # v6：自助会话没有业务员（回问由客户在对话里直接回答）；真人产品经理的问题留在待办，不派 Agent
                     self._dispatched.add((q.id, rounds.get(q.id, 0)))
                     continue
-                session_id = q.refs.get("session_id") if q.owner_role == "sales" else None
-                target = q.refs.get("requirement_id") or q.refs.get("session_id") or q.object_id
-                text = (f"{target}：{q.title}（觉的问题 {q.id}，{q.family}；调用工具时用 {target}，不要用问题编号）。引用：{q.refs}。"
-                        f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。")
-                # 授予现有能力：形式与目标层已由觉算出，Agent 只告知委托人，不起草
-                text += ("请告知委托人待签的授予，不起草，不签字。" if q.family == "qi_grant" and "capability_id" in q.refs
-                         else "请告知委托人：同事申请查看这条知识，附上申请人碰到过它的需求单，不起草，不签字。"
-                         if q.family == "qi_grant" and "requester" in q.refs
-                         else f"请起草一句可以写给 L{q.refs['audience']} 的话，不含结论原文与机理，交委托人在签字区改定，不签字。"
-                         if q.family == "qi_grant" and q.refs.get("form") == "statement"
-                         else "请为此问题准备草稿，不签字。")
-                with self.app.drafting():          # v8 收口：准备（含退回再做）结束后觉才评估，中间稿不触发问题
-                    if self.app.config["gateway_mock"]:
-                        text += "\n" + self._prepare_offline(q)
-                        ctx = ToolContext(self.app, self.app.actors[q.owner_id], self.conversation_of(q), session_id)
-                        conv = self._conversation(ctx)
-                        conv.messages.append(AgentMessage(role="system", text=text, at=get_clock().now(), target=q.object_id))
-                        self._save(conv)
-                        out.append(conv.model_copy(deep=True))
-                    elif q.owner_role != "supervisor":   # 主管没有 Agent：拼凑风险无需准备，直接待签（REPLAN 4.3 主人为「—」）
-                        self.app.emit("dispatch", actor=q.owner_id, family=q.family)
-                        thread = q.refs.get("requirement_id") or q.object_id
-                        out.append(self.notify(q.owner_id, text, session_id, thread))
-                        # 步数用完也以对象为准：草稿齐了照常标记已准备
-                        if out[-1].messages[-1].text == OUT_OF_STEPS and not (q.signer_role and not self.app.preparation_gap(q.id)):
-                            self._give_up(q, rounds, exhausted, "out_of_steps", OUT_OF_STEPS)
-                            continue  # 本轮不重试它，继续派其他问题；下次 dispatch 再试。
-                        # v8：准备好没有以对象为准；缺什么就退回给 Agent 再做，Agent 说「已就绪」不算
-                        for _ in range(PUSHBACKS):
+                try:
+                    session_id = q.refs.get("session_id") if q.owner_role == "sales" else None
+                    target = q.refs.get("requirement_id") or q.refs.get("session_id") or q.object_id
+                    text = (f"{target}：{q.title}（觉的问题 {q.id}，{q.family}；调用工具时用 {target}，不要用问题编号）。引用：{q.refs}。"
+                            f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。")
+                    # 授予现有能力：形式与目标层已由觉算出，Agent 只告知委托人，不起草
+                    text += ("请告知委托人待签的授予，不起草，不签字。" if q.family == "qi_grant" and "capability_id" in q.refs
+                             else "请告知委托人：同事申请查看这条知识，附上申请人碰到过它的需求单，不起草，不签字。"
+                             if q.family == "qi_grant" and "requester" in q.refs
+                             else f"请起草一句可以写给 L{q.refs['audience']} 的话，不含结论原文与机理，交委托人在签字区改定，不签字。"
+                             if q.family == "qi_grant" and q.refs.get("form") == "statement"
+                             else "请为此问题准备草稿，不签字。")
+                    with self.app.drafting():          # v8 收口：准备（含退回再做）结束后觉才评估，中间稿不触发问题
+                        if self.app.config["gateway_mock"]:
+                            text += "\n" + self._prepare_offline(q)
+                            ctx = ToolContext(self.app, self.app.actors[q.owner_id], self.conversation_of(q), session_id)
+                            conv = self._conversation(ctx)
+                            conv.messages.append(AgentMessage(role="system", text=text, at=get_clock().now(), target=q.object_id))
+                            self._save(conv)
+                            out.append(conv.model_copy(deep=True))
+                        elif q.owner_role != "supervisor":   # 主管没有 Agent：拼凑风险无需准备，直接待签（REPLAN 4.3 主人为「—」）
+                            self.app.emit("dispatch", actor=q.owner_id, family=q.family)
+                            thread = q.refs.get("requirement_id") or q.object_id
+                            out.append(self.notify(q.owner_id, text, session_id, thread))
+                            # 步数用完也以对象为准：草稿齐了照常标记已准备
+                            if out[-1].messages[-1].text == OUT_OF_STEPS and not (q.signer_role and not self.app.preparation_gap(q.id)):
+                                self._give_up(q, rounds, exhausted, "out_of_steps", OUT_OF_STEPS)
+                                continue  # 本轮不重试它，继续派其他问题；下次 dispatch 再试。
+                            # v8：准备好没有以对象为准；缺什么就退回给 Agent 再做，Agent 说「已就绪」不算
+                            for _ in range(PUSHBACKS):
+                                gap = q.signer_role and self.app.preparation_gap(q.id)
+                                if not gap:
+                                    break
+                                self.error(q.owner_id, "prepare_missing", question_id=q.id, detail=gap)
+                                out.append(self.notify(q.owner_id, f"{q.id} 还没有准备好：{gap}。是否准备好以对象上的草稿为准，"
+                                                                   "不以你的回复为准。", session_id, thread))
                             gap = q.signer_role and self.app.preparation_gap(q.id)
-                            if not gap:
-                                break
-                            self.error(q.owner_id, "prepare_missing", question_id=q.id, detail=gap)
-                            out.append(self.notify(q.owner_id, f"{q.id} 还没有准备好：{gap}。是否准备好以对象上的草稿为准，"
-                                                               "不以你的回复为准。", session_id, thread))
-                        gap = q.signer_role and self.app.preparation_gap(q.id)
-                        if gap:
-                            self._give_up(q, rounds, exhausted, "prepare_failed", gap)
-                            continue
-                if q.status == "open" and q.signer_role is not None:
-                    self.app.mark_prepared(q.id, q.owner_id)
-                self._dispatched.add((q.id, rounds.get(q.id, 0)))
+                            if gap:
+                                self._give_up(q, rounds, exhausted, "prepare_failed", gap)
+                                continue
+                    if q.status == "open" and q.signer_role is not None:
+                        self.app.mark_prepared(q.id, q.owner_id)
+                    self._dispatched.add((q.id, rounds.get(q.id, 0)))
+                except MODEL_ERRORS as exc:
+                    # V9.2：模型接口失败，这一项整个留到下一次 dispatch 重跑（或委托人点重跑），不影响别的问题
+                    self.failures[q.id] = {"at": get_clock().now().isoformat(), "error": f"{type(exc).__name__}: {exc}"}
+                    self.error(q.owner_id, "model_failed", question_id=q.id, detail=self.failures[q.id]["error"])
+                    exhausted.add(q.id)
+                    continue
+                self.failures.pop(q.id, None)
         return out
+
+    def retry(self, question_id: str, by: str) -> dict:
+        """V9.2：把一项准备整个重跑（模型失败或派单次数用完之后）。能看到这个问题的人都可以点；下一次 dispatch 重新派。"""
+        if question_id not in {q.id for q in self.app.questions(by)}:
+            raise PermissionDenied("只能重跑自己能看到的问题")
+        q = self.app.bus.get(question_id)
+        if q.status != "open" or q.prepared_at is not None:
+            raise ValueError("这一项已经准备好或已处理，不需要重跑")
+        self._dispatched = {d for d in self._dispatched if d[0] != question_id}
+        self._attempts.pop(question_id, None)
+        self.failures.pop(question_id, None)
+        return {"question_id": question_id}
+
+    def failures_for(self, viewer: str) -> dict[str, dict]:
+        visible = {q.id for q in self.app.questions(viewer)}
+        return {qid: f for qid, f in self.failures.items() if qid in visible}
 
     def _give_up(self, q, rounds, exhausted, kind, detail) -> None:
         """这次没准备好：记一条 Agent 错误；派的次数没用完就下次 dispatch 再派，用完就留在「准备中」由人看见。"""

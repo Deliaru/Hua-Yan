@@ -77,6 +77,18 @@ export default function App() {
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
   useEffect(() => { api.meta().then(setMeta, fail); }, []);
+  // V9.2 试用实例：别人的提交与后台准备完成后，几秒内自动刷新（只看事件数是否变了，不排会话锁）
+  const trialOn = !!meta?.trial?.actor;
+  useEffect(() => {
+    if (!trialOn) return;
+    let last = "";
+    const timer = setInterval(() => api.trialStamp().then((s) => {
+      const now = `${s.events}:${s.failures}`;
+      if (last && now !== last) setVersion((v) => v + 1);
+      last = now;
+    }, () => {}), 4000);
+    return () => clearInterval(timer);
+  }, [trialOn]);
   if (busy) return <p role="status" className="p-10 text-ink-2">{busy}</p>;
   if (!meta) return error ? <p className="p-10 text-danger">{error}</p> : null;
   const trial = meta.trial;

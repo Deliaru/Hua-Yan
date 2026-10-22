@@ -24,6 +24,9 @@ class ReplayMiss(RuntimeError):
 class OpenAICompatGateway:
     def __init__(self, config, meter=None, *, clients=None, cache_dir=None, trace=None, sleep=time.sleep):
         self.tiers = config["tiers"]
+        # 每档失败后的等待秒数，次数即重试次数。默认 5、20、80、80、80 秒：试用接口过载时要求至少退避 60 秒，
+        # 整月录制里遇到过几分钟的超时；有人在界面前等的试用实例配得短，失败早点报出来、由人重跑（V9.2）
+        self.retry_waits = config.get("retry_waits", [5, 20, 80, 80, 80])
         self.meter, self.trace = meter, trace
         self.clients = {} if clients is None else dict(clients)
         self.cache_dir = Path(cache_dir) if cache_dir else None
@@ -86,7 +89,7 @@ class OpenAICompatGateway:
         last_error = None
         for tier in self._order(req.tier.value):
             cfg = self.tiers[tier]
-            for attempt in range(6):
+            for attempt in range(len(self.retry_waits) + 1):
                 started = time.perf_counter()
                 try:
                     kwargs = dict(model=cfg["model"], messages=messages, temperature=req.temperature,
@@ -125,8 +128,8 @@ class OpenAICompatGateway:
                                  or "request illegal" in str(exc))
                     if not retryable:
                         raise
-                    if attempt < 5:     # 5、20、80、80、80 秒：试用接口过载时要求至少退避 60 秒；整月录制里遇到过几分钟的超时
-                        self.sleep(5 * 4 ** min(attempt, 2))
+                    if attempt < len(self.retry_waits):
+                        self.sleep(self.retry_waits[attempt])
         raise last_error
 
     def complete(self, req):

@@ -54,6 +54,9 @@ export const api = {
   setMode: (body: Record<string, string | boolean>) => call<RunMode>("mode", body),
   // 处理过程：不排会话锁，处理中也能读
   progress: (viewer: string) => call<Activity | null>(`progress?${q({ viewer })}`),
+  agentFailures: (viewer: string) => call<Record<string, { at: string; error: string }>>(`agents/failures?${q({ viewer })}`),
+  agentRetry: (question_id: string, by: string) => call<{ question_id: string }>("agents/retry", { question_id, by }),
+  trialStamp: () => call<{ events: number; failures: number }>("trial/stamp"),
   agentProcess: (conversation_id: string, viewer: string) => call<Record<string, AgentRun>>(`agents/process?${q({ conversation_id, viewer })}`),
 
   // 读

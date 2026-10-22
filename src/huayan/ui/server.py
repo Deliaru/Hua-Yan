@@ -18,7 +18,7 @@ import traceback
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock, RLock, Thread, local
+from threading import Event, Lock, RLock, Thread, current_thread, local
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
@@ -32,6 +32,8 @@ from huayan.knowledge import PermissionDenied
 from huayan.gateway.byok import Byok, public_url
 from huayan.gateway.client import ReplayMiss, StructuredOutputError
 from huayan.jev.system1 import OneJevClient
+from huayan.agent.hub import MODEL_ERRORS
+from huayan.sim.schedule import Gate
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
 PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
@@ -69,8 +71,8 @@ checkpoint_lock = Lock()                          # 载入检查点共用 runs/d
 class Activity:
     """一次写操作的处理过程（墙钟），界面的过程面板轮询读取；只在内存里。"""
 
-    def __init__(self, path):
-        self.path, self.t0, self.events, self.ms, self.error = path, time.monotonic(), [], None, None
+    def __init__(self, path, by=None):
+        self.path, self.by, self.t0, self.events, self.ms, self.error = path, by, time.monotonic(), [], None, None
 
     def add(self, kind, **fields):
         self.events.append({"kind": kind, "t": round(time.monotonic() - self.t0, 2), **fields})
@@ -83,6 +85,30 @@ class Activity:
             events.append({k: v for k, v in e.items() if k != "tool"} if e["kind"] == "step" and owner != viewer else e)
         elapsed = self.ms if self.ms is not None else (time.monotonic() - self.t0) * 1000
         return {"path": self.path, "running": self.ms is None, "elapsed_ms": elapsed, "error": self.error, "events": events}
+
+
+class TrialGate(Gate):
+    """V9.2 试用实例的会话锁：沿用模拟器的闸口（sim/schedule.py），业务状态只由持有者改，等模型返回时让出，
+    别人的读写照常进行。线程名可能重复，按线程号区分。"""
+
+    @staticmethod
+    def me():
+        return f"{current_thread().name}#{current_thread().ident}"
+
+    def __enter__(self):
+        self.acquire(self.me())
+
+    def __exit__(self, *exc):
+        self.release()
+
+    def outside(self, fn):
+        if self.holder != self.me():
+            return fn()
+        self.release()
+        try:
+            return fn()
+        finally:
+            self.acquire(self.me())
 
 
 def use_clock(clock):
@@ -229,6 +255,8 @@ GET = {
     "/api/agents/memory": lambda app, p: app.memories(p["actor"]),           # v8：助手记忆，人能看能删
     "/api/agents/trace": lambda app, p: app.agents.trace(p["conversation_id"]),
     "/api/agents/pending": lambda app, p: app.agents.pending(p["actor"]),
+    "/api/agents/failures": lambda app, p: app.agents.failures_for(p["viewer"]),     # V9.2：因模型接口失败没准备成的问题
+    "/api/trial/stamp": lambda app, p: {"events": len(app.events.events), "failures": len(app.agents.failures)},
 }
 POST = {
     "/api/agents/forget": lambda app, p: app.forget(p["id"], p["by"]),
@@ -277,6 +305,7 @@ POST = {
     "/api/agents/chat": lambda app, p: app.agents.chat(p["actor"], p["text"], p.get("session_id"), focus=p.get("focus")),
     "/api/agents/approve": lambda app, p: app.agents.approve(p["action_id"], p["by"]),
     "/api/agents/reject": lambda app, p: app.agents.reject(p["action_id"], p["by"], p.get("note", "")),
+    "/api/agents/retry": lambda app, p: app.agents.retry(p["question_id"], p["by"]),   # V9.2：整项重跑
 }
 
 
@@ -286,9 +315,11 @@ class Api:
     def __init__(self, app, config_path=CONFIG, clock=None, byok=None):
         self.app, self.config_path, self.byok = app, config_path, byok
         self.clock = clock or get_clock()   # 本会话的业务时钟；每次调用先在当前线程换上它
-        self.lock = RLock()
+        self.lock = TrialGate() if TRIAL else RLock()
         self.writes = 0     # 本轮成功的写操作数；回放部署里按它对齐台词的下一步
         self.activity = None                # 正在进行或最近一次写操作的处理过程
+        self.current = local()              # V9.2：试用实例里各人的请求并行，过程记在发起它的线程上
+        self.recent = {}                    # 试用实例：每个人最近一次写操作的处理过程
         self.agent_runs = {}                # (对话 id, 回复序号) → 这一轮 Agent 的过程，供对话里展开
         self.story_done, self.story_handles = 0, {}   # V6-5.5 讲解已执行到第几步；句柄 → 会话、开场、已说几句
         self.story_last = None                        # 上一步的耗时、模型调用次数与是否偏离剧本
@@ -302,9 +333,20 @@ class Api:
         for client in (app.system1, getattr(app.system1, "onejev", None)):
             if isinstance(client, OneJevClient):
                 client.trace = self.emit
+        if TRIAL:      # 等模型时让出会话锁；计量在锁外写，另加一把锁免得行交错
+            complete, ask = app.gateway._complete, app.system1.ask
+            app.gateway._complete = lambda req, schema=None: self.lock.outside(lambda: complete(req, schema))
+            app.system1.ask = lambda *a, **k: self.lock.outside(lambda: ask(*a, **k))
+            if not hasattr(app.meter, "unlocked_record"):
+                app.meter.unlocked_record, meter_lock = app.meter.record, Lock()
+
+                def record(**kw):
+                    with meter_lock:
+                        return app.meter.unlocked_record(**kw)
+                app.meter.record = record
 
     def emit(self, kind, **fields):
-        activity = self.activity
+        activity = getattr(self.current, "activity", None) if TRIAL else self.activity
         if activity is None or activity.ms is not None:
             return
         activity.add(kind, **fields)
@@ -315,7 +357,8 @@ class Api:
                 "events": events[start:], "ms": (events[-1]["t"] - events[start]["t"]) * 1000}
 
     def progress(self, viewer):
-        return self.activity.view(viewer) if self.activity else None
+        activity = self.recent.get(viewer) if TRIAL else self.activity
+        return activity.view(viewer) if activity else None
 
     def agent_process(self, conversation_id, viewer):
         """自己的对话里每轮 Agent 回复的过程；只给对话的委托人本人。"""
@@ -594,7 +637,9 @@ class Api:
         before = self.clock.now()
         if not TRIAL:                   # 试用实例是真实时间，不推进
             self.clock.advance_to(before + timedelta(minutes=1))
-        activity = self.activity = Activity(path)
+        activity = self.activity = self.current.activity = Activity(path, params.get("by"))
+        if activity.by:
+            self.recent[activity.by] = activity
         try:
             try:
                 result = route(self.app, params)
@@ -604,7 +649,10 @@ class Api:
                     self.clock = SimClock(before)
                     use_clock(self.clock)
                 raise
-            self.app.tick()
+            if TRIAL:
+                WAKE.set()          # 觉提出的问题交给后台准备，不让这次写操作等 Agent
+            else:
+                self.app.tick()
         except Exception as e:
             activity.error = f"{type(e).__name__}: {e}"
             raise
@@ -631,7 +679,11 @@ class Api:
         """试用实例的后台周期：觉按真实时间检查到点的扫描，并派发待准备的问题。"""
         with self.lock:
             use_clock(self.clock)
-            self.app.tick()
+            self.current.activity = Activity("/tick", "jue")
+            try:
+                self.app.tick()
+            finally:
+                self.current.activity.ms = (time.monotonic() - self.current.activity.t0) * 1000
 
     def mode(self):
         """本会话的运行方式与所用模型名（不含密钥）。"""
@@ -699,9 +751,13 @@ def trial_params(sid, method, path, params):
     return params
 
 
+WAKE = Event()       # 写操作或重跑之后叫醒后台，不用等满一个周期
+
+
 def trial_ticker():
     while True:
-        time.sleep(TICK_SECONDS)
+        WAKE.wait(TICK_SECONDS)
+        WAKE.clear()
         try:
             session_api("default").tick()
         except Exception:
@@ -719,7 +775,9 @@ class Handler(SimpleHTTPRequestHandler):
             sid = self.headers.get("X-Huayan-Session", "default")
             if TRIAL and url.path not in MONTH and not url.path.startswith("/api/trial/"):
                 params = trial_params(sid, method, url.path, params)
-            if TRIAL and url.path == "/api/trial/role":
+            if TRIAL and url.path == "/api/trial/stamp":         # 界面轮询有没有别人的变化，不排会话锁
+                result = GET[url.path](session_api(sid).app, params)
+            elif TRIAL and url.path == "/api/trial/role":
                 result = set_trial_role(sid, params)
             elif TRIAL and url.path == "/api/trial/models":
                 result = session_api(sid).switch_models(params)
@@ -734,6 +792,8 @@ class Handler(SimpleHTTPRequestHandler):
                 result = session_api(sid).agent_process(params["conversation_id"], params["viewer"])
             else:
                 result = session_api(sid).call(method, url.path, params)
+                if TRIAL and url.path == "/api/agents/retry":
+                    WAKE.set()
             if TRIAL and url.path == "/api/meta":
                 result = dump(result) | {"trial": {"actor": trial_roles.get(sid)}}
             status, body = 200, dump(result)
@@ -742,6 +802,8 @@ class Handler(SimpleHTTPRequestHandler):
         except ReplayMiss:
             status, body = 409, {"error": "当前是录制回放，只能沿演示讲解一步步走（这一步不在录制里）。想自由操作，"
                                           "点右上角「接入真实模型」用你自己的模型真实运行；进度乱了可以在讲解目录里点某一章重看。"}
+        except MODEL_ERRORS as e:
+            status, body = 503, {"error": f"模型接口暂时不可用（{type(e).__name__}: {str(e)[:200]}）。已提交的内容都在，恢复后再点一次就是重跑。"}
         except AssertionError as e:
             status, body = 409, {"error": str(e)}
         except ValueError as e:

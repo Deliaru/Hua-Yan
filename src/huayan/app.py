@@ -54,6 +54,7 @@ def _human_events(events):
 
 class _Held(threading.local):
     ids = None      # 助手起草期间暂存的 (会话, 需求单)；None = 不暂存。按线程分开，模拟器并发准备互不影响
+    agent_drafting = False   # Hub 工具执行期间的来源标记；按线程分开，试用实例里等模型时别人的写操作不会被记成 Agent 起草
 
 
 def _read_dir(path):
@@ -107,12 +108,20 @@ class HuayanApp:
         app._wire_jue()
         app._jue_trace, app._answers = {}, {}
         app._last_scan = None
-        app._agent_drafting = False  # Hub 工具执行期间的来源标记，不由模型或 HTTP 参数指定。
         app._held = _Held()
         app._drafts = {}     # 线程 → 它正在起草的需求单；别的线程写后评估时跳过，由起草的线程结束时评估
         app.progress = None          # 界面过程面板的进度回调（ui.server 设置）；只报「谁在做什么、用时」
         app.agents = AgentHub(app)
         return app
+
+    @property
+    def _agent_drafting(self):
+        """Hub 工具执行期间的来源标记，不由模型或 HTTP 参数指定。"""
+        return self._held.agent_drafting
+
+    @_agent_drafting.setter
+    def _agent_drafting(self, value):
+        self._held.agent_drafting = value
 
     def _wire_models(self, byok=None):
         """网关、Jev（System 1）与抽取器；换模型配置时只重接这几样，业务对象原样保留。"""

@@ -1,5 +1,5 @@
 // 收件箱（研发、主管）：觉提出、签字人是本人的决策，按 prepared_at 分「准备中 / 待签」（REPLAN 3.2 第 4 条）。
-// 准备中只显示主人在做什么，没有按钮；待签是橙色，点开后签字区在工作面顶部。
+// 准备中只显示主人在做什么；V9.2 模型接口失败没准备成的，写明原因并可整项重跑。待签是橙色，点开后签字区在工作面顶部。
 import { api } from "../api";
 import { PREPARING, useApp, useData, useLabels } from "../ctx";
 import type { Question, RequirementSummary } from "../types";
@@ -8,9 +8,10 @@ import { Score, SideHead } from "./ui";
 export function useInbox() {
   const { me } = useApp();
   const qs = useData(() => api.questions(me), [me]) ?? [];
+  const failures = useData(() => api.agentFailures(me), [me]) ?? {};
   const preparing = qs.filter((q) => q.prepared_at == null);
   const ready = qs.filter((q) => q.prepared_at != null);
-  return { all: qs, preparing, ready };
+  return { all: qs, preparing, ready, failures };
 }
 
 export function ownerText(q: Question, me: string, name: (id: string) => string) {
@@ -22,9 +23,10 @@ export function ownerText(q: Question, me: string, name: (id: string) => string)
 export function InboxSidebar({ selected, guided, select, reqs }: {
   selected: string | null; guided?: string | null; select: (q: Question) => void; reqs: RequirementSummary[];
 }) {
-  const { me } = useApp();
+  const { me, refresh, fail } = useApp();
   const L = useLabels();
-  const { preparing, ready } = useInbox();
+  const { preparing, ready, failures } = useInbox();
+  const retry = (id: string) => api.agentRetry(id, me).then(refresh, fail);
   const object = (q: Question) => {
     const r = reqs.find((x) => x.id === q.refs.requirement_id);
     return r ? L.phen(r.phenomenon) : L.scrub(q.title);
@@ -49,7 +51,15 @@ export function InboxSidebar({ selected, guided, select, reqs }: {
           <p className="flex items-center gap-1.5"><span className="tag">{L.family(q.family)}</span>
             <span className="truncate text-[13px]">{object(q)}</span></p>
           <p className="mt-0.5 text-[12px] text-ink-2">{ownerText(q, me, L.name)}</p>
+          {failures[q.id] && <p className="mt-0.5 text-[12px] text-danger" title={failures[q.id].error}>
+            模型接口失败，没准备成，稍后自动重跑</p>}
         </button>
+      ))}
+      {preparing.filter((q) => failures[q.id]).map((q) => (
+        <div key={`retry:${q.id}`} className="flex items-center gap-2 px-[18px] py-1 text-[12px] text-ink-2">
+          <span className="truncate">{object(q)}</span>
+          <button className="btn btn-plain ml-auto !h-6" onClick={() => retry(q.id)}>现在重跑</button>
+        </div>
       ))}
       {!preparing.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">无</p>}
     </>
