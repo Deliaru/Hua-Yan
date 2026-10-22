@@ -205,8 +205,12 @@ class AgentHub:
                     self.app.auto_execute(q.id)      # v6 契约 6.1：低风险推进由觉自动执行
                     self._dispatched.add((q.id, rounds.get(q.id, 0)))
                     continue
-                if q.owner_id is None or (q.owner_role == "pm" and q.owner_id != "pm:agent"):
-                    # v6：自助会话没有业务员（回问由客户在对话里直接回答）；真人产品经理的问题留在待办，不派 Agent
+                if q.owner_id is None:
+                    # v6：自助会话没有业务员（回问由客户在对话里直接回答）。V9.6a：只是这一轮不派——之后配上人（如客户的归属业务员）再派
+                    exhausted.add(q.id)
+                    continue
+                if q.owner_role == "pm" and q.owner_id != "pm:agent":
+                    # 真人产品经理的问题留在待办，不派 Agent
                     self._dispatched.add((q.id, rounds.get(q.id, 0)))
                     continue
                 try:

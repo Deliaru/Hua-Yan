@@ -13,7 +13,7 @@ import yaml
 from huayan.agent import AgentHub
 from huayan.bus import QuestionBus
 from huayan.clock import get_clock
-from huayan.contracts import (KIND_LEVEL, Actor, Capability, AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
+from huayan.contracts import (KIND_LEVEL, Actor, Candidate, Capability, AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
     Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, MemoryEntry, NeedState, PendingAsk, PointsDraft, Question, Recommendation, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
     JueTimeline, Product, SHANGHAI, Situation, TimelineNode, TimelinePoint)
@@ -179,9 +179,11 @@ class HuayanApp:
 
     def _jue_model(self, name, mode):
         # 原型在 system1 为 OneJev 时用它打分，否则规则模式；Jue-K 只做本地推理。
-        if name == "jue_k":
-            return JueK(self.config["jue_k_dir"], self.config["templates_dir"], mode, self.meter)
-        return JueProto(self.config["templates_dir"], self.system1, mode, self.meter)
+        model = (JueK(self.config["jue_k_dir"], self.config["templates_dir"], mode, self.meter) if name == "jue_k"
+                 else JueProto(self.config["templates_dir"], self.system1, mode, self.meter))
+        off = set(self.config.get("jue_off", ()))      # V9.6a：配置里停用的觉家族（试用停用 leak_risk）
+        model.templates = {k: t for k, t in model.templates.items() if t.family not in off}
+        return model
 
     def emit(self, kind, **fields):
         if self.progress:
@@ -328,11 +330,29 @@ class HuayanApp:
                 req.product_lang = [item for item in req.product_lang if item.edited_by]
                 self._return_to_preparation(req)
                 self._save_requirement(req)
+            elif req.status == "rd_accepted" and session_id in req.session_ids and (changed or req.id in answered):
+                self._conditions_changed(req, session.need.known() if changed else req.known_slots)
         if speaker == "sales":
             session.reply_draft = ""
         self._save_session(session)
         self._after([session_id])
         return session.model_copy(deep=True)
+
+    def _conditions_changed(self, req, known):
+        """V9.6a：已接单的单在返工中条件变了——产品稿里 Agent 起草的部分按新条件重写，化学稿里 Agent 起草的条目清掉、
+        由研发 Agent 重新起草；人改过的条目保留，退回说明里请研发按新条件重新确认。待签问题回到准备中。"""
+        req.known_slots = dict(known)
+        from huayan.escalation import translate
+        draft = translate.draft_product_need(req, [self._sessions[sid] for sid in req.session_ids],
+                                              self.kb, self._actor("pm:agent"), get_clock().now())
+        edited = [i for i in req.product_lang if i.edited_by]
+        req.product_lang = edited + [i for i in draft.product_lang if not any(
+            (i.slot == old.slot if i.slot or old.slot else set(i.quote_refs) & set(old.quote_refs)) for old in edited)]
+        req.chem_lang = [i for i in req.chem_lang if i.edited_by]
+        if edited or req.chem_lang:
+            req.return_notes.append("客户条件有变化，人改过的条目请按新条件重新确认")
+        self._return_to_preparation(req)
+        self._save_requirement(req)
 
     def _sales_session(self, session_id, by):
         self._actor(by, {"sales"})
@@ -659,14 +679,14 @@ class HuayanApp:
         at = get_clock().now()
         state = requirement_state(req, session.need, self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, at, self.events)
         question = self._decision("reuse_product", "adopt_reuse", state.objects[f"requirement:{req_id}"], by)
-        self._recommend_product(session, proposal.product_id, at)
         unit = KnowledgeUnit(id=self.kb.next_claim_id(), kind="claim", level=3,
             title="研发审定的复用说明", text=proposal.customer_note, product_id=proposal.product_id,
             phenomenon_ids=[req.phenomenon], owner=by, confirmed_by=by, source="contributed", created_at=at)
         self.kb.add(unit)
-        self.kb.grant(Capability(id=self.kb.next_cap_id(), form="statement", audience=0,   # 写给客户的话，研发审过后回到客户
+        said = self.kb.grant(Capability(id=self.kb.next_cap_id(), form="statement", audience=0,   # 写给客户的话，研发审过后回到客户
             payload={"text": proposal.customer_note, "product_id": proposal.product_id},
             based_on=[unit.id], granted_by=by, status="active", at=at))
+        self._recommend_product(session, proposal.product_id, at, said.id)
         req.status = "reused"
         for unit in units:
             if unit.level == 2 and unit.owner not in {"pm:agent", "jue"} and not self.ledger.has(unit.owner, unit.id, req.id):
@@ -711,15 +731,17 @@ class HuayanApp:
         self._after([session.id])
         return session.model_copy(deep=True)
 
-    def _recommend_product(self, session, product_id, at):
-        """把一个已发布产品按公开版本推荐到会话（研发审定的复用、研发判定已有产品适用）。"""
+    def _recommend_product(self, session, product_id, at, basis):
+        """把一个已发布产品按公开版本推荐到会话（研发审定的复用、研发判定已有产品适用、本单发布）。
+        V9.6a：basis 是这张推荐所依据的能力，依据失效时推荐随之撤回（_invalidate_capabilities）。"""
         viewer = self.actors[session.sales_id or session.customer_id]
         maximum = "product_usage" if self.kb.is_frozen(viewer.id) else cap(
             viewer, session.customer_id, product_id, self.grants)
         disclosure = self.jev.disclose(session.need, product_id, maximum)
         card = render(product_id, disclosure.choice, viewer, self.kb, session_id=session.id,
                       customer_id=session.customer_id, grants=self.grants)
-        session.recommendation = Recommendation(product_id=product_id, candidates=[], match=None,
+        session.recommendation = Recommendation(product_id=product_id, match=None,
+            candidates=[Candidate(product_id=product_id, unknown_slots=[], capability_id=basis)],
             disclose=disclosure, version=disclosure.choice, at=at)
         session.status = "recommended"
         record_disclosure(card, self)
@@ -753,12 +775,12 @@ class HuayanApp:
                        "conditions": {slot: [value] for slot, value in req.known_slots.items() if slot in required}}
             if limits:
                 payload["limits"] = limits
-            self.kb.grant(Capability(id=self.kb.next_cap_id(), form="applicable", audience=0, payload=payload,
+            basis = self.kb.grant(Capability(id=self.kb.next_cap_id(), form="applicable", audience=0, payload=payload,
                 based_on=list(claim_ids), granted_by=by, status="proposed", at=at))
         req.status = "rejected"
         for sid in req.session_ids:
             if applicable_product:
-                self._recommend_product(self._sessions[sid], applicable_product, at)
+                self._recommend_product(self._sessions[sid], applicable_product, at, basis.id)
             else:
                 self._sessions[sid].status = "closed"
         self.events.append("project_declined", by, {"requirement_id": req_id, "reason": reason,
@@ -1306,7 +1328,7 @@ class HuayanApp:
         self._after(req_ids=[req_id])
         return self.requirement_view(req_id, by).requirement
 
-    def release_product(self, req_id, by):
+    def release_product(self, req_id, by, name=None, category=None):
         req, _ = self._requirement(req_id, by, {"rd"}, {"rd_confirmed"})
         if not req.sheet or not req.product_id or not req.public_points:
             raise ValueError("发布需要关联产品、对外要点与说明书")
@@ -1321,13 +1343,25 @@ class HuayanApp:
         question = self._decision("release", "release_product", state.objects[f"requirement:{req_id}"], by)
         seed = next(p for p in self.seeds.products if p.id == req.product_id)
         update = {"sheet": req.sheet.sheet, "usage": req.sheet.usage}
-        if seed.id == f"proj:{req.id}":          # 接单时立的项目：机理取化学语言条目，第一条适用情境取通过试样的条件
-            passed = next(t for t in self._trials.values() if t.requirement_id == req.id and t.result == "pass")
-            update |= {"mechanism": "\n".join(i.text for i in req.chem_lang), "formula": "（模拟）配方不录入本系统",
+        if seed.id == f"proj:{req.id}":          # 接单时立的项目：机理取转译出来的化学语言条目，第一条适用情境取最后一次通过试样的条件
+            passed = [t for t in self._trials.values() if t.requirement_id == req.id and t.result == "pass"][-1]
+            mechanism = "\n".join(i.text for i in req.chem_lang if i.ku_refs or i.edited_by)
+            update |= {"mechanism": mechanism or "（研发未录入机理）", "formula": "（模拟）配方不录入本系统",
                        "situations": [Situation(phenomenon=req.phenomenon, capability_id=self.kb.next_cap_id(),
                                                 conditions={s: [v] for s, v in passed.conditions.items()})]}
+        if seed.id == f"proj:{req.id}" and not ((name or "").strip() and (category or "").strip()):
+            raise ValueError("新立项目发布时请填写产品名称和类别")
+        update |= {k: v.strip() for k, v in (("name", name), ("category", category)) if v and v.strip()}
         product = seed.model_copy(update=update, deep=True)
-        released = flow.release_product(req, product, self.kb, self.ledger, self.events, by, get_clock().now())
+        at = get_clock().now()
+        released = flow.release_product(req, product, self.kb, self.ledger, self.events, by, at)
+        for sid in req.session_ids:            # V9.6a：原会话收到新产品，依据是本单发布的适用情境
+            session = self._sessions[sid]
+            situation = next((x for x in released.situations if x.phenomenon == session.need.phenomenon
+                              and consistent(released, session.need.known())), None)
+            if session.status != "closed" and situation:
+                self._recommend_product(session, released.id, at, situation.capability_id)
+                self._save_session(session)
         if question:
             self._settle(question.id, Resolution(action="sign", by=by))
         self._save_requirement(req)
@@ -1485,21 +1519,25 @@ class HuayanApp:
         self.scan()
 
     def _invalidate_capabilities(self, by):
-        active, withdrawn = {c.id for c in self.kb.capabilities() if c.status == "active"}, []
+        """V9.6a：每张推荐都要有一条仍有效的依据。依据撤销或挂起时，换成同一产品仍有效、不带研发限制的情境
+        （收窄后仍覆盖已知条件的推荐因此保留）；没有可替代的就撤回，重新匹配并留下 match 事件，
+        仍无合适产品时觉照常提出升级，客户不会停在没有下文的会话里。研发直接给的依据在产品经理批准前是 proposed，照样有效。"""
+        caps, limited, withdrawn = {c.id: c for c in self.kb.capabilities()}, self.kb.limits(), []
         for session in self._sessions.values():
-            if session.status in {"escalated", "closed"}:
-                continue
             rec = session.recommendation
             selected = next((c for c in rec.candidates if c.product_id == rec.product_id), None) if rec else None
-            # 命中的情境失效后，按本层现有情境重新匹配；收窄后仍覆盖已知条件的推荐保留
-            if selected and selected.capability_id not in active and rec.product_id not in {
-                    c.product_id for c in match_candidates(session.need.phenomenon, session.need.known(),
-                        self.kb.view(self._actor(session.sales_id or session.customer_id)).products)}:
-                self.events.append("recommendation_withdrawn", by, {"product_id": rec.product_id,
-                                   "capability_id": selected.capability_id}, session_id=session.id)
-                # 重新匹配并留下 match 事件：仍无合适产品时觉照常提出升级，客户不会停在没有下文的会话里
-                recommend(session, self)
-                withdrawn.append(session.id)
+            basis = caps.get(selected.capability_id) if selected and selected.capability_id else None
+            if session.status not in {"escalated", "closed"} and basis and basis.status not in {"active", "proposed"}:
+                products = self.kb.view(self._actor(session.sales_id or session.customer_id)).products
+                other = next((c for c in match_candidates(session.need.phenomenon, session.need.known(), products, limited)
+                              if c.product_id == rec.product_id and c.capability_id not in limited), None)
+                if other:
+                    selected.capability_id = other.capability_id
+                else:
+                    self.events.append("recommendation_withdrawn", by, {"product_id": rec.product_id,
+                                       "capability_id": basis.id}, session_id=session.id)
+                    recommend(session, self)
+                    withdrawn.append(session.id)
             session.hints = self.ask_hints(session.need)
             self._save_session(session)
         self._after(withdrawn)
@@ -1924,6 +1962,9 @@ class HuayanApp:
             return f"{req.id} 还没有复用建议，查过后请用 propose_reuse 写下（没有可用产品也要写下）"
         if q.family == "confirm_translation" and not req.chem_lang:
             return f"{req.id} 还没有化学语言条目，请用 draft_chem_need 起草"
+        if q.family == "confirm_translation" and (missing := [s for s in req.known_slots
+                                                               if not any(i.slot == s for i in req.chem_lang)]):
+            return f"{req.id} 的化学语言条目还没有承接条件 {'、'.join(missing)}，请用 draft_chem_need 按当前条件重新起草"
         if q.family == "release" and req.sheet is None:
             return f"{req.id} 还没有说明书草稿，请用 package_sheet 生成"
         if q.family in {"release", "seal_leak"} and (hits := self.leak_check(req.id, req.assigned_rd)):

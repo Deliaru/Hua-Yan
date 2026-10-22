@@ -713,6 +713,9 @@ function SheetReview({ view, release, dismiss }: { view: RequirementView; releas
   const [usage, setUsage] = useState(s.usage);
   useEffect(() => { setSheet(s.sheet); setUsage(s.usage); }, [s.sheet, s.usage]);
   const changed = sheet !== s.sheet || usage !== s.usage;
+  const opened = req.product_id === `proj:${req.id}`;     // 接单时新立的项目：名称、类别由研发发布时填写
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
   return (
     <>
       {release && (
@@ -742,9 +745,19 @@ function SheetReview({ view, release, dismiss }: { view: RequirementView; releas
             : <p className="text-ink-2">未命中封存项与研发术语（规则匹配挡不住换说法，最后一道闸是你的审定）</p>}
         </div>
       </div>
+      {release && opened && (
+        <div className="row !items-start">
+          <span className="w-14 shrink-0 text-[13px] text-ink-2">新品</span>
+          <div className="flex min-w-0 flex-1 gap-2">
+            <div className="flex-1"><Field value={name} onChange={setName} rows={1} label="产品名称" placeholder="产品名称（必填）" /></div>
+            <div className="w-40"><Field value={category} onChange={setCategory} rows={1} label="类别" placeholder="类别，如匀染剂" /></div>
+          </div>
+        </div>
+      )}
       <div className="row gap-2">
         {changed && <Act kind="plain" label="保存说明书" run={() => api.sheet(req.id, { sheet, usage }, me)} />}
-        {release && <Act label="审定发布" disabled={changed} run={() => api.release(req.id, me)} />}
+        {release && <Act label="审定发布" disabled={changed || (opened && !(name.trim() && category.trim()))}
+          run={() => api.release(req.id, me, name, category)} />}
         {dismiss}
       </div>
     </>

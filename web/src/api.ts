@@ -114,7 +114,7 @@ export const api = {
     call("contribute", { req_id, item_index, scene_phrase, chem_term, by }),
   points: (req_id: string, text: string, sealed: string[], by: string) => call("points", { req_id, text, sealed, by }),
   sheet: (req_id: string, sheet: SheetDraft, by: string) => call("sheet", { req_id, sheet, by }),
-  release: (req_id: string, by: string) => call("release", { req_id, by }),
+  release: (req_id: string, by: string, name = "", category = "") => call("release", { req_id, by, name, category }),
   decideDecrypt: (question_id: string, approve: boolean, text: string, by: string) =>
     call("decrypt/decide", { question_id, approve, text, by }),
   trial: (req_id: string, result: "pass" | "fail", by: string, cause = "none", missing_slots: string[] = []) =>

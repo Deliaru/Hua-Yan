@@ -32,6 +32,9 @@ class QuestionBus:
             if existing.status == "open":
                 existing.evidence.extend(e for e in q.evidence if e not in existing.evidence)
                 existing.refs.update(q.refs)        # 引用随对象最新状态（如又有一张单判过同一适用）
+                # V9.6a：当初找不到人的（如自助客户还没有归属业务员），配上人之后再提出时补上主人与签字人
+                existing.owner_id = existing.owner_id or q.owner_id
+                existing.signer_id = existing.signer_id or q.signer_id
                 self._snapshot(existing)
                 return existing
         if any(x.status == "dismissed" and q.created_at - x.resolved_at < self.suppress for x in same):

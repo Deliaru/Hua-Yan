@@ -170,7 +170,8 @@ class _Humans:
             elif f == "seal_points":
                 app.set_public_points(req_id, "（模拟）按需求单条件试样通过；按推荐用量使用。", [], by)
             elif f == "release":
-                app.release_product(req_id, by)
+                product = next(p for p in app.seeds.products if p.id == app._requirements[req_id].product_id)
+                app.release_product(req_id, by, product.name, product.category)   # 模拟研发沿用立项时的名称与类别
             else:                                          # 失真、对外泄密、沉淀等：模拟人不处理内容，直接 dismiss
                 app.resolve(q.id, "dismiss", by)
                 return self._log(f, q.object_id, "dismiss", by, q.id)

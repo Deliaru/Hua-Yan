@@ -91,7 +91,14 @@ def test_translation_release_and_ownership(tmp_path):
     assert app.return_for_conditions(req.id, ["equipment"], rd).status == "rd_accepted"
     assert any(q.object_id == f"slot:{req.id}/equipment" for q in app.bus.list(family="ask_back"))
     app.add_turn(session.id, "customer", "设备是气流缸")
-    assert app.requirement_view(req.id, rd).requirement.known_slots["equipment"] == "气流染色机"
+    # V9.6a：条件变了，化学稿里 Agent 起草的条目清掉、研发改过的保留并请研发重新确认；没按新条件重新起草前不算准备好
+    returned = app.requirement_view(req.id, rd).requirement
+    assert returned.known_slots["equipment"] == "气流染色机"
+    assert [i.edited_by for i in returned.chem_lang] == [rd] and "重新确认" in returned.return_notes[-1]
+    assert any(i.slot == "equipment" and "气流" in i.text for i in returned.product_lang)
+    confirm = next(q for q in app.bus.list(family="confirm_translation") if q.object_id == f"requirement:{req.id}")
+    assert "重新起草" in app.preparation_gap(confirm.id)
+    app.translate_requirement(req.id, rd)
     prepare("confirm_translation", f"requirement:{req.id}")
     req = app.confirm_translation(req.id, rd)
     assert not app.bus.list(family="trial_risk")
@@ -120,6 +127,7 @@ def test_translation_release_and_ownership(tmp_path):
     assert back.id not in {q.id for q in app.bus.list(family="ask_back")}
     assert app.requirement_view(req.id, rd).requirement.known_slots["equipment"] == "气流染色机"
     assert not any(q.object_id == f"slot:{req.id}/equipment" for q in app.bus.list(family="ask_back"))
+    app.translate_requirement(req.id, rd)
     prepare("confirm_translation", f"requirement:{req.id}")
     req = app.confirm_translation(req.id, rd)
     assert not app.bus.list(family="trial_rework")
@@ -145,8 +153,13 @@ def test_translation_release_and_ownership(tmp_path):
     rewards = [e for e in app.ledger.list() if e.reason == "product_released"]
     assert len(rewards) == 1 and rewards[0].ku_id == "ku:sheet:T-206"
     row = next(r for r in app.contributions("pm:agent") if r.ku_id == "ku:sheet:T-206")
-    assert row.points == app.config["points"]["product_released"]
-    assert row.n_cited == 0 and row.used_by == ["T-206"]
+    # V9.6a：发布后原会话收到新产品推荐，依据是本单发布的适用情境；这次推荐给说明书记一次引用
+    origin = app._sessions[session.id]
+    released = next(p for p in app.kb.products() if p.id == "T-206")
+    assert origin.status == "recommended" and origin.recommendation.product_id == "T-206"
+    assert origin.recommendation.candidates[0].capability_id in {x.capability_id for x in released.situations}
+    assert row.points == app.config["points"]["product_released"] + app.config["points"]["cited"]
+    assert row.n_cited == 1 and row.used_by == ["T-206", session.id]
     with pytest.raises(ValueError):
         app.release_product(req.id, rd)
     other = app.start_session("customer:C02", "sales:S01")
@@ -353,3 +366,105 @@ def test_translation_release_and_ownership(tmp_path):
     assert app.kb._caps[ask["capability_id"]].status == "suspended"
     review = next(q for q in app.bus.list(family="qi_review") if q.refs["ku_id"] == ask["ku_id"])
     assert review.signer_id == "rd:R01"
+
+
+def test_corrected_condition_reaches_release(tmp_path):
+    """V9.6a：立项后客户更正条件——发布的适用情境与说明书用最后一次通过试样、本单当前条件；原会话收到推荐，
+    按旧条件来的下一位客户不会被推荐。"""
+    config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
+    config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"))
+    path = tmp_path / "app.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    app = HuayanApp.build(str(path))
+    clock = get_clock()
+
+    def prepare(family, object_id):
+        question = next(q for q in app.bus.list(family=family) if q.object_id == object_id)
+        app.mark_prepared(question.id, question.owner_id)
+
+    session = app.start_session("customer:C01", "sales:S01")
+    app.add_turn(session.id, "customer", "洗了掉色厉害，涤纶的")
+    app.save_escalate_note(session.id, "（模拟）涤纶掉色，现有产品无法匹配", "sales:S01")
+    prepare("escalate_need", f"session:{session.id}")
+    req = app.escalate(session.id, "sales:S01")
+    app.save_reuse_proposal(req.id, None, [], "", "离线：未检索现成产品", "pm:agent")
+    app.draft_requirement(req.id, "pm:agent")
+    prepare("accept_requirement", f"requirement:{req.id}")
+    rd = req.assigned_rd
+    app.accept_requirement(req.id, rd)
+    app.translate_requirement(req.id, rd)
+    prepare("confirm_translation", f"requirement:{req.id}")
+    req = app.confirm_translation(req.id, rd)
+    assert req.product_id == f"proj:{req.id}"
+    app.record_requirement_trial(req.id, "pass", rd)                       # 按旧条件（涤纶）通过
+    prepare("market_eval", f"requirement:{req.id}")
+    app.record_market_eval(req.id, "fail", "（模拟）客户说布其实是锦纶氨纶", "sales:S01", missing_slots=["fiber"])
+    prepare("trial_rework", f"requirement:{req.id}")
+    app.rework_requirement(req.id, rd)
+    clock.advance_to(clock.now() + timedelta(hours=1))
+    app.add_turn(session.id, "customer", "其实是锦纶氨纶的")
+    returned = app.requirement_view(req.id, rd).requirement
+    assert returned.known_slots["fiber"] == "锦纶氨纶"
+    assert [i for i in returned.product_lang if i.slot == "fiber"][0].text == "条件：锦纶氨纶"
+    app.translate_requirement(req.id, rd)
+    prepare("confirm_translation", f"requirement:{req.id}")
+    app.confirm_translation(req.id, rd)
+    app.record_requirement_trial(req.id, "pass", rd)                       # 按更正后的条件通过
+    prepare("market_eval", f"requirement:{req.id}")
+    app.record_market_eval(req.id, "pass", "（模拟）客户试用通过", "sales:S01")
+    app.save_points_draft(req.id, "（模拟）改善锦纶氨纶色牢度。", [], rd)
+    prepare("seal_points", f"requirement:{req.id}")
+    app.set_public_points(req.id, "（模拟）改善锦纶氨纶色牢度。", [], rd)
+    sheet = app.package_sheet(req.id, "pm:agent")
+    assert "锦纶氨纶" in sheet.usage and "涤纶" not in sheet.usage
+    prepare("release", f"requirement:{req.id}")
+    released = app.release_product(req.id, rd, name="（模拟）锦氨固色剂 T-901", category="固色剂")
+    assert (released.name, released.category) == ("（模拟）锦氨固色剂 T-901", "固色剂")
+    assert released.situations[0].conditions["fiber"] == ["锦纶氨纶"]
+    assert "未转译" not in released.mechanism
+    origin = app._sessions[session.id]
+    assert origin.status == "recommended" and origin.recommendation.product_id == released.id
+    other = app.start_session("customer:C02", "sales:S01")
+    other = app.add_turn(other.id, "customer", "洗了掉色厉害，涤纶的")
+    assert other.recommendation is None or other.recommendation.product_id != released.id
+
+
+def test_trial_risk_counts_required_conditions_never_obtained(tmp_path):
+    """V9.6a：试样前风险既数客户答过「不清楚」的必问条件，也数一直没取得的；配置可以停用某个觉家族。"""
+    from huayan.jue.state import requirement_state
+    from huayan.contracts import Actor
+    config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
+    config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"), jue_off=["leak_risk"])
+    path = tmp_path / "app.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    app = HuayanApp.build(str(path))
+    assert all(t.family != "leak_risk" for m in (app.jue_realtime, app.jue_scheduled) for t in m.templates.values())
+
+    def prepare(family, object_id):
+        question = next(q for q in app.bus.list(family=family) if q.object_id == object_id)
+        app.mark_prepared(question.id, question.owner_id)
+
+    session = app.start_session("customer:C01", "sales:S01")
+    app.add_turn(session.id, "customer", "洗了掉色厉害，涤纶的")
+    app.save_escalate_note(session.id, "（模拟）涤纶掉色，现有产品无法匹配", "sales:S01")
+    prepare("escalate_need", f"session:{session.id}")
+    req = app.escalate(session.id, "sales:S01")
+    app.save_reuse_proposal(req.id, None, [], "", "离线：未检索现成产品", "pm:agent")
+    app.draft_requirement(req.id, "pm:agent")
+    prepare("accept_requirement", f"requirement:{req.id}")
+    app.accept_requirement(req.id, req.assigned_rd)
+    app.translate_requirement(req.id, req.assigned_rd)
+    prepare("confirm_translation", f"requirement:{req.id}")
+    app.confirm_translation(req.id, req.assigned_rd)
+    assert not app.bus.list(family="trial_risk")
+    # 纤维（掉色的必问条件）从没取得过：单上没有、客户也没答过「不清楚」
+    app._requirements[req.id].known_slots.pop("fiber")
+    app._sessions[session.id].need.slots.pop("fiber")
+    state = requirement_state(app._requirements[req.id], app._sessions[session.id].need,
+                              app.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")),
+                              app.kb, get_clock().now(), app.events)
+    attrs = state.objects[f"requirement:{req.id}"].attrs
+    assert (attrs["n_unknown_required"], attrs["n_missing_required"]) == (0, 1)
+    app._after(req_ids=[req.id])
+    risk = next(q for q in app.bus.list(family="trial_risk") if q.object_id == f"requirement:{req.id}")
+    assert any("还没取得 1 个" in e.summary for e in risk.evidence)

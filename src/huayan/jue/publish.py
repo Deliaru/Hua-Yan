@@ -69,7 +69,7 @@ def _summary(family: str, a: dict) -> str:
     if family == "seal_leak":
         return f"说明书与用法中有 {a['n_leak_hits']} 句命中封存项、L3 术语或研发方向假设"
     if family == "trial_risk":
-        return (f"必问条件答不清楚 {a['n_unknown_required']} 个、无原话依据 {a['n_unquoted_slots']} 个；"
+        return (f"必问条件答不清楚 {a['n_unknown_required']} 个、还没取得 {a.get('n_missing_required', 0)} 个、无原话依据 {a['n_unquoted_slots']} 个；"
                 f"同现象历史试样因需求条件缺失失败 {a['hist_req_fail_rate']:.0%}，同产品同条件失败率 {a['hist_fail_rate']:.0%}")
     if family == "stale_capability":
         return (f"授予 {a['days_since_grant']:.0f} 天、被使用 {a['n_used']} 次；之后 {a['n_outcomes']} 次试样产品原因失败 {a['n_fail']} 次，"

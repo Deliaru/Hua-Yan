@@ -257,7 +257,7 @@ GET = {
     "/api/report": report,
     "/api/agents/conversation": lambda app, p: app.agents.conversation(p["actor"], p.get("session_id"), p.get("thread")),
     "/api/agents/memory": lambda app, p: app.memories(p["actor"]),           # v8：助手记忆，人能看能删
-    "/api/agents/trace": lambda app, p: app.agents.trace(p["conversation_id"]),
+    "/api/agents/trace": lambda app, p: own_trace(app, p["conversation_id"], p.get("viewer")),
     "/api/agents/pending": lambda app, p: app.agents.pending(p["actor"]),
     "/api/agents/failures": lambda app, p: app.agents.failures_for(p["viewer"]),     # V9.2：因模型接口失败没准备成的问题
     "/api/trial/stamp": lambda app, p: {"events": len(app.events.events), "failures": len(app.agents.failures)},
@@ -270,7 +270,7 @@ POST = {
     "/api/qi/request-share": lambda app, p: app.request_share(p["ku_id"], p["by"]),
     "/api/qi/withdraw": lambda app, p: app.withdraw_claim(p["ku_id"], p["by"]),
     "/api/sessions": lambda app, p: app.start_session(p["customer_id"], p.get("sales_id")),
-    "/api/turn": lambda app, p: app.add_turn(p["session_id"], p["speaker"], p["text"]),
+    "/api/turn": lambda app, p: app.add_turn(*writable_turn(app, p), p["text"]),
     "/api/recommend": lambda app, p: app.recommend_now(p["session_id"]),
     "/api/resolve": lambda app, p: app.resolve(p["question_id"], p["action"], p["by"], p.get("note", "")),
     "/api/unfreeze": lambda app, p: app.unfreeze_access(p["actor_id"], p["by"]),     # v8 Q9.8
@@ -300,7 +300,7 @@ POST = {
     "/api/qi/narrow": lambda app, p: app.narrow_capability(p["cap_id"], p["conditions"], p["by"]),
     "/api/points": lambda app, p: app.set_public_points(p["req_id"], p["text"], p["sealed"], p["by"]),
     "/api/sheet": lambda app, p: app.save_sheet(p["req_id"], SheetDraft.model_validate(p["sheet"]), p["by"]),
-    "/api/release": lambda app, p: app.release_product(p["req_id"], p["by"]),
+    "/api/release": lambda app, p: app.release_product(p["req_id"], p["by"], p.get("name"), p.get("category")),
     "/api/trial": lambda app, p: app.record_requirement_trial(p["req_id"], p["result"], p["by"],
                                                               p.get("cause", "none"), p.get("missing_slots", ())),
     "/api/decrypt/request": lambda app, p: app.request_decrypt(p["session_id"], p["by"]),
@@ -730,7 +730,22 @@ def set_trial_role(sid, p):
     return {"actor": actor}
 
 
-SPEAKERS = {"customer": {"customer"}, "sales": {"customer", "sales"}}   # 业务员可以替客户录入原话
+SPEAKERS = {"customer": {"customer"}, "sales": {"customer", "sales"}}
+
+def writable_turn(app, p):
+    """V9.6a：试用里（by 由服务端认定）只有会话的客户本人或负责它的业务员能在会话里说话。"""
+    if "by" in p:
+        session = next((s for s in app.sessions() if s.id == p["session_id"]), None)
+        if session is None or p["by"] not in (session.customer_id, session.sales_id):
+            raise PermissionDenied("只能在自己参与的会话里说话")
+    return p["session_id"], p["speaker"]
+
+
+def own_trace(app, conversation_id, viewer):
+    """V9.6a：助手轨迹的工具结果里有委托人这一层的知识原文，只给对话的委托人本人。"""
+    if not viewer or not conversation_id.startswith(f"conv:{viewer}:"):
+        raise PermissionDenied("只能查看自己 Agent 的轨迹")
+    return app.agents.trace(conversation_id)   # 业务员可以替客户录入原话
 
 
 def trial_params(sid, method, path, params):

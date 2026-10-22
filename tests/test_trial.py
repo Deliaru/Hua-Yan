@@ -91,3 +91,48 @@ def test_switch_models_keeps_business_and_resume(tmp_path):
         app.switch_models(run_root="elsewhere")
     resumed = HuayanApp.build(config, run_id="trial", resume=True)
     assert [len(s.turns) for s in resumed.sessions()] == [len(app.sessions()[0].turns)]
+
+
+def test_turn_and_trace_check_the_server_identity(tmp_path):
+    """V9.6a：看不到的会话不能往里说话；助手轨迹只给委托人本人。"""
+    app = HuayanApp.build(_config(tmp_path), run_id="trial")
+    session = app.start_session("customer:C01", "sales:S01")
+    for by in ("customer:C02", "sales:S02"):
+        with pytest.raises(PermissionDenied):
+            server.POST["/api/turn"](app, {"session_id": session.id, "speaker": "customer", "text": "布面发花", "by": by})
+    assert server.POST["/api/turn"](app, {"session_id": session.id, "speaker": "customer", "text": "布面发花",
+                                          "by": "sales:S01"}).turns[-1].text == "布面发花"
+    with pytest.raises(PermissionDenied):
+        server.GET["/api/agents/trace"](app, {"conversation_id": "conv:rd:R01:inbox", "viewer": "customer:C02"})
+    assert server.GET["/api/agents/trace"](app, {"conversation_id": "conv:rd:R01:inbox", "viewer": "rd:R01"}) == []
+
+
+def test_ownerless_question_gets_its_owner_when_raised_again():
+    """V9.6a：自助客户当时没有归属业务员，觉提出的客户评价没人接；配上人之后再提出，补上主人与签字人。"""
+    from datetime import datetime, timezone
+    from huayan.bus import QuestionBus
+    from huayan.contracts import Question
+    from huayan.events import EventLog
+    bus = QuestionBus(EventLog())
+    ask = dict(id="", family="market_eval", title="客户评价", object_id="requirement:req:1", owner_role="sales",
+               signer_role="sales", scored_by="rule", discoverer="jue_proto", dedup_key="market_eval:requirement:req:1",
+               created_at=datetime(2026, 10, 23, tzinfo=timezone.utc))
+    first = bus.publish(Question(**ask))
+    assert first.owner_id is None
+    again = bus.publish(Question(**ask, owner_id="sales:S01", signer_id="sales:S01"))
+    assert again.id == first.id and (again.owner_id, again.signer_id) == ("sales:S01", "sales:S01")
+
+
+def test_ownerless_question_is_dispatched_once_it_has_an_owner(tmp_path):
+    """V9.6a：没人接的问题这一轮不派，但不记成派过；配上主人后下一次 dispatch 照常派。"""
+    app = HuayanApp.build(_config(tmp_path), run_id="trial")
+    from datetime import datetime, timezone
+    from huayan.contracts import Question
+    q = app.bus.publish(Question(id="", family="market_eval", title="客户评价", object_id="requirement:req:9",
+        owner_role="sales", signer_role="sales", scored_by="rule", discoverer="jue_proto",
+        dedup_key="market_eval:requirement:req:9", created_at=datetime(2026, 10, 23, tzinfo=timezone.utc)))
+    app.agents.dispatch()
+    assert q.id in {x.id for x in app.agents.pending_dispatch()}
+    q.owner_id = q.signer_id = "sales:S01"
+    app.agents.dispatch()
+    assert q.id not in {x.id for x in app.agents.pending_dispatch()}

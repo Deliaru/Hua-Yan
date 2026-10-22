@@ -128,7 +128,7 @@ def draft_chem_need(req: Requirement, sessions: list[Session], kb: KnowledgeBase
 def package_sheet(req: Requirement) -> SheetDraft:
     """只读产品需求条目与对外要点，不接触机理、配方与 L3 转化对照。
     说明书给业务员和客户看：正文是研发放出的对外要点，不把「需要……」的产品需求原样拼进去。"""
-    conditions = "、".join(i.text.removeprefix("条件：") for i in req.product_lang if i.slot is not None)
+    conditions = "、".join(req.known_slots.values())            # V9.6a：本单当前确认的条件，不取可能过时的产品稿
     sheet = f"（模拟）{req.public_points}"
     usage = f"（模拟）适用条件：{conditions or '见说明书'}；用量与工艺以试样结果为准，请联系业务员确认。"
     return SheetDraft(sheet=sheet, usage=usage)

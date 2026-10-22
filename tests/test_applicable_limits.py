@@ -89,3 +89,40 @@ def test_limits_pass_the_leak_check(tmp_path):
     with pytest.raises(ValueError, match="限制条件含研发术语"):
         app.decline_project(req.id, "现有固色剂同样有效", req.assigned_rd, "T-301",
                             limits="染浴 pH 漂移导致上染速率波动时不适用")
+
+
+def _recommended(app, customer):
+    session = app.start_session(customer, "sales:S01")
+    app.add_turn(session.id, "customer", "涤纶的布洗了褪色")
+    return app._sessions[session.id]
+
+
+def test_revoke_leaves_no_recommendation_on_a_limited_basis(tmp_path):
+    """V9.6a：同一产品还有一条带限制的情境时，撤销不带限制的那条，推荐也要撤回，不能挂在已撤销的能力上。"""
+    app = _app(tmp_path)
+    plain = _declined(app, "")
+    limited = app.kb.grant(plain.model_copy(update={"id": app.kb.next_cap_id(), "status": "active",
+                                                   "payload": {**plain.payload, "limits": LIMIT}}))
+    app.kb.approve(limited.id, "pm:P01")
+    session = _recommended(app, "customer:C02")
+    assert session.recommendation.product_id == "T-301"
+    app.revoke_capability(plain.id, plain.granted_by)
+    assert app._sessions[session.id].recommendation is None
+    assert any(e.session_id == session.id and e.payload["capability_id"] == plain.id
+               for e in app.events.query(["recommendation_withdrawn"]))
+    assert _matched(app, session.id)["limited_ids"] == ["T-301"]
+
+
+def test_withdrawn_claim_takes_back_the_rd_recommendation(tmp_path):
+    """V9.6a：研发判「已有产品适用」直接推给原客户的推荐记着依据；研发撤回这条结论，推荐随之撤回并重新匹配。"""
+    app = _app(tmp_path)
+    session, req = _escalated(app, "customer:C01")
+    app.decline_project(req.id, "现有固色剂对这类情况同样有效", req.assigned_rd, "T-301")
+    assert app._sessions[session.id].recommendation.product_id == "T-301"
+    cap = next(c for c in app.kb.capabilities() if c.payload.get("product_id") == "T-301" and c.status == "proposed")
+    app.withdraw_claim(cap.based_on[0], req.assigned_rd)
+    assert app._sessions[session.id].recommendation is None
+    assert _matched(app, session.id)["candidate_ids"] == []
+    # 这位客户之前升级过；推荐撤回后觉照常跟进，再次提出升级
+    assert any(q.object_id == f"session:{session.id}" for q in app.bus.list()
+               if q.family in {"escalate_need", "route_rd"})

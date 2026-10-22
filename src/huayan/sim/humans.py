@@ -437,7 +437,8 @@ class LLMHumans:
             "trial_risk": {"return": Button("先回问勾选的条件再试样", lambda c: app.return_for_conditions(rid, values(c), by), "slots")},
             "trial_rework": {"rework": Button("退回重新转译", lambda c: app.rework_requirement(rid, by))},
             "seal_points": {"points": Button("签字放出对外要点（写在 text）", lambda c: app.set_public_points(rid, c.text, [], by), "text")},
-            "release": {"release": Button("审定发布", lambda c: app.release_product(rid, by))},
+            "release": {"release": Button("审定发布", lambda c: app.release_product(rid, by, *next(
+                (p.name, p.category) for p in app.seeds.products if p.id == app._requirements[rid].product_id)))},
             "qi_grant": {"grant": Button("签字授予", lambda c: app.sign_qi_grant(q.id, by, note=c.text),
                                          "text" if q.refs.get("form") == "statement" else "")},
             "qi_review": {"keep": Button("复核后保留", lambda c: app.resolve(q.id, "sign", by)),

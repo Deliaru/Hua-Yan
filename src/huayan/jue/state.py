@@ -30,8 +30,11 @@ def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: d
 
 def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
     """p_none、p_top、n_candidates 取本会话最近一次 match 事件。
-    escalated 取 escalate 事件（业务员签字升级是历史事实）：现成产品被采用后会话变为 recommended，不能因此再次到点升级。"""
-    relevant = [e for e in events.query(["match", "decrypt_request", "escalate"]) if e.session_id == sess.id]
+    escalated 取 escalate 事件（业务员签字升级是历史事实）：现成产品被采用后会话变为 recommended，不能因此再次到点升级。
+    V9.6a：推荐因依据失效被撤回之后，只看撤回之后有没有升级——上一次升级得到的推荐已经不成立，觉照常跟进。"""
+    relevant = [e for e in events.query(["match", "decrypt_request", "escalate", "recommendation_withdrawn"])
+                if e.session_id == sess.id]
+    withdrawn = max((i for i, e in enumerate(relevant) if e.kind == "recommendation_withdrawn"), default=-1)
     match = next((e.payload for e in reversed(relevant) if e.kind == "match"), None)
     p_none = match["p_none"] if match is not None else 0.0
     p_top = max(match["p_choice"].values(), default=0.0) if match is not None else 0.0
@@ -53,7 +56,7 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
         "matched": match is not None, "p_none": p_none, "p_top": p_top,
         "n_candidates": len(match["candidate_ids"]) if match is not None else 0,
         "top_is_none": match is not None and p_none >= p_top,
-        "recommended": sess.status == "recommended", "escalated": any(e.kind == "escalate" for e in relevant),
+        "recommended": sess.status == "recommended", "escalated": any(e.kind == "escalate" for e in relevant[withdrawn + 1:]),
         "chem_savvy": need.profile.chem_savvy, "asked_mechanism": need.profile.asked_mechanism,
         "decrypt_requested": any(e.kind == "decrypt_request" for e in relevant),
         "self_serve": sess.origin == "customer", "sales_assigned": sess.sales_id is not None,
@@ -167,6 +170,8 @@ def _risk_attrs(req: Requirement, need: NeedState, seeds: Seeds, kb: KnowledgeBa
             and all(t.conditions.get(s) == v for s, v in req.known_slots.items() if s in t.conditions)]
     phen_trials = [t for t in trials if t.product_id in solvers]
     return {"n_unknown_required": len(unknown & set(phen.required_slots)),
+            # V9.6a：必问条件既没取得、客户也没答过「不清楚」——多半是没问到
+            "n_missing_required": len(set(phen.required_slots) - set(req.known_slots) - unknown),
             "n_unquoted_slots": sum(not (need.slots.get(s) and need.slots[s].quote) for s in req.known_slots),
             "match_possible": bool(matched) and matched[0].status == "possible",
             "hist_n_trials": len(same), "hist_fail_rate": sum(t.result == "fail" for t in same) / len(same) if same else 0.0,
