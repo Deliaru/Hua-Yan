@@ -90,8 +90,8 @@ def ask_customer(session, hint, deps):
                                           "text": hint.ask_text}, session_id=session.id)
 
 
-def handle_turn(session, speaker, text, deps, answering=False):
-    """回问及已签字升级的会话只抽取和回答；需求单生命周期由门面处理。"""
+def handle_turn(session, speaker, text, deps, answering=False, asking=()):
+    """回问及已签字升级的会话只抽取和回答；需求单生命周期由门面处理。asking：客户页上正显示、对话里没有的回问槽位。"""
     n = len(session.turns) + 1
     turn = Turn(id=f"turn:{session.id}:{n}", session_id=session.id, n=n, speaker=speaker,
                 text=text, ts=get_clock().now())
@@ -102,7 +102,7 @@ def handle_turn(session, speaker, text, deps, answering=False):
     view = [{"id": p.id, "name": p.name, "recommended": p.id == rec_id}
             for p in deps.kb.view(deps.actors[_acting(session)]).products]
     # ⑰′：这句话在问什么、指到哪些产品，只由抽取理解一次；下游只读这两个字段
-    result = validate_extraction(deps.extractor.extract(session.turns, session.need, view), deps.seeds, session.turns,
+    result = validate_extraction(deps.extractor.extract(session.turns, session.need, view, asking=asking if speaker == "customer" else ()), deps.seeds, session.turns,
                                  {p["id"] for p in view})
     previous_conditions = session.need.phenomenon, session.need.known()
     after_rec = bool(rec_id)

@@ -317,7 +317,8 @@ class HuayanApp:
                 raise ValueError([hit.model_dump() for hit in hits])
         previous = current.need
         asks = [q for q in self.bus.list(family="ask_back") if q.refs["session_id"] == session_id]
-        session = handle_turn(current, speaker, text, self, answering=bool(asks))
+        session = handle_turn(current, speaker, text, self, answering=bool(asks),
+                              asking=[q.refs["slot"] for q in asks[:1]])     # V9.3：自助页一次显示一条回问
         answered = self._answer_ask_back(session, asks) if speaker == "customer" else set()
         # v8 收口：客户补条件只走一条路——会话里补的、回问答的，起草中的单都按会话条件重写，未经人改的条目清掉重写
         changed = (previous.phenomenon, previous.known()) != (session.need.phenomenon, session.need.known())
@@ -390,7 +391,7 @@ class HuayanApp:
         return session.model_copy(deep=True)
 
     def _pending_asks(self, session_id):
-        """v8：本会话上未答的回问，只给槽位问法；自助会话里客户直接在自助页回答。"""
+        """v8：本会话上未答的回问，只给槽位问法；自助会话里客户直接在自助页回答（V9.3：页面一次显示第一条）。"""
         slots = {s.id: s for s in self.seeds.slots}
         return [PendingAsk(question_id=q.id, slot=q.refs["slot"], label=slots[q.refs["slot"]].label,
                            ask_text=slots[q.refs["slot"]].ask_text)

@@ -113,7 +113,7 @@ function Chat({ v, route }: { v: SessionView; route: Route | null }) {
             </li>
           ))}
         </ol>
-        {v.asks.map((a) => (    // v8：研发的回问直达客户，直接在下面回答
+        {v.asks.slice(0, 1).map((a) => (    // v8：研发的回问直达客户，直接在下面回答；V9.3 一次问一条，客户说「这个」时指得清
           <p key={a.question_id} className="mx-4 mb-2 rounded-[10px] bg-attn-bg px-3 py-1.5 text-[13.5px] leading-[21px]">
             <span className="mr-1 text-[11px] font-semibold text-attn-ink">研发想确认</span>{a.ask_text}</p>
         ))}

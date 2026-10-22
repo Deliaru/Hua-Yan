@@ -23,7 +23,7 @@ class RuleExtractor:
     def __init__(self, seeds):
         self.seeds = seeds
 
-    def extract(self, turns, prev, products=()):
+    def extract(self, turns, prev, products=(), asking=()):
         turn = turns[-1]
         profile = prev.profile.model_copy(deep=True)
         result = ExtractionResult(intent="need", phenomenon=prev.phenomenon,
@@ -49,11 +49,11 @@ class RuleExtractor:
                 confidence=0.7, quote=quote, turn_n=turn.n))
         if any(word in text for word in ("不清楚", "不知道", "不确定")):
             previous = next((t for t in reversed(turns[:-1]) if t.speaker != "customer"), None)   # 业务员或化言的问话
-            if previous:
-                for slot in detect_asked_slots(previous.text, self.seeds.slots):
-                    if slot not in {s.slot for s in result.slots}:
-                        result.slots.append(ExtractedSlot(slot=slot, value=None, status="unknown",
-                            confidence=0.7, quote=text, turn_n=turn.n))
+            asked = detect_asked_slots(previous.text, self.seeds.slots) if previous else []
+            for slot in asked or list(asking):          # 没有问话时，答的是客户页上正显示的回问
+                if slot not in {s.slot for s in result.slots}:
+                    result.slots.append(ExtractedSlot(slot=slot, value=None, status="unknown",
+                        confidence=0.7, quote=text, turn_n=turn.n))
         # 「成分」在说布料（面料用词或本轮抽到面料取值）时是需求，不算问机理
         about_fabric = "fiber" in {s.slot for s in result.slots} or any(
             word in text for word in ("面料", "布", "纱", "纤维", "料子", "材质"))
@@ -88,14 +88,17 @@ class LLMExtractor:
         self.seeds, self.gateway = seeds, gateway
         self.prompt = (Path(__file__).resolve().parents[3] / "prompts/extract.md").read_text(encoding="utf-8")
 
-    def extract(self, turns, prev, products=()):
+    def extract(self, turns, prev, products=(), asking=()):
+        slots = {s.id: s for s in self.seeds.slots}
         data = {"products": [{"id": p["id"], "name": p["name"]} for p in products],
                 "recommended_product_id": next((p["id"] for p in products if p.get("recommended")), None),"slots": [{"id": s.id, "label": s.label, "values": s.values} for s in self.seeds.slots],
                 "categories": sorted({p.category for p in self.seeds.products}),
                 "phenomena": [{"id": p.id, "label": p.label, "phrases": p.customer_phrases}
                               for p in self.seeds.phenomena],
                 "previous": prev.model_dump(mode="json"),
-                "turns": [{"n": t.n, "speaker": t.speaker, "text": t.text} for t in turns]}
+                "turns": [{"n": t.n, "speaker": t.speaker, "text": t.text} for t in turns],
+                # V9.3：研发的回问显示在客户自助页上，不在对话里；客户这句可能就是在答它
+                "asking": [{"slot": s, "label": slots[s].label, "ask_text": slots[s].ask_text} for s in asking]}
         output, _ = self.gateway.structured(LLMRequest(tier=Tier.FAST, caller="agent:extract",
             temperature=0, messages=[Message(role="system", content=self.prompt),
                 Message(role="user", content=json.dumps(data, ensure_ascii=False))]), ExtractionResult)
