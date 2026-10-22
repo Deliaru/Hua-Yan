@@ -484,9 +484,10 @@ class HuayanApp:
             return self.requirement_view(req.id, viewer_id).requirement
 
     def _validate_item(self, req, item, actor):
-        turns = {t.id for sid in req.session_ids for t in self._sessions[sid].turns if t.speaker == "customer"}
-        if any(ref not in turns for ref in item.quote_refs):
-            raise ValueError("原话引用必须属于本需求单的客户发言")
+        turns = [t.id for sid in req.session_ids for t in self._sessions[sid].turns if t.speaker == "customer"]
+        if bad := [ref for ref in item.quote_refs if ref not in turns]:
+            # V9.4：说清哪条引不上、能引哪些（业务员和化言的问话不算客户原话）
+            raise ValueError(f"原话引用必须属于本需求单的客户发言：{'、'.join(bad)} 不是；可引用 {'、'.join(turns)}")
         for ref in item.ku_refs:
             try:
                 self._work_unit(req, ref, actor)

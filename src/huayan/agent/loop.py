@@ -42,7 +42,9 @@ def history(conv: Conversation) -> list[Message]:
 def run_turn(conv: Conversation, ctx: ToolContext, hub, gateway) -> list[AgentMessage]:
     """跑一轮：模型 → 工具 → 模型 … 直到没有工具调用或满 8 步；返回本轮的助手消息。"""
     role = ctx.principal.role
-    messages = [Message(role="system", content=system_prompt(ctx, hub.pending(ctx.principal.id))), *history(conv)]
+    # V9.4：只列本段对话（按对象分段时即当前对象）提出的确认卡，别的单的卡不进上下文
+    pending = [a for a in hub.pending(ctx.principal.id) if a.conversation_id == conv.id]
+    messages = [Message(role="system", content=system_prompt(ctx, pending)), *history(conv)]
     created, reply = [], OUT_OF_STEPS
     for step in range(1, MAX_STEPS + 1):
         response = gateway.complete(LLMRequest(tier=Tier.FAST, caller=f"agent:{role}", messages=messages,

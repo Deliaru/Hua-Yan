@@ -75,6 +75,7 @@ class AgentHub:
 
     def notify(self, actor_id: str, text: str, session_id: str | None = None, thread: str | None = None) -> Conversation:
         ctx = self.context(actor_id, session_id, thread)
+        ctx.focus = thread          # V9.4：派来的问题以它的对象为当前工作面，助手按这个对象装配上下文
         return self._respond(ctx, AgentMessage(role="system", text=text, at=get_clock().now()))
 
     def _respond(self, ctx: ToolContext, message: AgentMessage) -> Conversation:
@@ -220,6 +221,9 @@ class AgentHub:
                              else f"请起草一句可以写给 L{q.refs['audience']} 的话，不含结论原文与机理，交委托人在签字区改定，不签字。"
                              if q.family == "qi_grant" and q.refs.get("form") == "statement"
                              else "请为此问题准备草稿，不签字。")
+                    # V9.4：签字前对象上必须已有的草稿，派单时就写明，不等做完再退回
+                    if q.signer_role and (gap := self.app.preparation_gap(q.id)):
+                        text += f"签字前对象上要有：{gap}。"
                     with self.app.drafting():          # v8 收口：准备（含退回再做）结束后觉才评估，中间稿不触发问题
                         if self.app.config["gateway_mock"]:
                             text += "\n" + self._prepare_offline(q)
