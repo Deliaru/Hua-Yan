@@ -11,14 +11,37 @@ BASE_FAIL = 0.06        # 设备、操作原因的失败，与需求无关
 
 # 缺口槽位 → [(真值条件, 失败概率)]：缺口在满足真值条件时按该概率导致失败，取第一条命中的；都不命中按 OTHER
 GAPS = {
-    "equipment": [({"fiber": {"锦纶氨纶", "锦纶"}}, 0.6)],                 # 弹力、细旦面料对张力与流速敏感
-    "bath_ph": [({"dye_class": {"酸性染料"}}, 0.65), ({"dye_class": {"活性染料"}}, 0.3)],
-    "water": [({"dye_class": {"活性染料"}, "process": {"浸染"}}, 0.45)],   # 硬水、回用水下活性染料易色点
-    "process": [({"process": {"冷轧堆"}}, 0.5)],
+    "equipment": [({"fiber": {"锦纶氨纶", "锦纶"}}, 0.85)],                # 弹力、细旦面料对张力与流速敏感
+    "bath_ph": [({"dye_class": {"酸性染料"}}, 0.85), ({"fiber": {"锦纶", "锦纶氨纶"}}, 0.6),   # 锦纶的上染对 pH 敏感
+                ({"dye_class": {"活性染料"}}, 0.45)],
+    "water": [({"dye_class": {"活性染料"}, "process": {"浸染"}}, 0.7), ({"fiber": {"粘胶"}}, 0.5)],   # 硬水、回用水下易色点
+    "process": [({"process": {"冷轧堆"}}, 0.75)],
+    "constraint": [({"constraint": {"低温节能"}, "fiber": {"涤纶", "涤棉"}}, 0.7)],   # 分散染料要高温，低温节能的要求没写上就不行
+    "dye_class": [({"fiber": {"涤棉"}}, 0.6)],                               # 涤棉要两类染料，只写一类就不行
 }
-# 第 3 周起的世界漂移：新客户群大量使用气流染色机，涤纶上的设备缺口也开始要命
-DRIFT = {"equipment": [({"fiber": {"涤纶", "涤棉"}, "equipment": {"气流染色机"}}, 0.6)]}
-OTHER = 0.03
+# 第 3 周起的世界漂移：新客户群大量使用气流染色机做涤纶 / 涤棉，涤纶上的设备缺口也开始要命
+DRIFT = {"equipment": [({"fiber": {"涤纶", "涤棉"}, "equipment": {"气流染色机"}}, 0.85)]}
+OTHER = 0.01            # v8 Q9.4 调世界：不在交叉条件里的缺口几乎不要命（离线比较见 docs/reports/month/）
+
+# v8 Q9.4：产品本身合不合用（cause = product）。用在适用表以外的取值上（研发签出去的判断把范围放宽了），
+# 一半取值其实不行（按「产品 × 槽位 = 取值」固定抽签）；说明书有一处写错；第 3 周起没限定设备的产品在
+# 涤纶 / 涤棉 × 气流染色机上开始不行（低浴比、高张力）。在研发中新立的产品只有偶发失败与漂移。
+PRODUCT_NOISE, PRODUCT_BAD, OUT_OF_RANGE_BAD = 0.04, 0.65, 0.5
+WRONG_CLAIMS = {("HY-RP330", "water", "自来水"): 0.65}       # 说明书写了适用自来水，自来水硬度一波动就色差
+DRIFT_PRODUCT = ({"fiber": {"涤纶", "涤棉"}, "equipment": {"气流染色机"}}, 0.5)
+
+
+def product_risk(product_id: str, applicable: dict[str, list[str]], truth: dict[str, str], drift: bool = False) -> float:
+    """applicable：种子里产品的适用表（新立的产品为空）。"""
+    for slot, values in applicable.items():
+        if (product_id, slot, truth[slot]) in WRONG_CLAIMS:
+            return WRONG_CLAIMS[(product_id, slot, truth[slot])]
+        if truth[slot] not in values and random.Random(f"{product_id}:{slot}={truth[slot]}").random() < OUT_OF_RANGE_BAD:
+            return PRODUCT_BAD
+    cond, p = DRIFT_PRODUCT
+    if drift and "equipment" not in applicable and all(truth[s] in vs for s, vs in cond.items()):
+        return p
+    return PRODUCT_NOISE
 
 
 def gaps(card: NeedCard, known: dict[str, str]) -> list[str]:
@@ -30,11 +53,15 @@ def gap_risk(card: NeedCard, slot: str, drift: bool = False) -> float:
     return next((p for cond, p in rules if all(card.slots[s] in vs for s, vs in cond.items())), OTHER)
 
 
-def trial_outcome(card: NeedCard, known: dict[str, str], drift: bool = False) -> tuple[str, str, list[str]]:
-    """返回 (result, cause, missing_slots)：先看缺口（cause = requirement），再看设备与操作。"""
+def trial_outcome(card: NeedCard, known: dict[str, str], drift: bool = False,
+                  product: tuple[str, dict] | None = None) -> tuple[str, str, list[str]]:
+    """返回 (result, cause, missing_slots)：先看缺口（cause = requirement），再看产品本身（给了 product =
+    (产品编号, 种子适用表) 时），最后看设备与操作。"""
     fired = [s for s in gaps(card, known) if random.Random(f"{card.id}:{s}").random() < gap_risk(card, s, drift)]
     if fired:
         return "fail", "requirement", fired
+    if product and random.Random(f"{card.id}:{product[0]}:product").random() < product_risk(*product, card.slots, drift):
+        return "fail", "product", []
     if random.Random(f"{card.id}:base").random() < BASE_FAIL:
         return "fail", "equipment", []
     return "pass", "none", []

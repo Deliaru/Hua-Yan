@@ -86,7 +86,7 @@ class OpenAICompatGateway:
         last_error = None
         for tier in self._order(req.tier.value):
             cfg = self.tiers[tier]
-            for attempt in range(4):
+            for attempt in range(6):
                 started = time.perf_counter()
                 try:
                     kwargs = dict(model=cfg["model"], messages=messages, temperature=req.temperature,
@@ -120,11 +120,13 @@ class OpenAICompatGateway:
                         self.meter.record(caller=req.caller, kind="llm", model=cfg["model"], ok=False,
                                           latency_ms=(time.perf_counter() - started) * 1000,
                                           fallback_used=tier != req.tier.value, degraded=tier != req.tier.value)
-                    retryable = not isinstance(exc, openai.APIStatusError) or exc.status_code == 429 or exc.status_code >= 500
+                    # 试用接口的风控偶尔把正常请求判成 400「request illegal」（重发有时能过），按过载重试
+                    retryable = (not isinstance(exc, openai.APIStatusError) or exc.status_code == 429 or exc.status_code >= 500
+                                 or "request illegal" in str(exc))
                     if not retryable:
                         raise
-                    if attempt < 3:
-                        self.sleep(5 * 4 ** attempt)        # 5、20、80 秒：试用接口过载时要求至少退避 60 秒
+                    if attempt < 5:     # 5、20、80、80、80 秒：试用接口过载时要求至少退避 60 秒；整月录制里遇到过几分钟的超时
+                        self.sleep(5 * 4 ** min(attempt, 2))
         raise last_error
 
     def complete(self, req):

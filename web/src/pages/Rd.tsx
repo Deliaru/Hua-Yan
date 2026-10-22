@@ -29,7 +29,7 @@ export function Rd() {
   useEffect(() => { if (guided) { setQid(null); setChosenReq(null); } }, [guided?.id]);
   const question = all.find((q) => q.id === qid)
     ?? (chosenReq ? ready.find((q) => reqsOf(q).includes(chosenReq)) ?? null : guided ?? ready[0] ?? null);
-  // 不挂在需求单上的决策（解密申请、知识冲突、拼凑风险）只显示签字区
+  // 不挂在需求单上的决策（解密申请、知识冲突、泄露风险）只显示签字区
   const reqId = question ? reqsOf(question)[0] ?? null : chosenReq ?? (reqs.find((r) => r.status !== "merged") ?? reqs[0])?.id ?? null;
   return (
     <>
@@ -429,7 +429,7 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
       <Act label="复核后保留" run={() => api.resolve(q.id, "sign", me)} />
       <Act kind="plain" label="撤回结论" run={() => api.withdrawClaim(q.refs.ku_id, me)} />{dismiss}</div></>;
     if (q.family === "decrypt_request") return <DecryptReview q={q} dismiss={dismiss} evidence={evidence} />;
-    if (!req) return <>{evidence}<div className="row text-[13px] text-ink-2">证据 {q.evidence.length} 条</div><div className="row gap-2">{q.family === "knowledge_conflict" && <Act label="更新适用表" run={() => api.resolve(q.id, "update_sheet", me)} />}{q.family === "leak_risk" && <Act label="冻结权限" run={() => api.resolve(q.id, "freeze_access", me)} />}{dismiss}</div></>;
+    if (!req) return <>{evidence}<div className="row text-[13px] text-ink-2">证据 {q.evidence.length} 条</div><div className="row gap-2">{q.family === "knowledge_conflict" && <Act label="更新适用表" run={() => api.resolve(q.id, "update_sheet", me)} />}{q.family === "leak_risk" && <Act label="冻结上层知识检索" run={() => api.resolve(q.id, "freeze_access", me)} />}{dismiss}</div></>;
     switch (q.family) {
       case "reuse_product": return <ReuseReview q={q} view={view!} dismiss={dismiss} />;
       case "opportunity": return <MergeReview q={q} view={view!} dismiss={dismiss} />;

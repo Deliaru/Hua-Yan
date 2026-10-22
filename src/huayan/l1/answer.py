@@ -1,5 +1,4 @@
 import json
-import re
 from pathlib import Path
 
 from huayan.clock import get_clock
@@ -10,59 +9,30 @@ from huayan.knowledge import PermissionDenied, level_of
 from huayan.knowledge.disclosure import render_refs
 
 
-def target_products(session, deps, products):
-    """解析明确型号和最近的唯一话题；不确定时请客户澄清。"""
-    boundary = next((e.payload["turn_id"] for e in reversed(deps.events.query(kinds=["extraction"]))
-                     if e.session_id == session.id and e.payload.get("conditions_changed")), None)
-    rec = session.recommendation
-    recommended = [rec.product_id] if rec and rec.product_id else []
-    for turn in reversed(session.turns):
-        # 已知型号以知识库为准，不假设连字符、字母或数字的排列方式。
-        ids = [pid for pid in products if re.search(
-            rf"(?<![A-Za-z0-9_-]){re.escape(pid)}(?![A-Za-z0-9_-])", turn.text, re.IGNORECASE)]
-        remainder = turn.text
-        for pid in ids:
-            remainder = re.sub(rf"(?<![A-Za-z0-9_-]){re.escape(pid)}(?![A-Za-z0-9_-])",
-                               "", remainder, flags=re.IGNORECASE)
-        # 未知的型号形态仅用于阻止回退，不能拿它推断已知产品。
-        unknown = re.search(r"(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+", remainder)
-        if ids or unknown:
-            return ids if not unknown and (turn.id == session.turns[-1].id or len(ids) == 1) else []
-        if any(word in turn.text for word in ("前者", "后者", "前一个", "后一个", "另一个")):
-            return []
-        if re.search(r"推荐(?:的)?(?:产品|型号|那个|这个)", turn.text):
-            return recommended
-        # 条件变更意味着新一轮匹配，不沿用更早的产品话题。
-        if turn.id == boundary:
-            break
-    return recommended
-
-
-def answer(session, deps, *, check_grounding=False):
+def answer(session, deps, targets, *, check_grounding=False):
+    """按抽取给出的意图与指到的产品回答（⑰′）：用法与适用给公开资料，原因与产品内部只能用授予本层的话。"""
     turn = session.turns[-1]
     actor = deps.actors[session.sales_id or session.customer_id]   # v6：自助会话按客户身份检索
     products = {p.id: p for p in deps.kb.view(deps.actors[session.sales_id or session.customer_id]).products}
     rec = session.recommendation
-    targets = target_products(session, deps, products)
+    intent = session.need.last_intent
     query = turn.text + " " + " ".join(targets)
     # 先记完整检索事件；明确型号不受当前会话现象筛选，以免查别的产品时答错。
     # v8：检索用的是这句话，记在说这句话的人名下（客户问的不算业务员的）；权限仍按会话身份
     asker = session.customer_id if turn.speaker == "customer" else actor.id
-    found = deps.kb.explore(query, actor, session_id=session.id, asked_by=asker,
+    found = deps.kb.explore(query, actor, intent=intent, products=targets, session_id=session.id, asked_by=asker,
                             phenomenon=None if targets else session.need.phenomenon)
     # 研发授予这一层的话（statement）：前台可以说这句话，看不到它依据的结论
     statements = [c for c in found.capabilities if c.form == "statement"]
-    # 是否问机理只看抽取给出的意图；能看到什么由知识库按层级裁剪。有授予的话就用它回答。
-    mechanism = session.need.last_intent == "mechanism_request"
-    blocked = mechanism and not statements
-    public_request = not mechanism or any(word in turn.text for word in ("怎么用", "用法", "用量", "说明书", "产品说明"))
-    if targets and public_request:
+    # 能看到什么由知识库按层级裁剪；有授予的话就用它回答
+    blocked = intent == "mechanism_request" and not statements
+    if targets and intent == "product_question":
         hits = [KnowledgeHit(ku=deps.kb.get(f"ku:{kind}:{pid}", actor), score=1.0)
                 for pid in targets for kind in ("sheet", "usage")]
     else:
         # 没有明确指代或有效推荐时，不把其他型号的剂量当成当前建议。
         hits = []
-    denial = ("这部分属于研发保密内容；你的高层级访问已被冻结，暂不能申请解密。" if deps.kb.is_frozen(actor.id)
+    denial = ("这部分属于研发保密内容；你的访问已被冻结，暂不能申请解密。" if deps.kb.is_frozen(actor.id)
               else "这部分属于研发保密内容，可以为客户申请解密。") + "配方不对外开放。" if targets \
         else "这部分需要专业人员解答。"
     if blocked:
@@ -70,7 +40,8 @@ def answer(session, deps, *, check_grounding=False):
             object_ids=[turn.id], session_id=session.id, reason="提问涉及高层级知识"))
     used = statements
     if not hits and not statements:
-        text = denial if blocked else "请明确要查询的产品型号；目前没有足够依据提供用法。"
+        text = denial if blocked else "请明确要查询的产品型号；目前没有足够依据提供用法。" \
+            if intent == "product_question" else "这部分需要专业人员解答。"     # 问毛病原因、本层没有可说的话
         if not blocked and session.status == "escalated":
             status = "已转产品经理处理。" if rec and rec.escalated_question_id else "请联系产品经理。"
             text = "当前条件没有适用的推荐产品，" + status + text

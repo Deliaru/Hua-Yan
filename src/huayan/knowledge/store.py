@@ -21,11 +21,6 @@ def _grams(text: str) -> set[str]:
     return {p[i:i + 2] for p in parts for i in range(max(1, len(p) - 1))}
 
 
-def _intent(query: str) -> str:
-    return "mechanism_request" if any(w in query.casefold() for w in
-        ("配方", "机理", "原理", "为什么", "成分", "染座", "ph")) else "product_question"
-
-
 def migrate_seeds(seeds, at):
     units, caps = [], []
     for product in seeds.products:
@@ -89,7 +84,8 @@ class KnowledgeBase:
             kb.add(unit)
         kb._caps = {cap.id: cap for cap in caps}
         kb._seed_units = {key: unit.model_copy(deep=True) for key, unit in kb._units.items()}
-        kb._frozen = {e.payload["actor_id"] for e in events.query(["access_frozen"])}     # 续跑时事件已读回
+        for e in events.query(["access_frozen", "access_unfrozen"]):     # 续跑时事件已读回，按先后恢复
+            (kb._frozen.add if e.kind == "access_frozen" else kb._frozen.discard)(e.payload["actor_id"])
         kb.state_path = Path(state_path) if state_path else None
         if kb.state_path and kb.state_path.exists():
             data = json.loads(kb.state_path.read_text(encoding="utf-8"))
@@ -342,31 +338,34 @@ class KnowledgeBase:
         return sorted(hits, key=lambda hit: (-hit.score, hit.ku.id))
 
     def search(self, query: str, actor: Actor, *, phenomenon: str | None = None, k: int = 5,
-               session_id: str | None = None, asked_by: str | None = None) -> list[KnowledgeHit]:
+               session_id: str | None = None, asked_by: str | None = None, intent: str = "",
+               products: list[str] = ()) -> list[KnowledgeHit]:
         ranked = self._rank(query, phenomenon)
         visible = [h for h in ranked if self._readable(actor, h.ku)]
-        blocked = [h for h in ranked if not self._readable(actor, h.ku)]
+        blocked = [h for h in ranked if self._stub(actor, h.ku)]
         # 拼凑机密只看越层命中；同层研发的存根可以申请查看，不算拼凑信号
         above = [h for h in blocked if h.ku.level > level_of(actor)]
-        intent = _intent(query)
-        if self.is_frozen(actor.id) and (intent == "mechanism_request" or (blocked and not visible)):
-            self._deny(actor, [h.ku.id for h in blocked] or [actor.id], "高层级访问已冻结", session_id)
-            visible = []
         result = visible[:max(0, k)]
         # v8：事件记在真正提问的人或助手名下（asked_by），委托人记在 principal；权限仍按委托人
         self.events.append("retrieve", asked_by or actor.id, {"query": query, "intent": intent, "principal": actor.id,
             "actor_level": level_of(actor), "hit_ku_ids": [h.ku.id for h in result],
-            "n_blocked": len(above),
-            "blocked_product_ids": [h.ku.product_id for h in above if h.ku.product_id]},
+            "n_blocked": len(above), "blocked_product_ids": [h.ku.product_id for h in above if h.ku.product_id],
+            "target_products": list(products), "capability_ids": [], "denied": False},
             session_id=session_id)
         return result
 
     def search_blocked(self, query: str, actor: Actor, *, phenomenon: str | None = None,
                        k: int = 3) -> list[BlockedHint]:
-        # 只有同层研发的存根带 ku_id（可申请查看）；跨层存根不带
+        # 只有同层研发的存根带 ku_id（可申请查看）；跨层存根不带；冻结后不给上层存根（⑰′）
+        if self.is_frozen(actor.id):
+            return []
         return [BlockedHint(owner=holder(h.ku), level=h.ku.level, kind=h.ku.kind,
                             ku_id=h.ku.id if colleague_l3(actor, h.ku) else None)
-                for h in self._rank(query, phenomenon) if not self._readable(actor, h.ku)][:max(0, k)]
+                for h in self._rank(query, phenomenon) if self._stub(actor, h.ku)][:max(0, k)]
+
+    def _stub(self, actor: Actor, ku: KnowledgeUnit) -> bool:
+        """v8：读不到的才出存根；试样记录是原始数据、不是能向下讲的结论，不算被拦命中、也不出存根。"""
+        return ku.kind != "trial" and not self._readable(actor, ku)
 
     def _hits(self, text, phenomenon, k):
         hits = [h.ku for h in self._rank(text, phenomenon)][:k]
@@ -375,7 +374,8 @@ class KnowledgeBase:
                        and any(e.rsplit("@", 1)[0].rsplit("#", 1)[0] in docs for e in u.evidence)]
 
     def explore(self, query: str, actor: Actor, *, phenomenon: str | None = None, k: int = 5,
-                session_id: str | None = None, asked_by: str | None = None) -> ExploreResult:
+                session_id: str | None = None, asked_by: str | None = None, intent: str = "",
+                products: list[str] = ()) -> ExploreResult:
         """分层召回（只读）：本层可读的结论给原文，授予本层的能力给能力，命中却没有能力的只记「不可答」；
         内部各层给存根，客户层什么都不给，与没找到相同。"""
         level = level_of(actor)
@@ -387,20 +387,26 @@ class KnowledgeBase:
         direct, reached = self._hits(query, phenomenon, k), self._hits(expanded, phenomenon, k)
         # 3. 本层可读 → 原文；授予本层且依据命中的能力 → 能力；越层命中且没有能力 → 不可答
         units = [u.model_copy(deep=True) for u in direct if self._readable(actor, u)]
-        blocked = [u for u in reached if not self._readable(actor, u)]
+        blocked = [u for u in reached if self._stub(actor, u)]
         above = [u for u in blocked if u.level > level]
-        if self.is_frozen(actor.id) and (_intent(query) == "mechanism_request" or (blocked and not units)):
-            self._deny(actor, [u.id for u in blocked] or [actor.id], "高层级访问已冻结", session_id)
-            units = []
         hit_ids = {u.id for u in direct} | {u.id for u in above}
         caps = [c for c in self._visible_caps(actor) if hit_ids & set(c.based_on)]
+        # ⑰′ 冻结：不给授予本层的上层结论（statement），也不给上层存根（谁知道）；挡下了什么就记拒绝
+        frozen = self.is_frozen(actor.id)
+        held = [c.id for c in caps if c.form == "statement"] + [u.id for u in above] if frozen else []
+        if frozen:
+            caps = [c for c in caps if c.form != "statement"]
+            blocked = [u for u in blocked if u.level <= level]
+        if held:
+            self._deny(actor, held, "访问已冻结", session_id)
         covered = {ku_id for c in caps for ku_id in c.based_on}
         # 转化对照走升级转译，配方永不对下；其余越层命中没有能力的才算「不可答」
         unanswerable = [u.id for u in above if u.id not in covered and u.kind not in ("formula", "translation")]
-        self.events.append("retrieve", asked_by or actor.id, {"query": query, "intent": _intent(query),
+        self.events.append("retrieve", asked_by or actor.id, {"query": query, "intent": intent,
             "principal": actor.id, "actor_level": level, "hit_ku_ids": [u.id for u in units], "n_blocked": len(above),
             "blocked_product_ids": [u.product_id for u in above if u.product_id],
-            "unanswerable_ku_ids": unanswerable, "n_unanswerable": len(unanswerable)}, session_id=session_id)
+            "unanswerable_ku_ids": unanswerable, "n_unanswerable": len(unanswerable), "target_products": list(products),
+            "capability_ids": [c.id for c in caps if c.form == "statement"], "denied": bool(held)}, session_id=session_id)
         if level == 0:
             return ExploreResult(units=units, capabilities=[c.model_copy(deep=True) for c in caps], hints=[])
         # 4. 提示只从本层视图算
@@ -423,3 +429,8 @@ class KnowledgeBase:
         self._frozen.add(actor_id)
         self.events.append("access_frozen", by, {"actor_id": actor_id}, ts=at)
         self.audit.append(AuditRecord(ts=at, actor=by, action="freeze", object_ids=[actor_id]))
+
+    def unfreeze(self, actor_id: str, by: str, at: datetime) -> None:
+        self._frozen.discard(actor_id)
+        self.events.append("access_unfrozen", by, {"actor_id": actor_id}, ts=at)
+        self.audit.append(AuditRecord(ts=at, actor=by, action="unfreeze", object_ids=[actor_id]))

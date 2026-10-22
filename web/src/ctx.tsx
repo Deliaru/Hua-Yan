@@ -33,7 +33,7 @@ export const FAMILY: Record<string, string> = {
   ask_slot: "追问", escalate_need: "推荐还是升级", reuse_product: "现成产品审定", opportunity: "机会汇聚",
   accept_requirement: "接单", ask_back: "回问", distortion: "转译失真", confirm_translation: "确认化学要点",
   contribution: "沉淀", market_eval: "客户评价", seal_points: "封存 / 放出", seal_leak: "说明书泄密",
-  release: "发布审定", knowledge_conflict: "知识冲突", leak_risk: "拼凑风险", decrypt_request: "解密申请",
+  release: "发布审定", knowledge_conflict: "知识冲突", leak_risk: "泄露风险", mechanism_followup: "追问产品内部", decrypt_request: "解密申请",
   route_rd: "直达研发", handoff_sales: "交业务员", scope_update: "扩展适用范围", contribution_pm: "沉淀产品需求",
 };
 // 准备中的问题只显示主人在做什么
@@ -52,7 +52,7 @@ export const REQ_STATUS: Record<string, string> = {
 export const SESSION_STATUS: Record<string, string> = { open: "进行中", recommended: "已推荐", escalated: "已转研发", closed: "已记录，暂无方案" };
 export const ACTION: Record<string, string> = {
   sign: "已签字", accept: "已接单", return: "已退回", answered: "已回答", update_sheet: "已更新适用表",
-  freeze_access: "已冻结权限", approve_decrypt: "已批准解密", reject_decrypt: "已拒绝解密", dismiss: "现在不需要",
+  freeze_access: "已冻结上层知识检索", take_over: "已接手", approve_decrypt: "已批准解密", reject_decrypt: "已拒绝解密", dismiss: "现在不需要",
   auto: "觉 · 自动执行",
 };
 const SCORER: Record<string, string> = {

@@ -105,7 +105,7 @@ class RecommendationCard(BaseModel):          # 按「查看者」渲染的结�
 class AuditRecord(BaseModel):
     ts: datetime
     actor: str
-    action: Literal["disclose", "deny", "decrypt_request", "decrypt_approve", "decrypt_reject", "freeze"]
+    action: Literal["disclose", "deny", "decrypt_request", "decrypt_approve", "decrypt_reject", "freeze", "unfreeze"]   # v8 Q9.8 加 unfreeze
     object_ids: list[str]
     version: Version | None = None
     session_id: str | None = None

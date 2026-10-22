@@ -21,6 +21,7 @@ import { Overview } from "./pages/Overview";
 import { Story } from "./pages/Story";
 import { Customer } from "./pages/Customer";
 import { Pm } from "./pages/Pm";
+import { Month } from "./pages/Month";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
@@ -35,6 +36,7 @@ const PAGES = [
   ["pm", "产品经理", NavPm, "工作面"],
   ["rd", "研发", NavRd, "工作面"],
   ["jue", "觉视图", NavJue, null],
+  ["month", "化言的一个月", NavLedger, null],
   ["layers", "三层对照", NavLayers, null],
   ["eval", "评测", NavEval, null],
   ["ledger", "知识与积分", NavLedger, null],
@@ -178,6 +180,7 @@ export default function App() {
         {page === "layers" && <Layers key={meta.status.run_id} />}
         {page === "eval" && <Eval />}
         {page === "ledger" && <Ledger key={key} />}
+        {page === "month" && <Month />}
       </main>
 
       {modeOpen && <ModeDialog mode={meta.mode} onClose={() => setModeOpen(false)}

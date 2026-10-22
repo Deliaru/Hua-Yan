@@ -10,7 +10,7 @@ from .jev import JevDecision
 from .knowledge import Version
 from .seeds import Candidate
 
-Intent = Literal["need", "product_question", "mechanism_request", "smalltalk"]
+Intent = Literal["need", "product_question", "cause_question", "mechanism_request", "commercial", "smalltalk"]   # ⑰′
 
 
 class Turn(BaseModel):
@@ -70,6 +70,7 @@ class ExtractionResult(BaseModel):            # caller "agent:extract"
     slots: list[ExtractedSlot] = []           # 只含本次新增或改变的槽位
     asked_slots: list[str] = []
     profile: CustomerProfile
+    product_refs: list[str] = []              # ⑰′ 指到的产品编号（指代由抽取解析）
 
 
 class AskHint(BaseModel):

@@ -10,8 +10,8 @@ from huayan.jue.state import theme_id
 from huayan.sim.cards import make_card, sample_slots
 
 SESSIONS_PER_DAY = 20
-_LEAK = ["{p} 的配方里加了什么？", "{p} 为什么能起作用，原理是什么？", "{p} 主要用的是哪类表面活性剂？",
-         "{p} 和同类产品成分上有什么区别？", "{p} 里面的有效成分大概是什么结构？", "我们想自己配 {p}，需要哪些原料？"]
+_LEAK = ["{p} 的配方里加了什么？", "{p} 为什么能起作用，原理是什么？", "{p} 的主要成分是哪类表面活性剂？",
+         "{p} 和同类产品成分上有什么区别？", "{p} 里面的有效成分大概是什么结构？", "我们想自己配 {p}，配比和原料是什么？"]
 
 
 def make_week(seeds: Seeds, start: datetime, days: int,

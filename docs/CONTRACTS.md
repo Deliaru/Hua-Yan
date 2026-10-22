@@ -218,7 +218,7 @@ class KnowledgeBase:
                session_id: str | None = None) -> list[KnowledgeHit]: ...
         # 先按层级过滤再打分（关键词 / 字符二元组即可）。
         # 被过滤掉、但本来会命中的条目：只记入 retrieve 事件的 n_blocked 与 blocked_product_ids，不返回给调用方。
-        # 被冻结的人（2.3）检索 L1 以外的意图时直接返回空。
+        # 被冻结的人（2.3）检索 L1 以外的意图时直接返回空。（v8 Q9.8 改，见第 ⑰ 节）
     def search_blocked(self, query: str, actor: Actor, *, phenomenon: str | None = None,
                        k: int = 3) -> list[BlockedHint]: ...
         # 与 search 同样打分，只看被层级过滤掉的那一组，返回前 k 条的归属人、层级、类型（不含标题与正文）。
@@ -318,7 +318,7 @@ class Ledger:     # add(entry) / totals() -> dict[owner, points] / list(owner=No
 ## ③ 会话与需求
 
 ```python
-Intent = Literal["need", "product_question", "mechanism_request", "smalltalk"]
+Intent = Literal["need", "product_question", "cause_question", "mechanism_request", "commercial", "smalltalk"]   # ⑰′
 
 class Turn(BaseModel):
     id: str                                   # "turn:sess:3:2"
@@ -371,6 +371,7 @@ class ExtractionResult(BaseModel):            # 抽取 Agent 结构化输出（c
     slots: list[ExtractedSlot] = []           # 只含本次新增或改变的槽位
     asked_slots: list[str] = []               # 最新一句业务员发言追问了哪些槽位
     profile: CustomerProfile
+    product_refs: list[str] = []              # ⑰′ 这句话指到的产品编号（指代由抽取按上下文解析）
 
 # huayan.l1.extract（WP-A2）
 class Extractor(Protocol):
@@ -561,7 +562,7 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState: ..
 
 **knowledge（定时，知识冲突）**：`product_id` str、`slot` str、`value` str、`claimed` bool（说明书声称适用）、`n_trials` int、`n_fail` int、`n_fail_product` int（失败原因为产品本身）、`fail_ratio` float、`n_recommended` int。
 
-**actor（定时，泄露风险）**：`role` str、`n_queries` int、`n_mech_requests` int、`n_blocked` int（被拦截的高层级命中数）、`blocked_top_share` float（被拦截命中中最集中的产品占比）、`n_distinct_products` int、`frozen` bool。
+**actor（定时，泄露风险）**（v8 Q9.8 改，以第 ⑰ 节为准）：`role` str、`n_queries` int、`n_mech_requests` int、`n_blocked` int（被拦截的高层级命中数）、`blocked_top_share` float（被拦截命中中最集中的产品占比）、`n_distinct_products` int、`frozen` bool。
 
 **session（v5，实时：推荐还是升级 `escalate_need`、解密时机）**
 
@@ -1723,7 +1724,7 @@ Jue-K 模型按「家族 × 判断层」保存：`models: {"<family>|L<k>": (cla
   - knowledge（知识冲突）的 `claimed` 只认第 0 天情境。
 - **家族**：新增 `trial_risk`（推进类，对象 `requirement`，主人与签字人为研发）、`stale_capability`（推进类，对象 `knowledge`，主人与签字人为授予人），家族数 22 → **24**；`auto_action` 不变。
 - **门面（契约 ⑫）**：新增 `return_for_conditions(req_id, slots, by)`（研发；`rd_confirmed` → `rd_accepted`，写 `requirement_returned`，payload 带 `slots`）、`narrow_capability(cap_id, conditions, by)`（授予人；撤销原能力并按更窄条件授予，依据不变）、`timeline(day, by)`（主管只读；L3 内容只给存根）。
-- **网关（契约 ⑩）**：新 caller `sim:sales`、`sim:rd`、`sim:pm`（业务月里大模型扮演的业务员、研发、产品经理）。
+- **网关（契约 ⑩）**：新 caller `sim:sales`、`sim:rd`、`sim:pm`（业务月里大模型扮演的业务员、研发、产品经理）；Q9.4 加 `sim:supervisor`（主管，人已批准，2026-10-22）。
 - **事件**：不新增；`requirement_returned` 的 payload 可带 `slots`。
 
 实施 Q9.3 时补（人已批准，2026-10-21）：
@@ -1754,3 +1755,44 @@ Jue-K 模型按「家族 × 判断层」保存：`models: {"<family>|L<k>": (cla
   - `decision_records`（收工归纳材料）给业务员时不含研发的退回理由，只列要回问客户的条件名。
   - 决策投影（5.4）：`trial_risk`、`stale_capability` 的问题没有人的处置时，用之后的结果补标签（口径同 Q9.1、Q9.2 轨迹），`level = 3`；结果未出为 `None`。
 - **步数用完也看对象**：Agent 步数用完时同样按 `preparation_gap` 判断，对象齐了照常标记已准备，有缺口才记 `out_of_steps`。派单文字以对象编号开头（需求单、会话），问题编号放在后面。
+
+## ⑰ 泄露判断分层 v8 Q9.8（2026-10-22，人已批准，之后冻结）
+
+依据 `docs/workpackages/REPLAN-v8.md` Q9.8。与前文冲突处以本节为准（2.3 冻结、5.2 actor 属性、`_intent` 关键词）。
+
+- **意图（契约 ③）**：`Intent` 类型不变。`mechanism_request` 只指问产品内部（成分配比、机理、配方、配法、作用原理）；问自己的毛病为什么出现、问用法、问说明书与安全技术说明书上本就公开的合规信息（APEO、甲醛、离子性、固含量、pH）都不算。抽取提示词随之改。知识库按关键词判检索意图时只认「配方、配比、机理、原理、成分、染座」，不再认「为什么」「pH」。
+- **事件（契约 ⑧）**：
+  - 新增 `access_unfrozen`（payload `actor_id`）。
+  - `retrieve` 的 payload 加 `target_products`（查询里出现的产品编号或名称）、`capability_ids`（本次返回的 `statement` 能力）、`denied`（冻结后被拒）。
+  - `extraction` 的 payload 加 `speaker`（customer / sales）、`customer_id`、`after_rec`（这句话说出时会话已有推荐）、`products`（意图为 `mechanism_request` 时这句话指到的产品：型号或已推荐产品，按 L1 回答同一解析）。
+  - `decrypt_approve` 的 payload 加 `capability_id`。
+- **审计（契约 ②）**：`AuditRecord.action` 加 `unfreeze`。
+- **冻结（2.3）**：冻结的效果只有四项：指到产品的原理请求（意图为 `mechanism_request` 且 `target_products` 非空）返回空并记拒绝；`explore` 不返回授予给本层的 `statement` 能力；披露上限为用法；不能申请解密。其余工作照常：门面不再因冻结拒绝看工作台、看需求单与时间线、录试样、审批解密。新增 `KnowledgeBase.unfreeze(actor_id, by, at)`：写 `access_unfrozen` 事件与审计 `unfreeze`。重启续跑时按冻结、解冻事件的先后恢复。
+- **属性（契约 5.2）**：
+  - **actor（定时，泄露风险）**：对象只取业务员本人：`retrieve` 的 `actor` 为 `sales:<id>` 或 `agent:sales:<id>` 的都记到 `sales:<id>`；客户、`pm:agent`、研发及其助手不是 actor 对象。窗口为配置 `windows.actor_hours`（企业编制 168 小时），且从该业务员最近一次解冻起算。属性：`role` str、`n_queries` int、`n_mech_requests` int（意图为 `mechanism_request`、指到产品、未被拒的检索）、`n_statements_top` int（读到的授予结论里同一产品最多的条数）、`top_product` str 与 `top_product_share` float（原理请求与读到的授予结论按产品计，最集中的产品及其占比）、`n_decrypt_requests` int、`n_decrypt_products` int、`n_decrypt_customers` int、`frozen` bool（按冻结、解冻事件先后）。去掉 `n_blocked`、`blocked_top_share`、`n_distinct_products`。
+  - **session（实时）** 加：`n_internals_after_rec` int（本会话推荐之后客户问产品内部、且指到产品的轮数）、`customer_internal_products` int（该客户 48 小时内各会话问过内部的不同产品数）、`customer_decrypts` int（该客户已获批且未撤销的解密数）、`followup_handled` bool（本会话的 `mechanism_followup` 已结案）。全部从事件日志算，`session_state` 签名不变。
+- **家族**：新增 `mechanism_followup`（异常类，对象 `session`，主人与签字人为业务员），家族数 24 → **25**。改写 `leak_risk`（对象只取业务员；证据不再提「被拦截」）。
+- **解析表（5.4）**：`sales` 角色在会话对象上为会话业务员，自助会话（尚无业务员）为客户的归属业务员（门面在会话对象的引用里传 `account_sales`）。
+- **Jue-K（5.4）**：`leak_risk|L2` 旧模型作废；新特征下重训之前不用，两组都用模板规则打分，标 `scored_by: rule`。
+- **门面（契约 ⑫）**：
+  - 新增 `unfreeze_access(actor_id, by)`（只给主管；对象须已冻结）。
+  - 新增 `frozen_actors(viewer_id)`（只给主管）：每个被冻结的人一行：`actor_id`、`name`、`frozen_at`、`frozen_by`、`evidence`（冻结时问题的证据摘要）、`n_denied`（冻结以来被拒次数）、`customers`（手上在跟的客户）。
+  - `resolve`：`mechanism_followup` 允许动作 `take_over`：会话尚无业务员时按客户归属交给业务员（同 `assign_sales`）；问题以 `take_over` 结案，`followup_handled` 为真，不再重复提出。
+  - `request_decrypt` 去掉「客户须懂化学」的拦截，只留权限（自己的会话、未被冻结）与做不到（没有推荐）。解密申请问题带事实证据：客户画像（懂不懂化学、依据原话）、该客户已获批的解密（产品、批准研发、日期）、申请业务员近 30 天为哪些客户、哪些产品申请过解密。只列事实，不判断。
+  - 同层研发申请查看知识（`qi_grant` 带 `requester`）的问题证据加申请人近 30 天的其他申请。
+- **界面接口**：`POST /api/unfreeze`、`GET /api/frozen_actors`。
+
+## ⑰′ 理解只在一处（2026-10-22 晚，人已批准，之后冻结）
+
+依据 `docs/workpackages/REPLAN-v8.md` 第 9 节。与 ⑰ 冲突处以本节为准。原则：每段输入只在一处被理解（客户的话由抽取理解一次），下游只读结构化字段，不再各自用关键词重判语义；规则抽取器只作离线降级，标 `extracted_by: rule`。
+
+- **意图（契约 ③）**：`Intent` 取值为 `need`、`product_question`（问用法、问适不适用、问管不管用）、`cause_question`（问自己的毛病为什么出现）、`mechanism_request`（只指问产品内部：成分配比、机理、配方）、`commercial`（报价、采购、送样、要找业务员或人工）、`smalltalk`。问说明书与安全技术说明书上本就公开的合规信息（APEO、甲醛、离子性、固含量、pH）算 `product_question`。⑰ 中「知识库按关键词判检索意图」一条作废。
+- **抽取（契约 ③）**：`ExtractionResult` 加 `product_refs: list[str]`：这句话指到的产品编号，「推荐的那个」「前者」这类指代由抽取按上下文解析成编号；抽取校验丢掉本层视图里没有的编号。
+- **事件（契约 ⑧）**：
+  - `extraction` 的 `products` 记本轮 `product_refs`，不再限于要原理的轮次；`intent` 照旧。
+  - `retrieve` 的 `intent` 由调用方传入：客户会话传本轮抽取的 `intent`，助手检索传 `purpose`（可空），其余为空；知识库不再自己判。`target_products` 为调用方传入的产品编号（客户会话为本轮 `product_refs`），知识库不从查询文字里猜。
+- **冻结（2.3）**：效果第 1 项改为「`explore` 不再返回上层存根（谁知道）」；其余三项（不返回授予给本层的 `statement` 能力、披露上限为用法、不能申请解密）不变。被冻结者的检索照常记 `denied`（本次有存根或授予结论被挡下）。
+- **属性（契约 5.2）**：
+  - **actor**：去掉 `n_mech_requests`；加 `n_stubs_top` int（窗口内碰到的上层存根里同一产品最多几条，按 `retrieve` 的 `blocked_product_ids` 计）；`top_product`、`top_product_share` 改按「读到的授予结论 + 碰到的上层存根 + 解密申请」三者按产品合计；其余不变。
+  - **session**：`n_internals_after_rec`、`customer_internal_products` 由客户发言的 `extraction` 事件（`intent == mechanism_request` 且 `products` 非空）算；`purchase_intent` 为本会话有客户发言的 `intent == commercial`。
+- **Agent 工具（契约 ⑭）**：`search_knowledge` 加可选参数 `purpose`（`usage` / `cause` / `internal` / 空），原样作为 `retrieve` 的 `intent` 记进事件，只作参考，不进泄露判断。

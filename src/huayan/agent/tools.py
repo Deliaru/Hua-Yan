@@ -81,14 +81,15 @@ class QuestionId(BaseModel):
 class SearchArgs(BaseModel):
     query: str
     kind: KUKind | None = None
+    purpose: Literal["usage", "cause", "internal", ""] = ""   # ⑰′ 只记进检索事件作参考，不进泄露判断
 
 
 @tool("search_knowledge", "read", ["sales", "pm", "rd"],
       "在你委托人这一层检索：可读的结论、授予这一层的话（写给下层时只写 [[编号]]）、相关提示；"
-      "越权命中只告诉你归属人与层级（谁知道），不给内容", SearchArgs)
+      "越权命中只告诉你归属人与层级（谁知道），不给内容；purpose 写你为什么查：usage 用法与适用、cause 毛病原因、internal 产品内部", SearchArgs)
 def search_knowledge(ctx: ToolContext, args: SearchArgs) -> ToolResult:
     found = ctx.app.kb.explore(args.query, ctx.principal, k=5, session_id=ctx.session_id,
-                               asked_by=agent_id(ctx.principal.id))
+                               asked_by=agent_id(ctx.principal.id), intent=args.purpose)
     return ToolResult(data={"hits": [{"ku_id": u.id, "kind": u.kind, "level": u.level, "title": u.title,
                                       "text": u.text[:160], "owner": u.owner} for u in found.units if args.kind in (None, u.kind)],
                             "statements": [{"ref": c.id, "text": c.payload["text"]} for c in found.capabilities if c.form == "statement"],
@@ -142,7 +143,7 @@ def get_need_card(ctx: ToolContext, args: NoArgs) -> ToolResult:
                                                 "sections": [f"{s.title}：{s.text}" for s in v.card.sections]}})
 
 
-@tool("request_decrypt", "effect", ["sales"], "客户懂化学且要求了解机理时，为当前会话的推荐产品申请解密（产品归属研发审批）",
+@tool("request_decrypt", "effect", ["sales"], "客户确有正当需要了解机理时，为当前会话的推荐产品申请解密（产品归属研发审批）",
       NoArgs, "为当前会话的推荐产品申请解密，交产品归属研发审批")
 def request_decrypt(ctx: ToolContext, args: NoArgs) -> ToolResult:
     q = ctx.app.request_decrypt(ctx.session_id, ctx.principal.id)

@@ -41,10 +41,22 @@ def test_l1_knowledge_boundary(mini_seeds, sim_clock, tmp_path):
     assert any(h.owner == "rd:R01" for h in hints)
     assert all(set(h.model_dump()) == {"owner", "level", "kind", "ku_id"} and h.ku_id is None for h in hints)
     assert before == (len(events.events), len(audit.list()))
+    # ⑰′：冻结只挡上层存根（谁知道）与授予给本层的上层结论，不看检索在问什么；解冻后恢复；重载时按冻结、解冻先后恢复
+    kb.grant(Capability(id=kb.next_cap_id(), form="statement", audience=1, payload={"text": "（模拟）控制升温速率", "product_id": "T-205"},
+                        based_on=["ku:mechanism:T-205"], granted_by="rd:R01", status="active", at=sim_clock.now()))
+    def said():
+        found = kb.explore("匀染 缓染 染座", sales)
+        return {c.form for c in found.capabilities} | ({"stub"} if found.stubs else set())
+    assert {"statement", "stub"} <= said() and kb.search_blocked("匀染 缓染 染座", sales)
     kb.freeze(sales.id, "supervisor:M01", sim_clock.now())
-    assert kb.search("T-205 配方", sales) == []
-    assert kb.search("用法", sales)
+    assert not {"statement", "stub"} & said() and events.query(kinds=["retrieve"])[-1].payload["denied"]
+    assert kb.search("用法", sales) and kb.search_blocked("匀染 缓染 染座", sales) == []
     assert not KnowledgeBase.from_seeds(mini_seeds, EventLog(), AuditLog()).is_frozen(sales.id)
+    assert KnowledgeBase.from_seeds(mini_seeds, events, AuditLog()).is_frozen(sales.id)
+    kb.unfreeze(sales.id, "supervisor:M01", sim_clock.now())
+    assert {"statement", "stub"} <= said()
+    assert not KnowledgeBase.from_seeds(mini_seeds, events, AuditLog()).is_frozen(sales.id)
+    kb.freeze(sales.id, "supervisor:M01", sim_clock.now())
     assert events.query(kinds=["access_denied"]) and audit.list(sales.id)
 
     # 情境取并集，不能把两条情境里的面料和设备交叉拼接。

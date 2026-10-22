@@ -39,4 +39,4 @@ customer:
   customer:C11: {name: 某印染厂 K（模拟）, persona: "懂一点化学，喜欢自己先下判断。", unknown: 0.1}
   customer:C12: {name: 某印染厂 L（模拟）, persona: "做整理的，常提手感和黄变，耐心好。", unknown: 0.1}
 supervisor:
-  supervisor:M01: {name: 主管赵总（模拟）, persona: "看全局，关心有没有泄密、有没有积压。"}
+  supervisor:M01: {every: [60, 120], away: ["14:00-15:30"], name: 主管赵总（模拟）, persona: "看全局，关心有没有泄密、有没有积压；不愿冤枉人，看证据决定冻不冻结，冻错了会解冻。"}

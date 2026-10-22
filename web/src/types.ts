@@ -245,3 +245,48 @@ export interface Capability {
 export interface Claim {
   id: string; title: string; text: string; evidence: string[]; status: string;
 }
+
+// v8 Q9.5：模拟业务月。运行进度来自 runs/<运行>/progress.json；时间线是门面 timeline(day, by)，只给主管。
+export interface MonthProgress {
+  run_id?: string; group: "jue" | "sm"; day: number; days: number; at: string; tick: number; ticks: number;
+  elapsed_s: number; eta_s: number; calls: number; failed: number; inflight_peak: number;
+  input_tokens: number; output_tokens: number; open_questions: number; requirements: Record<string, number>;
+  rejected: number; jue: string; updated: string;
+}
+export interface MonthItem {
+  id: string; lane: string; at: string; kind: string; actor: string; family: string | null;
+  session_id: string | null; text: string;
+}
+export interface MonthSession {
+  id: string; customer: string; sales: string | null; status: string; phenomenon: string | null; start: string; end: string;
+  turns: { at: string; speaker: string; text: string }[];
+}
+export interface MonthDay {
+  day: string; days: string[]; lanes: { id: string; label: string }[]; items: MonthItem[]; sessions: MonthSession[];
+  board: { requirements: Record<string, string[]>; capabilities: Record<string, number>; jue: { model: string; version: string | null } };
+  kpi: Record<string, number>; summary: string; highlights: MonthItem[];
+  cases: MonthCase[]; discoveries: MonthStep[]; qi: MonthQi;
+}
+// 案件故事里的一步：一句话（turn）、觉的一个问题（decision：提出 → 准备 → 签字）、或一件事实（推荐、建单、试样…）
+export interface MonthStep {
+  at: string; kind: string; text?: string; speaker?: string; by?: string; tone?: "ok" | "fail"; owner?: string | null;
+  family?: string; label?: string; discovery?: boolean; scored_by?: string; p?: number | null; object?: string;
+  prepared_at?: string | null; signer?: string | null; status?: string; done_at?: string; action?: string; note?: string;
+  ask?: string; case?: string | null; title?: string;
+}
+export interface MonthCase {
+  id: string; key: string; customer: string; customer_name: string; sales: string | null; phenomenon: string;
+  opening: string; started_at: string; requirements: string[]; story: MonthStep[];
+  outcome: { state: "done" | "open" | "fail"; text: string; since?: string };
+}
+export interface MonthQi {
+  used_by_owner: Record<string, number>; used_total: number; denied: number; outbound: number; leaked: number;
+  grants: { at: string; kind: string; by: string; capability: string | null; form: string | null; audience: number | null; uses_since: number }[];
+  points: Record<string, number>;
+}
+
+// v8 Q9.8：主管工作台的已冻结名单
+export interface FrozenActor {
+  actor_id: string; name: string; frozen_at: string; frozen_by: string;
+  evidence: string[]; n_denied: number; customers: string[];
+}

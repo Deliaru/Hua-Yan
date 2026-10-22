@@ -40,8 +40,12 @@ def _summary(family: str, a: dict) -> str:
     if family == "ask_back":
         return f"第 {a['layer']} 层转译中，该信息有 {a['trans_splits']} 种取值会改变引用的转化知识，客户尚未说明"
     if family == "leak_risk":
-        return (f"检索 {a['n_queries']} 次，被拦截的高层级命中 {a['n_blocked']} 条，"
-                f"最集中的产品占 {a['blocked_top_share']:.0%}，涉及 {a['n_distinct_products']} 个产品")
+        return (f"近 7 天碰到同一产品的上层知识最多 {a['n_stubs_top']} 条、读到授予给业务员的结论最多 {a['n_statements_top']} 条"
+                f"（{a['top_product_share']:.0%} 集中在 {a['top_product'] or '—'}），"
+                f"替 {a['n_decrypt_customers']} 位客户申请了 {a['n_decrypt_products']} 个产品的解密")
+    if family == "mechanism_followup":
+        return (f"推荐之后客户 {a['n_internals_after_rec']} 轮追问产品内部，系统只答到用法；"
+                f"该客户近两天问过内部的产品 {a['customer_internal_products']} 个，已获批解密 {a['customer_decrypts']} 个")
     if family == "qi_grant" and a["requested"]:
         return "同事申请查看这条知识的原文；授予后对方可读、你记「授予」分，可随时撤销。"
     if family == "qi_grant" and a["slot"] == "statement":
@@ -113,8 +117,8 @@ def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None, s
         if not signer:
             return "pm:agent"
         return ref.get("pm") or min(a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent")
-    if role == "sales":     # v8 收口：自助单没有会话业务员时，需求单上的事（客户评价）归客户的归属业务员跟进
-        return ref["sales_id"] or (ref["account_sales"] if obj.object_type == "requirement" else None)
+    if role == "sales":     # v8 收口：自助单没有会话业务员时，需求单上的事（客户评价）归客户的归属业务员跟进；Q9.8 会话同理
+        return ref["sales_id"] or (ref["account_sales"] if obj.object_type in ("requirement", "session") else None)
     if role == "supervisor":
         return min(a.id for a in seeds.actors if a.role == "supervisor")
     if obj.object_type == "knowledge":

@@ -7,7 +7,7 @@ import pytest
 
 from huayan.bus import QuestionBus
 from huayan.contracts import (Capability, JueObject, JueOutput, JueRecord, JueState, NeedState, Requirement, ReuseProposal,
-                              ScoredDecision, Session)
+                              ScoredDecision, Session, Turn)
 from huayan.events import EventLog
 from huayan.jev.system1 import MockSystem1Client
 from huayan.jue.expr import evaluate
@@ -19,6 +19,7 @@ from huayan.jue.scan import scan
 from huayan.jue.state import collect_scheduled, requirement_state, session_state
 from huayan.jue.train import fit
 from huayan.knowledge import AuditLog, KnowledgeBase
+from huayan.l1.extract import RuleExtractor
 from huayan.meter import FileMeter
 
 ROOT = Path(__file__).parents[1]
@@ -81,9 +82,43 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     attrs = session_state(session, session_events, t0).objects["session:sess:20"].attrs
     assert attrs["escalated"] and not evaluate(templates_all["escalate_need"].precondition, attrs, boolean=True)
 
-    # 模板目录：Q2 新增 qi_grant、qi_review，Q5.5 新增 trial_rework，v8 新增 trial_risk、stale_capability，共 24 个；自动动作仍只有两种。
+    # v8 Q9.8：推荐之后客户连问两轮产品内部 → mechanism_followup（主人为会话业务员）；签过不再提出；只问用法和毛病原因的不提出
+    extractor = RuleExtractor(mini_seeds)
+    intent = lambda text: extractor.extract([Turn(id="turn:x:1", session_id="x", n=1, speaker="customer", text=text, ts=t0)],
+                                            need).intent
+    assert [intent(t) for t in ("T-205 怎么用？", "为什么升温快了就会色花？", "T-205 的配方和配比是什么？", "T-205 什么价格？")] == [
+        "product_question", "cause_question", "mechanism_request", "commercial"]
+    session.status, rt_model = "recommended", JueProto(TEMPLATES, system1, "realtime", meter)
+    def followups(asks):
+        log = EventLog()
+        for internal in asks:
+            log.append("extraction", "sales:S01", {"speaker": "customer", "customer_id": need.customer_id, "after_rec": True,
+                       "intent": "mechanism_request" if internal else "product_question", "products": ["T-205"]},
+                       session_id=session.id, ts=t0)
+        state = session_state(session, log, t0)
+        found = publish(rt_model.propose(state), state, templates_all, QuestionBus(log), 0.5, seeds=mini_seeds,
+                        refs={o: {"session_id": session.id, "sales_id": "sales:S01"} for o in state.objects})
+        return log, [(q.family, q.owner_id, q.signer_id) for q in found if q.family == "mechanism_followup"]
+    assert followups([False, False, False])[1] == []
+    log, found = followups([True, True])
+    assert found == [("mechanism_followup", "sales:S01", "sales:S01")]
+    log.append("question_resolved", "sales:S01", {"question_id": "q:f", "family": "mechanism_followup",
+               "object_id": "session:sess:20", "template_id": "mechanism_followup", "action": "take_over", "by": "sales:S01"}, ts=t0)
+    assert not evaluate(templates_all["mechanism_followup"].precondition,
+                        session_state(session, log, t0).objects["session:sess:20"].attrs, boolean=True)
+    # leak_risk 的对象只取业务员：助手的检索记到本人名下，客户、pm:agent 不是对象；只数行为（碰到的上层存根），不看意图
+    leak = EventLog()
+    for actor in ("customer:C01", "pm:agent", "agent:sales:S01", "sales:S01"):
+        for _ in range(3):
+            leak.append("retrieve", actor, {"query": "T-205 配方", "intent": "", "target_products": [],
+                                            "blocked_product_ids": ["T-205"], "capability_ids": [], "denied": False}, ts=t0)
+    state, _ = collect_scheduled(leak, t0 + timedelta(hours=1), mini_seeds, mini_seeds.products)
+    assert [o.attrs["n_stubs_top"] for o in state.objects.values() if o.object_type == "actor"] == [6]
+    assert "actor:sales:S01" in state.objects
+
+    # 模板目录：Q2 新增 qi_grant、qi_review，Q5.5 新增 trial_rework，v8 新增 trial_risk、stale_capability，Q9.8 新增 mechanism_followup，共 25 个；自动动作仍只有两种。
     templates = load_templates(TEMPLATES)
-    assert len({t.family for t in templates.values()}) == 24
+    assert len({t.family for t in templates.values()}) == 25
     assert {t.auto_action for t in templates.values() if t.auto_action} == {"escalate", "assign_sales"}
     for name in ("b1_required", "b2_info_value", "rule_alert"):
         load_templates(ROOT / "config" / "baselines" / name)

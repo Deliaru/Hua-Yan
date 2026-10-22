@@ -8,13 +8,22 @@ from huayan.contracts import (ExtractedSlot, ExtractionResult, LLMRequest, Messa
 from huayan.domain import detect_asked_slots, find_phenomenon, find_slot_values
 
 
+_MODEL = re.compile(r"(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+")
+
+
+def _named(text, products):
+    """按编号认型号：已知型号以本层视图为准，不假设连字符、字母或数字的排列方式。"""
+    return [p["id"] for p in products if re.search(
+        rf"(?<![A-Za-z0-9_-]){re.escape(p['id'])}(?![A-Za-z0-9_-])", text, re.IGNORECASE)]
+
+
 class RuleExtractor:
     name = "rule"
 
     def __init__(self, seeds):
         self.seeds = seeds
 
-    def extract(self, turns, prev):
+    def extract(self, turns, prev, products=()):
         turn = turns[-1]
         profile = prev.profile.model_copy(deep=True)
         result = ExtractionResult(intent="need", phenomenon=prev.phenomenon,
@@ -48,13 +57,23 @@ class RuleExtractor:
         # 「成分」在说布料（面料用词或本轮抽到面料取值）时是需求，不算问机理
         about_fabric = "fiber" in {s.slot for s in result.slots} or any(
             word in text for word in ("面料", "布", "纱", "纤维", "料子", "材质"))
-        if any(word in text for word in ("原理", "为什么", "配方", "机理")) or ("成分" in text and not about_fabric):
+        # 以下词表只是离线降级（测试、无模型）；线上意图由大模型抽取给出（契约 ⑰′）
+        if any(word in text for word in ("原理", "配方", "配比", "机理", "染座")) or ("成分" in text and not about_fabric):
             result.intent = "mechanism_request"
             profile.asked_mechanism = True
-        elif any(word in text for word in ("是什么产品", "怎么用", "用法")):
+        elif any(word in text for word in ("报价", "价格", "采购", "下单", "送样", "寄样", "业务员", "人工")):
+            result.intent = "commercial"
+        elif any(word in text for word in ("是什么产品", "怎么用", "用法", "用量", "说明书")):
             result.intent = "product_question"
+        elif "为什么" in text:
+            result.intent = "cause_question"
         elif not phenomenon and not result.slots and any(w in text for w in ("你好", "谢谢", "再见")):
             result.intent = "smalltalk"
+        result.product_refs = _named(text, products)
+        # 型号按编号认；没点名型号（也没有认不出的型号）的问题默认指已推荐的产品
+        if not result.product_refs and not _MODEL.search(text) and result.intent in (
+                "product_question", "cause_question", "mechanism_request"):
+            result.product_refs = [p["id"] for p in products if p.get("recommended")]
         # 懂化学的客户直接点名要某一类助剂（种子产品品类）；不懂化学的只说现象。
         compact = text.replace(" ", "").casefold()
         if any(p.category.replace(" ", "").casefold() in compact for p in self.seeds.products):
@@ -69,8 +88,9 @@ class LLMExtractor:
         self.seeds, self.gateway = seeds, gateway
         self.prompt = (Path(__file__).resolve().parents[3] / "prompts/extract.md").read_text(encoding="utf-8")
 
-    def extract(self, turns, prev):
-        data = {"slots": [{"id": s.id, "label": s.label, "values": s.values} for s in self.seeds.slots],
+    def extract(self, turns, prev, products=()):
+        data = {"products": [{"id": p["id"], "name": p["name"]} for p in products],
+                "recommended_product_id": next((p["id"] for p in products if p.get("recommended")), None),"slots": [{"id": s.id, "label": s.label, "values": s.values} for s in self.seeds.slots],
                 "categories": sorted({p.category for p in self.seeds.products}),
                 "phenomena": [{"id": p.id, "label": p.label, "phrases": p.customer_phrases}
                               for p in self.seeds.phenomena],
@@ -82,7 +102,7 @@ class LLMExtractor:
         return output
 
 
-def validate_extraction(result, seeds, turns):
+def validate_extraction(result, seeds, turns, product_ids):
     """枚举校验位于掌握种子定义的输入边界，保持 apply_extraction 的冻结签名。"""
     slots = {s.id: s for s in seeds.slots}
     by_n = {t.n: t for t in turns}
@@ -98,6 +118,7 @@ def validate_extraction(result, seeds, turns):
     result.slots = [s for s in result.slots if (src := by_n.get(s.turn_n)) is not None and src.speaker == "customer"
                     and s.quote and s.quote in src.text]
     result.asked_slots = [s for s in result.asked_slots if s in slots]
+    result.product_refs = list(dict.fromkeys(p for p in result.product_refs if p in product_ids))   # 只认本层视图里的编号
     if turns[-1].speaker != "sales":
         result.asked_slots = []
     return result
@@ -105,7 +126,8 @@ def validate_extraction(result, seeds, turns):
 
 def apply_extraction(prev: NeedState, result: ExtractionResult, turns) -> NeedState:
     need = prev.model_copy(deep=True)
-    need.phenomenon, need.phenomenon_quote = result.phenomenon, result.phenomenon_quote
+    if result.phenomenon is not None:       # 大模型偶尔漏回已认出的现象（整月录制里客户答回问时遇到），沿用上一轮
+        need.phenomenon, need.phenomenon_quote = result.phenomenon, result.phenomenon_quote
     by_n = {t.n: t for t in turns}
     for slot in result.slots:
         need.slots[slot.slot] = SlotFill(**slot.model_dump(exclude={"turn_n"}), turn_id=by_n[slot.turn_n].id)

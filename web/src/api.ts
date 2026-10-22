@@ -3,7 +3,7 @@
 import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun,
-  Route, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem,
+  Route, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -61,6 +61,7 @@ export const api = {
   questions: (viewer: string) => call<Question[]>(`questions?${q({ viewer })}`),
   requirements: (viewer: string) => call<RequirementSummary[]>(`requirements?${q({ viewer })}`),
   frozen: (actor: string) => call<{ frozen: boolean }>(`frozen?${q({ actor })}`),
+  frozenActors: (viewer: string) => call<FrozenActor[]>(`frozen_actors?${q({ viewer })}`),
   requirement: (id: string, viewer: string) => call<RequirementView>(`requirement?${q({ id, viewer })}`),
   leak: (id: string, viewer: string) => call<LeakHit[]>(`leak?${q({ id, viewer })}`),
   timeline: (target: string, viewer: string) => call<JueTimeline>(`timeline?${q({ target_id: target, viewer })}`),
@@ -68,6 +69,9 @@ export const api = {
   contributions: (viewer: string) => call<ContributionStat[]>(`contributions?${q({ viewer })}`),
   report: <T,>(name: "distortion" | "distortion_300" | "jue_k" | "week" | "v6_routes") => call<T>(`report?${q({ name })}`),
   // 单卡对照按查看者裁剪（WP-E2）：L1 只拿到三组统计，L2/L3 有单卡明细
+  // v8 Q9.5：模拟业务月（不属于浏览器会话；时间线只给主管）
+  monthRuns: () => request<MonthProgress[]>("month/runs"),
+  monthTimeline: (run: string, day: string, viewer: string) => request<MonthDay>(`month/timeline?${q({ run, day, viewer })}`),
   singleCard: <T,>(viewer: string) => call<T>(`report?${q({ name: "single_card", viewer })}`),
 
   // 业务员工作面
@@ -111,8 +115,9 @@ export const api = {
     call("decrypt/decide", { question_id, approve, text, by }),
   trial: (req_id: string, result: "pass" | "fail", by: string, cause = "none", missing_slots: string[] = []) =>
     call("trial", { req_id, result, by, cause, missing_slots }),
-  resolve: (question_id: string, action: "dismiss" | "update_sheet" | "freeze_access" | "sign", by: string, note = "") =>
+  resolve: (question_id: string, action: "dismiss" | "update_sheet" | "freeze_access" | "take_over" | "sign", by: string, note = "") =>
     call("resolve", { question_id, action, by, note }),
+  unfreeze: (actor_id: string, by: string) => call("unfreeze", { actor_id, by }),
 
   // v6：路由、开工条件、岗位工作、产品经理协作、研发不立项
   route: (id: string, viewer: string) => call<Route>(`route?${q({ id, viewer })}`),

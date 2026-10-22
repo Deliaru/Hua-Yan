@@ -2,13 +2,13 @@ id: leak_risk
 family: leak_risk
 kind: anomaly
 object_type: actor
-decision_label: 是否冻结权限
-# 未冻结、48 小时内检索至少 3 次就进入评估（正常连续问用法的也进来，作为困难负样本）
-precondition: "not attrs.frozen and attrs.n_queries >= 3"
-# 规则：被拦截的高层级命中至少 3 条；被拦截越多、越集中在同一个产品上，越像在拼凑
-rule_score: "(attrs.n_blocked >= 3) * (0.05 * attrs.n_blocked + 0.6 * attrs.blocked_top_share)"
-worth_prompt: "提问者 {object}（角色 {attrs.role}，只有 L1 权限）近 48 小时检索 {attrs.n_queries} 次，其中要求讲原理 {attrs.n_mech_requests} 次；这些检索命中了 {attrs.n_blocked} 条他无权查看、被拦截的研发级知识（机理、配方），其中 {attrs.blocked_top_share} 比例集中在同一个产品上。正常业务员问用法不会被拦截；反复换角度追问同一产品的机理和配方，可能是在拼凑保密知识。是否存在泄露风险、需要冻结其高层级检索权限？"
-title: "{object} 反复检索同一产品的高层级内容，是否冻结权限？"
+decision_label: 是否冻结上层知识检索
+# v8 Q9.8：对象只取业务员（助手的检索记到本人名下）；客户交给 mechanism_followup。窗口 7 天，从上次解冻起算
+precondition: "attrs.role == 'sales' and not attrs.frozen and attrs.n_queries >= 3"
+# ⑰′ 纯行为计数的暂用版；最终从三条候选里按离线变体轨迹的验证集选（REPLAN-v8 第 9 节）
+rule_score: "(attrs.n_stubs_top + attrs.n_statements_top >= 3 and attrs.top_product_share >= 0.6) * 1.0"
+worth_prompt: "业务员 {object} 近 7 天检索 {attrs.n_queries} 次，碰到同一产品的上层知识（只见归属）最多 {attrs.n_stubs_top} 条，读到同一产品授予给业务员的上层结论最多 {attrs.n_statements_top} 条，以上与解密申请合计 {attrs.top_product_share} 比例集中在产品 {attrs.top_product}；替 {attrs.n_decrypt_customers} 位客户申请了 {attrs.n_decrypt_products} 个产品的解密（共 {attrs.n_decrypt_requests} 次）。是否存在泄露风险、需要冻结其上层知识检索与解密申请？"
+title: "{object} 的检索集中在同一产品的上层知识，是否冻结？"
 owner_role: supervisor
 signer_role: supervisor
 urgency: "1.0"

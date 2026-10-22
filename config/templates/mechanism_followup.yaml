@@ -1,0 +1,13 @@
+id: mechanism_followup
+family: mechanism_followup
+kind: anomaly
+object_type: session
+decision_label: 是否由业务员接手客户对产品内部的追问
+# v8 Q9.8：推荐之后客户追问产品内部（意图为要原理且指到具体产品）。本质是交接，分不出正当与否，措辞保持中性
+precondition: "attrs.recommended and not attrs.followup_handled and attrs.n_internals_after_rec >= 1"
+rule_score: "(attrs.n_internals_after_rec >= 2 or attrs.customer_internal_products >= 2) * 1.0"
+worth_prompt: "会话 {object} 已给出推荐，客户之后 {attrs.n_internals_after_rec} 轮追问产品内部（配方、机理、成分等），系统只能答到用法；该客户近两天问过内部的产品 {attrs.customer_internal_products} 个，已获批的解密 {attrs.customer_decrypts} 个。是否由业务员接手：讲用法与公开的合规信息，确有正当需求就替客户申请解密、交研发审批？"
+title: "{object}：客户追问产品内部，交业务员接手"
+# 发布层解析：会话业务员；自助会话为客户归属业务员
+owner_role: sales
+signer_role: sales

@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import time
 from collections import OrderedDict
 import traceback
@@ -208,6 +209,7 @@ GET = {
                                           "customer_ids": [s.customer_id for s in app.sessions() if s.id in r.session_ids]}
                                     for r in app.requirements(p["viewer"])],
     "/api/frozen": lambda app, p: {"frozen": app.kb.is_frozen(p["actor"])},
+    "/api/frozen_actors": lambda app, p: app.frozen_actors(p["viewer"]),          # v8 Q9.8
     "/api/requirement": lambda app, p: app.requirement_view(p["id"], p["viewer"]),
     "/api/leak": lambda app, p: app.leak_check(p["id"], p["viewer"]),
     "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),
@@ -235,6 +237,7 @@ POST = {
     "/api/turn": lambda app, p: app.add_turn(p["session_id"], p["speaker"], p["text"]),
     "/api/recommend": lambda app, p: app.recommend_now(p["session_id"]),
     "/api/resolve": lambda app, p: app.resolve(p["question_id"], p["action"], p["by"], p.get("note", "")),
+    "/api/unfreeze": lambda app, p: app.unfreeze_access(p["actor_id"], p["by"]),     # v8 Q9.8
     "/api/escalate": lambda app, p: app.escalate(p["session_id"], p["by"]),
     "/api/reuse/adopt": lambda app, p: app.adopt_reuse(p["req_id"], p["by"]),
     "/api/reuse/decline": lambda app, p: app.decline_reuse(p["req_id"], p["reason"], p["by"]),
@@ -617,6 +620,8 @@ class Handler(SimpleHTTPRequestHandler):
                 result = set_mode(sid, params)
             elif url.path == "/api/progress":
                 result = session_api(sid).progress(params["viewer"])
+            elif url.path in MONTH:                   # 业务月的运行不属于任何浏览器会话
+                result = MONTH[url.path](params)
             elif url.path == "/api/agents/process":
                 result = session_api(sid).agent_process(params["conversation_id"], params["viewer"])
             else:
@@ -664,6 +669,63 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         self._api("POST", json.loads(self.rfile.read(length) or b"{}"))
+
+
+# v8 Q9.5：模拟业务月（scripts/run_month.py）的运行状态与主管时间线。正在跑的运行由另一个进程写，
+# 这里复制一份快照（截掉写了一半的行）再读回门面，不碰原运行目录；事件有变化时至多每 3 秒重建一次。
+MONTH_RUNS, MONTH_VIEWS = Path("data/enterprise/runs"), Path("data/enterprise/views")
+MONTH_RUN = re.compile(r"month-[\w-]+")
+month_views: dict = {}
+month_lock = Lock()
+
+
+def month_runs(p):
+    runs = [{"run_id": d.name, **json.loads((d / "progress.json").read_text(encoding="utf-8"))}
+            for d in MONTH_RUNS.glob("month-*") if (d / "progress.json").exists()]
+    return sorted(runs, key=lambda r: r["updated"], reverse=True)
+
+
+def _month_dir(run):
+    if not MONTH_RUN.fullmatch(run) or not (MONTH_RUNS / run / "progress.json").exists():
+        raise KeyError(run)
+    return MONTH_RUNS / run
+
+
+def month_app(run):
+    src = _month_dir(run)
+    stamp = (src / "events.jsonl").stat().st_mtime_ns
+    with month_lock:
+        cached = month_views.get(run)
+        if cached and (cached[0] == stamp or time.monotonic() - cached[2] < 3):
+            return cached[1]
+        root = MONTH_VIEWS / run
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.copytree(src, root / run, ignore=shutil.ignore_patterns(
+            "jue_samples.jsonl", "metering.jsonl", "agent_trace.jsonl", "conversations"),
+            copy_function=lambda a, b: Path(b).write_bytes(Path(a).read_bytes()))   # Windows 上系统复制会锁住正在追加的源文件
+        for f in (root / run).glob("*.jsonl"):
+            text = f.read_text(encoding="utf-8")
+            f.write_text(text[:text.rfind("\n") + 1], encoding="utf-8")
+        config = yaml.safe_load(Path(f"data/enterprise/app.{run}.yaml").read_text(encoding="utf-8"))
+        config.update(run_root=str(root), gateway_mock=True, replay=True, llm_cache_dir=None)
+        (root / "app.yaml").write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+        use_clock(SimClock(datetime.now(SHANGHAI)))
+        app = HuayanApp.build(str(root / "app.yaml"), run, resume=True)
+        month_views[run] = (stamp, app, time.monotonic())
+        return app
+
+
+def month_timeline(p):
+    app = month_app(p["run"])
+    use_clock(SimClock(datetime.now(SHANGHAI)))
+    return app.timeline(p["day"], p["viewer"])
+
+
+MONTH = {
+    "/api/month/runs": month_runs,
+    "/api/month/progress": lambda p: json.loads((_month_dir(p["run"]) / "progress.json").read_text(encoding="utf-8")),
+    "/api/month/timeline": month_timeline,
+}
 
 
 apis: OrderedDict[str, Api] = OrderedDict()

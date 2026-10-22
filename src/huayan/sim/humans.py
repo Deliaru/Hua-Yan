@@ -5,7 +5,8 @@
 查资料，生效动作只出确认卡，由本人确认。客户多数先在自助页问化言，点名要人或有商务诉求时觉交业务员。
 卡片上只有本人工作面上看得到的内容和按钮。
 模拟人看不到需求卡、注入清单与世界规律；只有模拟客户知道真值。试样结果、客户评价由世界规律（sim/world.py）给出。
-主管的处置不在本包（契约 ⑩ 没有 sim:supervisor），泄露风险问题留在待签。"""
+v8 Q9.4：主管（sim:supervisor）看泄露风险、决定冻不冻结，主管没有助手（Q9.8：冻结后被拦的人还在要原理时，主管也看到可以解冻）；客户拿到推荐后送样试用，结果由产品归属研发录入；
+研发确认化学要点时，世界按当时的已知条件记下「这单照此试样会不会失败」（verdicts，只供 eval/）。"""
 from __future__ import annotations
 
 import json
@@ -21,11 +22,13 @@ from pydantic import BaseModel, create_model
 
 from huayan.clock import get_clock
 from huayan.contracts import LLMRequest, Message, NeedCard, Question, Tier, Trial
+from huayan.knowledge import PermissionDenied
 from huayan.sim.customer import SimCustomer
 from huayan.sim.world import market_outcome, trial_outcome
 
 PROMPTS = Path(__file__).parents[3] / "prompts"
 TRIAL_DELAY = timedelta(days=1)          # 确认化学要点 1 个业务日后试样（模拟 ELN 录入）
+SAMPLE_DELAY = timedelta(days=2)         # v8 Q9.4：客户拿到推荐 2 天后送样试用，反馈由产品归属研发录入
 MAX_TURNS = 8
 LOOK_STEPS = 4                           # 一次查看最多做几步（处理一件、对助手说一句、确认一张卡都算一步）
 CUSTOMER_EVERY = [60, 180]               # 客户隔一两个小时回自助页看一眼
@@ -60,6 +63,10 @@ def load_personas(path: Path = PROMPTS / "personas.yaml") -> dict:
 class LLMHumans:
     def __init__(self, app, personas: dict, drift: bool = False):
         self.app, self.personas, self.drift = app, personas, drift
+        self.applicable = {p.id: p.applicable for p in app.seeds.products}   # 世界规律用种子适用表；新立的产品为空
+        self.samples: list[tuple[datetime, str]] = []      # (到期, 会话)：客户送样试用
+        self.sampled: set[str] = set()
+        self.verdicts: list[dict] = []                      # 确认化学要点时世界的判定（只供 eval/）
         self.customers: dict[str, SimCustomer] = {}
         self.cards: dict[str, NeedCard] = {}               # 会话 → 需求卡（只给模拟客户与世界规律用）
         self.trials: list[tuple[datetime, str, str]] = []
@@ -70,6 +77,7 @@ class LLMHumans:
         self.answered: set[str] = set()                     # 客户在自助页答过的回问
         self.seen: dict[str, str | None] = {}               # 客户在自助页看过的推荐
         self.called: set[str] = set()                       # 业务员打过电话的会话
+        self.denied_seen: dict[str, int] = {}               # 主管看过的「冻结后被拦」次数
 
     # 模型选按钮 ------------------------------------------------------------------------------------
     def _choose(self, actor: str, card: str, buttons: dict[str, Button]) -> Choice:
@@ -97,7 +105,7 @@ class LLMHumans:
                 button.run(choice)
                 action = button.label
                 break
-            except ValueError as exc:
+            except (ValueError, PermissionDenied) as exc:
                 action = f"被拒：{button.label}（{exc}）"
                 if attempt == 0:
                     self._log(family, object_id, action, actor, question_id, choice.reason, choice.text, choice.slots,
@@ -108,10 +116,11 @@ class LLMHumans:
                          raised=button.question, kind=button.kind)
 
     # 客户来找：多数客户先在自助页问化言；点名要人或有商务诉求时觉交业务员；少数客户（direct）直接打给业务员 ----------
-    def visit(self, card: NeedCard, sales: str, rng: random.Random) -> None:
+    def visit(self, card: NeedCard, sales: str, rng: random.Random, direct: bool | None = None, intent: str = "") -> None:
+        """direct、intent：Q9.4 剧本事件用（这次直接打给业务员；这次另有来意，追加在人设后）。"""
         app, p = self.app, self.personas[card.customer_id]
-        direct = p.get("direct", False)
-        customer = SimCustomer(card, app.seeds, rng, app.gateway, persona=p["persona"],
+        direct = p.get("direct", False) if direct is None else direct
+        customer = SimCustomer(card, app.seeds, rng, app.gateway, persona=p["persona"] + intent,
                                channel="" if direct else SELF_SERVE)
         sid = app.start_session(card.customer_id, sales if direct else None).id
         self.customers[sid], self.cards[sid] = customer, card
@@ -238,6 +247,7 @@ class LLMHumans:
             raise ValueError(done.result.error)
         if a.tool == "confirm_translation":
             self.trials.append((get_clock().now() + TRIAL_DELAY, a.args["req_id"], by))
+            self._verdict(a.args["req_id"])
 
     # 研发的试样：结果由世界规律给出 -----------------------------------------------------------------
     def trial(self, req_id: str, rd: str, due: datetime) -> None:
@@ -246,12 +256,64 @@ class LLMHumans:
         if req.status != "rd_confirmed" or due != max(d for d, r, _ in self.trials if r == req_id):
             self._log("trial", req_id, "试样取消", rd, note=f"单子状态 {req.status}，或已重新确认另排")
             return
-        result, cause, missing = trial_outcome(self.cards[req.session_ids[0]], req.known_slots, self.drift)
+        result, cause, missing = trial_outcome(self.cards[req.session_ids[0]], req.known_slots, self.drift,
+                                               self._product(req.product_id))
         self.tested[req_id] = dict(req.known_slots)
         self.app.record_trial(Trial(id=f"trial:{req_id}:{len(self.log)}", product_id=req.product_id,
                                     requirement_id=req_id, rd=rd, conditions=req.known_slots, result=result,
                                     cause=cause, missing_slots=missing, at=get_clock().now()))
         self._log("trial", req_id, f"试样{'通过' if result == 'pass' else '失败'}", rd, note=f"（世界）原因 {cause} {missing}")
+
+    def _product(self, product_id: str) -> tuple[str, dict]:
+        return product_id, self.applicable.get(product_id, {})
+
+    def _verdict(self, rid: str) -> None:
+        """确认化学要点时，世界按当时的已知条件判一次：照此试样会不会失败、是不是因需求条件缺失（只供 eval/）。"""
+        req = self.app._requirements[rid]
+        result, cause, missing = trial_outcome(self.cards[req.session_ids[0]], req.known_slots, self.drift,
+                                               self._product(req.product_id))
+        self.verdicts.append({"requirement_id": rid, "at": get_clock().now().isoformat(), "result": result,
+                              "cause": cause, "missing_slots": missing})
+
+    # 客户送样试用：拿到推荐的客户 2 天后试用，结果由世界给出、产品归属研发录入 ------------------------------
+    def schedule_samples(self) -> None:
+        for s in self.app.sessions():
+            if s.id in self.cards and s.id not in self.sampled and s.status == "recommended" \
+                    and s.recommendation and s.recommendation.product_id:
+                self.sampled.add(s.id)
+                self.samples.append((get_clock().now() + SAMPLE_DELAY, s.id))
+
+    def sample(self, sid: str) -> None:
+        session = next(s for s in self.app.sessions() if s.id == sid)
+        if session.recommendation is None:       # 之后客户又升级了，推荐已撤下，不再送样
+            self._log("sample", sid, "送样取消", session.customer_id, note=f"会话状态 {session.status}")
+            return
+        pid = session.recommendation.product_id
+        rd = self.app.kb.product(pid).owner
+        known = {k: v.value for k, v in session.need.slots.items() if v.status == "filled"}
+        result, cause, missing = trial_outcome(self.cards[sid], known, self.drift, self._product(pid))
+        self.app.record_trial(Trial(id=f"sample:{sid}", product_id=pid, rd=rd, conditions=known, result=result,
+                                    cause=cause, missing_slots=missing, note="（模拟）客户送样试用反馈",
+                                    at=get_clock().now()))
+        self._log("sample", sid, f"送样试用{'通过' if result == 'pass' else '失败'}", rd,
+                  note=f"（世界）{pid} 原因 {cause} {missing}")
+
+    # 剧本事件：研发在需求单上看到同事知识的存根，决定要不要申请查看（Q9.4） -----------------------------------
+    def peer_look(self, rd: str) -> None:
+        for req in self.app.requirements(rd):
+            if req.assigned_rd != rd:
+                continue
+            phen = next(p for p in self.app.seeds.phenomena if p.id == req.phenomenon)
+            stubs = [h for h in self.app.kb.search_blocked(phen.label, self.app.actors[rd], phenomenon=phen.id)
+                     if h.ku_id]
+            if stubs:
+                h = stubs[0]
+                card = (f"你在看需求单 {req.id}（现象 {phen.label}）时，检索到同事 {self.app.actors[h.owner].name} 的一条"
+                        f" {h.kind} 类研发知识，你只看得到存根（归属与类型），看不到原文。")
+                buttons = {"apply": Button("申请查看（同事本人审批）", lambda c: self.app.request_share(h.ku_id, rd)),
+                           "skip": Button("不申请", lambda c: None, kind="later")}
+                self._decide(rd, "peer_request", h.ku_id, card, buttons)
+                return
 
     # 助手准备 --------------------------------------------------------------------------------------
     def prepare(self, run=lambda jobs: [fn() for _, fn in jobs]) -> None:
@@ -284,11 +346,16 @@ class LLMHumans:
         return at
 
     def todo(self, actor: str) -> list[Question]:
-        """轮到这个人动手的事（与界面工作台同一份待办）：自己签字且助手已准备好的，业务员的回问；最早的在前。"""
-        return sorted((q for q in self.app.questions(actor)
+        """轮到这个人动手的事（与界面工作台同一份待办）：自己签字且助手已准备好的，业务员的回问；最早的在前，
+        试样风险置顶（它有期限：确认后次日就试样，两组一样）。"""
+        try:
+            questions = self.app.questions(actor)
+        except PermissionDenied:                 # 被冻结的人打不开工作台
+            return []
+        return sorted((q for q in questions
                        if (q.family == "ask_back" and q.owner_id == actor)
                        or (q.signer_id == actor and q.prepared_at is not None and q.family != "ask_back")),
-                      key=lambda q: (q.created_at, q.id))
+                      key=lambda q: (q.family != "trial_risk", q.created_at, q.id))
 
     def look(self, actor: str) -> None:
         """打开工作台看一眼：没有待办、没有确认卡就不调模型；有就看着整张工作台做一步——处理一件、对助手说一句、
@@ -310,15 +377,24 @@ class LLMHumans:
         for _ in range(LOOK_STEPS):
             todo = [q for q in self.todo(actor) if q.id not in done]
             cards = self._card_buttons(actor)
-            if not todo and not cards:
+            frozen = self.app.frozen_actors(actor) if actor.startswith("supervisor:") else []
+            fresh = [r for r in frozen if r["n_denied"] > self.denied_seen.get(r["actor_id"], 0)]
+            if not todo and not cards and not fresh:
                 return
+            for r in frozen:                             # v8 Q9.8：有待办或冻结后又被拦时，主管同时看到解冻
+                self.denied_seen[r["actor_id"]] = r["n_denied"]
+                cards[f"u/{r['actor_id']}"] = Button(
+                    f"解冻 {r['name']}（{r['frozen_at'][5:16]} 冻结；之后被拦的原理请求 {r['n_denied']} 次，"
+                    f"涉及客户 {'、'.join(r['customers']) or '无'}；冻结依据：{'；'.join(r['evidence'])}）",
+                    lambda c, a=r["actor_id"]: self.app.unfreeze_access(a, actor))
             shown, buttons = todo[:DETAIL], {}
             for i, q in enumerate(shown, 1):
                 dismiss = {} if q.family not in anomalies else {   # 推进类不给忽略，不想处理就先放着
                     "dismiss": Button("越过，判断无须处理（text 写理由）",
                                       lambda c, q=q: self.app.resolve(q.id, "dismiss", actor, c.text), "text")}
-                chat = {"chat": Button("对助手说（text 写你要它做的事：查资料、改草稿、解释证据）",
-                                       lambda c, q=q: notes.append(self._chat_on(actor, c.text, q)), "text", kind="chat")}
+                chat = {} if actor.startswith("supervisor:") else {   # 主管没有助手
+                    "chat": Button("对助手说（text 写你要它做的事：查资料、改草稿、解释证据）",
+                                   lambda c, q=q: notes.append(self._chat_on(actor, c.text, q)), "text", kind="chat")}
                 for key, b in {**self._buttons(q, actor, q.refs.get("requirement_id")), **dismiss, **chat}.items():
                     buttons[f"{i}/{key}"] = replace(b, label=f"第 {i} 件：{b.label}", question=q)
             buttons.update(cards)
@@ -373,12 +449,26 @@ class LLMHumans:
                                  "revoke": Button("撤销这条判断", lambda c: app.revoke_capability(q.refs["capability_id"], by))},
             "opportunity": {"merge": Button("合并立项", lambda c: app.merge_requirements(q.id, by, c.text), "text")},
             "scope_update": {"extend": Button("批准纳入适用范围", lambda c: app.extend_scope(q.id, c.text, by), "text")},
+            "leak_risk": {"freeze": Button("冻结其上层知识检索与解密申请", lambda c: app.resolve(q.id, "freeze_access", by))},
+            "mechanism_followup": {"take": Button("接手：给客户回电话，讲用法与公开信息，确有需要就替客户申请解密",
+                                                  lambda c: self._take_over(q, by))},
         }
-        return table.get(f, {})
+        buttons = table.get(f, {})
+        if f in {"accept_requirement", "confirm_translation"} and self.app.candidate_claims(rid, by):
+            buttons["claims"] = Button("确认勾选的候选结论（编号写进 slots）",
+                                       lambda c: app.confirm_claims(rid, c.slots, by), "slots")
+        return buttons
+
+    def _take_over(self, q: Question, by: str) -> None:
+        sid = q.refs["session_id"]
+        self.app.resolve(q.id, "take_over", by)
+        self.called.discard(sid)
+        self.call(sid, by)
 
     def _confirm(self, rid: str, by: str) -> None:
         self.app.confirm_translation(rid, by)
         self.trials.append((get_clock().now() + TRIAL_DELAY, rid, by))
+        self._verdict(rid)
 
     def _narrow(self, q: Question, drop: list[str], by: str) -> None:
         scope = json.loads(q.refs["scope"])
@@ -403,7 +493,10 @@ class LLMHumans:
                     lines.append(f"已回问 {self.slot_label[a.refs['slot']]}（{a.created_at:%m-%d %H:%M}）：{answer}")
             if req.points_draft:
                 lines.append(f"助手起草的对外要点：{req.points_draft.model_dump_json()}")
-        if q.family == "qi_grant" and "ku_id" in q.refs:   # 人记得自己的结论；扮演的模型没有记忆，把原文放进卡片
+        if q.family == "qi_grant" and "requester" in q.refs:   # 同层研发申请查看：归属人看得到原文
+            ku = self.app.kb.get(q.refs["ku_id"], self.app.actors[by])
+            lines.append(f"{self.app.actors[q.refs['requester']].name}申请查看你的这条知识（原文）：{ku.text}")
+        elif q.family == "qi_grant" and "ku_id" in q.refs:   # 人记得自己的结论；扮演的模型没有记忆，把原文放进卡片
             ku = self.app.kb.get(q.refs["ku_id"], self.app.actors[by])
             lines.append(f"这条结论是你的（你看得到原文，L{q.refs['audience']} 看不到）：{ku.text}")
             lines.append(f"给 L{q.refs['audience']} 的一句话只说效果和适用场合（例如「某工序里能减少某种问题」），"
@@ -411,6 +504,9 @@ class LLMHumans:
         if q.family in {"accept_requirement", "confirm_translation"}:   # 工作台签字区同样列出同单还开着的失真提示，供参考
             lines += [f"同单还开着的失真提示（供参考）：{e.summary}" for d in self.app.questions(by)
                       if d.family == "distortion" and d.refs.get("requirement_id") == rid for e in d.evidence]
+        if q.family in {"accept_requirement", "confirm_translation"} and not by.startswith("sales:"):
+            lines += [f"契从资料里编出的候选结论（等你确认，可勾选编号）：{u.id}｜{u.title}：{u.text}"
+                      for u in self.app.candidate_claims(rid, by)]
         if q.family in {"trial_risk", "accept_requirement"}:
             lines.append("可勾选的条件编号：" + "、".join(f"{s}（{l}）" for s, l in self.slot_label.items()))
         if q.family == "stale_capability":

@@ -4,7 +4,6 @@ from __future__ import annotations
 import itertools
 import json
 import math
-import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -18,10 +17,9 @@ from huayan.events import EventLog
 if TYPE_CHECKING:
     from huayan.knowledge import KnowledgeBase
 
-WINDOWS = {"theme_days": 7, "knowledge_days": 7, "actor_hours": 48}   # 与 config/app.yaml 的 windows 一致
+WINDOWS = {"theme_days": 7, "knowledge_days": 7, "actor_hours": 168}   # 与 config/app.yaml 的 windows 一致
 _PRODUCT_KU = {"sheet", "usage", "mechanism", "formula"}
 _INTERNAL = Actor(id="system:jue", role="rd", name="觉（内部身份，只用于属性计数）")
-_PURCHASE = re.compile("报价|价格|采购|下单|送样|业务员|人工")   # v6：商务诉求；v8：客户要找人，纯规则
 
 
 def realtime_state(need: NeedState, seeds: Seeds, products: list[Product], at: datetime) -> JueState:
@@ -39,6 +37,15 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
     p_top = max(match["p_choice"].values(), default=0.0) if match is not None else 0.0
     need = sess.need
     oid = f"session:{sess.id}"
+    # ⑰′：只读抽取事件的意图与指到的产品；客户问产品内部按本会话与该客户 48 小时内各会话计
+    said = [e for e in events.query(["extraction"], until=at)
+            if e.payload.get("speaker") == "customer" and e.payload.get("customer_id") == sess.customer_id]
+    internals = [e for e in said if e.payload["intent"] == "mechanism_request" and e.payload.get("products")]
+    revoked = {e.payload["capability_id"] for e in events.query(["capability_revoked"], until=at)}
+    decrypts = {e.payload["capability_id"] for e in events.query(["decrypt_approve"], until=at)
+                if e.payload["customer_id"] == sess.customer_id} - revoked
+    handled = any(e.payload["family"] == "mechanism_followup" and e.payload["object_id"] == oid
+                  for e in events.query(["question_resolved"], until=at))
     obj = JueObject(object_id=oid, object_type="session", attrs={
         "phenomenon": need.phenomenon or "unknown", "phenomenon_known": need.phenomenon is not None,
         "turn": need.turn_count, "n_filled": len(need.known()),
@@ -50,7 +57,11 @@ def session_state(sess: Session, events: EventLog, at: datetime) -> JueState:
         "chem_savvy": need.profile.chem_savvy, "asked_mechanism": need.profile.asked_mechanism,
         "decrypt_requested": any(e.kind == "decrypt_request" for e in relevant),
         "self_serve": sess.origin == "customer", "sales_assigned": sess.sales_id is not None,
-        "purchase_intent": any(t.speaker == "customer" and _PURCHASE.search(t.text) for t in sess.turns),
+        "purchase_intent": any(e.session_id == sess.id and e.payload["intent"] == "commercial" for e in said),
+        "n_internals_after_rec": sum(1 for e in internals if e.session_id == sess.id and e.payload.get("after_rec")),
+        "customer_internal_products": len({pid for e in internals if e.ts >= at - timedelta(hours=48)
+                                           for pid in e.payload["products"]}),
+        "customer_decrypts": len(decrypts), "followup_handled": handled,
     })
     return JueState(at=at, mode="realtime", objects={oid: obj})
 
@@ -261,7 +272,7 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
                      *_stale(events, at, caps, seeds),
                      *_scope(events, at, caps),
                      *_qi(events, at, caps, units or {}),
-                     *_actors(events, at, at - timedelta(hours=w["actor_hours"]))]:
+                     *_actors(events, at, at - timedelta(hours=w["actor_hours"]), caps)]:
         objects[obj.object_id], refs[obj.object_id] = obj, ref
     return JueState(at=at, mode="scheduled", objects=objects), refs
 
@@ -393,21 +404,41 @@ def _scope(events, at, caps):
              "requirement_ids": [e.payload["requirement_id"] for e in evs]}
 
 
-def _actors(events, at, since):
-    frozen = {e.payload["actor_id"] for e in events.query(["access_frozen"], until=at)}
+def _sales_of(actor: str) -> str | None:
+    """v8 Q9.8：泄露风险的对象只取业务员本人，其助手的检索记到本人名下。"""
+    actor = actor.removeprefix("agent:")
+    return actor if actor.startswith("sales:") else None
+
+
+def _actors(events, at, since, caps):
+    frozen, unfrozen_at = set(), {}
+    for e in events.query(["access_frozen", "access_unfrozen"], until=at):
+        (frozen.add if e.kind == "access_frozen" else frozen.discard)(e.payload["actor_id"])
+        if e.kind == "access_unfrozen":
+            unfrozen_at[e.payload["actor_id"]] = e.ts
+    product_of = {c.id: c.payload.get("product_id") for c in caps}
     groups = defaultdict(list)
-    for e in events.query(["retrieve"], since=since, until=at):
-        groups[e.actor].append(e)
+    for e in events.query(["retrieve", "decrypt_request"], since=since, until=at):
+        sales = _sales_of(e.actor)
+        if sales and e.ts > unfrozen_at.get(sales, since):     # 解冻后重新起算
+            groups[sales].append(e)
     for actor, evs in groups.items():
-        blocked = Counter(pid for e in evs for pid in e.payload["blocked_product_ids"])
-        hit = {ku.split(":", 2)[2] for e in evs for ku in e.payload["hit_ku_ids"] if ku.split(":")[1] in _PRODUCT_KU}
+        retrieves = [e for e in evs if e.kind == "retrieve"]
+        # ⑰′ 只看行为：读到的授予结论、碰到的上层存根、解密申请，按产品合计；不看检索在问什么
+        statements = Counter(product_of[c] for e in retrieves for c in dict.fromkeys(e.payload.get("capability_ids", []))
+                             if product_of.get(c))
+        stubs = Counter(pid for e in retrieves for pid in e.payload.get("blocked_product_ids", []))
+        decrypts = [e.payload for e in evs if e.kind == "decrypt_request"]
+        products = statements + stubs + Counter(d["product_id"] for d in decrypts)
+        top, n_top = products.most_common(1)[0] if products else ("", 0)
         yield JueObject(object_id=f"actor:{actor}", object_type="actor", attrs={
-            "role": actor.split(":")[0], "n_queries": len(evs),
-            "n_mech_requests": sum(e.payload["intent"] == "mechanism_request" for e in evs),
-            "n_blocked": sum(e.payload["n_blocked"] for e in evs),
-            "blocked_top_share": max(blocked.values()) / sum(blocked.values()) if blocked else 0.0,
-            "n_distinct_products": len(hit | set(blocked)), "frozen": actor in frozen,
-        }), {"event_ids": [e.id for e in evs if e.payload["n_blocked"]], "session_ids": []}
+            "role": "sales", "n_queries": len(retrieves), "n_stubs_top": max(stubs.values(), default=0),
+            "n_statements_top": max(statements.values(), default=0),
+            "top_product": top, "top_product_share": n_top / sum(products.values()) if products else 0.0,
+            "n_decrypt_requests": len(decrypts), "n_decrypt_products": len({d["product_id"] for d in decrypts}),
+            "n_decrypt_customers": len({d["customer_id"] for d in decrypts}), "frozen": actor in frozen,
+        }), {"event_ids": [e.id for e in evs if e.kind == "decrypt_request" or e.payload.get("blocked_product_ids")
+                           or e.payload.get("capability_ids")], "session_ids": []}
 
 
 def _qi(events, at, caps, units):

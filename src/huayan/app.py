@@ -3,7 +3,8 @@ import json
 import threading
 import time
 from contextlib import contextmanager
-from datetime import timedelta
+from collections import Counter
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,7 +16,7 @@ from huayan.clock import get_clock
 from huayan.contracts import (KIND_LEVEL, Actor, Capability, AuditRecord, CitedKnowledge, ContributionDraft, ContributionStat, DecryptGrant,
     Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, MemoryEntry, NeedState, PendingAsk, PointsDraft, Question, Recommendation, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
-    JueTimeline, Product, Situation, TimelineNode, TimelinePoint)
+    JueTimeline, Product, SHANGHAI, Situation, TimelineNode, TimelinePoint)
 from huayan.domain import consistent, load_seeds, match_candidates
 from huayan.escalation import flow
 from huayan.escalation.translate import leak_hits
@@ -221,7 +222,8 @@ class HuayanApp:
             sess = self._sessions[sid]
             objects = session_state(sess, self.events, at).objects
             state.objects.update(objects)
-            refs.update({oid: {"session_id": sid, "sales_id": sess.sales_id} for oid in objects})
+            refs.update({oid: {"session_id": sid, "sales_id": sess.sales_id,
+                               "account_sales": self.config["customer_sales"].get(sess.customer_id)} for oid in objects})
         for rid in sorted(req_ids):
             req = self._requirements[rid]
             sess = self._sessions[req.session_ids[0]]
@@ -427,8 +429,6 @@ class HuayanApp:
 
     def _requirement(self, req_id, by, roles, states):
         actor = self._actor(by, roles)
-        if actor.role != "sales" and self.kb.is_frozen(by):
-            raise PermissionDenied("高层级访问已冻结")
         req = _find(self._requirements, req_id, "需求单")
         if actor.role == "rd" and actor.id != req.assigned_rd:
             raise PermissionDenied("只有接单研发可以修改或签字")
@@ -838,7 +838,7 @@ class HuayanApp:
     def save_merge_proposal(self, question_id, target_req_id, member_ids, note, by):
         if by != "pm:agent":
             raise PermissionDenied("只有产品经理 Agent 可以起草合并建议")
-        q = self.bus.get(question_id)
+        q = _find(self.bus.questions, question_id, "问题")
         if q.family != "opportunity" or q.status != "open":
             raise ValueError("需要待处理的机会汇聚问题")
         candidates = q.refs["requirement_ids"].split(",")
@@ -866,7 +866,7 @@ class HuayanApp:
 
     def merge_requirements(self, question_id, by, note=""):
         """v6：真人产品经理签字合并，note = 商业价值与产品方向判断（随问题结案、合并事件交研发）。"""
-        q = self.bus.get(question_id)
+        q = _find(self.bus.questions, question_id, "问题")
         if q.family != "opportunity" or q.status != "open":
             raise ValueError("需要待处理的机会汇聚问题")
         proposal = next((e.payload for e in reversed(self.events.query(["merge_proposed"]))
@@ -1109,14 +1109,10 @@ class HuayanApp:
 
     def requirements(self, viewer_id):
         viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})
-        if self.kb.is_frozen(viewer.id):
-            raise PermissionDenied("高层级访问已冻结")
         return [self.requirement_view(req.id, viewer_id).requirement for req in self._requirements.values()]
 
     def requirement_view(self, req_id, viewer_id):
         viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})
-        if self.kb.is_frozen(viewer.id):
-            raise PermissionDenied("高层级访问已冻结")
         req = _find(self._requirements, req_id, "需求单").model_copy(deep=True)
         refs = sorted({ref for item in req.product_lang + req.chem_lang for ref in item.ku_refs})
         colleague = viewer.role == "rd" and viewer.id != req.assigned_rd
@@ -1144,8 +1140,6 @@ class HuayanApp:
 
     def leak_check(self, req_id, viewer_id):
         viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})
-        if self.kb.is_frozen(viewer.id):
-            raise PermissionDenied("高层级访问已冻结")
         req = _find(self._requirements, req_id, "需求单")
         if req.sheet is None:
             return []
@@ -1209,8 +1203,6 @@ class HuayanApp:
 
     def record_trial(self, trial: Trial):
         actor = self._actor(trial.rd, {"rd"})
-        if self.kb.is_frozen(actor.id):
-            raise PermissionDenied("高层级访问已冻结")
         if trial.id in self._trials:
             raise ValueError("试样记录已经存在")
         if trial.requirement_id:
@@ -1479,15 +1471,24 @@ class HuayanApp:
         if by != session.sales_id or self.kb.is_frozen(by):
             raise PermissionDenied("只能为自己的有效会话申请解密")
         rec, profile = session.recommendation, session.need.profile
-        if not rec or not rec.product_id or not profile.chem_savvy:
-            raise ValueError("解密需要已有推荐，且客户懂化学")
+        if not rec or not rec.product_id:
+            raise ValueError("解密需要已有推荐")
         product = self.kb.product(rec.product_id)
+        at = get_clock().now()
+        granted = [c.payload["product_id"] for c in self.kb.capabilities()
+                   if c.form == "decrypt" and c.status == "active" and c.audience == session.customer_id]
+        mine = [e.payload for e in self.events.query(["decrypt_request"], since=at - timedelta(days=30)) if e.actor == by]
+        evidence = [Evidence(summary=f"客户画像：{'懂化学' if profile.chem_savvy else '未表现出化学背景'}"
+                             f"{'，问过机理' if profile.asked_mechanism else ''}", quote=profile.evidence_quote),
+                    Evidence(summary=f"该客户已获批的解密：{'、'.join(granted) or '无'}"),
+                    Evidence(summary=f"申请人近 30 天的解密申请 {len(mine)} 次，涉及客户 {len({m['customer_id'] for m in mine})} 位、"
+                                     f"产品 {len({m['product_id'] for m in mine})} 个")]
         q = self.bus.publish(Question(id="", family="decrypt_request", title="客户申请了解产品机理",
             object_id=f"{session_id}/{product.id}", owner_role="rd", owner_id=product.owner,
             signer_role="rd", signer_id=product.owner,
             scored_by="human", discoverer="human", created_at=get_clock().now(),
             dedup_key=f"decrypt_request:{session_id}/{product.id}",
-            evidence=[Evidence(summary="客户明确要求机理", quote=profile.evidence_quote)],
+            evidence=evidence,
             refs={"session_id": session_id, "customer_id": session.customer_id, "product_id": product.id}))
         self.audit.append(AuditRecord(ts=get_clock().now(), actor=actor.id, action="decrypt_request",
             object_ids=[q.id, product.id], session_id=session_id))
@@ -1500,14 +1501,15 @@ class HuayanApp:
         question = _find(self.bus.questions, question_id, "问题")
         if question.family != "decrypt_request" or question.status != "open":
             raise ValueError("只能审批待处理的解密申请")
-        if question.owner_id != by or self.kb.is_frozen(by):
+        if question.owner_id != by:
             raise PermissionDenied("只有产品归属研发本人可审批")
         at, refs = get_clock().now(), question.refs
         if approve:
-            self.kb.grant(Capability(id=self.kb.next_cap_id(), form="decrypt", audience=refs["customer_id"],
+            cap_id = self.kb.next_cap_id()
+            self.kb.grant(Capability(id=cap_id, form="decrypt", audience=refs["customer_id"],
                 payload={"product_id": refs["product_id"], "session_id": refs["session_id"], "text": text},
                 based_on=[f"ku:mechanism:{refs['product_id']}"], granted_by=by, status="active", at=at))
-            self.events.append("decrypt_approve", by, {"question_id": question.id,
+            self.events.append("decrypt_approve", by, {"question_id": question.id, "capability_id": cap_id,
                 "customer_id": refs["customer_id"], "product_id": refs["product_id"]}, session_id=refs["session_id"])
         self.audit.append(AuditRecord(ts=at, actor=by, action="decrypt_approve" if approve else "decrypt_reject",
             object_ids=[question_id, refs["product_id"]], session_id=refs["session_id"]))
@@ -1544,7 +1546,8 @@ class HuayanApp:
             raise ValueError("问题已处理")
         if by == "pm:agent" or q.signer_id != actor.id:
             raise PermissionDenied("只有问题的签字人可以处置")
-        allowed = {"knowledge_conflict": "update_sheet", "leak_risk": "freeze_access", "qi_review": "sign"}
+        allowed = {"knowledge_conflict": "update_sheet", "leak_risk": "freeze_access", "qi_review": "sign",
+                   "mechanism_followup": "take_over"}
         if action != "dismiss" and allowed.get(q.family) != action:
             raise ValueError(f"{q.family} 问题不能执行 {action}")
         if action == "update_sheet":
@@ -1564,12 +1567,37 @@ class HuayanApp:
             self.kb.confirm([q.refs["ku_id"]], by)
         elif action == "freeze_access":
             self.kb.freeze(q.refs["actor_id"], by, get_clock().now())
-        return self._settle(question_id, Resolution(action=action, by=by, note=note)).model_copy(deep=True)
+        result = self._settle(question_id, Resolution(action=action, by=by, note=note))
+        session = self._sessions[q.refs["session_id"]] if action == "take_over" else None
+        if session and session.sales_id is None:      # v8 Q9.8：自助会话由客户归属业务员接手
+            self._assign_sales(session, by)
+        return result.model_copy(deep=True)
+
+    def unfreeze_access(self, actor_id, by):
+        """v8 Q9.8：主管解冻；之后的泄露风险证据从解冻起重新累计。"""
+        self._actor(by, {"supervisor"})
+        if not self.kb.is_frozen(actor_id):
+            raise ValueError("该身份未被冻结")
+        self.kb.unfreeze(actor_id, by, get_clock().now())
+
+    def frozen_actors(self, viewer_id):
+        """v8 Q9.8：主管看被冻结的人、冻结依据、之后被挡下的检索次数与涉及客户。"""
+        self._actor(viewer_id, {"supervisor"})
+        rows = []
+        for actor_id in sorted(self.kb._frozen):
+            freeze = next(e for e in reversed(self.events.query(["access_frozen"])) if e.payload["actor_id"] == actor_id)
+            q = next((q for q in reversed(self.bus.list()) if q.family == "leak_risk" and q.object_id == f"actor:{actor_id}"
+                      and q.resolution and q.resolution.action == "freeze_access"), None)
+            denied = [e for e in self.events.query(["retrieve"], since=freeze.ts)
+                      if e.actor.removeprefix("agent:") == actor_id and e.payload.get("denied")]
+            customers = {self._sessions[e.session_id].customer_id for e in denied if e.session_id in self._sessions}
+            rows.append({"actor_id": actor_id, "name": self.actors[actor_id].name, "frozen_at": freeze.ts.isoformat(),
+                         "frozen_by": freeze.actor, "evidence": [ev.summary for ev in q.evidence] if q else [],
+                         "n_denied": len(denied), "customers": sorted(customers)})
+        return rows
 
     def questions(self, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
-        if viewer.role != "sales" and self.kb.is_frozen(viewer.id):
-            raise PermissionDenied("高层级访问已冻结")
         questions = [q.model_copy(deep=True) for q in self.bus.list()
                      if viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
                          and self._sessions[q.refs["session_id"]].sales_id == viewer_id)]
@@ -1577,6 +1605,9 @@ class HuayanApp:
             if q.family == "qi_grant" and "requester" in q.refs:
                 unit = self.kb._units[q.refs["ku_id"]]
                 q.evidence.append(Evidence(summary=f"{self.actors[q.refs['requester']].name}申请查看：{unit.title}"))
+                others = [e for e in self.events.query(["share_requested"], since=q.created_at - timedelta(days=30))
+                          if e.actor == q.refs["requester"] and e.payload.get("ku_id") != q.refs["ku_id"]]
+                q.evidence.append(Evidence(summary=f"申请人近 30 天的其他查看申请 {len(others)} 次"))
             elif q.family == "qi_grant" and q.refs["form"] == "statement":
                 unit = self.kb._units[q.refs["ku_id"]]
                 ids = set(q.refs["retrieve_ids"].split(","))
@@ -1595,8 +1626,6 @@ class HuayanApp:
 
     def jue_timeline(self, target_id, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
-        if viewer.role != "sales" and self.kb.is_frozen(viewer_id):
-            raise PermissionDenied("高层级访问已冻结")
         if target_id in self._sessions:
             session = self._sessions[target_id]
             if viewer.role == "sales" and session.sales_id != viewer_id:
@@ -1908,6 +1937,215 @@ class HuayanApp:
                                 f"结果 {s.status}")
         return rows
 
+    def timeline(self, day, by):
+        """v8 Q9.5：主管只读的一天。泳道（客户、各人与其助手、产品经理 Agent、觉、契）上的事件、当天结束时的状态看板、
+        KPI、模板小结与三件高光；不调大模型。研发的话与上层结论只给存根「研发知识 · 归属某人」。"""
+        self._actor(by, {"supervisor"})
+        day = date.fromisoformat(str(day))
+        events = self.events.query()
+        names = {a.id: a.name for a in self.seeds.actors}
+        today = [e for e in events if e.ts.date() == day]
+        until = [e for e in events if e.ts.date() <= day]
+        questions = {q.id: q for q in self.bus.list(status=None)}
+        upper = [u.text for u in self.kb._units.values() if u.level > 2 and u.kind != "trial"]
+
+        def lane(e):
+            actor = e.actor.removeprefix("agent:")
+            if e.kind in _QI_KINDS:
+                return "qi"
+            if actor.startswith("jue") or e.kind == "question_published":
+                return "jue"
+            if actor.startswith("customer:"):
+                return "customer"
+            return actor if actor in names else "jue" if actor.startswith("system") else None
+
+        def stub(owner):
+            return f"研发知识 · 归属{names.get(owner, owner)}"
+
+        def safe(text, owner=None):
+            """研发写的话一律给存根；其余文字若与上层结论重合也给存根。"""
+            if owner and owner.removeprefix("agent:").startswith("rd:"):
+                return stub(owner.removeprefix("agent:"))
+            return stub("研发") if leak_hits(text, upper, [], self.kb, audience=2) else text
+
+        def detail(e):
+            p = e.payload
+            if e.kind == "question_published":
+                q = questions.get(p["question_id"])
+                return f"觉提出：{q.title if q else p['family']}（{p['family']}）"
+            if e.kind == "question_resolved":
+                q = questions.get(p["question_id"])
+                note = q.resolution.note if q and q.resolution else ""
+                return f"{names.get(p['by'], p['by'])} {_ACTIONS.get(p['action'], p['action'])}：{p['family']}" + (
+                    f"；{safe(note, p['by'])}" if note else "")
+            if e.kind == "requirement_returned":
+                return f"{p['requirement_id']} 退回" + (f"，回问 {'、'.join(p['slots'])}" if p.get("slots") else "") + \
+                    f"；理由：{stub(e.actor)}"
+            if e.kind == "requirement_translated":
+                return f"{p['requirement_id']} 化学要点 {len(p['ku_refs'])} 条：{stub(e.actor)}"
+            if e.kind == "requirement_edited":
+                return f"{p['requirement_id']} 第 {p['layer']} 层第 {p['index'] + 1} 条" + (
+                    f"：{stub(e.actor)}" if p["layer"] == 3 else "改写")
+            if e.kind == "trial":
+                return (f"{p['product_id']} 试样{'通过' if p['result'] == 'pass' else '失败'}"
+                        f"（{p.get('requirement_id') or '客户送样'}；原因 {p['cause']}）")
+            if e.kind == "capability_granted":
+                return f"{names.get(e.actor, e.actor)} 授予 {p['id']}（{p['form']} → L{p['audience']}）"
+            if e.kind == "capability_used":
+                return f"{p['capability_id']} 被使用（{p['form']}）"
+            keys = ("requirement_id", "product_id", "capability_id", "ku_id", "actor_id", "customer_id", "sales_id")
+            return " ".join([_KIND_LABEL.get(e.kind, e.kind)] + [str(p[k]) for k in keys if p.get(k)])
+
+        items = [{"id": e.id, "lane": lane(e), "at": e.ts.isoformat(), "kind": e.kind, "actor": e.actor,
+                  "family": e.payload.get("family"), "session_id": e.session_id, "text": detail(e)}
+                 for e in sorted(today, key=lambda e: e.ts) if e.kind not in _QUIET and lane(e)]
+        sessions = []
+        for sid in dict.fromkeys(e.session_id for e in today if e.kind == "turn" and e.session_id):
+            s = self._sessions[sid]
+            turns = [e for e in events if e.kind == "turn" and e.session_id == sid]
+            sessions.append({"id": sid, "customer": s.customer_id, "sales": s.sales_id, "status": s.status,
+                             "phenomenon": s.need.phenomenon, "start": min(t.ts for t in turns if t.ts.date() == day).isoformat(),
+                             "end": max(t.ts for t in turns if t.ts.date() == day).isoformat(),   # 回问的回答可能在别的天
+                             "turns": [{"at": t.ts.isoformat(), "speaker": t.payload["speaker"],
+                                        "text": safe(t.payload["text"]) if t.payload["speaker"] != "customer" else t.payload["text"]}
+                                       for t in turns]})
+        status = {}
+        for e in until:
+            for rid in (e.payload.get("members") or [e.payload.get("requirement_id")]):
+                if rid and e.kind in _REQ_STATE:
+                    status[rid] = _REQ_STATE[e.kind](e.payload)
+        board = {"requirements": {k: sorted(r for r, v in status.items() if v == k) for k in dict.fromkeys(status.values())},
+                 "capabilities": dict(Counter(_CAP_STATE[e.kind] for e in until if e.kind in _CAP_STATE)),
+                 "jue": {"model": self.jue_realtime.name, "version": Path(self.config["jue_k_dir"]).name
+                         if self.jue_realtime.name == "jue_k" else None}}
+        count = Counter(e.kind for e in today)
+        raised = Counter(e.payload["family"] for e in today if e.kind == "question_published")
+        trials = [e for e in today if e.kind == "trial"]
+        kpi = {"sessions": len(sessions), "recommended": count["recommend"], "escalated": count["escalate"],
+               "raised": sum(raised.values()), "interrupts": raised["trial_risk"] + raised["stale_capability"],
+               "signed": sum(e.kind == "question_resolved" and not e.payload["by"].startswith("jue") for e in today),
+               "auto": count["auto_executed"], "trials": len(trials),
+               "trial_fail": sum(e.payload["result"] == "fail" for e in trials), "released": count["product_released"]}
+        summary = (f"{day:%m月%d日}：客户来访 {kpi['sessions']} 段，给出推荐 {kpi['recommended']} 次，升级 {kpi['escalated']} 单；"
+                   f"觉提出 {kpi['raised']} 个问题（试样风险 {raised['trial_risk']}、判断过时 {raised['stale_capability']}），"
+                   f"人签字 {kpi['signed']} 次、觉自动执行 {kpi['auto']} 次；试样 {kpi['trials']} 次，失败 {kpi['trial_fail']} 次。")
+        rank = lambda i: (-_HIGHLIGHT.get(i["family"] or i["kind"], 0), i["at"])   # noqa: E731
+        highlights = [i for i in sorted(items, key=rank) if _HIGHLIGHT.get(i["family"] or i["kind"])][:3]
+        lanes = ([{"id": "customer", "label": "客户"}]
+                 + [{"id": a.id, "label": a.name} for a in self.seeds.actors if a.role in ("sales", "pm", "rd", "supervisor")]
+                 + [{"id": "jue", "label": "觉"}, {"id": "qi", "label": "契"}])
+        cases, discoveries = self._cases(day, until, questions, names, safe)
+        return {"day": day.isoformat(), "days": sorted({e.ts.date().isoformat() for e in events if e.kind == "turn"}),
+                "lanes": lanes, "items": items, "sessions": sessions, "board": board, "kpi": kpi,
+                "summary": summary, "highlights": highlights, "cases": cases, "discoveries": discoveries,
+                "qi": self._qi_day(day, until, names, upper)}
+
+    def _cases(self, day, until, questions, names, safe):
+        """v8 Q9.5 案件：以一段客户会话为起点，串上它的需求单、觉的问题（提出 → 准备 → 签字）与试样，截至当天结束。
+        当天有动静的案件才列出。返回 (案件, 当天觉提出的发现类问题)。"""
+        end = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=SHANGHAI)
+        labels = {t.family: t.decision_label for t in self.templates.values()}
+        phen = {p.id: p.label for p in self.seeds.phenomena}
+        slots = {s.id: s for s in self.seeds.slots}
+        sess_req = {}
+        for r in self._requirements.values():
+            for sid in r.session_ids:
+                sess_req.setdefault(sid, []).append(r.id)
+        req_sess = {rid: sid for sid, rids in sess_req.items() for rid in rids}
+
+        def case_of(object_id):
+            kind, _, rest = object_id.partition(":")
+            if kind == "slot":
+                rest = rest.rsplit("/", 1)[0]
+            if rest in self._sessions:
+                return rest
+            return req_sess.get(rest)
+
+        def who(actor):
+            if actor.startswith("jue"):
+                return "觉"
+            return names.get(actor.removeprefix("agent:"), actor)
+
+        def decision(q):
+            res = q.resolution if q.resolved_at and q.resolved_at < end else None
+            step = {"at": q.created_at.isoformat(), "kind": "decision", "family": q.family,
+                    "label": labels.get(q.family, q.family), "discovery": q.family in _DISCOVERY,
+                    "scored_by": q.scored_by, "p": q.p_need, "object": q.object_id,
+                    "owner": who(q.owner_id) if q.owner_id else None,
+                    "prepared_at": q.prepared_at.isoformat() if q.prepared_at and q.prepared_at < end else None,
+                    "signer": who(q.signer_id) if q.signer_id else None, "status": "open"}
+            if q.family == "ask_back":
+                step["ask"] = slots[q.refs["slot"]].ask_text
+            if res:
+                step.update(status=q.status, done_at=q.resolved_at.isoformat(), by=who(res.by),
+                            action=_ACTIONS.get(res.action, res.action), note=safe(res.note, res.by) if res.note else "")
+            return step
+
+        steps, touched = {}, set()
+        for q in questions.values():
+            sid = case_of(q.object_id) if q.created_at < end else None
+            if sid:
+                steps.setdefault(sid, []).append(decision(q))
+                touched |= {sid} if q.created_at.date() == day or (q.resolved_at and q.resolved_at.date() == day) else set()
+        for e in until:
+            sid = e.session_id or req_sess.get(e.payload.get("requirement_id"))
+            if not sid or e.kind not in _CASE_FACTS:
+                continue
+            p = e.payload
+            fact = {"at": e.ts.isoformat(), "kind": e.kind, "by": who(e.actor), "text": _CASE_FACTS[e.kind](p, names)}
+            if e.kind == "trial":
+                fact["tone"] = "ok" if p["result"] == "pass" else "fail"
+            if e.kind == "capability_used":
+                unit = self.kb._units.get((p.get("based_on") or [""])[0])
+                fact["owner"] = names.get(unit.owner, "企业资料（第 0 天迁移）") if unit else "企业资料（第 0 天迁移）"
+                fact["text"] = f"{fact['owner']}的{_FORMS.get(p['form'], p['form'])}"
+            steps.setdefault(sid, []).append(fact)
+            touched |= {sid} if e.ts.date() == day else set()
+        cases = []
+        for sid in sorted(touched, key=lambda s: self._sessions[s].started_at):
+            s = self._sessions[sid]
+            turns = [e for e in until if e.kind == "turn" and e.session_id == sid]
+            story = sorted(steps.get(sid, []) + [
+                {"at": t.ts.isoformat(), "kind": "turn", "speaker": t.payload["speaker"],
+                 "text": t.payload["text"] if t.payload["speaker"] == "customer" else safe(t.payload["text"])}
+                for t in turns], key=lambda x: (x["at"], x["kind"] != "turn"))
+            cases.append({"id": sid, "key": f"{s.customer_id}|{s.started_at.isoformat()}", "customer": s.customer_id,
+                          "customer_name": names.get(s.customer_id, s.customer_id), "sales": who(s.sales_id) if s.sales_id else None,
+                          "phenomenon": phen.get(s.need.phenomenon, s.need.phenomenon or "未判明"),
+                          "opening": next((t.payload["text"] for t in turns if t.payload["speaker"] == "customer"), ""),
+                          "started_at": s.started_at.isoformat(), "requirements": sess_req.get(sid, []),
+                          "story": story, "outcome": _outcome(story, s.status)})
+        discoveries = [decision(q) | {"case": case_of(q.object_id), "title": q.title}
+                       for q in sorted(questions.values(), key=lambda q: q.created_at)
+                       if q.family in _DISCOVERY and q.family not in ("ask_slot", "ask_back") and q.created_at.date() == day]
+        return cases, discoveries
+
+    def _qi_day(self, day, until, names, upper):
+        """v8 Q9.5 契的一天：谁的判断被用了几次、当天人签的授予与撤销（附授予后至今的使用次数）、拦下的越层读取、
+        对外的话里与上层结论重合的句数（应为 0）、当天记分。"""
+        today = [e for e in until if e.ts.date() == day]
+        used = Counter()
+        for e in today:
+            if e.kind == "capability_used":
+                unit = self.kb._units.get((e.payload.get("based_on") or [""])[0])
+                used[names.get(unit.owner, "种子资料") if unit else "种子资料"] += 1
+        uses = Counter(e.payload["capability_id"] for e in until if e.kind == "capability_used")
+        grants = [{"at": e.ts.isoformat(), "kind": _CAP_STATE[e.kind], "by": names.get(e.actor, e.actor),
+                   "capability": e.payload.get("id") or e.payload.get("capability_id"),
+                   "form": _FORMS.get(e.payload.get("form"), e.payload.get("form")),
+                   "audience": e.payload.get("audience"),
+                   "uses_since": uses[e.payload.get("id") or e.payload.get("capability_id")]}
+                  for e in today if e.kind in _CAP_STATE and not e.actor.startswith(("seed", "system"))]
+        outbound = [e.payload["text"] for e in today if e.kind == "turn" and e.payload["speaker"] == "assistant"]
+        leaked = sum(bool(leak_hits(t, upper, [], self.kb, audience=1)) for t in outbound)
+        points = Counter()
+        for r in self.ledger.list():
+            if r.ts.date() == day:
+                points[names.get(r.owner, r.owner)] += r.points
+        return {"used_by_owner": dict(used.most_common()), "used_total": sum(used.values()), "grants": grants,
+                "denied": sum(e.kind == "access_denied" for e in today), "outbound": len(outbound), "leaked": leaked,
+                "points": dict(points.most_common())}
+
     def close_day(self, since):
         """v8：收工时各助手归纳当天的记忆（agent_memory 打开时）；只整理助手自己的记忆，不推进业务。"""
         if not self.config["agent_memory"]:
@@ -1922,3 +2160,77 @@ class HuayanApp:
             found += self.scan(now)
         self.agents.dispatch()
         return [q.model_copy(deep=True) for q in found]
+
+
+# v8 Q9.5 主管时间线 -------------------------------------------------------------------------------
+_QUIET = {"turn", "extraction", "retrieve", "ask_hint", "match"}          # 原话进会话块；检索与打分不上泳道
+_QI_KINDS = {"capability_granted", "capability_revoked", "capability_suspended", "capability_used", "claim_confirmed",
+             "claim_withdrawn", "evidence_changed", "scope_extended", "share_requested"}
+_ACTIONS = {"sign": "签字", "answered": "结案", "auto": "自动执行", "dismiss": "越过", "accept": "接单", "return": "退回",
+            "freeze_access": "冻结", "take_over": "接手", "update_sheet": "改说明书", "reject_decrypt": "拒绝解密"}
+_KIND_LABEL = {"recommend": "推荐", "escalate": "升级", "requirement_created": "建单", "requirement_accepted": "接单",
+               "reuse_proposed": "复用提议", "sales_assigned": "派业务员", "auto_executed": "觉自动执行",
+               "question_prepared": "助手准备好", "project_opened": "立项", "market_eval": "客户评价",
+               "points_set": "封存与放出", "knowledge_contributed": "沉淀", "product_released": "发布新品",
+               "decrypt_request": "申请解密", "decrypt_approve": "批准解密", "access_frozen": "冻结上层知识检索", "access_unfrozen": "解冻",
+               "access_denied": "拦下越权读取", "agent_action_proposed": "助手提议", "agent_action_decided": "人确认提议",
+               "capability_revoked": "撤销能力", "capability_suspended": "能力挂起", "claim_confirmed": "确认结论",
+               "evidence_changed": "依据变了", "scope_extended": "扩展适用范围", "share_requested": "申请查看同事知识",
+               "requirements_merged": "合并需求", "sheet_updated": "改说明书", "human_decision": "人直接决定"}
+_REQ_STATE = {"requirement_created": lambda p: "待接单", "requirement_accepted": lambda p: "已接单",
+              "requirement_returned": lambda p: "退回补条件", "requirement_translated": lambda p: "要点已确认",
+              "trial": lambda p: "试样通过" if p["result"] == "pass" else "试样失败",
+              "market_eval": lambda p: "客户评价通过" if p["result"] == "pass" else "客户评价不通过",
+              "product_released": lambda p: "已发布", "requirements_merged": lambda p: "已合并",
+              "reuse_adopted": lambda p: "复用已有产品"}
+_CAP_STATE = {"capability_granted": "授予", "capability_revoked": "撤销", "capability_suspended": "挂起",
+              "claim_confirmed": "结论确认", "evidence_changed": "待复核"}
+# 觉的发现（打分可以学；其余为流程推进点，两组都是规则到点）
+_DISCOVERY = {"ask_slot", "ask_back", "trial_risk", "stale_capability", "opportunity", "knowledge_conflict", "leak_risk",
+              "mechanism_followup", "distortion", "seal_leak", "qi_review"}
+_FORMS = {"ask": "追问", "applicable": "适用判断", "statement": "对外说法", "phrase": "说法", "translation": "转化对照",
+          "decrypt": "解密", "share": "同层共享"}
+_CASE_FACTS = {
+    "recommend": lambda p, n: f"推荐 {p['product_id']}" if p.get("product_id") else "没有合适的已发布产品",
+    "requirement_created": lambda p, n: f"建需求单 {p['requirement_id']}，派给{n.get(p.get('assigned_rd'), '研发')}",
+    "requirement_translated": lambda p, n: f"{p['requirement_id']} 化学要点 {len(p['ku_refs'])} 条（研发知识，只显示归属）",
+    "requirement_returned": lambda p, n: f"{p['requirement_id']} 退回" + (f"，回问 {'、'.join(p['slots'])}" if p.get("slots") else ""),
+    "trial": lambda p, n: f"{p['product_id']} 试样{'通过' if p['result'] == 'pass' else '失败'}"
+                          + ("" if p["result"] == "pass" else f"（{_CAUSE.get(p['cause'], p['cause'])}）"),
+    "market_eval": lambda p, n: f"客户评价{'通过' if p['result'] == 'pass' else '不通过'}",
+    "project_opened": lambda p, n: "立项",
+    "product_released": lambda p, n: f"发布新品 {p['product_id']}",
+    "sales_assigned": lambda p, n: f"交给{n.get(p.get('sales_id'), '业务员')}跟进",
+    "access_frozen": lambda p, n: f"冻结了{n.get(p['actor_id'], p['actor_id'])}的上层知识检索",
+    "access_unfrozen": lambda p, n: f"解冻{n.get(p['actor_id'], p['actor_id'])}",
+    "decrypt_request": lambda p, n: "客户申请了解原理（解密）",
+    "decrypt_approve": lambda p, n: "研发批准解密",
+    "capability_used": lambda p, n: "",
+}
+_CAUSE = {"requirement": "需求条件缺失", "product": "产品本身不合用", "equipment": "设备、操作原因"}
+
+
+def _outcome(story: list[dict], status: str) -> dict:
+    """案件截至当天的结局：已解决 / 失败 / 等谁做什么。"""
+    trials = [x for x in story if x["kind"] == "trial"]
+    evals = [x for x in story if x["kind"] == "market_eval"]
+    waiting = [x for x in story if x["kind"] == "decision" and x["status"] == "open"
+               and x["family"] not in ("ask_slot", "contribution", "contribution_pm", "seal_points")]
+    if evals and evals[-1]["text"].endswith("通过") and not evals[-1]["text"].endswith("不通过"):
+        return {"state": "done", "text": "试样通过、客户评价通过"}
+    if waiting:
+        w = waiting[-1]
+        actor = "客户" if w["family"] == "ask_back" else (w["signer"] if w["prepared_at"] or not w["owner"] else w["owner"])
+        verb = "回答回问" if w["family"] == "ask_back" else f"{'签字' if w['prepared_at'] else '准备'}：{w['label']}"
+        return {"state": "open", "text": f"等{actor}{verb}", "since": w["at"]}
+    if trials:
+        return {"state": "done" if trials[-1]["tone"] == "ok" else "fail", "text": trials[-1]["text"]}
+    rec = [x for x in story if x["kind"] == "recommend"]
+    if rec and rec[-1]["text"].startswith("推荐"):
+        return {"state": "done", "text": f"L1 {rec[-1]['text']}"}
+    return {"state": "open", "text": {"open": "会话进行中", "escalated": "已升级，研发处理中", "recommended": "已推荐产品", "closed": "已结束"}[status]}
+
+
+_HIGHLIGHT = {"product_released": 9, "access_frozen": 8, "access_unfrozen": 7, "mechanism_followup": 6, "trial_risk": 8, "stale_capability": 8, "knowledge_conflict": 7,
+              "leak_risk": 7, "opportunity": 7, "decrypt_approve": 7, "capability_suspended": 6, "evidence_changed": 6,
+              "scope_extended": 5, "share_requested": 5}

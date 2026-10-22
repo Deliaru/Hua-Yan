@@ -49,7 +49,7 @@ function SalesSidebar({ mine, current, guided, choose }: {
   );
 }
 
-// 主管冻结了本人的高层级访问：只读状态由门面给出，界面不自己判断权限
+// 主管冻结了本人的上层知识检索：只读状态由门面给出，界面不自己判断权限
 function useFrozen() {
   const { me } = useApp();
   return useData(() => api.frozen(me), [me])?.frozen ?? false;
@@ -109,7 +109,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
             <p className="rounded-[10px] bg-attn-bg px-3.5 py-2.5 text-[13px] leading-5 text-attn-ink">
               客户在自助对话里提出了商务诉求，觉把这件事交给你。下面是客户的完整原话、已明确的条件和已推荐的产品，不需要你重新询问、重新记录。</p>
           )}
-          {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的高层级访问已被主管冻结：客户只能拿到说明书与用法，暂不能申请解密。</p>}
+          {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的上层知识检索已被主管冻结：检索不再显示上层知识的归属、读不到研发授予的结论，推荐只披露到用法，暂不能申请解密；日常跟单不受影响。</p>}
           <PendingActions />
           <div className="grid grid-cols-[minmax(280px,5fr)_minmax(320px,6fr)] items-start gap-5">
             <Timeline v={v} lit={lit} />
@@ -293,7 +293,7 @@ function Decisions({ v, questions, fill, replyEmpty, escalateNotes }: {
 }) {
   const L = useLabels();
   const by = (f: string) => questions.filter((q) => q.family === f);
-  const handled = new Set(["escalate_need", "ask_back", "market_eval"]);
+  const handled = new Set(["escalate_need", "ask_back", "market_eval", "mechanism_followup"]);
   return (
     <>
       {v.card && v.reuse?.status !== "adopted" && <RecCard card={v.card} sid={v.session_id} fill={fill} replyEmpty={replyEmpty} />}
@@ -312,6 +312,7 @@ function Decisions({ v, questions, fill, replyEmpty, escalateNotes }: {
         </Group>
       ))}
       {by("market_eval").map((q) => <MarketEval key={q.id} q={q} />)}
+      {by("mechanism_followup").map((q) => <Followup key={q.id} q={q} />)}
       {questions.filter((q) => !handled.has(q.family)).map((q) => (
         <Group key={q.id} title={L.family(q.family)}>
           <div className="row !items-start">
@@ -415,6 +416,27 @@ function ReuseLine({ v, fill }: { v: SessionView; fill: (t: string) => void }) {
       <div className="row flex-wrap">
         <button type="button" className="btn btn-plain" onClick={() => fill(r.customer_note)}>填进发给客户</button>
         {!frozen && <Act kind="quiet" label="申请解密" done="已申请解密，等研发审批" run={() => api.requestDecrypt(v.session_id, me)} />}
+      </div>
+    </Group>
+  );
+}
+
+// v8 Q9.8：客户追问产品内部，交业务员接手（措辞中性：分不出正当与否）
+function Followup({ q }: { q: Question }) {
+  const { me } = useApp();
+  const L = useLabels();
+  return (
+    <Group title={<span className="text-attn-ink">客户追问产品内部</span>} aside={<Score q={q} />}>
+      <div className="row attn-edge !items-start !py-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <p className="text-[14px]">{L.scrub(q.title)}</p>
+          {q.evidence.map((e, i) => <p key={i} className="text-[12.5px] leading-5 text-ink-2">{L.scrub(e.summary)}</p>)}
+          <p className="text-[12.5px] text-ink-2">建议：讲用法与公开的合规信息；客户确有正当需要，就在推荐卡上替客户申请解密，交研发审批。配方永不对外。</p>
+          <div className="flex flex-wrap gap-2">
+            <Act label="接手" done="已接手" run={() => api.resolve(q.id, "take_over", me)} />
+            <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />
+          </div>
+        </div>
       </div>
     </Group>
   );

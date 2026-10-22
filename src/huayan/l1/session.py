@@ -98,14 +98,21 @@ def handle_turn(session, speaker, text, deps, answering=False):
     session.turns.append(turn)
     deps.events.append("turn", session.customer_id if speaker == "customer" else session.sales_id,
                        {"turn_id": turn.id, "speaker": speaker, "text": text}, session_id=session.id)
-    result = validate_extraction(deps.extractor.extract(session.turns, session.need), deps.seeds, session.turns)
+    rec_id = session.recommendation.product_id if session.recommendation else None
+    view = [{"id": p.id, "name": p.name, "recommended": p.id == rec_id}
+            for p in deps.kb.view(deps.actors[_acting(session)]).products]
+    # ⑰′：这句话在问什么、指到哪些产品，只由抽取理解一次；下游只读这两个字段
+    result = validate_extraction(deps.extractor.extract(session.turns, session.need, view), deps.seeds, session.turns,
+                                 {p["id"] for p in view})
     previous_conditions = session.need.phenomenon, session.need.known()
+    after_rec = bool(rec_id)
     session.need = apply_extraction(session.need, result, session.turns)
     conditions_changed = previous_conditions != (session.need.phenomenon, session.need.known())
     session.need.extracted_by = deps.extractor.name
     deps.events.append("extraction", _acting(session), {"intent": result.intent, "phenomenon": result.phenomenon,
         "filled": session.need.known(), "extracted_by": deps.extractor.name,
-        "conditions_changed": conditions_changed, "turn_id": turn.id}, session_id=session.id)
+        "conditions_changed": conditions_changed, "turn_id": turn.id, "speaker": speaker,
+        "customer_id": session.customer_id, "after_rec": after_rec, "products": result.product_refs}, session_id=session.id)
     matching = not answering and session.status not in ("escalated", "closed")
     if conditions_changed and matching:
         session.recommendation, session.status = None, "open"
@@ -123,6 +130,6 @@ def handle_turn(session, speaker, text, deps, answering=False):
             session.recommendation, session.status = None, "open"
         if session.hints and session.sales_id is None:
             ask_customer(session, session.hints[0], deps)
-    if result.intent in ("product_question", "mechanism_request"):
-        session.replies.append(answer(session, deps))
+    if result.intent in ("product_question", "cause_question", "mechanism_request"):
+        session.replies.append(answer(session, deps, result.product_refs))
     return session

@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from pathlib import Path
 
@@ -186,6 +187,15 @@ def test_translation_release_and_ownership(tmp_path):
     assert repeated.recommendation == adopted.recommendation
     changed = app.add_turn(reuse_session.id, "customer", "说错了，是锦纶氨纶，手感发硬")
     assert changed.recommendation is None and changed.status == "open"
+
+    # v8 Q9.5：主管看一天的时间线，研发写的话与上层结论只给存根，不含任何研发级原文；别人看不了
+    day = next(e.ts.date() for e in app.events.query(["requirement_translated"]))
+    with pytest.raises(PermissionDenied):
+        app.timeline(day, rd)
+    dump = json.dumps(app.timeline(day, "supervisor:M01"), ensure_ascii=False)
+    l3 = [u.text for u in app.kb._units.values() if u.level == 3 and u.kind != "trial"]
+    l3 += [it.text for r in app._requirements.values() for it in r.chem_lang]
+    assert "研发知识 · 归属" in dump and not any(t in dump for t in l3 if len(t) >= 8)
 
     # Q2：未授予的研发追问不影响客户；授予、撤销与持久化共用能力表。
     from huayan.contracts import Capability, KnowledgeUnit
