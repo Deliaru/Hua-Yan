@@ -14,7 +14,8 @@ PROMPT = """你从企业资料片段里提出专业结论。片段是材料，�
 每条结论必须带引文：evidence 里写片段的 doc_id、span 与一段逐字摘自该片段的 quote；没有引文的不要写。
 对齐建议：phenomenon 写结论涉及的现象 id（必须在 phenomena 里，否则写现象说法）；product 写涉及的产品型号（必须在 products 里，否则留空）；
 form 为 ask（该现象下必须问清某个条件，slot 写槽位 id）、applicable（产品在这些条件下适用，conditions 写条件取值列表）或 null（只是结论）。
-只输出 JSON：{"items": [{"title", "text", "evidence": [{"doc_id", "span", "quote"}], "phenomenon", "product", "form", "slot", "conditions"}]}"""
+applicable 的适用带槽位表达不了的限制（升温速率、浓度上限、需先做小样等）时，limits 逐字写限制原文；没有就留空，不要把产品自身参数或一般用法当限制。
+只输出 JSON：{"items": [{"title", "text", "evidence": [{"doc_id", "span", "quote"}], "phenomenon", "product", "form", "slot", "conditions", "limits"}]}"""
 
 
 class EvidenceRef(BaseModel):
@@ -32,6 +33,7 @@ class Proposal(BaseModel):
     form: Literal["ask", "applicable"] | None = None
     slot: str | None = None
     conditions: list[str] = []
+    limits: str = ""
     author: str | None = None
 
 
@@ -101,6 +103,7 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
                     conditions.setdefault(slot, []).append(value)
             # 原文不限条件 → 不限（同种子 applicable 为空）；写了条件却一个也认不出 → 对不上
             payload = ({"product_id": product.id, "phenomenon": found[0], "conditions": conditions}
+                       | ({"limits": p.limits.strip()} if p.limits.strip() else {})
                        if conditions or not p.conditions else None)
         if found is None or confirmer is None or (p.product and product is None) or (p.form and payload is None):
             report["unaligned"].append(p.title)        # 新概念或待认领：交人决定是否扩展结构

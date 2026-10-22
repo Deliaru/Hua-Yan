@@ -26,17 +26,19 @@ def consistent(product: Product, known: dict[str, str]) -> bool:
                    if slot in situation.conditions) for situation in product.situations)
 
 
-def match_candidates(phenomenon: str, known: dict[str, str], products: list[Product]) -> list[Candidate]:
+def match_candidates(phenomenon: str, known: dict[str, str], products: list[Product], limited=()) -> list[Candidate]:
+    """limited：带研发限制原文的适用能力 id；同一产品优先取不带限制的情境，带限制的只算「可能」。"""
     candidates = []
     for product in sorted(products, key=lambda p: p.id):
         matches = [s for s in product.situations if s.phenomenon == phenomenon
                    and all(value in s.conditions[slot] for slot, value in known.items() if slot in s.conditions)]
         if product.status != "released" or not matches:
             continue
-        situation = min(matches, key=lambda s: sum(slot not in known for slot in s.conditions))
+        situation = min(matches, key=lambda s: (s.capability_id in limited, sum(slot not in known for slot in s.conditions)))
         unknown = [slot for slot in situation.conditions if slot not in known]
         candidates.append(Candidate(product_id=product.id, unknown_slots=unknown,
-            status="possible" if unknown else "confirmed", capability_id=situation.capability_id))
+            status="possible" if unknown or situation.capability_id in limited else "confirmed",
+            capability_id=situation.capability_id))
     return candidates
 
 

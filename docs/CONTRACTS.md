@@ -1272,7 +1272,9 @@ class HuayanApp:
     def start_session(self, customer_id: str, sales_id: str | None = None) -> Session: ...
         # v6：sales_id 为 None = 客户自助会话（origin="customer"），只接受客户发言，升级由觉自动执行
     # v6 路由（REPLAN-v6 V6-1）
-    def decline_project(self, req_id: str, reason: str, by: str, applicable_product: str | None = None) -> Requirement: ...
+    def decline_project(self, req_id: str, reason: str, by: str, applicable_product: str | None = None,
+                        claim_ids: Sequence[str] = (), limits: str = "") -> Requirement: ...
+        # V9.5：limits 非空时与 reason 同样过研发术语自查，原文写入适用能力 payload["limits"]
         # assigned_rd，draft；status="rejected"，写 project_declined（reason、product_id）；accept_requirement resolve(dismiss)，
         # 需求单其余 open 问题 resolve(answered)；给出 applicable_product 时各会话按公开版本推荐该产品，否则会话 closed
     def route_of(self, object_id: str, viewer_id: str) -> dict: ...
@@ -1597,7 +1599,7 @@ class BlockedHint(BaseModel):            # v7.8 加一个字段（已批准）
 
 | form | payload | 第 0 天来源 |
 |---|---|---|
-| `applicable` | `{product_id, phenomenon, conditions: {slot: [values]}}` | 每个已发布产品的每个 `solves` 现象 × 原 `applicable`，一行 |
+| `applicable` | `{product_id, phenomenon, conditions: {slot: [values]}, limits?: str}`；V9.5：`limits` 为槽位表达不了的限制原文（产品级用语），带限制的适用只给研发和产品经理看、不在客户自助阶段自动推荐 | 每个已发布产品的每个 `solves` 现象 × 原 `applicable`，一行 |
 | `ask` | `{phenomenon, slot, required: true}` 或 `{phenomenon, slot, prior: {value: p}}` | 现象的 `required_slots`、`slot_priors` |
 | `statement` | `{text, product_id?}` | 无（第 0 天的说明书、用法、公开案例是 L0 结论，同层直接用） |
 | `decrypt` | `{product_id, session_id, text}` | 无（启动时没有解密授权） |

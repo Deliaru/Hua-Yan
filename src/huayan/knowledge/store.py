@@ -191,6 +191,11 @@ class KnowledgeBase:
     def capabilities(self):
         return [c.model_copy(deep=True) for c in self._caps.values()]
 
+    def limits(self):
+        """V9.5：生效的、带限制原文的适用能力 {能力 id: 限制原文}。"""
+        return {c.id: c.payload["limits"] for c in self._caps.values()
+                if c.form == "applicable" and c.status == "active" and c.payload.get("limits")}
+
     def decrypt_grants(self):
         return [DecryptGrant(id=c.id, customer_id=c.audience, product_id=c.payload["product_id"],
             session_id=c.payload["session_id"], text=c.payload["text"], approved_by=c.granted_by, at=c.at)

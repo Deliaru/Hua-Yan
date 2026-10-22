@@ -724,14 +724,17 @@ class HuayanApp:
         session.status = "recommended"
         record_disclosure(card, self)
 
-    def decline_project(self, req_id, reason, by, applicable_product=None, claim_ids=()):
+    def decline_project(self, req_id, reason, by, applicable_product=None, claim_ids=(), limits=""):
         """v6：研发不立项。给出 applicable_product = 已有产品适用（只是超出标注范围），客户会话收到该产品推荐；
-        否则客户收到「暂无方案、已记录」（会话 closed）。"""
+        否则客户收到「暂无方案、已记录」（会话 closed）。V9.5：limits = 槽位表达不了的限制原文，随适用能力保存。"""
         req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
         if not reason.strip():
             raise ValueError("请填写不立项的原因")
         if leak_hits(reason, [], [], self.kb):
             raise ValueError("不立项原因含研发术语，请改写为产品需求说明")
+        limits = limits.strip()
+        if limits and leak_hits(limits, [], [], self.kb):
+            raise ValueError("限制条件含研发术语，请改写为产品级说法")
         at = get_clock().now()
         state = requirement_state(req, self._sessions[req.session_ids[0]].need, self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")), self.kb, at, self.events)
         question = self._decision("accept_requirement", "decline_project", state.objects[f"requirement:{req_id}"], by)
@@ -746,9 +749,11 @@ class HuayanApp:
                 self.kb.add(unit)
                 claim_ids = [unit.id]
             required = next(p.required_slots for p in self.kb.view(self._actor(by)).phenomena if p.id == req.phenomenon)
-            self.kb.grant(Capability(id=self.kb.next_cap_id(), form="applicable", audience=0,
-                payload={"product_id": applicable_product, "phenomenon": req.phenomenon,
-                         "conditions": {slot: [value] for slot, value in req.known_slots.items() if slot in required}},
+            payload = {"product_id": applicable_product, "phenomenon": req.phenomenon,
+                       "conditions": {slot: [value] for slot, value in req.known_slots.items() if slot in required}}
+            if limits:
+                payload["limits"] = limits
+            self.kb.grant(Capability(id=self.kb.next_cap_id(), form="applicable", audience=0, payload=payload,
                 based_on=list(claim_ids), granted_by=by, status="proposed", at=at))
         req.status = "rejected"
         for sid in req.session_ids:
@@ -757,7 +762,7 @@ class HuayanApp:
             else:
                 self._sessions[sid].status = "closed"
         self.events.append("project_declined", by, {"requirement_id": req_id, "reason": reason,
-            "product_id": applicable_product, "phenomenon": req.phenomenon, "known": req.known_slots,
+            "product_id": applicable_product, "limits": limits, "phenomenon": req.phenomenon, "known": req.known_slots,
             "session_ids": req.session_ids})
         if question:
             self._settle(question.id, Resolution(action="dismiss", by=by, note=reason))
@@ -1149,6 +1154,17 @@ class HuayanApp:
     def requirements(self, viewer_id):
         viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})
         return [self.requirement_view(req.id, viewer_id).requirement for req in self._requirements.values()]
+
+    def matched_limits(self, req_id, by):
+        """V9.5 只读：与本单现象和已知条件相符、带研发限制原文的生效适用，给研发和产品经理对照处理。"""
+        self._actor(by, {"pm", "rd", "supervisor"})
+        req = _find(self._requirements, req_id, "需求单")
+        limits = self.kb.limits()
+        return [{"product_id": c.payload["product_id"], "capability_id": c.id, "granted_by": c.granted_by,
+                 "conditions": c.payload["conditions"], "limits": limits[c.id]}
+                for c in self.kb.capabilities() if c.id in limits and c.payload["phenomenon"] == req.phenomenon
+                and all(value in c.payload["conditions"][slot] for slot, value in req.known_slots.items()
+                        if slot in c.payload["conditions"])]
 
     def requirement_view(self, req_id, viewer_id):
         viewer = self._actor(viewer_id, {"pm", "rd", "supervisor"})

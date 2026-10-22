@@ -8,6 +8,7 @@ from huayan.clock import get_clock
 from huayan.contracts import Actor, ContributionDraft, KUKind, ReqItem, Role, SheetDraft, ToolKind, ToolResult, ToolSpec, Trial
 from huayan.contracts._base import BaseModel
 from huayan.domain import match_candidates
+from huayan.knowledge.permission import level_of
 from huayan.escalation import translate
 
 
@@ -183,8 +184,16 @@ class ProductArgs(BaseModel):
 
 @tool("find_products", "read", ["sales", "pm", "rd"], "按现象与已知条件查已发布产品中的候选（含还不知道的限定条件）", ProductArgs)
 def find_products(ctx: ToolContext, args: ProductArgs) -> ToolResult:
-    found = match_candidates(args.phenomenon, args.slots, ctx.app.kb.view(ctx.principal).products)
-    return ToolResult(data=[c.model_dump() for c in found])
+    phenomena = {p.id: p.label for p in ctx.app.seeds.phenomena}
+    if args.phenomenon not in phenomena:      # 填了说法而不是 id 时如实报错，不当作「没有候选」
+        raise ValueError(f"phenomenon 要填现象 id（需求单的 phenomenon 字段），{args.phenomenon} 不是；可选："
+                         + "；".join(f"{k}={v}" for k, v in phenomena.items()))
+    limited = ctx.app.kb.limits()
+    found = match_candidates(args.phenomenon, args.slots, ctx.app.kb.view(ctx.principal).products, limited)
+    # V9.5：带研发限制的适用标「可能」；产品经理、研发看得到限制原文，其他人只知道要研发处理
+    shown = lambda c: (limited[c.capability_id] if level_of(ctx.principal) >= 2 else "带研发限制，需研发处理")
+    return ToolResult(data=[{**c.model_dump(), **({"limits": shown(c)} if c.capability_id in limited else {})}
+                            for c in found])
 
 
 @tool("get_requirement", "read", ["pm", "rd"], "查看需求单：各层条目、客户原话、所引知识（越权知识只显示归属）", ReqId)

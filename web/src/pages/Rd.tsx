@@ -506,6 +506,7 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
   const [reason, setReason] = useState("");
   const [slots, setSlots] = useState<string[]>([]);
   const [product, setProduct] = useState(meta.products[0]?.id ?? "");
+  const [limits, setLimits] = useState("");
   // 演示讲解：研发判「已有产品适用」要选的产品与依据，由「演示自动填入」填好（录制回放里须与录制一致）
   const scripted = useGuideArg("decline");
   const dec = scripted ? JSON.parse(scripted) as { product: string; reason: string } : null;
@@ -518,6 +519,7 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
   return (
     <>
       {evidence}
+      <MatchedLimits reqId={reqId} />
       <div className="row !items-start">
         <div className="flex flex-1 flex-col gap-2.5">
           <div className="inline-flex w-fit gap-0.5 rounded-[9px] bg-fill p-0.5">
@@ -534,8 +536,9 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
               {meta.products.map((p) => <option key={p.id} value={p.id}>{L.product(p.id)}</option>)}
             </select>
             <Field value={reason} onChange={setReason} placeholder="判断依据（产品经理可见，提交前做研发术语自查）" />
+            <Field value={limits} onChange={setLimits} placeholder="限制条件（可空；原文保留，带限制的适用不在客户自助阶段自动推荐）" />
             {dec && !filled && <div><button type="button" className="chip glow" onClick={() => { setProduct(dec.product); setReason(dec.reason); }}>演示自动填入</button></div>}
-            <div><Act label="不立项：已有产品适用" disabled={!reason.trim()} glow={filled} run={() => api.decline(reqId, reason, me, product)} /></div>
+            <div><Act label="不立项：已有产品适用" disabled={!reason.trim()} glow={filled} run={() => api.decline(reqId, reason, me, product, limits)} /></div>
           </>}
           {mode === "other" && <>
             <Field value={reason} onChange={setReason} placeholder="不立项原因（客户会收到「已记录，暂无方案」）" />
@@ -557,6 +560,19 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
   );
 }
 
+// V9.5：已有研发判断带限制、条件与本单相符的适用；不自动推荐，原文交研发对照
+function MatchedLimits({ reqId }: { reqId: string }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const limited = useData(() => api.matchedLimits(reqId, me), [reqId, me]) ?? [];
+  return <>{limited.map((m) => (
+    <div key={m.capability_id} className="row !items-start text-[13px] leading-5">
+      <p className="rounded-[8px] bg-attn-bg px-3 py-2 text-attn-ink">
+        {L.name(m.granted_by)} 判过 {L.product(m.product_id)} 适用同类情况，但带限制：「{m.limits}」。化言没有自动推荐，请对照本单判断。</p>
+    </div>
+  ))}</>;
+}
+
 // 现成产品审定（D22）：产品、依据的 L2 案例原文、可改的给客户说明、自查结果
 function ReuseReview({ q, view, dismiss }: { q: Question; view: RequirementView; dismiss: React.ReactNode }) {
   const { me } = useApp();
@@ -573,6 +589,7 @@ function ReuseReview({ q, view, dismiss }: { q: Question; view: RequirementView;
     <>
       <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">产品</span>
         <span className="text-[15px] font-semibold">{L.product(r.product_id)}</span></div>
+      <MatchedLimits reqId={req.id} />
       <div className="row !items-start"><span className="w-20 shrink-0 text-[13px] text-ink-2">依据</span>
         <div className="min-w-0 flex-1">{cases.map((c) => <p key={c.ku_id} className="mb-1"><KnowledgeChip c={c} /></p>)}
           {q.evidence.map((e, i) => <p key={i} className="text-[12px] text-ink-2">{L.scrub(e.summary)}</p>)}</div></div>

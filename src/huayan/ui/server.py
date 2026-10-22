@@ -241,6 +241,7 @@ GET = {
     "/api/frozen": lambda app, p: {"frozen": app.kb.is_frozen(p["actor"])},
     "/api/frozen_actors": lambda app, p: app.frozen_actors(p["viewer"]),          # v8 Q9.8
     "/api/requirement": lambda app, p: app.requirement_view(p["id"], p["viewer"]),
+    "/api/matched_limits": lambda app, p: app.matched_limits(p["id"], p["viewer"]),
     "/api/leak": lambda app, p: app.leak_check(p["id"], p["viewer"]),
     "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),
     "/api/route": lambda app, p: app.route_of(p["id"], p["viewer"]),   # v6：需求轨迹条
@@ -281,7 +282,8 @@ POST = {
     "/api/prepared": lambda app, p: app.mark_prepared(p["question_id"], p["by"]),   # v6 退回纠偏：修改完成，交研发
     "/api/demo/open": open_route,   # v6 开场入口
     "/api/accept": lambda app, p: app.accept_requirement(p["req_id"], p["by"]),
-    "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id"), p.get("claim_ids", ())),   # v7
+    "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id"), p.get("claim_ids", ()),
+                                                     p.get("limits", "")),   # v7
     "/api/return": lambda app, p: app.return_requirement(p["req_id"], p["reason"], p["by"]),
     "/api/req-item": lambda app, p: app.edit_req_item(p["req_id"], p["index"], ReqItem.model_validate(p["item"]), p["by"]),
     "/api/confirm": lambda app, p: app.confirm_translation(p["req_id"], p["by"]),

@@ -30,12 +30,16 @@ def recommend(session, deps):
     if not session.need.phenomenon or session.status in ("escalated", "closed"):
         return session
     products = {p.id: p for p in deps.kb.view(deps.actors[session.sales_id or session.customer_id]).products}
-    candidates = match_candidates(session.need.phenomenon, session.need.known(), list(products.values()))
+    limited = deps.kb.limits()
+    found = match_candidates(session.need.phenomenon, session.need.known(), list(products.values()), limited)
+    # V9.5：带研发限制的适用不交 Jev 自动推荐，按常规转研发，由研发对照限制原文处理
+    candidates = [c for c in found if c.capability_id not in limited]
     decision = deps.jev.match(session.need, candidates, products)
     at = get_clock().now()
     deps.events.append("match", _acting(session), {
         "phenomenon": session.need.phenomenon, "known": session.need.known(),
         "customer_id": session.customer_id, "candidate_ids": [c.product_id for c in candidates],
+        "limited_ids": [c.product_id for c in found if c.capability_id in limited],
         "p_choice": {c.product_id: decision.probabilities[c.product_id] for c in candidates},
         "p_none": decision.probabilities["none"], "scored_by": decision.scored_by,
     }, session_id=session.id, ts=at)
