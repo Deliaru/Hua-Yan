@@ -140,7 +140,8 @@ export function DemoPanel({ onExit, onView, side }: {
       )}
       {done > 0 && !story.begun && <p className="-mt-2 text-[12px] leading-[18px] text-ink-3">也可以不按讲解，直接在右边的工作面上自己操作；讲解栏不锁步骤。</p>}
 
-      {step?.chapter === "收尾" && <><Estimator /><Fame /><Landing /></>}
+      {step?.chapter === "收尾" && <><Estimator /><Fame /></>}
+      {step?.chapter === "落地" && <Landing />}
 
       {mode === "day" ? (
         <section>
@@ -200,7 +201,7 @@ export function DemoPanel({ onExit, onView, side }: {
   );
 }
 
-const where = (chapter: string) => (chapter === "开场" || chapter === "收尾" ? chapter : `路径 ${chapter}`);
+const where = (chapter: string) => (["开场", "收尾", "落地"].includes(chapter) ? chapter : `路径 ${chapter}`);
 const guideKey = (g: StoryGuide | null) => (g ? `${g.target}|${g.who}|${g.view?.focus}` : "");
 
 // 轮到看的人做的那一步：你现在是谁、点哪个按钮（与工作面上呼吸高亮的按钮一致）
@@ -360,7 +361,7 @@ function Landing() {
         <p><b>试样结果回流。</b>ELN 里的试样结果经门面的试样录入回到需求单与知识库。</p>
         <p><b>嵌入钉钉 / 飞书。</b>四个工作面就是四个角色在现有协作工具里的入口。</p>
         <Value mark="↑" label="降本增效" color={GAIN}>不推翻已有 IT 投入；企业的 RAG 越强，化言越强。</Value>
-        <p className="text-[11.5px] leading-[18px] text-ink-3">以上未实际对接，给出的是接入路径与代码接缝（与 README 第 6 节一致）。</p>
+        <p className="text-[11.5px] leading-[18px] text-ink-3">以上为接入路径与代码接缝，正式对接在试点阶段完成（见 README 第 11 节）。</p>
       </div>
     </section>
   );
