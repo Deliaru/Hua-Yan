@@ -1,7 +1,7 @@
 # AGENTS.md
 
-> 给 coding agent 的项目宪法。每次会话先读本文件，再读 `docs/workpackages/REPLAN-v5.md`，再读 `docs/CONTRACTS.md`、`docs/workpackages/REPLAN-v7.md` 和 `docs/QI.md`，再读分配给你的工作包 `docs/workpackages/WP-*.md`。
-> **v7 契落地进行中**：已批准的变更以 `REPLAN-v7.md` 为准。
+> 给 coding agent 的项目宪法。每次会话先读本文件，再读 `docs/workpackages/REPLAN-v5.md`，再读 `docs/CONTRACTS.md`、`docs/workpackages/REPLAN-v7.md` 和 `docs/QI.md`，再读 `docs/workpackages/REPLAN-v9.md` 与 `docs/workpackages/FINALS-SCOPE.md`，再读分配给你的工作包。
+> **当前计划**：`REPLAN-v9.md`（2026-10-22 起）。v7 契落地已完成；`REPLAN-v8.md` 已冻结，只作历史记录。
 > **v5 历史基线**：旧工作包、`docs/DEMO.md`、`demo/mainline.yaml` 中与 `REPLAN-v5.md` 冲突的描述一律作废，以 REPLAN 为准。
 > 愿景与架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`；方向与取舍有疑问时以 `docs/VISION.md` 为准。
 
@@ -19,7 +19,7 @@
 - **觉（Jue-K）**：**全过程的决策点发现器**。对决策目录（`config/templates/`）里每个「决策 × 对象」给出「此刻需要被决策」的概率，超过阈值即提出问题；目录分推进类（追问、升级、接单、回问、确认、沉淀、客户评价、封存 / 放出、发布）与异常类（失真、对外泄密、知识冲突、拼凑）；主人与签字人由模板写定。**流程由「觉提出 → 主人准备 → 签字人签字 → 状态改变 → 觉再看」推动**。代码中是 `QuestionModel` 接口，两个实现：`jue_proto`（模板 × 对象 + 规则或 OneJev 打分）、`jue_k`（训练模型，覆盖追问、回问、机会汇聚、知识冲突、泄露风险）；新增决策先用规则打分并标 `scored_by: rule`；每次调用记录 `JueRecord`；
 - **Jev**：决策模型，回答已经提出的问题（推荐哪个产品、披露哪个版本、回答是否有依据），输出各选项概率。
 
-当前目标：按 `docs/workpackages/REPLAN-v7.md` 的 Q0–Q8 顺序完成契落地，每包一个提交；v6 对照基线为 `351c2c9`。
+当前目标：按 `docs/workpackages/REPLAN-v9.md` 第 5 节收口并备战决赛，范围以 `FINALS-SCOPE.md` 的四件事为准，每包一个提交；v6 对照基线为 `351c2c9`。
 
 ## 2. 技术栈
 
@@ -68,7 +68,7 @@ data/  models/  runs/      生成物（只提交 runs/demo_record/ 与 models/ju
 4. **权限只在知识库、披露和门面里执行。** Jev 只能在硬上限之内选择披露版本；传给 Jev 和 L1 Agent 的内容只含请求者权限内的知识；界面不做权限判断。L1 的任何输出都不得包含 L2/L3 内容（解密授权的机理除外，配方永不对外）。引擎只读视图，行为只由能力驱动，跨层能力只来自人签的授予；同层研发的知识原文须经归属人授予，转译引擎为接单研发引用的知识按「工作中用到」处理。
 5. **评估不作弊。** 觉、Jev、Agent、门面不得读取需求卡、注入清单和评测标签；只有 `sim/` 与 `eval/` 可以读。
 6. **降级必须标注。** Jev 走大模型降级或桩、觉用规则模式、抽取用规则时，结果上标 `scored_by` / `extracted_by`，界面状态条可见。
-7. **数据全部是模拟数据并明确标注。** 不提交任何传化真实资料、真实客户、真实配方，不提及其他化工企业名称。不提交密钥。文件读写显式 `encoding="utf-8"`。
+7. **数据全部是模拟数据并明确标注。** 唯一例外是官网公开的染色系列产品目录（`docs/assets/染色系列_产品目录.csv`，公开资料，2026-10-22 人定可入库）及由它起草的产品条目；挂在这些真实型号上的机理、配方、转化对照、案例与内部评价全部是模拟的，标「（模拟）」与 `placeholder: true`。除此之外不提交任何传化真实资料、真实客户、真实配方，不提及其他化工企业名称。不提交密钥。文件读写显式 `encoding="utf-8"`。
 8. **动作全部模拟。** 立项、发布、冻结、试样只改变本系统内的状态，不对接任何外部系统。
 9. **业务时间只来自 `huayan.clock`**，datetime 必须带时区；随机数显式传入种子，模拟与回放可复现。
 10. **禁止过度工程化。** 限时比赛作品，目标是可运行、可演示。采用满足当前工作包验收的最简单实现；不为假想需求加抽象层、配置项或扩展机制；不做与当前工作包无关的重构；复制来的 JUE 代码不重构。
