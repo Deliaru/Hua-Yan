@@ -73,3 +73,18 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 - **实际调用结果**：用户已明确允许向 `https://api.soranori.com/v1` 发送本报告三页图片与原生文字上下文。首次运行完成 Word 原生导出，但生成模型连续失败，未生成图片读数或缓存。续跑复用现有原生页图，经统一网关取得明确错误：HTTP 500，服务端访问 `https://oauth2.googleapis.com/token` 时 `TLS handshake timeout`。这是网关上游故障，不再记为缺少密钥。
 - **本次边界**：用户要求先跳过需要该模型的部分，因此停止进一步调用；真实结构化读图与真实缓存回放均记为“按用户要求跳过／未完成”，没有用模拟结果补入真实报告。审阅页的无结果提示改为“尚无可用的图片模型读数”，同时保留模型调用失败的说明。运行记录在 `data/knowledge_v10/evidence/SRC-3a2130604c/structured-reading-check.json`。
 - **验证与交接**：本次仅补运行说明、提示文案和实际运行记录，未新增或重复执行测试；已有 2 项读取测试的通过记录继续有效，不当作真实模型读取成绩。首份报告原生 30 块、33 条标签和 7 项原生待补读保留，额外标明模型读取未完成；没有专业签字或正式知识写入。待用户评审后继续 V10.4，未自行推进下一包；MinerU 区域解析与 V10.1 统一回取入口仍按前条记录待办。
+
+### 2026-10-30｜按用户要求准备 Cloudflare 视觉 Worker
+
+- **本小项**：用户改为使用已有 Cloudflare `AI` 绑定，要求先提供代码自行部署。开始时分支 `v10`、基线 `052a487`，首份原生 TrialRecord 已提交。本次按 V10.2 的网关图片适配范围交付，已重读 AGENTS 全文、总计划及相关契约/QI/本包，并按最小实现要求核对；评审由用户进行。
+- **文件与入口**：新增 `scripts/cloudflare_vision_worker.mjs` 与同名 `.md` 部署说明。Worker 的 `POST /v1/chat/completions` 将当前网关的文字/单张图片消息转成 Workers AI 的 `messages + image`，固定调用 `@cf/meta/llama-3.2-11b-vision-instruct`；`POST /license` 仅转交用户主动发送的 `prompt="agree"`，普通读取不自动接受条款。调用格式依据 [Cloudflare 官方教程](https://developers.cloudflare.com/workers-ai/guides/tutorials/llama-vision-tutorial/)。
+- **契约与错误处理**：保持本地 `OpenAICompatGateway`、`caller="ingest:extract"`、结构校验及缓存路径；Worker 只适配当前非流式逐页读图。返回指定调用模型名和原始生成文本，不正则截取 JSON、不伪造读数、概率或 token 数；`json_object` 仅转换为提示要求，结构是否合格仍由本地 `structured` 决定。HTTP 输入不符和上游失败明确返回错误，不增设重试、缓存或权限框架。冻结契约和当前模型配置未修改。
+- **验证与边界**：`node --check scripts/cloudflare_vision_worker.mjs` 通过，未新增冗余测试。未部署、未调用 Cloudflare 模型、未接受协议、未上传真实报告；没有真实模型或缓存回放成绩。免费额度按 Cloudflare 官方定价如实说明，部署说明列明下一步所需连接参数。
+- **交接**：本小项代码交用户评审与部署；取得部署地址后再接回首份报告读图。原 Jev/Clef 核对接口继续保留。当前停下，不推进候选编译或其他工作包；未提交或推送。
+
+### 2026-10-30｜按用户现有 Jev Worker 合并读图入口
+
+- **修改**：用户提供了正在使用的 Clef Worker 代码，要求共用现有部署。更新 `scripts/cloudflare_vision_worker.mjs` 与部署说明，作为现有 Worker 的整体替换文件；根路径 `/` 保留 `state/questions/images` 输入与 Clef 原始返回，新增 `/v1/chat/completions` 供视觉模型读取，`/license` 继续只处理用户主动的协议接受请求。三个路径共用现有 `AI` 绑定和 `jev-proxy.xi1092183542.workers.dev` 域名，无需新建 Worker。
+- **兼容**：读取侧 `ClefWorkerClient.path="/"` 已核对，无需修改 Python 客户端；CORS/OPTIONS 保留，允许请求头加入 `Authorization`。现有网关、模型配置和契约均未修改，没有扩展检索或编译工作包。
+- **验证**：JavaScript 语法检查通过；使用合成请求在本地进行一次两路转发检查，确认 Clef 输入与返回原样保留、视觉请求送到指定视觉模型并保留图片和生成文本，全部通过。未新增测试文件，未调用真实模型或上传企业资料，不作为读图效果成绩。
+- **交接**：已重新完整阅读 AGENTS，再读总计划、相关契约/QI 与本包，按其约束完成本小项。用户可将合并文件全文替换原 Worker 后部署；当前停下等待用户评审，真实接入和读图仍待完成，未提交或推送。工作区原有的 `huayan_knowledge_compiler_design_v3.html` 未改动。
