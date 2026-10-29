@@ -1,0 +1,9 @@
+# 已部署在本机的模型；只读本地缓存，不自动下载。
+embedding:
+  model_id: google/embeddinggemma-2
+  cache_dir: D:/hf_cache/hub
+
+# 用户部署的 Worker；响应保留 Clef 的 model/answers/usage。
+jev:
+  worker_url: https://jev-proxy.xi1092183542.workers.dev
+  timeout_s: 120
