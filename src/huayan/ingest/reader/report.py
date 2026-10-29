@@ -4,6 +4,7 @@ import html
 import json
 from pathlib import Path
 
+from .image import read_image
 from .office import export_word
 from .word import read_docx, read_native_labels, save_document_xml
 
@@ -25,6 +26,17 @@ def read_report(source, output_dir):
             "fragments": [b.fragment().model_dump(mode="json") for b in blocks],
             "readings": [r.model_dump(mode="json") for r in readings], "pending": pending,
             "image_readouts": [], "professional_confirmation": None}
+
+
+def read_report_images(report, gateway):
+    """试样报告逐页完整读取；查询不进入读图提示，审阅与编译共用保存的读数。"""
+    context = "\n\n".join(f'{b["span"]}（{b["group"] or b["section"]}）\n{b["text"]}' for b in report["blocks"])
+    results = []
+    for page, image in enumerate(report["images"], 1):
+        readout, response = read_image(image, context, gateway)
+        results.append({"page": page, "method": "vision", "readout": readout.model_dump(mode="json"),
+                        "response": response.model_dump(mode="json")})
+    return results
 
 
 def write_review(report, output_dir):
@@ -50,11 +62,23 @@ def write_review(report, output_dir):
             texts.append(f'<section{anchor}><h3>{esc(block["span"])} · {block["group"] or "未分组"}</h3>'
                          f'<p>{esc(block["section"])}</p><pre>{esc(block["text"])}</pre></section>')
         relative_image = Path(image_path).relative_to(output).as_posix()
-        pages.append(f'<h2>原生第 {page} 页</h2><div class="page"><img src="{esc(relative_image)}" '
+        pages.append(f'<h2 id="page-{page}">原生第 {page} 页</h2><div class="page"><img src="{esc(relative_image)}" '
                      f'alt="Word 原生第 {page} 页"><div>{"".join(texts)}</div></div>')
     pending = "".join(f"<li>{esc(note)}</li>" for note in report["pending"])
-    visual = "".join(f'<h3>第 {item["page"]} 页 · {esc(item["response"]["model"])}</h3>'
-                     f'<pre>{esc(item["readout"]["text"])}</pre>' for item in report["image_readouts"])
+    visual = []
+    for item in report["image_readouts"]:
+        image_rows = []
+        for reading in item["readout"]["readings"]:
+            cells = [reading["group"] or "共同／待确认", reading["object"], reading["stage"] or "待关联",
+                     (reading["value"] or "未读清") + " " + (reading["unit"] or "单位未给出／未读清"),
+                     "；".join(reading["conditions"]) or "未给出，待确认", reading["quote"]]
+            image_rows.append("<tr>" + "".join(f"<td>{esc(value)}</td>" for value in cells)
+                              + f'<td><a href="#page-{item["page"]}">{esc(reading["position"])}</a></td></tr>')
+        model = esc(item["response"]["model"]) + ("（降级）" if item["response"]["fallback_used"] else "")
+        visual.append(f'<h3>第 {item["page"]} 页 · 图片模型读取 · {model}</h3>'
+                      f'<pre>{esc(item["readout"]["text"])}</pre><table><thead><tr><th>组别</th><th>对象</th>'
+                      '<th>阶段</th><th>值与原单位</th><th>条件</th><th>原文标签</th><th>图中位置</th></tr></thead>'
+                      f'<tbody>{"".join(image_rows)}</tbody></table>')
     document = f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8">
 <title>报告原文与读取结果 · {esc(report["source_id"])}</title>
 <style>body{{font:16px/1.6 "Microsoft YaHei",sans-serif;margin:32px;color:#183044;background:#f6f8fa}}
@@ -67,5 +91,5 @@ section{{background:white;padding:12px;margin-bottom:12px;border:1px solid #d8e0
 <p><a href="native/original.pdf">原生 PDF</a> · <a href="evidence.json">完整读取记录</a> · <a href="document.xml">原始 XML</a></p>
 <h2>待补读</h2><ul>{pending}</ul><h2>数值与出处</h2><table><thead><tr><th>组别</th><th>阶段</th><th>值与原单位</th><th>局部条件</th><th>原文标签</th><th>出处／行列</th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table>{"".join(pages)}
-<h2>图片辅助读稿</h2>{visual or "<p>未调用模型；当前交付使用原生 Word 文本与页面。</p>"}</html>'''
+<h2>图片辅助读稿（待人工审阅）</h2>{"".join(visual) or "<p>未调用模型；当前仅完成原生解析，图片结构化读数待补。</p>"}</html>'''
     (output / "review.html").write_text(document, encoding="utf-8")

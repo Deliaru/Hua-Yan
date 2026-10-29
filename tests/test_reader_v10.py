@@ -34,14 +34,19 @@ def test_native_report_groups_units_and_merged_curve():
     assert textbox.text == "合成文本框 30℃" and textbox.locations[0].page == 1
 
 
-def test_image_gateway_serializes_bytes_and_reuses_only_same_image(tmp_path):
+def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
     sent = []
+    readout = {"text": "合成图片读稿", "readings": [
+        {"object": "合成布样", "group": "A", "stage": "保温", "value": "12", "unit": "min",
+         "conditions": ["85℃"], "position": "上部原工艺横线", "quote": "85℃*12min"},
+        {"object": "合成布样", "group": "B", "stage": "保温", "value": "6", "unit": "min",
+         "conditions": ["95℃"], "position": "下部试样工艺横线", "quote": "95℃*6min"}], "pending": []}
 
     def handle(request):
         sent.append(json.loads(request.content))
         return httpx.Response(200, json={"id": "synthetic-response", "object": "chat.completion", "created": 0,
-            "model": "synthetic-vision", "choices": [{"index": 0, "finish_reason": "stop",
-                "message": {"role": "assistant", "content": '{"text":"合成图片读稿","pending":[]}'}}],
+            "model": sent[-1]["model"], "choices": [{"index": 0, "finish_reason": "stop",
+                "message": {"role": "assistant", "content": json.dumps(readout, ensure_ascii=False)}}],
             "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20}})
 
     client = openai.OpenAI(api_key="synthetic-key", base_url="https://gateway.invalid/v1",
@@ -58,6 +63,11 @@ def test_image_gateway_serializes_bytes_and_reuses_only_same_image(tmp_path):
     read_image(image, "合成上下文", gateway)
     assert first.text == repeated.text == "合成图片读稿" and response.model == "synthetic-vision"
     assert len(sent) == 2
+    assert [(r.group, r.value, r.unit, r.conditions) for r in repeated.readings] == [
+        ("A", "12", "min", ["85℃"]), ("B", "6", "min", ["95℃"])]
+    gateway.tiers["strong"]["model"] = "synthetic-vision-v2"
+    _, updated_response = read_image(image, "合成上下文", gateway)
+    assert len(sent) == 3 and updated_response.model == "synthetic-vision-v2"
     content = sent[0]["messages"][-1]["content"]
     assert content[0] == {"type": "text", "text": "合成上下文"}
     assert base64.b64decode(content[1]["image_url"]["url"].split(",", 1)[1]) == b"synthetic-image-A"
