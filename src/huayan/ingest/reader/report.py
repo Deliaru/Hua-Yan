@@ -91,5 +91,5 @@ section{{background:white;padding:12px;margin-bottom:12px;border:1px solid #d8e0
 <p><a href="native/original.pdf">原生 PDF</a> · <a href="evidence.json">完整读取记录</a> · <a href="document.xml">原始 XML</a></p>
 <h2>待补读</h2><ul>{pending}</ul><h2>数值与出处</h2><table><thead><tr><th>组别</th><th>阶段</th><th>值与原单位</th><th>局部条件</th><th>原文标签</th><th>出处／行列</th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table>{"".join(pages)}
-<h2>图片辅助读稿（待人工审阅）</h2>{"".join(visual) or "<p>未调用模型；当前仅完成原生解析，图片结构化读数待补。</p>"}</html>'''
+<h2>图片辅助读稿（待人工审阅）</h2>{"".join(visual) or "<p>尚无可用的图片模型读数；当前仅完成原生解析，图片结构化读数待补。</p>"}</html>'''
     (output / "review.html").write_text(document, encoding="utf-8")

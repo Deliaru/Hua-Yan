@@ -1,6 +1,8 @@
 """读取清单中的一份 Word 报告，输出原文对照与读取侧 JSON；不写正式状态。
 
 uv run python scripts/read_report.py --source SRC-3a2130604c
+密钥保存在项目根目录 .env 时：
+uv run --env-file .env python scripts/read_report.py --source SRC-3a2130604c --vision
 配置好现有模型网关后，加 --vision 完成试样报告逐页结构化读图；不加时仅完成原生解析。
 """
 import argparse

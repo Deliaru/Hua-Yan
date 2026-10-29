@@ -8,6 +8,7 @@ import openai
 
 from huayan.gateway.client import OpenAICompatGateway
 from huayan.ingest.reader.image import read_image
+from huayan.ingest.reader.trials import build_trial_record
 from huayan.ingest.reader.word import read_docx, read_native_labels
 from huayan.meter import FileMeter
 
@@ -32,6 +33,14 @@ def test_native_report_groups_units_and_merged_curve():
     assert next(r for r in readings if r.value == "90").group is None
     textbox = next(b for b in blocks if b.kind == "textbox")
     assert textbox.text == "合成文本框 30℃" and textbox.locations[0].page == 1
+    record = build_trial_record(blocks, readings, pending)
+    a, b = record.groups
+    assert [(x.name, x.value, x.unit) for x in a.formula] == [("SYNTH-A", "7", None)]
+    assert [(x.name, x.value, x.unit) for x in b.formula] == [("SYNTH-B", "2", "kg")]
+    assert [r.conditions for r in a.curve_labels if r.stage == "保温"] == [["85℃"]]
+    assert [r.conditions for r in b.curve_labels if r.stage == "保温"] == [["95℃"]]
+    assert a.formula[0].evidence[1].cell == (2, 2)
+    assert record.time.a is None and record.time.b is None  # 未标组别的总时间90min不回填A/B。
 
 
 def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
