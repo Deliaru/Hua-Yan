@@ -15,9 +15,23 @@ class LLMToolCall(BaseModel):
     call_id: str; name: str; arguments: dict[str, Any]
 
 
+class TextContent(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ImageURL(BaseModel):
+    url: str
+
+
+class ImageContent(BaseModel):
+    type: Literal["image_url"] = "image_url"
+    image_url: ImageURL
+
+
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
-    content: str
+    content: str | list[TextContent | ImageContent]
     tool_call_id: str | None = None
     tool_calls: list[LLMToolCall] = []
 

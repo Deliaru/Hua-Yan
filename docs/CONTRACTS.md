@@ -1100,9 +1100,20 @@ def make_week(seeds: Seeds, start: datetime, days: int, rng) -> tuple[list[WeekI
 class Tier(str, Enum):
     FAST = "fast"; STRONG = "strong"; BACKUP = "backup"; MOCK = "mock"
 
+class TextContent(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+class ImageURL(BaseModel):
+    url: str
+
+class ImageContent(BaseModel):
+    type: Literal["image_url"] = "image_url"
+    image_url: ImageURL
+
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
-    content: str
+    content: str | list[TextContent | ImageContent]  # V10 C1；旧字符串消息不变
     tool_call_id: str | None = None
     tool_calls: list[LLMToolCall] = []
 

@@ -76,7 +76,7 @@ class OpenAICompatGateway:
             raise ReplayMiss(f"gateway 回放缓存未命中：caller={req.caller} key={cache_key}")
         messages = []
         for message in req.messages:
-            item = {"role": message.role, "content": message.content}
+            item = message.model_dump(mode="json", include={"role", "content"})
             if message.tool_call_id:
                 item["tool_call_id"] = message.tool_call_id
             if message.tool_calls:

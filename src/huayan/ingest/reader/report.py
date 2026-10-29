@@ -1,0 +1,71 @@
+"""首份报告的读取入口与静态原文对照；不导入正式知识状态。"""
+import hashlib
+import html
+import json
+from pathlib import Path
+
+from .office import export_word
+from .word import read_docx, read_native_labels, save_document_xml
+
+
+def read_report(source, output_dir):
+    path, output = Path(source["path"]), Path(output_dir).resolve()
+    fingerprint = hashlib.sha256(path.read_bytes()).hexdigest()
+    if fingerprint != source["sha256"]:
+        raise ValueError("原件指纹与来源清单不一致，请先核对来源变化")
+    native = export_word(path, output / "native")
+    blocks = read_docx(native["reading_copy"], source, native["pages"], native["images"])
+    readings, pending = read_native_labels(blocks)
+    chart_count = save_document_xml(native["reading_copy"], output)
+    if chart_count:
+        pending.append(f"文档含 {chart_count} 个原生图表，当前 Word 样例读取器尚未解析其系列，交后续补读。")
+    return {"source_id": source["source_id"], "source_path": str(path), "file_sha256": fingerprint,
+            **native, "reading_copy_sha256": hashlib.sha256(Path(native["reading_copy"]).read_bytes()).hexdigest(),
+            "native_chart_count": chart_count, "blocks": [b.model_dump(mode="json") for b in blocks],
+            "fragments": [b.fragment().model_dump(mode="json") for b in blocks],
+            "readings": [r.model_dump(mode="json") for r in readings], "pending": pending,
+            "image_readouts": [], "professional_confirmation": None}
+
+
+def write_review(report, output_dir):
+    output = Path(output_dir).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "evidence.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    esc = html.escape
+    rows = []
+    for reading in report["readings"]:
+        cells = [reading["group"] or "未分组", reading["stage"] or "原生标签（阶段待关联）",
+                 reading["value"] + " " + reading["unit"], "；".join(reading["conditions"]), reading["quote"]]
+        rows.append("<tr>" + "".join(f"<td>{esc(value)}</td>" for value in cells)
+                    + f'<td><a href="#{esc(reading["span"])}">{esc(reading["span"])}</a> '
+                    + esc(str(reading["cell"]) if reading["cell"] else "") + "</td></tr>")
+    pages = []
+    for page, image_path in enumerate(report["images"], 1):
+        texts = []
+        for block in report["blocks"]:
+            locations = block["locations"]
+            if page not in [loc["page"] for loc in locations]:
+                continue
+            anchor = f' id="{esc(block["span"])}"' if page == locations[0]["page"] else ""
+            texts.append(f'<section{anchor}><h3>{esc(block["span"])} · {block["group"] or "未分组"}</h3>'
+                         f'<p>{esc(block["section"])}</p><pre>{esc(block["text"])}</pre></section>')
+        relative_image = Path(image_path).relative_to(output).as_posix()
+        pages.append(f'<h2>原生第 {page} 页</h2><div class="page"><img src="{esc(relative_image)}" '
+                     f'alt="Word 原生第 {page} 页"><div>{"".join(texts)}</div></div>')
+    pending = "".join(f"<li>{esc(note)}</li>" for note in report["pending"])
+    visual = "".join(f'<h3>第 {item["page"]} 页 · {esc(item["response"]["model"])}</h3>'
+                     f'<pre>{esc(item["readout"]["text"])}</pre>' for item in report["image_readouts"])
+    document = f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8">
+<title>报告原文与读取结果 · {esc(report["source_id"])}</title>
+<style>body{{font:16px/1.6 "Microsoft YaHei",sans-serif;margin:32px;color:#183044;background:#f6f8fa}}
+h1,h2{{color:#145b67}}table{{border-collapse:collapse;width:100%;background:white}}td,th{{border:1px solid #d8e0e5;padding:8px;text-align:left}}
+.page{{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}}img{{width:100%;position:sticky;top:12px}}
+section{{background:white;padding:12px;margin-bottom:12px;border:1px solid #d8e0e5}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 monospace}}
+.notice{{padding:16px;background:#fff3d4}}@media(max-width:950px){{.page{{grid-template-columns:1fr}}img{{position:static}}}}</style>
+<h1>报告原文与读取结果</h1><p>{esc(report["source_id"])} · {esc(report["renderer"])}</p>
+<p class="notice">原生文字与标签读数，尚未专业确认。A＝工厂原工艺，B＝试样工艺；未分组内容保留所在节标题。曲线速率未自动关联线段。</p>
+<p><a href="native/original.pdf">原生 PDF</a> · <a href="evidence.json">完整读取记录</a> · <a href="document.xml">原始 XML</a></p>
+<h2>待补读</h2><ul>{pending}</ul><h2>数值与出处</h2><table><thead><tr><th>组别</th><th>阶段</th><th>值与原单位</th><th>局部条件</th><th>原文标签</th><th>出处／行列</th></tr></thead>
+<tbody>{"".join(rows)}</tbody></table>{"".join(pages)}
+<h2>图片辅助读稿</h2>{visual or "<p>未调用模型；当前交付使用原生 Word 文本与页面。</p>"}</html>'''
+    (output / "review.html").write_text(document, encoding="utf-8")

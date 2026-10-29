@@ -1,6 +1,6 @@
 # WP-2v10｜选定资料的解析与证据读取
 
-> 决赛必需，按样例交付｜状态：待实施｜先处理首份报告用到的格式。
+> 决赛必需，按样例交付｜状态：首份 Word 报告原生读取已实现，待用户评审；图片模型实调与 PPT 图表读取另记｜先处理首份报告用到的格式。
 
 ## 目标
 
@@ -39,4 +39,20 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 
 ## 完成记录
 
-待填写：已支持文件、解析/读取配置、原文核对结果和补读项。交付 V10.4，图表来源交 V10.3。
+### 2026-10-29｜首份报告读取与 C1 落实
+
+- **实现范围**：`reader/office.py` 按文件头识别当前 DOC/DOCX，用 Word COM 只读处理本地原件副本，导出原生 PDF、DOCX 读取副本和页码映射；PNG 由原生 PDF 渲染。`reader/word.py` 用 python-docx 读取段落、表格、文本框与 XML，按原工艺/试样工艺标题保持 A/B，合并格的同一物理单元格只读一次。`reader/evidence.py` 保存读取侧位置和标签，映射现有 Fragment，未增加 `Fragment.meta`。
+- **读数范围**：原生数值与单位逐字保留，明确写成“温度×时间”的保温点直接配对；其余标签不凭 XML 顺序推断工艺执行顺序。异常数值和用量缺单位列为待补读。曲线速率与升降温线段的关联仍留在对照页等待判读，未生成完整 TrialRecord 或推定产品适用范围。
+- **C1 差异**：按 V10.0 已批准约定，在 `contracts/gateway.py` 增加 `TextContent/ImageURL/ImageContent`，`Message.content` 扩为字符串或内容列表，原默认值与调用签名不变；同步契约文档。`gateway/client.py` 仅改消息内容序列化，沿用缓存键和计量；`gateway/mock.py` 按联合类型提取文字。`reader/image.py` 经现有 `gateway.structured`、`caller="ingest:extract"` 返回辅助读稿。未新增网关、缓存、重试或权限框架。
+- **入口与产物**：`uv run python scripts/read_report.py --source SRC-3a2130604c`；本机实际使用 `.venv/Scripts/uv.exe run --no-sync python scripts/read_report.py --source SRC-3a2130604c`。产物在 `data/knowledge_v10/evidence/SRC-3a2130604c/`：`review.html` 为原页与原文对照，`evidence.json` 为读取记录，`document.xml` 为原生 XML，`native/` 为原件字节副本、Word 导出与页图。可配置现有网关后加 `--vision` 获取图片辅助读稿。解析依赖加入 `pyproject.toml`：python-docx、pypdfium2、Windows pywin32。
+- **真实运行**：选定的原始 DOC 实际运行成功，Word 16.0 原生导出3页，提取30个非空证据块、3张表格、33条原生标签读数（含5个保温点，A组2个、B组3个）。位置为 A 配方第1页、A 曲线表跨第1—2页、B 表格/曲线第2页；报告无原生 chart 系列。7条待补读包括4个缺单位用量、1处异常数值写法和2组曲线线段关联。含企业内容的产物均留在被忽略的 `data/`。
+- **测试**：执行 `uv run --no-sync pytest -q`，既有29项通过；新增原生读取测试首次发现文本框 XML 命名空间问题，修复后运行 `uv run --no-sync pytest -q tests/test_reader_v10.py`，本包2项通过。合成夹具及生成入口在 `tests/fixtures/reader/`；覆盖 A/B 保温点、合并格、缺单位、异常写法、结果节不继承B组及文本框读取。图片通路采用离线 HTTP 传输替身验证内容序列化、相同图片缓存复用、不同图片缓存区分和 caller 计量，不作为真实模型成绩。
+- **实际模型与验收边界**：本次未调用真实生成模型、Jev、嵌入或 OCR；当前终端未配置 `BACKUP_API_KEY`，图片实调未完成。首份表格、曲线原生标签及原页对照已交付，数值/单位/组别/局部条件可以回到块与表格行列，待补项可见。后续 PPT/PDF 图表题读取尚未接入本读取器。研发测试安排继续按用户要求暂缓。
+- **交接**：V10.4 可直接消费 `read_docx`、`read_native_labels`、EvidenceBlock 与本次读取记录，整理首份 A/B TrialRecord。已按要求重读 AGENTS、总计划、相关契约/QI 与本包；本次只完成实现、必要测试与真实运行，由用户评审，停在本小项。未提交或推送，未写入正式知识状态。
+
+### 2026-10-29｜按用户评审修复合并单元格原文重复，收口交主线
+
+- **问题与修改**：原先只对 `cells` 去重，`EvidenceBlock.text` 仍按展开后的网格拼接，导致首份报告 `table-3` 的横向合并格内容重复4次。`word.py` 现以同一套物理单元格遍历同时生成原文和单元格记录，保留首次出现的行列位置，不按文字内容去重。
+- **真实产物**：复用指纹一致的 Word 原生 `native/reading.docx` 和已有页码、页图重新读取，更新 `evidence.json`、`review.html` 与 Fragment 文本/指纹。该合并格内容4次变为1次；30个块、33条原生读数、7条待补项不变，全部读数逐项与修复前一致。核对记录在 `data/knowledge_v10/evidence/SRC-3a2130604c/dedup-check.json`。未改原件，未重复渲染，未写正式知识状态。
+- **验证**：在已有合成报告测试中补充原文与 Fragment 的合并格单次出现断言；本次全部离线回归 `uv run --no-sync pytest -q` 为34项通过（23.25秒），含已有业务回归、读取及模型适配检查。
+- **交接与归档**：按用户要求提交本包当前成果；原件、含原文产物和模型缓存保持在不入库目录。V10.4 只使用本次更新后的证据记录，首份 TrialRecord 完成后交 V10.5，再推进 V10.7、V10.6。检索组件的完成情况单独记入 V10.3，停止支线扩展。已重读 AGENTS、总计划及相关契约/QI，按本文件完成必要核对，评审由用户进行。

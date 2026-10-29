@@ -66,7 +66,9 @@ class MockGateway:
 
     def complete(self, req: LLMRequest) -> LLMResponse:
         if req.tools and req.messages and req.messages[-1].role == "user":
-            match = re.search(r"\[\[call:([^\]]+)\]\]", req.messages[-1].content)
+            content = req.messages[-1].content
+            text = content if isinstance(content, str) else "\n".join(p.text for p in content if p.type == "text")
+            match = re.search(r"\[\[call:([^\]]+)\]\]", text)
             if match:
                 call = LLMToolCall(call_id="mock-call-1", name=match[1], arguments={})
                 return self._response(req, None, [call])
