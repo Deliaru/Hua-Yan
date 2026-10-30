@@ -78,7 +78,7 @@ class OperationIR(BaseModel):
     nature: Literal["observation"] = "observation"
     prepared_by: Literal["rule"] = "rule"
     product_raw: str
-    group: Literal["A", "B"]
+    group: Literal["A", "B"] | None
     observation: str
     conditions: list[IRCondition]
     evidence: list[Citation]
@@ -100,6 +100,37 @@ def prepare_operation(record: TrialRecord, seeds, group, product, index=0):
                    for c in own.curve_evidence]
     # 操作原句内含加料顺序、泵速和时间，整体保留，不推断复用范围。
     conditions.append(IRCondition(text=operation.text, group=group, stage="现场操作", evidence=operation.evidence))
+    return _prepare_observation(record, seeds, group, product, operation, conditions,
+                                f"{record.source_id}:{group}:operation-{index + 1}", f"{product} {group}组现场操作观察")
+
+
+def prepare_negative(record: TrialRecord, seeds, product):
+    """消费已选负例的品质原文；保留同次合格对照，不自动归因或推定不适用范围。"""
+    observation = record.quality[0]
+    conditions = [IRCondition(text=t.text, group=None, evidence=t.evidence) for t in record.common_conditions]
+    conditions += [IRCondition(text=t.text, group=None, stage="产品及配合方案原文", evidence=t.evidence)
+                   for t in record.metadata if "试样产品" in t.text]
+    for own in record.groups:
+        conditions += [IRCondition(text=f'{x.name} {x.value}{x.unit or "（单位未记载）"}', group=own.group,
+                                   stage="配方", evidence=x.evidence) for x in own.formula]
+        conditions += [IRCondition(text=x.text, group=None, stage="配方原文（按原对象及列）", evidence=x.evidence)
+                       for x in own.formula_notes]
+        conditions += [IRCondition(text=c.quote, group=own.group, stage="工艺曲线", evidence=[c]) for c in own.curve_evidence]
+        conditions += [IRCondition(text=x.text, group=None, stage="操作原文（保留原对象）", evidence=x.evidence)
+                       for x in own.operations]
+    conditions += [IRCondition(text=x.text, group=None, stage="报告分析及后续原文（非系统因果判断）", evidence=x.evidence)
+                   for x in record.reported_results if x.text != observation.text]
+    ir = _prepare_observation(record, seeds, None, product, observation, conditions,
+                              f"{record.source_id}:negative-1", f"{product} 品质负例观察（含同次对照）")
+    ir.pending.append("这是选定报告的品质结果观察，包含同次对照；原报告分析不等于系统确认的因果结论，不推定产品通用不适用。")
+    if record.time.a is None or record.time.b is None:
+        ir.pending.append("报告未给出完整A/B标注总时长，不从曲线估算总节时。")
+    if not record.cost:
+        ir.pending.append("报告未记载成本变化，不按零或无变化处理。")
+    return ir
+
+
+def _prepare_observation(record, seeds, group, product, operation, conditions, ir_id, title):
     for condition in conditions:
         text = condition.text.strip().strip("，。；")
         matches = find_slot_values(text, seeds.slots)
@@ -115,11 +146,11 @@ def prepare_operation(record: TrialRecord, seeds, group, product, index=0):
         pending.append("观察涉及的现象尚未对齐词表。")
     evidence = list({c.fragment + "\n" + c.quote: c for c in
                      [*operation.evidence, *(e for condition in conditions for e in condition.evidence)]}.values())
-    proposal = Proposal(title=f"{product} {group}组现场操作观察", text=operation.text,
+    proposal = Proposal(title=title, text=operation.text,
         product=product, phenomenon=phenomenon[0] if phenomenon else "", form=None,
         conditions=[c.text for c in conditions], limits=limits,
         evidence=[EvidenceRef(doc_id=record.source_id, span=c.span, quote=c.quote) for c in evidence])
-    return OperationIR(id=f"{record.source_id}:{group}:operation-{index + 1}", source_id=record.source_id,
+    return OperationIR(id=ir_id, source_id=record.source_id,
         file_sha256=record.file_sha256, level=record.level, product_raw=product, group=group,
         observation=operation.text, conditions=conditions, evidence=evidence, pending=pending, proposal=proposal)
 
@@ -134,7 +165,7 @@ def write_operation_review(ir, output, evidence_review, *, candidate_id=None):
     def citations(items):
         return "<br>".join(f'<a href="{esc(evidence_review)}#{esc(c.span)}">'
             f'{esc(c.span)} · 第{esc(str(c.pages))}页</a><pre>{esc(c.quote)}</pre>' for c in items)
-    rows = "".join(f'<tr><td>{c.group or "共同"} · {esc(c.stage or "共同条件")}</td>'
+    rows = "".join(f'<tr><td>{c.group or ("原文范围" if c.stage else "共同")} · {esc(c.stage or "共同条件")}</td>'
         f'<td><pre>{esc(c.text)}</pre></td><td>{esc(str(c.structured)) if c.structured else "保留原文待判断"}</td>'
         f'<td>{citations(c.evidence)}</td></tr>' for c in ir.conditions)
     pending = "".join(f"<li>{esc(note)}</li>" for note in ir.pending)
@@ -156,10 +187,10 @@ def write_operation_review(ir, output, evidence_review, *, candidate_id=None):
 <style>body{{font:16px/1.6 'Microsoft YaHei',sans-serif;margin:32px;color:#183044}}
 table{{width:100%;border-collapse:collapse}}td,th{{border:1px solid #ccd6df;padding:10px;text-align:left}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere}}.notice{{background:#fff3d4;padding:16px}}</style>
-<h1>操作经验 IR · {esc(ir.id)}</h1><p class="notice">L{ir.level} 内部资料；规则整理的单次观察草稿，
+<h1>现场观察 IR · {esc(ir.id)}</h1><p class="notice">L{ir.level} 内部资料；规则整理的单次观察草稿，
 {admission}；未专业确认，未授予能力。产品原词与未结构化限制交人判断；配方保持原密级。</p>
 <p>{assignee}</p>
-<h2>观察及拟用方式</h2><pre>{esc(ir.observation)}</pre><p>拟作为同类现场操作的审阅材料；
+<h2>观察及拟用方式</h2><pre>{esc(ir.observation)}</pre><p>拟作为同类现场情况的审阅材料；
 复用范围待研发确定，当前不提议 applicable 或 ask。</p>{citations(ir.evidence[:1])}
 <h2>产品身份与说明书原文（目录登记待归属）</h2>{product}
 <h2>完整条件与原文</h2><table><tr><th>组别／阶段</th><th>条件</th><th>对齐状态</th><th>出处</th></tr>{rows}</table>
