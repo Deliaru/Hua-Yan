@@ -28,7 +28,7 @@ def run_case(root, name, config, state_path, previous, replacement, new_range):
     path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     app = HuayanApp.build(str(path), run_id="developer-simulation")
     unit = app.kb._units[previous["claim_id"]]
-    old = app.kb._caps[previous["original_recommendation"]["candidates"][0]["capability_id"]]
+    old = app.kb._caps[previous["branches"][0]["candidates"][0]["capability_id"]]
     prefix = "（合成需求）深一块浅一块，锦纶氨纶的，溢流缸，"
     session = app.start_session("customer:C01", "sales:S01")
     session = app.add_turn(session.id, "customer", prefix + "75℃")
