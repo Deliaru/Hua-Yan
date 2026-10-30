@@ -93,3 +93,8 @@
 - **修改**：`trial_ir.py::EvidenceReportSource.search` 复用 `knowledge.store._grams`，沿用 `FolderSource.search` 的重叠比例评分、文档/段号排序与前 k 项返回；权限继续复用知识库。`docs/CONTRACTS.md` 门面说明补入 `HuayanApp.import_proposals(proposals, by)`，不增加契约字段。
 - **验证**：`tests/test_compiler_v10.py` 新增一项合成回归，覆盖该来源挂入 `kb.sources` 后研发可从 `.candidates` 看到本人候选、客户不可见且查询不报错。运行 `uv run --no-sync pytest -q tests/test_compiler_v10.py`，5项通过（1.48秒）。续跑真实 `first-report` 本地实例，三个读取记录来源均接入，`rd:JianMingXi` 可检索 `ku:claim:1`，客户不可见；候选仍为 `candidate`，未执行确认、授予或模型调用。
 - **交接**：此次修复完成，未提交或推送；停下等待用户评审，不开始下一小项。
+
+### 2026-10-30｜消费 V10.6 的显式温度范围提议
+
+- `compile.Proposal` 的读取侧内部类型增加默认 None 的摄氏闭区间字段；`admit` 只在明确提供时写入同一适用 payload，保留原有 conditions/limits、证据核对和 candidate/proposed 状态。编译提示不把单次试验温度或多阶段曲线推断为适用范围，未修改冻结模型。
+- 新增合成材料及纵向验证归 V10.6，现有授予/批准展示归 V10.7；全量47项通过，前端构建通过。首份真实 IR 的内存预览仍只有观察候选，能力提议0、无温度授权，详见 V10.6 同日完成记录。已按 AGENTS 自查，未调用模型、写真实确认、提交或推送，停下等待用户评审。

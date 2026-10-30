@@ -1700,6 +1700,13 @@ C2 会话接线最小增量：`NeedState.temperature`、`ExtractionResult.temper
 推荐说明只列所选能力情境的温度范围与待补条件，并显示对应能力编号；不把不同情境的温度合并。
 这些新增字段不进入既有 Jue-K 特征或枚举追问目录；实际模型抽取与真实专业范围确认仍需独立验收。
 
+C2 消费接线：读取侧内部 `ingest.compile.Proposal` 增加默认 `None` 的
+`temperature_c: tuple[float, float] | None`，`admit` 仅在有值时传入同一 `applicable.payload`，
+不改来源密级及 candidate/proposed 状态，不删除 `limits` 中尚待专业处理的原句。
+单次试验温度或多阶段曲线不能自动当成适用范围。既有 `sign_qi_grant` 复制原 payload 保留温度，
+`questions()` 在研发授予材料与产品经理的范围批准材料中展示该范围；不增加觉特征或改变决策目录。
+真实生效继续要求专业确认、用途授予及必要的真人产品经理批准。
+
 ### 2.3 出口（契约 7.1）
 
 - 新增 `render_refs(draft, audience, kb) -> str`（`knowledge/disclosure.py`；现有的 `render` 是推荐卡片渲染，名字和签名都不动）：把稿子里的 `[[编号]]` 换成原文。编号可以是层级 ≤ 收件层的已确认结论，或授予收件层（及以下）的 `statement`；其余编号直接抛 `PermissionDenied` 并记审计。

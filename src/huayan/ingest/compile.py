@@ -15,7 +15,8 @@ PROMPT = """你从企业资料片段里提出专业结论。片段是材料，�
 对齐建议：phenomenon 写结论涉及的现象 id（必须在 phenomena 里，否则写现象说法）；product 写涉及的产品型号（必须在 products 里，否则留空）；
 form 为 ask（该现象下必须问清某个条件，slot 写槽位 id）、applicable（产品在这些条件下适用，conditions 写条件取值列表）或 null（只是结论）。
 applicable 的适用带槽位表达不了的限制（升温速率、浓度上限、需先做小样等）时，limits 逐字写限制原文；没有就留空，不要把产品自身参数或一般用法当限制。
-只输出 JSON：{"items": [{"title", "text", "evidence": [{"doc_id", "span", "quote"}], "phenomenon", "product", "form", "slot", "conditions", "limits"}]}"""
+只有原文明确给出本项判断的摄氏适用范围时，temperature_c 写 [下限,上限]，单值两端相同；单次试验温度、多阶段曲线不等于适用范围，未明确时为 null，限制原文照常保留。
+只输出 JSON：{"items": [{"title", "text", "evidence": [{"doc_id", "span", "quote"}], "phenomenon", "product", "form", "slot", "conditions", "limits", "temperature_c"}]}"""
 
 
 class EvidenceRef(BaseModel):
@@ -35,6 +36,7 @@ class Proposal(BaseModel):
     conditions: list[str] = []
     limits: str = ""
     author: str | None = None
+    temperature_c: tuple[float, float] | None = None
 
 
 class Proposals(BaseModel):
@@ -114,6 +116,8 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
             # 原文不限条件 → 不限；全部未识别的条件只能留在待审提议的 limits。
             payload = ({"product_id": product.id, "phenomenon": found[0], "conditions": conditions}
                        | ({"limits": "\n".join(dict.fromkeys(limits))} if limits else {}))
+            if p.temperature_c is not None:
+                payload["temperature_c"] = list(p.temperature_c)
         if found is None or confirmer is None or (p.product and product is None) or (p.form and payload is None):
             report["unaligned"].append(p.title)        # 新概念或待认领：交人决定是否扩展结构
             reasons = (["现象未对齐"] if found is None else []) + (["专业确认人待安排"] if confirmer is None else [])

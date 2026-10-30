@@ -17,7 +17,8 @@ const GROUPS: [string, string, (q: Question) => boolean][] = [
 const reqOf = (q: Question) => q.refs.requirement_id ?? (q.refs.requirement_ids ?? "").split(",").filter(Boolean)[0] ?? null;
 // V9.6：适用范围问题的对象是待批准的适用能力（knowledge:cap:<id>），产品、现象、条件与限制原文在 refs 里
 const scopeOf = (q: Question) => ({ product: q.refs.product_id, phenomenon: q.refs.phenomenon,
-  conditions: JSON.parse(q.refs.conditions || "{}") as Record<string, string[]>, limits: q.refs.limits ?? "" });
+  conditions: JSON.parse(q.refs.conditions || "{}") as Record<string, string[]>, limits: q.refs.limits ?? "",
+  temperature: JSON.parse(q.refs.temperature_c || "null") as [number, number] | null });
 
 export function Pm() {
   const { me, focus } = useApp();
@@ -118,8 +119,10 @@ function Scope({ q, onDone }: { q: Question; onDone: (t: string) => void }) {
           <span className="text-[15px] font-semibold">{L.product(s.product)}</span></div>
         <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">现象</span>
           <span className="text-[15px]">{L.phen(s.phenomenon)}</span><span className="ml-2 text-[12px] text-ink-3">说明书的适用范围里还没有</span></div>
-        <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">适用条件</span>
-          <span className="text-[14px]">{Object.entries(s.conditions).map(([k, v]) => `${L.slot(k)} ${v.join("、")}`).join("；") || "不限"}</span></div>
+        <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">枚举条件</span>
+          <span className="text-[14px]">{Object.entries(s.conditions).map(([k, v]) => `${L.slot(k)} ${v.join("、")}`).join("；") || "未限定枚举条件"}</span></div>
+        {s.temperature && <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">适用温度</span>
+          <span className="text-[14px]">{s.temperature.join("—")}℃</span></div>}
         {s.limits && <div className="row !items-start"><span className="w-20 shrink-0 text-[13px] text-ink-2">研发限制</span>
           <span className="text-[14px] leading-[21px]">「{s.limits}」<span className="ml-1 text-[12px] text-ink-3">带限制的适用不在客户自助阶段自动推荐，同类需求仍交研发对照处理</span></span></div>}
         {judged.map(([by, n], i) => (
@@ -130,14 +133,14 @@ function Scope({ q, onDone }: { q: Question; onDone: (t: string) => void }) {
       <Group title="客户原话">
         {views.flatMap((v) => Object.entries(v.quotes)).map(([id, t]) => <div key={id} className="row text-[14px]">「{t}」</div>)}
       </Group>
-      <Group title="签字：扩展适用范围" foot="签字后写进该产品的适用范围，并作为你名下的 L2 知识；此后同类需求在客户自助阶段就命中，被引用时给你记分。">
+      <Group title="签字：扩展适用范围" foot="批准后按已授予的完整情境匹配；温度未知时提示待补，超范围不命中，其他限制仍须研发判断。">
         <div className="row !items-start">
           <div className="flex flex-1 flex-col gap-2">
             <Field value={note} onChange={setNote} rows={2} placeholder="依据（必填）：例如研发判定适用、适用条件与说明书一致" />
             {scripted && note !== scripted && <div><button type="button" className="chip glow" onClick={() => setNote(scripted)}>演示自动填入</button></div>}
             <div className="flex gap-2">
               <Act label="扩展适用范围" disabled={!note.trim()} glow={!!scripted && note === scripted} run={() => api.extendScope(q.id, note, me).then(() =>
-                onDone(`已把「${L.phen(s.phenomenon)}」加进 ${L.product(s.product)} 的适用范围。此后同类需求在客户自助阶段就直接得到推荐，研发不再收到这类单。`))} />
+                onDone(`已批准 ${L.product(s.product)} 的「${L.phen(s.phenomenon)}」适用情境；后续需求按完整条件匹配。`))} />
             </div>
           </div>
         </div>

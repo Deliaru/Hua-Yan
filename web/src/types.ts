@@ -242,7 +242,8 @@ export interface NextAction {
 export interface Capability {
   id: string; form: string; audience: number | string;
   payload: { product_id?: string; phenomenon?: string; slot?: string; text?: string; ku_id?: string;
-    conditions?: Record<string, string[]>; required?: boolean; prior?: Record<string, number> };
+    conditions?: Record<string, string[]>; required?: boolean; prior?: Record<string, number>;
+    temperature_c?: [number, number]; limits?: string };
   based_on: string[]; granted_by: string; approved_by: string | null;
   status: "proposed" | "active" | "suspended" | "revoked"; at: string;
 }

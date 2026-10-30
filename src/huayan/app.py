@@ -1736,6 +1736,7 @@ class HuayanApp:
 
     def questions(self, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
+        labels = {s.id: s.label for s in self.seeds.slots}
         questions = [q.model_copy(deep=True) for q in self.bus.list()
                      if viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
                          and self._sessions[q.refs["session_id"]].sales_id == viewer_id)]
@@ -1756,10 +1757,20 @@ class HuayanApp:
             elif q.family == "qi_grant":
                 cap = self.kb._caps[q.refs["capability_id"]]
                 q.evidence.append(Evidence(summary=f"形式：{cap.form}；目标层：L{q.refs['audience']}"))
+                if cap.form == "applicable":
+                    conditions = "；".join(f"{labels[s]}：{'、'.join(v)}" for s, v in cap.payload["conditions"].items())
+                    q.evidence.append(Evidence(summary=f"枚举条件：{conditions or '未限定枚举条件'}"))
+                    if cap.payload.get("temperature_c") is not None:
+                        lower, upper = cap.payload["temperature_c"]
+                        q.evidence.append(Evidence(summary=f"适用温度：{lower:g}—{upper:g}℃"))
+                    if cap.payload.get("limits"):
+                        q.evidence.append(Evidence(summary=f"限制原文：{cap.payload['limits']}"))
                 for uid in cap.based_on:
                     unit = self.kb._units[uid]
                     q.evidence.append(Evidence(summary=f"{unit.title}；依据位置：{'；'.join(unit.evidence) or '研发直接判断'}",
                                                quote=unit.text))
+            elif q.family == "scope_update":
+                q.refs["temperature_c"] = json.dumps(self.kb._caps[q.refs["capability_id"]].payload.get("temperature_c"))
         return questions
 
     def jue_timeline(self, target_id, viewer_id):

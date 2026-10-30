@@ -901,6 +901,8 @@ function GrantedCapabilities() {
         <p><span className="tag mr-2">{status[c.status]}</span>{forms[c.form] ?? c.form} · 给{typeof c.audience === "number" ? ["客户", "业务员", "产品经理", "研发"][c.audience] : L.name(c.audience)}</p>
         <p>{c.payload.product_id && L.product(c.payload.product_id)} {c.payload.phenomenon && L.phen(c.payload.phenomenon)} {c.payload.slot && L.slot(c.payload.slot)}{c.payload.text}{c.payload.ku_id}</p>
         {c.payload.conditions && <p>{Object.entries(c.payload.conditions).map(([k, v]) => `${L.slot(k)}：${v.join("、")}`).join("；")}</p>}
+        {c.payload.temperature_c && <p>适用温度：{c.payload.temperature_c.join("—")}℃</p>}
+        {c.payload.limits && <p>限制原文：{c.payload.limits}</p>}
         <p className="text-ink-3">依据：{c.based_on.join("、")}</p>
       </div>
       {c.status !== "revoked" && <Act kind="quiet" label="撤销" run={() => api.revokeCapability(c.id, me)} />}

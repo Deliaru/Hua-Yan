@@ -1,4 +1,5 @@
 """V10.6：合成授权 70—80℃，不代表真实产品的专业确认范围。"""
+import json
 from pathlib import Path
 
 import yaml
@@ -9,7 +10,8 @@ from huayan.contracts import CustomerProfile, ExtractedTemperature, ExtractionRe
 from huayan.contracts import Situation
 from huayan.domain import consistent, match_candidates
 from huayan.events import EventLog
-from huayan.ingest.compile import _key
+from huayan.ingest.compile import EvidenceRef, Proposal, _key
+from huayan.ingest.folder import FolderSource
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.l1.extract import RuleExtractor, apply_extraction, validate_extraction
 
@@ -50,6 +52,52 @@ def test_temperature_stays_with_its_own_situation(mini_seeds):
                                        capability_id="cap:synthetic:unrestricted"))
     [candidate] = match_candidates("color_unlevel", {"fiber": "锦纶氨纶"}, [product])
     assert candidate.status == "confirmed" and candidate.capability_id == "cap:synthetic:unrestricted"
+
+
+def test_compiled_temperature_survives_confirmation_grant_and_scope_approval(tmp_path):
+    """合成专业签字，仅在临时实例走原有门面，不代表真实研发结论。"""
+    config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
+    config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"))
+    path = tmp_path / "app.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    app = HuayanApp.build(str(path))
+    app.kb.sources = [FolderSource("合成温度资料", "internal", "tests/fixtures/reader")]
+    app.revoke_capability("cap:applicable:T-205:color_unlevel", "rd:R01")
+    proposal = Proposal(title="合成温度适用判断", text="合成温度适用判断，待确认", product="T-205",
+        phenomenon="color_unlevel", form="applicable", author="rd:R01", conditions=["锦纶氨纶", "溢流染色机"],
+        temperature_c=(70, 80), evidence=[EvidenceRef(doc_id="synthetic-temperature", span="p1", quote="适用温度70—80℃")])
+    row = app.import_proposals([proposal], "rd:R01")["admitted"][0]
+    source = app.kb._caps[row["capability_id"]]
+    assert source.status == "proposed" and source.payload["temperature_c"] == [70, 80]
+    assert app.kb._units[row["ku_id"]].status == "candidate"
+    review = app.review_claims([row["ku_id"]], "rd:R01")
+    app.confirm_claims(None, [row["ku_id"]], "rd:R01", review["reviewed_evidence"])
+
+    def approve(cap_id):
+        question = next(q for q in app.questions("pm:P01") if q.family == "scope_update" and q.refs["capability_id"] == cap_id)
+        assert json.loads(question.refs["temperature_c"]) == [70, 80]
+        app.mark_prepared(question.id, "pm:agent")
+        return app.extend_scope(question.id, "合成温度范围核对", "pm:P01")
+
+    approve(source.id)
+    app.kb.explore("合成温度适用判断", app.actors["customer:C01"])
+    app.scan()
+    question = next(q for q in app.questions("rd:R01") if q.family == "qi_grant" and q.refs.get("capability_id") == source.id)
+    assert any("70—80℃" in e.summary for e in question.evidence)
+    app.mark_prepared(question.id, "rd:R01")
+    granted = app.sign_qi_grant(question.id, "rd:R01")
+    assert granted.audience == 0 and granted.status == "proposed" and granted.payload["temperature_c"] == [70, 80]
+    assert not any(s.capability_id == granted.id for p in app.kb.view(app.actors["customer:C01"]).products for s in p.situations)
+    approved = approve(granted.id)
+    assert approved.status == "active"
+    for text, expected in (("75℃", "confirmed"), ("温度不知道", "possible"), ("85℃", None)):
+        session = app.start_session("customer:C01", "sales:S01")
+        session = app.add_turn(session.id, "customer", "深一块浅一块，锦纶氨纶的，溢流缸，" + text)
+        if expected is None:
+            assert session.recommendation is None
+        else:
+            [candidate] = session.recommendation.candidates
+            assert candidate.status == expected and candidate.capability_id == approved.id
 
 
 def test_temperature_customer_turns_match_and_correct_current_recommendation(tmp_path):
