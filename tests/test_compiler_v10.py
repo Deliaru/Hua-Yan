@@ -1,3 +1,5 @@
+import hashlib
+import json
 import pytest
 from pathlib import Path
 
@@ -5,7 +7,43 @@ from huayan.domain import load_seeds
 from huayan.events import EventLog
 from huayan.ingest.compile import EvidenceRef, Proposal, admit
 from huayan.ingest.folder import FolderSource
+from huayan.ingest.trial_ir import EvidenceReportSource
 from huayan.knowledge import AuditLog, KnowledgeBase
+
+
+def test_unpublished_catalog_product_can_have_candidate_without_being_recommended():
+    seeds = load_seeds("tests/fixtures/mini_seeds")
+    kb = KnowledgeBase.from_seeds(seeds, EventLog(), AuditLog())
+    source = FolderSource("synthetic", "internal", "tests/fixtures/reader")
+    p = Proposal(title="合成未发布目录观察", text="单次观察，待审", product="T-206", author="rd:R01",
+        phenomenon="color_unlevel", evidence=[EvidenceRef(doc_id="synthetic-conditions", span="p1", quote="涤纶")])
+    report = admit([p], [source], kb)
+    unit = kb._units[report["admitted"][0]["ku_id"]]
+    assert unit.product_id == "T-206" and unit.status == "candidate"
+    assert report["admitted"][0]["capability_id"] is None
+    assert "T-206" not in {p.id for p in kb.products()}
+
+
+def test_report_source_explore_exposes_candidate_only_to_owning_rd(tmp_path):
+    seeds = load_seeds("tests/fixtures/mini_seeds")
+    kb = KnowledgeBase.from_seeds(seeds, EventLog(), AuditLog())
+    folder = FolderSource("synthetic", "internal", "tests/fixtures/reader")
+    doc = "synthetic-conditions"
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps({"source_id": doc,
+        "file_sha256": hashlib.sha256(Path(f"tests/fixtures/reader/{doc}.txt").read_bytes()).hexdigest(),
+        "fragments": [f.model_dump(mode="json") for f in folder.fetch(doc)]}, ensure_ascii=False), encoding="utf-8")
+    source = EvidenceReportSource(path)
+    kb.sources = [source]
+    proposal = Proposal(title="合成升温限制", text="涤纶升温观察，待审", product="T-205", author="rd:R01",
+        phenomenon="color_unlevel", evidence=[EvidenceRef(doc_id=doc, span="p1", quote="涤纶")])
+    report = admit([proposal], [source], kb)
+    ku_id = report["admitted"][0]["ku_id"]
+    actors = {a.id: a for a in seeds.actors}
+    assert ku_id in {u.id for u in kb.explore("涤纶升温", actors["rd:R01"]).candidates}
+    customer = kb.explore("涤纶升温", actors["customer:C01"])
+    assert customer.candidates == []
+    assert ku_id not in {u.id for u in customer.units}
 
 
 def test_partial_conditions_and_new_evidence_stay_pending(tmp_path):

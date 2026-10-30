@@ -83,6 +83,7 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
     report = {"admitted": [], "dropped": [], "duplicates": [], "conflicts": [], "unaligned": [],
               "unaligned_details": [], "pending_evidence": []}
     slot_ids = {s.id for s in kb.seeds.slots}
+    products = {p.id: p for p in kb.seeds.products} | kb._products
     for p in proposals:
         fragments = [_cited(sources, ev) for ev in p.evidence]
         if not fragments or None in fragments:
@@ -90,7 +91,7 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
             continue
         found = ((p.phenomenon, p.phenomenon) if p.phenomenon in {x.id for x in kb.seeds.phenomena}
                  else find_phenomenon(p.phenomenon, kb.seeds.phenomena))
-        product = kb._products.get(p.product) if p.product else None
+        product = products.get(p.product) if p.product else None
         # 公开产品页的适用情境由产品经理按产品页核对（设计「生效」表）；内部资料取作者，没有就交产品归属研发
         confirmer = (min(a.id for a in kb.seeds.actors if a.role == "pm" and a.id != "pm:agent")
                      if all(f.source == "public" for f in fragments) else p.author or (product.owner if product else None))

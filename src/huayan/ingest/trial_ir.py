@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import Literal
 
 from huayan.contracts._base import BaseModel
-from huayan.contracts import Fragment
+from huayan.contracts import Actor, Fragment
 from huayan.domain import find_phenomenon, find_slot_values
 from huayan.ingest.compile import EvidenceRef, Proposal
 from huayan.ingest.reader.trials import Citation, TrialRecord, TrialText
+from huayan.knowledge.store import _grams
 
 
 class EvidenceReportSource:
@@ -27,6 +28,13 @@ class EvidenceReportSource:
         if doc_id != self.name:
             raise KeyError(doc_id)
         return list(self.fragments.values()) if span is None else self.fragments[span]
+
+    def search(self, query, k=5) -> list[Fragment]:
+        grams = _grams(query)
+        scored = [(len(grams & _grams(f.text)) / len(grams), f)
+                  for f in self.fragments.values() if grams]
+        return [f for score, f in sorted(scored, key=lambda x: (-x[0], x[1].doc_id, x[1].span))
+                if score > 0][:k]
 
 
 class IRCondition(BaseModel):
@@ -77,6 +85,7 @@ class OperationIR(BaseModel):
     pending: list[str]
     proposal: Proposal
     product_alignment: ProductAlignment | None = None
+    assigned_rd: Actor | None = None
 
 
 def prepare_operation(record: TrialRecord, seeds, group, product, index=0):
@@ -115,7 +124,7 @@ def prepare_operation(record: TrialRecord, seeds, group, product, index=0):
         observation=operation.text, conditions=conditions, evidence=evidence, pending=pending, proposal=proposal)
 
 
-def write_operation_review(ir, output, evidence_review):
+def write_operation_review(ir, output, evidence_review, *, candidate_id=None):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     (output / "operation-ir.json").write_text(ir.model_dump_json(indent=2) + "\n", encoding="utf-8")
@@ -129,6 +138,9 @@ def write_operation_review(ir, output, evidence_review):
         f'<td><pre>{esc(c.text)}</pre></td><td>{esc(str(c.structured)) if c.structured else "保留原文待判断"}</td>'
         f'<td>{citations(c.evidence)}</td></tr>' for c in ir.conditions)
     pending = "".join(f"<li>{esc(note)}</li>" for note in ir.pending)
+    assignee = (f"候选研发归属：{esc(ir.assigned_rd.name)}（{esc(ir.assigned_rd.id)}）；专业确认待本人签字。"
+                if ir.assigned_rd is not None else "候选研发归属待指定。")
+    admission = (f"已导入候选 {esc(candidate_id)}（candidate）" if candidate_id else "候选入库状态参见编译/导入报告")
     product = "<p>产品身份依据待补。</p>"
     if ir.product_alignment is not None:
         alignment = ir.product_alignment
@@ -145,7 +157,8 @@ def write_operation_review(ir, output, evidence_review):
 table{{width:100%;border-collapse:collapse}}td,th{{border:1px solid #ccd6df;padding:10px;text-align:left}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere}}.notice{{background:#fff3d4;padding:16px}}</style>
 <h1>操作经验 IR · {esc(ir.id)}</h1><p class="notice">L{ir.level} 内部资料；规则整理的单次观察草稿，
-未专业确认，未导入契，未授予能力。产品原词与未结构化限制交人判断；配方保持原密级。</p>
+{admission}；未专业确认，未授予能力。产品原词与未结构化限制交人判断；配方保持原密级。</p>
+<p>{assignee}</p>
 <h2>观察及拟用方式</h2><pre>{esc(ir.observation)}</pre><p>拟作为同类现场操作的审阅材料；
 复用范围待研发确定，当前不提议 applicable 或 ask。</p>{citations(ir.evidence[:1])}
 <h2>产品身份与说明书原文（目录登记待归属）</h2>{product}

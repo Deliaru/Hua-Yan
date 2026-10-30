@@ -1701,6 +1701,7 @@ qi_state: null         # 有效状态文件；为 null 时用 <运行目录>/qi_
 
 ### 2.7 门面（契约 ⑫）与 Agent（契约 ⑭）
 
+- `HuayanApp.import_proposals(proposals, by)`：研发通过门面导入本人负责的提议，复用 `admit` 生成 candidate 结论与 proposed 能力提议，不执行确认或授予。
 - 新增：`confirm_claims(req_id, ku_ids, by)`、`sign_qi_grant(question_id, by, claim_ids=(), note="")`、`revoke_capability(cap_id, by)`、`withdraw_claim(ku_id, by)`、`set_doc_level(doc_id, level, by)`、`recheck_evidence()`、`capabilities(viewer_id)`；
 - 改：`decline_project(..., applicable_product=None, claim_ids=())` 不再要求相容，改为提议一个完整情境；`extend_scope` 改为批准待批准的适用能力；`release_product` 同时授予新品的适用情境；`decide_decrypt` 写 `decrypt` 能力；`adopt_reuse` 的审定说明写 `statement`（授予业务员层）；`save_reply_draft` 先过 `render_refs` 与 `leak_hits(audience=0)`；`resolve` 处理 `qi_review`；`app.grants` 改为 `kb.decrypt_grants()` 的只读属性；
 - 门面内部按「代谁」取视图（设计第 4 节规则一的表）；`self.seeds` 只用于标签、问法、抽取词表，以及读立项产品；

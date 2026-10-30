@@ -29,8 +29,9 @@ from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import publish, select_asks
 from huayan.jue.records import load_records
 from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
-from huayan.ingest.compile import recheck
+from huayan.ingest.compile import admit, recheck
 from huayan.ingest.folder import FolderSource
+from huayan.ingest.trial_ir import EvidenceReportSource
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder, can_read
 from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
@@ -93,7 +94,8 @@ class HuayanApp:
         app.kb = KnowledgeBase.from_seeds(app.seeds, app.events, app.audit,
             state_path=app.config.get("qi_state") or app.run_dir / "qi_state.json")
         app._load_public(Path(app.config["seeds_dir"]) / "public.yaml")
-        app.kb.sources = [FolderSource(s["name"], s["kind"], s["root"], s.get("level"), app.kb._doc_levels)
+        app.kb.sources = [EvidenceReportSource(s["root"]) if Path(s["root"]).suffix == ".json" else
+                         FolderSource(s["name"], s["kind"], s["root"], s.get("level"), app.kb._doc_levels)
                           for s in app.config["sources"]]
         app._wire_models(byok)
         app._sessions = {s.id: s for s in map(Session.model_validate_json, _read_dir(app.run_dir / "sessions"))}
@@ -1397,6 +1399,15 @@ class HuayanApp:
     def capabilities(self, viewer_id):
         self._actor(viewer_id, {"rd"})
         return [c for c in self.kb.capabilities() if c.granted_by == viewer_id and c.approved_by != "seed"]
+
+    def import_proposals(self, proposals, by):
+        """导入本人负责的已准备提议，只产生候选；专业签字仍走独立入口。"""
+        self._actor(by, {"rd"})
+        if any(p.author != by for p in proposals):
+            raise ValueError("只能导入已指定本人负责的提议")
+        report = admit(proposals, self.kb.sources, self.kb)
+        self.scan()
+        return report
 
     def candidate_claims(self, req_id, viewer_id):
         req, _ = self._requirement(req_id, viewer_id, {"rd"},

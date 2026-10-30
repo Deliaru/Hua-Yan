@@ -36,7 +36,8 @@ def main():
         parser.error("正式编译须提供 --state；仅 IR 支持内存预览")
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
     kb = KnowledgeBase.from_seeds(load_seeds(config["seeds_dir"]), EventLog(), AuditLog(), state_path=args.state)
-    kb.sources = [FolderSource(s["name"], s["kind"], s["root"], s.get("level"), kb._doc_levels)
+    kb.sources = [EvidenceReportSource(s["root"]) if Path(s["root"]).suffix == ".json" else
+                  FolderSource(s["name"], s["kind"], s["root"], s.get("level"), kb._doc_levels)
                   for s in config["sources"]]
     if args.ir:
         ir = OperationIR.model_validate_json(Path(args.ir).read_text(encoding="utf-8"))
@@ -47,7 +48,8 @@ def main():
             f = source.fetch(ir.source_id, citation.span)
             if citation.fragment != f"{f.doc_id}#{f.span}@{f.fingerprint}":
                 raise ValueError(f"IR 引用指纹已变化：{citation.span}")
-        kb.sources.append(source)
+        if not any(source.name in s.list_docs() for s in kb.sources):
+            kb.sources.append(source)
     fragments = [f for s in kb.sources for doc_id in s.list_docs() for f in s.fetch(doc_id)]
     if args.ir:
         proposals = [ir.proposal]
@@ -64,13 +66,17 @@ def main():
     changed = recheck(kb, kb.sources)
     report = admit(proposals, kb.sources, kb)
     if args.ir:
+        if ir.assigned_rd is not None:
+            report["assigned_rd"] = ir.assigned_rd.model_dump(mode="json")
         if ir.product_alignment is not None:
             report["product_alignment"] = {"product_id": ir.product_alignment.product_id,
                 "name": ir.product_alignment.name, "identity_supported": True,
-                "catalog_registered": ir.proposal.product in kb._products,
+                "catalog_registered": ir.proposal.product in {p.id for p in kb.seeds.products} | set(kb._products),
+                "published": ir.proposal.product in kb._products,
                 "pending": ir.product_alignment.pending}
             for item in report["unaligned_details"]:
-                item["reasons"] = ["产品身份已有依据，正式目录登记待归属" if reason == f"产品未对齐：{ir.product_raw}"
+                item["reasons"] = [("产品身份已有依据，正式目录登记待完成" if ir.assigned_rd is not None else
+                                    "产品身份已有依据，正式目录登记待归属") if reason == f"产品未对齐：{ir.product_raw}"
                                    else reason for reason in item["reasons"]]
         entries = report["admitted"] or report["pending_evidence"]
         report["ir_mapping"] = {"ir_id": ir.id, "ku_id": entries[0]["ku_id"] if entries else None,
@@ -102,6 +108,9 @@ def write_report(path, kb, fragments, proposals, report, changed, args):
     lines += [f"| {a['ku_id']} | L{a['level']} | {a['form'] or '只是结论'} | {a['capability_id'] or '—'} | {a['title']} |"
               for a in admitted]
     lines += ["", "## 待对齐与待挂接", ""]
+    if "assigned_rd" in report:
+        actor = report["assigned_rd"]
+        lines += [f"- 候选研发归属：{actor['name']}（{actor['id']}）；专业确认和授予待本人签字。"]
     if "product_alignment" in report:
         alignment = report["product_alignment"]
         lines += [f"- 产品身份已有资料依据：{alignment['name']}（{alignment['product_id']}）；"

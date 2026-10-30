@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from huayan.contracts import Fragment
+from huayan.contracts import Actor, Fragment
 from huayan.domain import load_seeds
 from huayan.ingest.reader.trials import TrialRecord
 from huayan.ingest.trial_ir import prepare_operation, write_operation_review, read_product_alignment
@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--seeds", default="seeds")
     parser.add_argument("--out", required=True)
     parser.add_argument("--product-alignment", help="已有来源引文的产品对齐材料")
+    parser.add_argument("--reviewer", help="用户指定的研发 Actor JSON；仅分配候选归属，不执行确认")
     args = parser.parse_args()
     record = TrialRecord.model_validate_json(Path(args.trial).read_text(encoding="utf-8"))
     evidence_path = Path(args.evidence)
@@ -38,6 +39,13 @@ def main():
         ir.product_alignment = alignment
         ir.pending = [note for note in ir.pending if note != f"产品原词 {args.product} 尚未对齐现有产品词表。"]
         ir.pending += alignment.pending
+    if args.reviewer:
+        reviewer = Actor.model_validate_json(Path(args.reviewer).read_text(encoding="utf-8"))
+        if reviewer.role != "rd":
+            raise ValueError("候选专业确认归属须为研发角色")
+        ir.assigned_rd, ir.proposal.author = reviewer, reviewer.id
+        ir.pending = [note for note in ir.pending if note != "专业确认人与用途授予待安排；单次观察的复用范围待研发判断。"]
+        ir.pending.append(f"研发归属已指定为 {reviewer.name}；单次观察的复用范围、专业确认与用途授予待本人处理。")
     fragments = {f.span: f for f in [Fragment.model_validate(item) for item in evidence["fragments"]]}
     for citation in ir.evidence:
         fragment = fragments[citation.span]
