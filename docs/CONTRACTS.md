@@ -1637,6 +1637,13 @@ class BlockedHint(BaseModel):            # v7.8 加一个字段（已批准）
 
 `SourceAdapter` 不定义成协议：本轮只有一种适配器（替身 RAG 的 `FolderSource`），接入企业 RAG 时再按它的三个方法 `search`、`fetch`、`list_docs` 写第二个类。
 
+V10.1 内部查证：`HuayanApp.read_source(doc_id, by, span=None) -> list[Fragment]` 经读取侧统一入口
+取回已登记的来源或单个块；HTTP 为 `GET /api/sources/read?doc_id=...&span=...`，主体沿用服务端 viewer。
+配置 `source_manifest` 指向 V10.0 清单，读取 `sources[].source_id/owner_actor_id`；未配清单时公开来源仍可读，内部来源须先明确归属。
+内部来源至少 L3，入口复用 `can_read`、冻结状态与 active `share`，整份来源的权限编号为 `ku:report:<doc_id>`；
+只有对应整份 report 的既有分享可开放该来源，单条 claim 的分享不开放完整报告。不自动创建 report KU 或授予。
+返回仍为六字段 Fragment，不返回文件路径，不产生结论或能力；下游原始适配器不重复检查 ACL，客户推荐仍只消费正式能力视图。
+
 `KnowledgeBase` 的接口变化：
 
 - `from_seeds(seeds, events, audit, *, state_path=None)`：只加一个有默认值的参数，现有三参数调用不变；
@@ -1655,6 +1662,11 @@ V10.7 C7 最小参数差异：`reviewed_evidence: dict[str, list[str]] | None = 
 对应 `/api/claims` 与 `/api/qi/confirm` 可省略 `req_id`；提供编号时保留原有需求单相关候选路径。
 有需求单时，相关现象筛选同样叠加现有 `can_read` 与 active `share` 边界；未指定确认人的候选仅其 owner 可读，不能仅凭现象相同返回其他研发的候选全文。
 无需求单确认返回 `None`，有需求单仍返回 `Requirement`，确认不等于用途授予或产品范围批准。
+`HuayanApp.revise_claim(ku_id, text, by)` 允许研发修订本人负责的待审候选正文；
+通过既有撤回机制保留并撤回原稿，创建证据、条件归属与密级不变的新 candidate KU，返回新候选。
+新稿使用新编号，旧编号的审阅不能用于确认新稿；用途提议及待挂接关系不自动转移，原能力沿既有撤回语义处理。
+`/api/qi/revise` 只透传上述参数，直接撤回仍用原 `/api/qi/withdraw`；不新增模型字段或事件类型。
+撤回时，仅对 `status="candidate"` 且 `confirmed_by=None` 的候选按 owner 判断权限；其余情况仍只允许确认人撤回，不因归属放宽已确认结论的权限。
 确认、授予、不立项引用、复核及 `extend_scope(..., reviewed_evidence=None)` 门面透传该可选参数。
 服务端不得在签字时自行取当前指纹替代审阅值。公开来源 `applicable` 批准的兼容路径：当有待确认结论且
 未显式传参时，`approve` 只使用候选中保存的编译时指纹交 `confirm` 比对，来源改变仍拒绝；不改用当前来源新指纹。

@@ -1,6 +1,6 @@
 # WP-1v10｜来源清单与统一读取入口
 
-> 决赛必需，精简｜状态：待实施｜资料登记与访问入口分开交付。
+> 决赛必需，精简｜状态：首份报告原文读取入口已接通；Agent 接入、页面/试样记录回取待消费包推进｜资料登记与访问入口分开交付。
 
 ## 目标
 
@@ -37,4 +37,12 @@
 
 ## 完成记录
 
-待填写：来源清单及入口、角色检查结果。清单交读取包，入口交 V10.3/V10.9。
+### 2026-10-30｜首份报告按来源编号读取
+
+- **范围与基线**：在 `v10 @ bd46875` 及用户已通过的 V10.7 未提交改动上补齐 V10.9 所需的读取前置小项。开工及切换工作包时已重读 AGENTS、总计划、相关契约/QI 与本包，按 G1、极简与禁止过度防御要求自查；保留既有修改，不扩大为检索支线或动态来源授权。
+- **入口**：新增读取侧 `reader/source.py::read_source`、只读门面 `HuayanApp.read_source(doc_id, by, span=None)` 与 `GET /api/sources/read`。从已登记的 `kb.sources` 按来源编号定位，全篇或指定 span 返回六字段 Fragment，不返回本地文件路径、不新增结论/能力/签字。原 `FolderSource` 和 `EvidenceReportSource` 不重复执行 ACL；HTTP 继续由既有 `trial_params` 绑定 viewer。
+- **权限与清单**：配置可选 `source_manifest`，直接读取 V10.0 `sources[].source_id/owner_actor_id`，缺省不影响原业务路径，公开来源可直接读，内部归属未定时提示补齐。内部来源至少 L3，返回片段继承入口检查的密级；以既有 KnowledgeUnit 的 report 结构临时描述来源权限，复用 `can_read`、冻结状态与 `kb._shared`，不写入正式状态。整份来源编号为 `ku:report:<doc_id>`，只接受既有对应 report 的 share，单条 claim 的分享不开放整份报告；没有自动创建 report 或新的授予接口。`docs/CONTRACTS.md` 已同步，冻结模型字段未变。
+- **真实资料登记**：按用户此前指定，将首份 `SRC-3a2130604c` 在本地 V10.0 清单中的 owner/reviewer 同步为 `rd:JianMingXi`，并在首份实例配置中指定该清单。原作者不变，指定归属不等于专业确认；其他未指定归属的内部来源仍待安排。原件、清单与实例配置均留在 `data/`，不入库。
+- **验证**：新增一项明确标注合成资料的 `test_sources_v10.py`，覆盖 JSON 报告与原有文件夹适配器经同一入口读取、归属限制、公开读取、服务端身份、归属未定拒绝，以及单条 claim 的分享不能开放整份报告、对应 report 的既有 share 可读。受影响13项通过（2.61秒）；最终全量 `.venv/Scripts/uv.exe run --no-sync pytest -q`，48项通过（27.76秒），`git diff --check` 通过。本轮未修改前端，无需重复构建。另做一次合成 MD/TXT/CSV 读取检查，结果在下述目录的 `format-check.json`；首次临时样例因 MD/TXT 同 stem 合并为同一文档导致检查失败，改用不同文档编号后通过，未修改既有适配器。
+- **真实运行**：复制首份实例知识状态至 `data/knowledge_v10/checks/source-entry-6ba6dd33/` 后调用新门面，JianMing Xi 可取回30个原文块及指定块；另一研发、业务员、客户、`pm:agent` 均拒绝。`summary.json` 标明真实资料隔离实例、mock 网关/System1、规则抽取，确认事件0，原实例 `qi_state.json` 文件字节未变，无模型实调或真实签字。
+- **交接**：本轮仅交原文统一入口，后续 V10.9 接 Agent 原子工具与原需求准备材料；页面/区域/试样记录回取仍待对应消费包接入。不宣称 V10.9 回流链或真人试用已完成；未提交或推送，停下等待用户评审。

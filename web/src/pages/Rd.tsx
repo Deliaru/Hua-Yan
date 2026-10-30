@@ -936,18 +936,37 @@ function CandidateClaims({ reqId }: { reqId: string | null }) {
   const claims = useData(() => api.claims(reqId, me), [reqId, me]) ?? [];
   const [selected, setSelected] = useState<string[]>([]);
   const [review, setReview] = useState<Awaited<ReturnType<typeof api.reviewClaims>> | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [text, setText] = useState("");
   if (!claims.length) return null;
   return <Group title={reqId ? "本单候选结论 · 待研发确认" : "本人资料候选 · 待研发确认"}
     foot="归属人是待确认负责人；点击签字才记录专业确认。用途授予与适用范围批准另行办理。">
-    {claims.map((c) => <label key={c.id} className="row !items-start text-[13px] leading-5">
+    {claims.map((c) => <div key={c.id} className="row !items-start text-[13px] leading-5"><label className="flex min-w-0 flex-1 items-start gap-2">
       <input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => {
         setReview(null);
         setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id));
       }} />
       <span><strong>{c.title}</strong><br /><span className="text-ink-3">{c.id} · 待确认 · 归属 {L.name(c.owner)}</span>
         <br />{c.text}<br /><span className="text-ink-3">依据：{c.evidence.join("；") || "研发直接判断"}</span></span>
-    </label>)}
-    <div className="row"><Act label="读取所选结论的审阅依据" disabled={!selected.length}
+    </label>{c.owner === me && <div className="flex shrink-0 gap-2">
+      <button type="button" className="btn btn-plain" onClick={() => {
+        setReview(null); setSelected([]); setEditing(c.id); setText(c.text);
+      }}>修订正文</button>
+      <Act kind="quiet" label="撤回候选" run={() => api.withdrawClaim(c.id, me).then(() => {
+        setSelected([]); setReview(null); setEditing(null);
+      })} />
+    </div>}</div>)}
+    {editing && <div className="row !block">
+      <Field value={text} onChange={setText} rows={5} label="修订后的候选正文" />
+      <p className="my-2 text-[12px] text-ink-2">保存后原稿撤回，新稿仍待确认。原依据保持不变，请重新审阅；原稿的用途能力按原有撤回规则处理。</p>
+      <div className="flex gap-2">
+        <Act label="保存为新的待审候选" disabled={!text.trim()} run={() => api.reviseClaim(editing, text, me).then(() => {
+          setEditing(null); setText(""); setSelected([]); setReview(null);
+        })} />
+        <button type="button" className="btn btn-plain" onClick={() => setEditing(null)}>放弃修订</button>
+      </div>
+    </div>}
+    <div className="row"><Act label="读取所选结论的审阅依据" disabled={!selected.length || editing !== null}
       run={() => api.reviewClaims(selected, me).then(setReview)} /></div>
     {review && review.claims.map((c) => <div key={c.id} className="row !block text-[13px] leading-5">
       <strong>{c.title}</strong><p>{c.text}</p>
@@ -960,7 +979,7 @@ function CandidateClaims({ reqId }: { reqId: string | null }) {
       {review.pending_evidence[c.id] && <p>补充依据：待挂接 {review.pending_evidence[c.id].capability_id}；
         原贡献人 {review.pending_evidence[c.id].contributor}</p>}
     </div>)}
-    <div className="row"><Act label="签字确认已审阅结论" disabled={!selected.length || !review}
+    <div className="row"><Act label="签字确认已审阅结论" disabled={!selected.length || !review || editing !== null}
       run={() => api.confirmClaims(reqId, selected, me, review!.reviewed_evidence).then(() => {
         setSelected([]); setReview(null);
       })} /></div>

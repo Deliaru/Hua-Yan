@@ -102,6 +102,7 @@ export const api = {
   }>("qi/review", { ku_ids, by }),
   confirmClaims: (req_id: string | null, ku_ids: string[], by: string, reviewed_evidence?: Record<string, string[]>) =>
     call("qi/confirm", { req_id, ku_ids, by, reviewed_evidence }),
+  reviseClaim: (ku_id: string, text: string, by: string) => call<Claim>("qi/revise", { ku_id, text, by }),
   grantCapability: (question_id: string, by: string, note = "") => call("qi/grant", { question_id, by, note }),
   revokeCapability: (cap_id: string, by: string) => call("qi/revoke", { cap_id, by }),
   requestShare: (ku_id: string, by: string) => call("qi/request-share", { ku_id, by }),
