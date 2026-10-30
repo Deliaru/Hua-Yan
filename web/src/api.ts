@@ -3,7 +3,7 @@
 import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus, AuthorizedSourceReply,
-  Route, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor,
+  Route, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -69,6 +69,7 @@ export const api = {
   requirement: (id: string, viewer: string) => call<RequirementView>(`requirement?${q({ id, viewer })}`),
   sourcePreparation: (req_id: string, viewer: string) => call<SourcePreparation | null>(`source-preparation?${q({ req_id, viewer })}`),
   sourcePreparationStatus: (req_id: string, viewer: string) => call<SourcePreparationStatus | null>(`source-preparation/status?${q({ req_id, viewer })}`),
+  sourceTrial: (doc_id: string, viewer: string) => call<SourceTrialRecord>(`sources/trial?${q({ doc_id, viewer })}`),
   authorizedSourceReplies: (session_id: string, viewer: string) => call<AuthorizedSourceReply[]>(`source-preparation/replies?${q({ session_id, viewer })}`),
   leak: (id: string, viewer: string) => call<LeakHit[]>(`leak?${q({ id, viewer })}`),
   timeline: (target: string, viewer: string) => call<JueTimeline>(`timeline?${q({ target_id: target, viewer })}`),

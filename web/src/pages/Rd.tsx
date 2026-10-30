@@ -10,6 +10,7 @@ import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
 import { useGlow, useGuide, useGuideArg } from "../components/Guide";
 import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip, SlotPicker } from "../components/ui";
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
+import { SourceTrial } from "../components/SourceTrial";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
 const reqsOf = (q: Question) => q.refs.requirement_id ? [q.refs.requirement_id] : (q.refs.requirement_ids ?? "").split(",").filter(Boolean);
@@ -113,6 +114,7 @@ function SourcePreparationCard({ reqId }: { reqId: string }) {
     </p>)}
     <p className="mt-3 font-medium">依据出处</p>
     {draft.evidence.map((ref, i) => <p key={i} className="break-all text-ink-2">{ref}</p>)}
+    {[...new Set(draft.evidence.map((ref) => ref.split("#")[0]))].map((doc) => <SourceTrial key={`${me}:${doc}`} docId={doc} />)}
     <p className="mt-2">关联结论：{draft.claim_ids.join("、") || "未关联"}</p>
     {current && <div className="mt-2">
       <p className="font-medium">当前确认与用途状态</p>
@@ -1013,6 +1015,7 @@ function CandidateClaims({ reqId }: { reqId: string | null }) {
       run={() => api.reviewClaims(selected, me).then(setReview)} /></div>
     {review && review.claims.map((c) => <div key={c.id} className="row !block text-[13px] leading-5">
       <strong>{c.title}</strong><p>{c.text}</p>
+      {[...new Set(review.fragments[c.id].map((f) => f.doc_id))].map((doc) => <SourceTrial key={`${me}:${doc}`} docId={doc} />)}
       {c.evidence.join(";") !== review.reviewed_evidence[c.id].join(";") &&
         <p className="text-amber-700">来源与编译时不同，请核对当前原文与候选判断后再签字。</p>}
       {review.fragments[c.id].map((f, i) => <div key={i}>

@@ -115,6 +115,18 @@ def read_source(ctx: ToolContext, args: SourceArgs) -> ToolResult:
     return ToolResult(data=[f.model_dump() for f in fragments])
 
 
+class SourceTrialArgs(BaseModel):
+    doc_id: str
+
+
+@tool("read_trial_record", "read", ["sales", "pm", "rd"],
+      "按来源编号回取已整理试样记录的A/B条件、配方、曲线标签、观察、出处及待补项。"
+      "使用委托人权限；单次观察不代表通用适用范围，读取不确认或授予。", SourceTrialArgs)
+def read_trial_record(ctx: ToolContext, args: SourceTrialArgs) -> ToolResult:
+    record = ctx.app.read_trial_record(args.doc_id, ctx.principal.id)
+    return ToolResult(data=record.model_dump(mode="json", exclude={"file_sha256", "changes", "professional_confirmation"}))
+
+
 class SourcePreparationArgs(BaseModel):
     req_id: str
     evidence: list[str]

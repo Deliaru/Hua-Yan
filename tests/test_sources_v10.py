@@ -49,6 +49,12 @@ def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp
     assert [r.conditions for r in b.curve_labels if r.stage == "保温"] == [["95℃"]]
     assert fetched.pending == pending and fetched.time.a is None and fetched.time.b is None
     assert "path" not in json.dumps(fetched.model_dump(mode="json"))
+    tool = app.agents.call_tool(app.agents.context("rd:R01"), "read_trial_record", {"doc_id": doc_id})
+    assert tool.ok and tool.data["groups"][0]["formula"][0]["name"] == "SYNTH-A"
+    assert tool.data["groups"][1]["formula"][0]["unit"] == "kg" and tool.data["pending"] == pending
+    assert "file_sha256" not in tool.data and "professional_confirmation" not in tool.data
+    denied = app.agents.call_tool(app.agents.context("pm:agent"), "read_trial_record", {"doc_id": doc_id})
+    assert not denied.ok and "无权读取" in denied.error and not app.agents.pending("rd:R01")
     monkeypatch.setattr(server, "trial_roles", {"sales-session": "sales:S01"})
     bound = server.trial_params("sales-session", "GET", "/api/sources/trial", params)
     with pytest.raises(PermissionDenied):

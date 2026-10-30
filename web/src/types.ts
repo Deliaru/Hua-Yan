@@ -58,6 +58,27 @@ export interface SourcePreparationStatus {
   capabilities: Pick<Capability, "id" | "form" | "audience" | "status" | "granted_by" | "approved_by">[];
 }
 export interface AuthorizedSourceReply { ref: string; text: string; audience: number }
+
+// 读取侧试样记录的显示字段，与正式业务Trial分开。
+export interface SourceCitation { fragment: string; span: string; pages: number[]; quote: string; cell: [number, number] | null }
+export interface SourceTrialText { text: string; evidence: SourceCitation[] }
+export interface SourceReading {
+  span: string; cell: [number, number] | null; object: string; group: "A" | "B" | null;
+  stage: string | null; value: string; unit: string; conditions: string[]; quote: string; status: "native" | "needs_reading";
+}
+export interface SourceTrialRecord {
+  source_id: string; level: number; source: "public" | "internal" | "external"; status: "draft"; extracted_by: "rule";
+  metadata: SourceTrialText[]; purpose: SourceTrialText[]; common_conditions: SourceTrialText[];
+  groups: {
+    group: "A" | "B";
+    formula: { name: string; value: string; unit: string | null; basis: string | null; evidence: SourceCitation[] }[];
+    formula_notes: SourceTrialText[]; curve_labels: SourceReading[]; curve_evidence: SourceCitation[]; operations: SourceTrialText[];
+  }[];
+  time: { a: SourceReading | null; b: SourceReading | null; reported_saving: SourceReading | null;
+    calculated_saving: string | null; formula: string | null; unit: string; basis: string; evidence: SourceCitation[] };
+  quality: SourceTrialText[]; cost: SourceTrialText[]; follow_up: SourceTrialText[]; reported_results: SourceTrialText[];
+  pending: string[]; review_notes: SourceTrialText[];
+}
 export interface AskHint { slot: string; label: string; ask_text: string; p_need: number; scored_by: string }
 export interface AssistantReply { turn_id: string; text: string; ku_ids: string[]; blocked: boolean }
 export interface CardSection { title: string; text: string; ku_id: string; level: number }

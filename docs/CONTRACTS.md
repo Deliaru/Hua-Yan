@@ -1689,6 +1689,9 @@ V10.1 `HuayanApp.read_trial_record(doc_id, by)` 与 `GET /api/sources/trial?doc_
 入口先复用上述整份来源检查一次，再核对记录来源/文件指纹及其引用与当前原文一致；来源变化时交重新整理。
 返回保留A/B、单位、阶段、时间口径和待补项，密级/来源类别继承当前来源，不含底层文件路径；不产生确认、授予或正式业务Trial。
 TrialRecord仍定义在ingest内部，未新增冻结模型、匹配链路或权限机制。
+消费入口：Agent只读工具 `read_trial_record(doc_id)`（sales/pm/rd）只调用上述门面，委托人由ToolContext绑定。
+返回条件、A/B、原观察及出处/待补项，不返回文件定位、重复差值清单或专业签字字段；不调用确认、授予或mark_prepared。
+研发工作面在所选候选的已读取依据和本单准备材料中按来源编号主动回取并展示记录；拒绝原因原样显示，界面不另判权限。
 
 `KnowledgeBase` 的接口变化：
 
