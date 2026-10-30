@@ -1,4 +1,5 @@
 """合成资料：统一入口读取原文，内部查证不等于对外能力。"""
+import hashlib
 import json
 from pathlib import Path
 
@@ -9,8 +10,62 @@ from huayan.app import HuayanApp
 from huayan.clock import get_clock
 from huayan.contracts import Capability, KnowledgeUnit
 from huayan.ingest.folder import FolderSource
+from huayan.ingest.reader.trials import build_trial_record
+from huayan.ingest.reader.word import read_docx, read_native_labels
 from huayan.knowledge import PermissionDenied
 from huayan.ui import server
+
+
+def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp_path, monkeypatch):
+    path = Path("tests/fixtures/reader/synthetic.docx")
+    doc_id = "synthetic-conditions"
+    source = {"source_id": doc_id, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+              "source": "internal", "level": 3}
+    pages = json.loads(Path("tests/fixtures/reader/pages.json").read_text(encoding="utf-8"))
+    blocks = read_docx(path, source, pages, ["synthetic-page-1.png"])
+    readings, pending = read_native_labels(blocks)
+    record = build_trial_record(blocks, readings, pending)
+    trial_path = tmp_path / "trial-record.json"
+    trial_path.write_text(record.model_dump_json(), encoding="utf-8")
+    evidence = {"source_id": doc_id, "file_sha256": source["sha256"],
+                "fragments": [b.fragment().model_dump() for b in blocks]}
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
+    config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"),
+        source_manifest="tests/fixtures/reader/source-manifest.json", source_trials={doc_id: str(trial_path)},
+        sources=[{"name": "合成报告", "kind": "internal", "root": str(evidence_path)}])
+    config_path = tmp_path / "app.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    app = HuayanApp.build(str(config_path))
+    params = {"doc_id": doc_id, "viewer": "rd:R01"}
+    before = app.kb.state_path.read_bytes()
+    fetched = server.GET["/api/sources/trial"](app, params)
+    assert fetched == record and fetched.status == "draft" and fetched.professional_confirmation is None
+    a, b = fetched.groups
+    assert a.formula[0].name == "SYNTH-A" and b.formula[0].name == "SYNTH-B"
+    assert a.formula[0].unit is None and b.formula[0].unit == "kg"
+    assert [r.conditions for r in a.curve_labels if r.stage == "保温"] == [["85℃"]]
+    assert [r.conditions for r in b.curve_labels if r.stage == "保温"] == [["95℃"]]
+    assert fetched.pending == pending and fetched.time.a is None and fetched.time.b is None
+    assert "path" not in json.dumps(fetched.model_dump(mode="json"))
+    monkeypatch.setattr(server, "trial_roles", {"sales-session": "sales:S01"})
+    bound = server.trial_params("sales-session", "GET", "/api/sources/trial", params)
+    with pytest.raises(PermissionDenied):
+        server.GET["/api/sources/trial"](app, bound)
+    # 外部记录的错误来源标注不改变统一入口确定的密级。
+    trial_path.write_text(record.model_copy(update={"level": 0, "source": "public"}).model_dump_json(), encoding="utf-8")
+    fetched = app.read_trial_record(doc_id, "rd:R01")
+    assert fetched.level == 3 and fetched.source == "internal"
+    trial_path.write_text(record.model_copy(update={"file_sha256": "old"}).model_dump_json(), encoding="utf-8")
+    with pytest.raises(ValueError, match="来源不一致"):
+        app.read_trial_record(doc_id, "rd:R01")
+    trial_path.write_text(record.model_dump_json(), encoding="utf-8")
+    fragment = app.kb.sources[0].fragments["table-2"]
+    app.kb.sources[0].fragments["table-2"] = fragment.model_copy(update={"fingerprint": "changed"})
+    with pytest.raises(ValueError, match="依据已变化"):
+        app.read_trial_record(doc_id, "rd:R01")
+    assert app.kb.state_path.read_bytes() == before and not app.events.query(["claim_confirmed"])
 
 
 def test_source_entry_uses_manifest_owner_and_existing_permissions(tmp_path, monkeypatch):

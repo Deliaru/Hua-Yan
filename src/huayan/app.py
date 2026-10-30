@@ -32,7 +32,7 @@ from huayan.jue.state import collect_scheduled, realtime_state, requirement_stat
 from huayan.ingest.compile import admit, recheck
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource, OperationIR
-from huayan.ingest.reader.source import read_source
+from huayan.ingest.reader.source import read_source, read_trial_record
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder, can_read
 from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
@@ -1447,6 +1447,12 @@ class HuayanApp:
         """内部查证只返回原文与出处键，不产生结论、能力或专业签字。"""
         actor = _find(self.actors, by, "主体")
         return read_source(self.kb, doc_id, actor, self.source_owners, span)
+
+    def read_trial_record(self, doc_id, by):
+        """回取来源关联的读取侧试样记录，不写正式知识状态。"""
+        actor = _find(self.actors, by, "主体")
+        return read_trial_record(self.kb, doc_id, actor, self.source_owners,
+                                 self.config.get("source_trials", {}).get(doc_id))
 
     def save_source_preparation(self, req_id, evidence, claim_ids, pending, by):
         """保存本单资料准备草稿；原文仍在读取侧，不确认或授予。"""

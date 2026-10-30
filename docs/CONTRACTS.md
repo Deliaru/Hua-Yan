@@ -1684,6 +1684,12 @@ V10.1 内部查证：`HuayanApp.read_source(doc_id, by, span=None) -> list[Fragm
 只有对应整份 report 的既有分享可开放该来源，单条 claim 的分享不开放完整报告。不自动创建 report KU 或授予。
 返回仍为六字段 Fragment，不返回文件路径，不产生结论或能力；下游原始适配器不重复检查 ACL，客户推荐仍只消费正式能力视图。
 
+V10.1 `HuayanApp.read_trial_record(doc_id, by)` 与 `GET /api/sources/trial?doc_id=...` 回取读取侧TrialRecord。
+服务端配置 `source_trials: {doc_id: 试样记录JSON路径}`，调用方只给来源编号，主体仍由服务端绑定。
+入口先复用上述整份来源检查一次，再核对记录来源/文件指纹及其引用与当前原文一致；来源变化时交重新整理。
+返回保留A/B、单位、阶段、时间口径和待补项，密级/来源类别继承当前来源，不含底层文件路径；不产生确认、授予或正式业务Trial。
+TrialRecord仍定义在ingest内部，未新增冻结模型、匹配链路或权限机制。
+
 `KnowledgeBase` 的接口变化：
 
 - `from_seeds(seeds, events, audit, *, state_path=None)`：只加一个有默认值的参数，现有三参数调用不变；
