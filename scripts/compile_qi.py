@@ -64,6 +64,14 @@ def main():
     changed = recheck(kb, kb.sources)
     report = admit(proposals, kb.sources, kb)
     if args.ir:
+        if ir.product_alignment is not None:
+            report["product_alignment"] = {"product_id": ir.product_alignment.product_id,
+                "name": ir.product_alignment.name, "identity_supported": True,
+                "catalog_registered": ir.proposal.product in kb._products,
+                "pending": ir.product_alignment.pending}
+            for item in report["unaligned_details"]:
+                item["reasons"] = ["产品身份已有依据，正式目录登记待归属" if reason == f"产品未对齐：{ir.product_raw}"
+                                   else reason for reason in item["reasons"]]
         entries = report["admitted"] or report["pending_evidence"]
         report["ir_mapping"] = {"ir_id": ir.id, "ku_id": entries[0]["ku_id"] if entries else None,
             "status": "pending_evidence" if report["pending_evidence"] else "candidate" if entries else "pending_alignment",
@@ -94,6 +102,11 @@ def write_report(path, kb, fragments, proposals, report, changed, args):
     lines += [f"| {a['ku_id']} | L{a['level']} | {a['form'] or '只是结论'} | {a['capability_id'] or '—'} | {a['title']} |"
               for a in admitted]
     lines += ["", "## 待对齐与待挂接", ""]
+    if "product_alignment" in report:
+        alignment = report["product_alignment"]
+        lines += [f"- 产品身份已有资料依据：{alignment['name']}（{alignment['product_id']}）；"
+                  f"正式目录已登记：{alignment['catalog_registered']}"]
+        lines += [f"- {note}" for note in alignment["pending"]]
     lines += [f"- {item['title']}：{'；'.join(item['reasons'])}" for item in report["unaligned_details"]]
     lines += [f"- {item['ku_id']} → {item['capability_id']}：待确认，尚未挂接" for item in report["pending_evidence"]]
     lines += ["", "## 待签（按设计第 9 节分类）", "",

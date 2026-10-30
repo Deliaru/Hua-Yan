@@ -1,6 +1,6 @@
 # WP-5v10｜从试样记录形成完整条件候选
 
-> 决赛必需｜状态：首条 IR 已接入编译预览，条件保留与补充依据候选化已实现；真实入库待产品对齐与确认人安排，确认挂接交 V10.7｜先编译一条值得复用的判断。
+> 决赛必需｜状态：首条 IR、条件保留与补充依据候选化已实现；TF-213HE 已补 SDS/说明书身份依据，正式目录登记与真实候选入库待归属安排，确认挂接交 V10.7｜先编译一条值得复用的判断。
 
 ## 目标
 
@@ -57,3 +57,14 @@
 - **真实运行**：执行 `.venv/Scripts/uv.exe run --no-sync python scripts/compile_qi.py --ir data/knowledge_v10/compiler/SRC-3a2130604c/operation-ir.json --evidence data/knowledge_v10/evidence/SRC-3a2130604c/evidence.json --out data/knowledge_v10/compiler/SRC-3a2130604c/compile-report.md`。读取真实报告提议1条，引文未被丢弃；候选0、能力提议0、待对齐1。报告明确列出“专业确认人待安排”“产品未对齐：TF-213HE”，IR 映射为 `pending_alignment`、`ku_id=null`，没有虚构归属人或把真实产品映射到模拟产品。配置中的既有来源名称标注为模拟；本条提议仅引用真实报告。
 - **必要回归**：新增一项针对本包两个真实缺口的合成测试及明确标注的 `tests/fixtures/reader/synthetic-conditions.txt`；验证“材料/设备已识别，升温限制仍完整保留”和“补充依据先候选、原能力不变、贡献人与待挂接目标保存后可恢复”。执行 `.venv/Scripts/uv.exe run --no-sync pytest -q tests/test_compiler_v10.py tests/test_wp_a3.py`，4项通过（2.36秒）。没有调用生成模型、视觉模型或 Jev，也未重复开展读取测试。
 - **交接**：本小项的编译路径及两处修复已完成，真实样例尚未正式入库，V10.5 整包不能记为通过。产品对齐与确认人安排仍待后续处理；确认人按用户此前要求暂缓。交 V10.7 消费待挂接记录并确定 C7 固定证据确认接口。运行产物只在 `data/`，未写共享试用状态，未提交或推送；当前停下等待用户评审。
+
+### 2026-10-30｜补入用户提供的 SDS 与产品说明书，完善产品对齐材料
+
+- **范围与基线**：分支 `v10 @ 44178ff`，开始时工作区干净。按用户授权完善当前 V10.5 材料，未切换到其他包。编程前已完整重读 AGENTS，再读总计划、相关契约/QI 与本包，按条件保真、最小改动和禁止过度防御要求自查；评审由用户进行。
+- **真实来源**：用户提供《SDS-分散匀染剂 TF-213HE-V6.1.pdf》8页和《说明书-分散匀染剂TF-213HE.pdf》1页。`scripts/prepare_product_sources.py` 用 PDFium 提取原生文字、生成首页图并保存原件字节副本；来源编号分别为 `SRC-38a27ac7a5`、`SRC-eb043d626f`。页码映射到现有 Fragment 的 `page-N` 段号和文本指纹，未增加契约字段。当前未取得来源已公开的确认，均按内部 L3 保存；没有将两份资料的内容直接发布为低层产品说明。
+- **产品材料**：在不入库目录 `data/knowledge_v10/products/TF-213HE/` 整理 `product-alignment.json`，逐字引用9项事实：中英文名、供应商、SDS版本与日期、说明书名称、两份文件的用途表述、说明书常规用法与调整前提、SDS用途边界。各项引文通过读取侧来源指纹和原文包含核对；这是人工整理的资料对齐草稿，不是模型生成或专业适用确认。两份原件及页图、原文分别在 `sds/`、`sheet/`，均提供本地 `review.html`。
+- **接入与修改**：读取侧 `ProductAlignment` 只承载资料事实、出处和待办，不另造引擎 Product 或候选匹配链。`prepare_trial_ir.py --product-alignment <json>` 将该材料接入首份 IR，校验型号、引文及块指纹；原观察的证据仍引用试样报告，说明书常规条件不替换报告实际条件。`compile_qi.py` 的报告新增产品身份依据与正式目录登记的区分，产品目录尚未登记时仍交既有 `admit` 处理，不绕过导入前置条件。
+- **待审差异**：说明书常规染色温度125–130℃，试样报告B组有132℃保温点；说明书注明“具体工艺请用户通过试样酌情调整”，两份原文保留并列，交研发判断。SDS修订日期2024.8.27晚于试样报告日期2024年3月14日，不据此推定当时使用同版资料。用量0.2–0.5g/L、浴比1:10、保温时间30–60min仅作为说明书常规方法原文保存，不擅自换算本报告用量或扩大适用范围。
+- **真实运行入口**：先执行 `scripts/prepare_product_sources.py --sds <用户提供的SDS绝对路径> --sheet <用户提供的说明书绝对路径> --out data/knowledge_v10/products/TF-213HE`。将上述逐字摘录整理为 `product-alignment.json` 后，运行此前 `prepare_trial_ir.py` 命令并增加 `--product-alignment data/knowledge_v10/products/TF-213HE/product-alignment.json`，再执行既有 `compile_qi.py --ir ... --evidence ... --out ...` 内存预览。
+- **结果与验收边界**：已更新 `data/knowledge_v10/compiler/SRC-3a2130604c/` 的 IR、审阅页与编译报告。原11项条件不变，产品资料新增9项事实，待办现为16项。预览引文丢弃0、真实候选0，报告列明“专业确认人待安排”“产品身份已有依据，正式目录登记待归属”；`identity_supported=true`、`catalog_registered=false`，IR映射仍为 `pending_alignment`。型号身份和用途资料缺口已补齐；正式目录登记及候选入库尚未完成，不能标记整包通过。
+- **必要验证与交接**：执行当前真实材料读取、IR准备和内存编译预览；受影响既有回归 `pytest -q tests/test_compiler_v10.py tests/test_reader_v10.py` 为3项通过（1.22秒），未新增冗余测试，未调用模型或 Jev。确认人与真实签字按用户要求暂缓，不新增占位身份；后续继续完成 V10.7 的固定证据审阅与确认挂接功能。未写共享试用状态、未改冻结契约、未提交或推送。本小项停下交用户评审。

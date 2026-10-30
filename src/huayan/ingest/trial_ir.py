@@ -1,6 +1,7 @@
 """首条操作经验的读取侧 IR 与审阅材料；不写正式知识状态。"""
 import html
 import json
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -8,7 +9,7 @@ from huayan.contracts._base import BaseModel
 from huayan.contracts import Fragment
 from huayan.domain import find_phenomenon, find_slot_values
 from huayan.ingest.compile import EvidenceRef, Proposal
-from huayan.ingest.reader.trials import Citation, TrialRecord
+from huayan.ingest.reader.trials import Citation, TrialRecord, TrialText
 
 
 class EvidenceReportSource:
@@ -36,6 +37,31 @@ class IRCondition(BaseModel):
     evidence: list[Citation]
 
 
+class ProductAlignment(BaseModel):
+    """资料侧的产品身份与使用原文，尚非正式 Product 或适用能力。"""
+    product_id: str
+    name: str
+    facts: list[TrialText]
+    source_records: list[str]
+    pending: list[str]
+
+
+def read_product_alignment(path, product):
+    path = Path(path)
+    alignment = ProductAlignment.model_validate_json(path.read_text(encoding="utf-8"))
+    if alignment.product_id != product:
+        raise ValueError("产品对齐材料与所选产品不一致")
+    sources = [EvidenceReportSource(path.parent / record) for record in alignment.source_records]
+    fragments = {f"{f.doc_id}#{f.span}@{f.fingerprint}": f for s in sources for f in s.fetch(s.name)}
+    for fact in alignment.facts:
+        if not fact.evidence or not any(product in fragments[c.fragment].text for c in fact.evidence):
+            raise ValueError("产品事实缺少对应型号的依据")
+        for citation in fact.evidence:
+            if citation.quote not in fragments[citation.fragment].text:
+                raise ValueError(f"产品对齐引文不符：{citation.span}")
+    return alignment
+
+
 class OperationIR(BaseModel):
     id: str
     source_id: str
@@ -50,6 +76,7 @@ class OperationIR(BaseModel):
     evidence: list[Citation]
     pending: list[str]
     proposal: Proposal
+    product_alignment: ProductAlignment | None = None
 
 
 def prepare_operation(record: TrialRecord, seeds, group, product, index=0):
@@ -102,6 +129,17 @@ def write_operation_review(ir, output, evidence_review):
         f'<td><pre>{esc(c.text)}</pre></td><td>{esc(str(c.structured)) if c.structured else "保留原文待判断"}</td>'
         f'<td>{citations(c.evidence)}</td></tr>' for c in ir.conditions)
     pending = "".join(f"<li>{esc(note)}</li>" for note in ir.pending)
+    product = "<p>产品身份依据待补。</p>"
+    if ir.product_alignment is not None:
+        alignment = ir.product_alignment
+        product = f"<h3>{esc(alignment.name)} · {esc(alignment.product_id)}</h3>"
+        for fact in alignment.facts:
+            refs = "；".join(f'{esc(c.fragment)} · 第{esc(str(c.pages))}页' for c in fact.evidence)
+            quotes = "\n".join(c.quote for c in fact.evidence)
+            product += f"<p>{esc(fact.text)}</p><pre>{esc(quotes)}</pre><small>{refs}</small>"
+        for index, record in enumerate(alignment.source_records, 1):
+            link = Path(os.path.relpath(Path(record).parent / "review.html", output)).as_posix()
+            product += f'<p><a href="{esc(link)}">产品来源{index}：原文、原生首页与 PDF</a></p>'
     page = f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>操作经验 IR 审阅</title>
 <style>body{{font:16px/1.6 'Microsoft YaHei',sans-serif;margin:32px;color:#183044}}
 table{{width:100%;border-collapse:collapse}}td,th{{border:1px solid #ccd6df;padding:10px;text-align:left}}
@@ -110,6 +148,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere}}.notice{{background:#fff3d4;pa
 未专业确认，未导入契，未授予能力。产品原词与未结构化限制交人判断；配方保持原密级。</p>
 <h2>观察及拟用方式</h2><pre>{esc(ir.observation)}</pre><p>拟作为同类现场操作的审阅材料；
 复用范围待研发确定，当前不提议 applicable 或 ask。</p>{citations(ir.evidence[:1])}
+<h2>产品身份与说明书原文（目录登记待归属）</h2>{product}
 <h2>完整条件与原文</h2><table><tr><th>组别／阶段</th><th>条件</th><th>对齐状态</th><th>出处</th></tr>{rows}</table>
 <h2>保留到 limits 的原文</h2><pre>{esc(ir.proposal.limits)}</pre><h2>待处理</h2><ul>{pending}</ul>
 <p><a href="operation-ir.json">IR</a> · <a href="proposals.json">现有 Proposal 格式</a> ·

@@ -7,7 +7,7 @@ from pathlib import Path
 from huayan.contracts import Fragment
 from huayan.domain import load_seeds
 from huayan.ingest.reader.trials import TrialRecord
-from huayan.ingest.trial_ir import prepare_operation, write_operation_review
+from huayan.ingest.trial_ir import prepare_operation, write_operation_review, read_product_alignment
 
 
 def main():
@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--group", choices=["A", "B"], default="B")
     parser.add_argument("--seeds", default="seeds")
     parser.add_argument("--out", required=True)
+    parser.add_argument("--product-alignment", help="已有来源引文的产品对齐材料")
     args = parser.parse_args()
     record = TrialRecord.model_validate_json(Path(args.trial).read_text(encoding="utf-8"))
     evidence_path = Path(args.evidence)
@@ -30,6 +31,13 @@ def main():
     record.pending = [n for n in record.pending if not n.startswith("图片模型读取未完成：")]
     record.pending += [n for n in evidence["pending"] if n.startswith("图片模型读取未完成：")]
     ir = prepare_operation(record, load_seeds(args.seeds), args.group, args.product)
+    if args.product_alignment:
+        alignment_path = Path(args.product_alignment).resolve()
+        alignment = read_product_alignment(alignment_path, args.product)
+        alignment.source_records = [str((alignment_path.parent / p).resolve()) for p in alignment.source_records]
+        ir.product_alignment = alignment
+        ir.pending = [note for note in ir.pending if note != f"产品原词 {args.product} 尚未对齐现有产品词表。"]
+        ir.pending += alignment.pending
     fragments = {f.span: f for f in [Fragment.model_validate(item) for item in evidence["fragments"]]}
     for citation in ir.evidence:
         fragment = fragments[citation.span]
