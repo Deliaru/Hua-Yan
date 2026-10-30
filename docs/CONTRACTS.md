@@ -1693,6 +1693,12 @@ TrialRecord仍定义在ingest内部，未新增冻结模型、匹配链路或权
 返回条件、A/B、原观察及出处/待补项，不返回文件定位、重复差值清单或专业签字字段；不调用确认、授予或mark_prepared。
 研发工作面在所选候选的已读取依据和本单准备材料中按来源编号主动回取并展示记录；拒绝原因原样显示，界面不另判权限。
 
+V10.1 `HuayanApp.read_source_image(doc_id, page, by, span=None)` / GET `/api/sources/image?doc_id=...&page=...&span=...`
+先复用整份来源权限检查一次，再从报告读取记录取回原页。page从1开始；span给出时必须属于该页。
+块的Location.bbox为原生页图像素(left, top, right, bottom)，左上原点；有已登记坐标则裁图，无坐标明确返回kind="page"及bbox=null，不推测区域。
+返回doc_id/span/page/bbox、kind、密级/来源类别、图像尺寸、图像字节指纹及data URL，不返回本地路径；HTTP不接受任意文件路径或自由裁图坐标。
+图像及块定位仍留在读取侧，不改Fragment六字段，不创建正式状态或调用视觉模型；Agent/UI消费与自动区域定位分别接续。
+
 `KnowledgeBase` 的接口变化：
 
 - `from_seeds(seeds, events, audit, *, state_path=None)`：只加一个有默认值的参数，现有三参数调用不变；

@@ -16,7 +16,8 @@ from huayan.knowledge.store import _grams
 class EvidenceReportSource:
     """让现有 admit/recheck 按原块位置取回读取记录，不改写段号或指纹。"""
     def __init__(self, path):
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        self.path = Path(path)
+        data = json.loads(self.path.read_text(encoding="utf-8"))
         self.name, self.file_sha256 = data["source_id"], data["file_sha256"]
         self.fragments = {f.span: f for f in [Fragment.model_validate(x) for x in data["fragments"]]}
         self.kind = next(iter(self.fragments.values())).source

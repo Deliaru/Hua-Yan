@@ -1,8 +1,11 @@
 """合成资料：统一入口读取原文，内部查证不等于对外能力。"""
+from base64 import b64decode
 import hashlib
+from io import BytesIO
 import json
 from pathlib import Path
 
+from PIL import Image
 import pytest
 import yaml
 
@@ -23,12 +26,17 @@ def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp
               "source": "internal", "level": 3}
     pages = json.loads(Path("tests/fixtures/reader/pages.json").read_text(encoding="utf-8"))
     blocks = read_docx(path, source, pages, ["synthetic-page-1.png"])
+    image_path = tmp_path / "synthetic-page.png"
+    image = Image.new("RGB", (20, 20), "red")
+    image.paste("green", (10, 0, 20, 20))
+    image.save(image_path)
+    next(b for b in blocks if b.span == "table-2").locations[0].bbox = (10, 0, 20, 20)
     readings, pending = read_native_labels(blocks)
     record = build_trial_record(blocks, readings, pending)
     trial_path = tmp_path / "trial-record.json"
     trial_path.write_text(record.model_dump_json(), encoding="utf-8")
-    evidence = {"source_id": doc_id, "file_sha256": source["sha256"],
-                "fragments": [b.fragment().model_dump() for b in blocks]}
+    evidence = {"source_id": doc_id, "file_sha256": source["sha256"], "images": [str(image_path)],
+                "blocks": [b.model_dump() for b in blocks], "fragments": [b.fragment().model_dump() for b in blocks]}
     evidence_path = tmp_path / "evidence.json"
     evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
     config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
@@ -40,6 +48,17 @@ def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp
     app = HuayanApp.build(str(config_path))
     params = {"doc_id": doc_id, "viewer": "rd:R01"}
     before = app.kb.state_path.read_bytes()
+    page = server.GET["/api/sources/image"](app, params | {"page": "1"})
+    assert page["kind"] == "page" and page["bbox"] is None and page["level"] == 3
+    assert b64decode(page["image_url"].split(",", 1)[1]) == image_path.read_bytes()
+    region = server.GET["/api/sources/image"](app, params | {"page": "1", "span": "table-2"})
+    assert region["kind"] == "region" and region["bbox"] == (10, 0, 20, 20)
+    assert (region["width"], region["height"]) == (10, 20) and region["fingerprint"] != page["fingerprint"]
+    with Image.open(BytesIO(b64decode(region["image_url"].split(",", 1)[1]))) as cropped:
+        assert cropped.getpixel((0, 0)) == (0, 128, 0)
+    assert all("path" not in key for key in region)
+    whole = app.read_source_image(doc_id, 1, "rd:R01", "table-1")
+    assert whole["kind"] == "page" and whole["bbox"] is None
     fetched = server.GET["/api/sources/trial"](app, params)
     assert fetched == record and fetched.status == "draft" and fetched.professional_confirmation is None
     a, b = fetched.groups
@@ -59,6 +78,9 @@ def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp
     bound = server.trial_params("sales-session", "GET", "/api/sources/trial", params)
     with pytest.raises(PermissionDenied):
         server.GET["/api/sources/trial"](app, bound)
+    image_bound = server.trial_params("sales-session", "GET", "/api/sources/image", params | {"page": "1"})
+    with pytest.raises(PermissionDenied):
+        server.GET["/api/sources/image"](app, image_bound)
     # 外部记录的错误来源标注不改变统一入口确定的密级。
     trial_path.write_text(record.model_copy(update={"level": 0, "source": "public"}).model_dump_json(), encoding="utf-8")
     fetched = app.read_trial_record(doc_id, "rd:R01")

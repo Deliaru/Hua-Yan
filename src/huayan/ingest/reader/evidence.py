@@ -10,7 +10,7 @@ from huayan.contracts.seeds import Level
 class Location(BaseModel):
     page: int
     image_path: str
-    bbox: tuple[int, int, int, int] | None = None
+    bbox: tuple[int, int, int, int] | None = None  # 原生页图像素，左上原点：(left, top, right, bottom)
 
 
 class TableCell(BaseModel):

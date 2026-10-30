@@ -1,5 +1,11 @@
 """按来源编号读取原文；权限集中在此入口，底层适配器仍只负责取回。"""
+from base64 import b64encode
+from hashlib import sha256
+from io import BytesIO
+import json
 from pathlib import Path
+
+from PIL import Image
 
 from huayan.clock import get_clock
 from huayan.contracts import KnowledgeUnit
@@ -7,6 +13,7 @@ from huayan.ingest.trial_ir import EvidenceReportSource
 from huayan.knowledge.permission import PermissionDenied, can_read
 
 from .trials import TrialRecord
+from .evidence import EvidenceBlock
 
 
 def read_source(kb, doc_id, actor, owners, span=None):
@@ -51,3 +58,47 @@ def read_trial_record(kb, doc_id, actor, owners, path):
     if any(c.fragment not in current or c.quote not in current[c.fragment] for c in citations):
         raise ValueError("试样记录依据已变化或无法取回，请重新整理")
     return record.model_copy(update={"level": max(f.level for f in fragments), "source": fragments[0].source})
+
+
+def read_source_image(kb, doc_id, actor, owners, page, span=None):
+    """回取原页或块的已登记区域；没有坐标时如实返回整页。"""
+    fragments = read_source(kb, doc_id, actor, owners, span)
+    source = next(s for s in kb.sources if doc_id in s.list_docs())
+    if not isinstance(source, EvidenceReportSource):
+        raise ValueError("该来源尚未登记原页图像")
+    report = json.loads(source.path.read_text(encoding="utf-8"))
+    if report["source_id"] != doc_id or report["file_sha256"] != source.file_sha256:
+        raise ValueError("图像读取记录与当前来源不一致，请重新读取")
+    images = report.get("images", [])
+    if not 1 <= page <= len(images):
+        raise ValueError("该来源没有指定原页")
+    bbox = None
+    if span is not None:
+        data = next((b for b in report.get("blocks", []) if b["span"] == span), None)
+        if data is None:
+            raise ValueError("该块尚无图像定位")
+        block = EvidenceBlock.model_validate(data)
+        if (block.source_id != doc_id or block.file_sha256 != source.file_sha256
+                or block.fragment().fingerprint != fragments[0].fingerprint):
+            raise ValueError("块依据已变化，请重新读取")
+        location = next((loc for loc in block.locations if loc.page == page), None)
+        if location is None:
+            raise ValueError("该块不在指定页面")
+        bbox = location.bbox
+    path = Path(images[page - 1])
+    raw = (path if path.is_absolute() else source.path.parent / path).read_bytes()
+    with Image.open(BytesIO(raw)) as image:
+        mime = Image.MIME[image.format]
+        width, height = image.size
+        if bbox is not None:
+            left, top, right, bottom = bbox
+            if not (0 <= left < right <= width and 0 <= top < bottom <= height):
+                raise ValueError("登记区域超出原页或为空，请重新定位")
+            with BytesIO() as stream:
+                image.crop(bbox).save(stream, format="PNG")
+                raw = stream.getvalue()
+            width, height, mime = right - left, bottom - top, "image/png"
+    return {"doc_id": doc_id, "span": span, "page": page, "bbox": bbox,
+            "kind": "region" if bbox is not None else "page", "level": fragments[0].level,
+            "source": fragments[0].source, "width": width, "height": height,
+            "fingerprint": sha256(raw).hexdigest()[:12], "image_url": f"data:{mime};base64,{b64encode(raw).decode('ascii')}"}

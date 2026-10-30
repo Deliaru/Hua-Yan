@@ -32,7 +32,7 @@ from huayan.jue.state import collect_scheduled, realtime_state, requirement_stat
 from huayan.ingest.compile import admit, recheck
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource, OperationIR
-from huayan.ingest.reader.source import read_source, read_trial_record
+from huayan.ingest.reader.source import read_source, read_trial_record, read_source_image
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder, can_read
 from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
@@ -1453,6 +1453,11 @@ class HuayanApp:
         actor = _find(self.actors, by, "主体")
         return read_trial_record(self.kb, doc_id, actor, self.source_owners,
                                  self.config.get("source_trials", {}).get(doc_id))
+
+    def read_source_image(self, doc_id, page, by, span=None):
+        """按证据来源键取回页图或已登记区域，不向调用方提供本地路径。"""
+        actor = _find(self.actors, by, "主体")
+        return read_source_image(self.kb, doc_id, actor, self.source_owners, page, span)
 
     def save_source_preparation(self, req_id, evidence, claim_ids, pending, by):
         """保存本单资料准备草稿；原文仍在读取侧，不确认或授予。"""
