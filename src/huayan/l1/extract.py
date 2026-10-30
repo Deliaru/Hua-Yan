@@ -3,12 +3,43 @@ import json
 import re
 from pathlib import Path
 
-from huayan.contracts import (ExtractedSlot, ExtractionResult, LLMRequest, Message,
-                              NeedState, SlotFill, Tier)
+from huayan.contracts import (ExtractedSlot, ExtractedTemperature, ExtractionResult, LLMRequest, Message,
+                              NeedState, SlotFill, TemperatureFill, Tier)
 from huayan.domain import detect_asked_slots, find_phenomenon, find_slot_values
 
 
 _MODEL = re.compile(r"(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+")
+_CELSIUS = re.compile(r"(?<![\d.])(?P<lower>-?\d+(?:\.\d+)?)\s*(?P<initial_unit>℃|°\s*[Cc]|摄氏度|度)?\s*"
+                      r"(?:[~～—–至到-]\s*(?P<upper>-?\d+(?:\.\d+)?)\s*)?"
+                      r"(?P<unit>℃|°\s*[Cc]|摄氏度|度)(?!\s*/)")
+
+
+def _temperature(turns, asking):
+    """离线规则降级；线上由 LLMExtractor 一次理解温度与否定/纠正。"""
+    turn = turns[-1]
+    previous = next((t for t in reversed(turns[:-1]) if t.speaker != "customer"), None)
+    context = "温" in turn.text or (previous is not None and "温" in previous.text)
+    matches = [m for m in _CELSIUS.finditer(turn.text)
+               if m["unit"] != "度" or m["initial_unit"] not in (None, "度")
+               or (context and not re.search(r"(?:硬度|牢度|白度|浓度|粘度|酸度|碱度)\s*$", turn.text[:m.start()]))]
+    valid = []
+    for i, match in enumerate(matches):
+        start = matches[i - 1].end() if i else 0
+        prefix = re.split(r"[，,。；;]", turn.text[start:match.start()])[-1]
+        lower = float(match["lower"])
+        upper = float(match["upper"]) if match["upper"] is not None else lower
+        if lower <= upper and not any(w in prefix for w in ("不是", "不在", "不超过", "低于", "高于", "小于", "大于")) \
+                and not re.match(r"\s*(?:以上|以下)", turn.text[match.end():]):
+            valid.append((match, lower, upper))
+    if valid and (len(valid) == 1 or any(w in turn.text[valid[-2][0].end():valid[-1][0].start()]
+                                       for w in ("不对", "说错", "改成", "改为", "其实", "更正"))):
+        match, lower, upper = valid[-1]
+        return ExtractedTemperature(celsius=(lower, upper), status="filled", quote=match.group(), turn_n=turn.n)
+    if matches or (any(w in turn.text for w in ("不清楚", "不知道", "不确定", "没测过"))
+                   and ("温度" in turn.text or (previous is not None and "温度" in previous.text)
+                        or "temperature_c" in asking)):
+        return ExtractedTemperature(celsius=None, status="unknown", quote=turn.text, turn_n=turn.n)
+    return None
 
 
 def _named(text, products):
@@ -32,6 +63,7 @@ class RuleExtractor:
             result.asked_slots = detect_asked_slots(turn.text, self.seeds.slots)
             return result
         text = turn.text
+        result.temperature = _temperature(turns, asking)
         phenomenon = find_phenomenon(text, self.seeds.phenomena)
         if phenomenon:
             result.phenomenon, result.phenomenon_quote = phenomenon
@@ -121,6 +153,15 @@ def validate_extraction(result, seeds, turns, product_ids):
     result.slots = [s for s in result.slots if (src := by_n.get(s.turn_n)) is not None and src.speaker == "customer"
                     and s.quote and s.quote in src.text]
     result.asked_slots = [s for s in result.asked_slots if s in slots]
+    temperature = result.temperature
+    if temperature is not None:
+        src = by_n.get(temperature.turn_n)
+        valid = src is not None and src.speaker == "customer" and temperature.quote and temperature.quote in src.text
+        valid = valid and ((temperature.status == "unknown" and temperature.celsius is None)
+            or (temperature.status == "filled" and temperature.celsius is not None
+                and temperature.celsius[0] <= temperature.celsius[1]))
+        if not valid:
+            result.temperature = None
     result.product_refs = list(dict.fromkeys(p for p in result.product_refs if p in product_ids))   # 只认本层视图里的编号
     if turns[-1].speaker != "sales":
         result.asked_slots = []
@@ -136,5 +177,8 @@ def apply_extraction(prev: NeedState, result: ExtractionResult, turns) -> NeedSt
         need.slots[slot.slot] = SlotFill(**slot.model_dump(exclude={"turn_n"}), turn_id=by_n[slot.turn_n].id)
     for slot in result.asked_slots:
         need.asked[slot] = need.asked.get(slot, 0) + 1
+    if result.temperature is not None:
+        need.temperature = TemperatureFill(**result.temperature.model_dump(exclude={"turn_n"}),
+                                           turn_id=by_n[result.temperature.turn_n].id)
     need.profile, need.last_intent, need.turn_count = result.profile, result.intent, len(turns)
     return need

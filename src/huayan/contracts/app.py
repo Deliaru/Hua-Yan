@@ -8,7 +8,7 @@ from .escalation import Requirement
 from .jue import Family
 from .knowledge import RecommendationCard
 from .seeds import Level
-from .session import AskHint, AssistantReply, SlotFill, Turn
+from .session import AskHint, AssistantReply, SlotFill, TemperatureFill, Turn
 
 
 class ReuseView(BaseModel):                   # v5.1：业务员看到的现成产品建议（不含案例原文）
@@ -44,6 +44,7 @@ class SessionView(BaseModel):
     escalate_note: str = ""
     reuse: ReuseView | None = None            # v5.1：会话所升级需求单上的现成产品建议
     asks: list[PendingAsk] = []               # v8：待答回问；客户在自助页直接回答，研发的问题直达客户
+    temperature: TemperatureFill | None = None
 
 
 class RunStatus(BaseModel):

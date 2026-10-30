@@ -74,7 +74,7 @@ def answer(session, deps, targets, *, check_grounding=False):
         deps._use_capability(c.id, session.id, actor.id)
     if hits and blocked:
         text += "\n" + denial
-    if any(not consistent(products[pid], session.need.known()) or
+    if any(not consistent(products[pid], session.need.known(), temperature_c=session.need.known_temperature()) or
            (session.need.phenomenon and session.need.phenomenon not in products[pid].solves) for pid in targets):
         text += "\n以上仅为所问型号的公开资料，该产品不适用于当前已知条件，不作为本会话推荐。"
     grounding = deps.jev.grounding(text, hits) if check_grounding and hits and not blocked else None

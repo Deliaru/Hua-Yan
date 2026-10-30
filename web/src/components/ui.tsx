@@ -1,8 +1,21 @@
 // 共用的小组件：分组、行、标记、可展开小节、签字按钮。规范见 index.css 顶部。
 import { useState } from "react";
 import { useApp, scoreText, isModel, useLabels } from "../ctx";
-import type { Question } from "../types";
+import type { Question, TemperatureFill } from "../types";
 import { ChevronRight } from "./Icons";
+
+export function TemperatureCondition({ value }: { value: TemperatureFill | null }) {
+  const range = value?.celsius;
+  return (
+    <div className="border-b border-sep px-5 py-3.5">
+      <p className="eyebrow">工艺温度</p>
+      <p className="mt-0.5 text-[16px] font-semibold">{range
+        ? range[0] === range[1] ? `${range[0]}℃` : `${range[0]}—${range[1]}℃`
+        : value ? "温度待补充" : "尚未提供"}</p>
+      {value && <p className="mt-1 text-[12px] text-ink-2">「{value.quote}」</p>}
+    </div>
+  );
+}
 
 export function PageHead({ title, subtitle, aside }: { title: string; subtitle?: React.ReactNode; aside?: React.ReactNode }) {
   return (

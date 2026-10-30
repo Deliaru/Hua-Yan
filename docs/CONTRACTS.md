@@ -149,8 +149,8 @@ class Candidate(BaseModel):
     unknown_slots: list[str]                  # applicable 中有限定、但当前未知的槽位
 
 def load_seeds(seeds_dir: str | Path) -> Seeds: ...
-def consistent(product: Product, known: dict[str, str]) -> bool: ...
-    # 已知槽位中，凡是 product.applicable 有限定的，取值都在适用范围内
+def consistent(product: Product, known: dict[str, str], *, temperature_c: tuple[float, float] | None = None) -> bool: ...
+    # 同一情境内，已知枚举条件相容且摄氏温度不超范围；温度未知不算冲突
 def match_candidates(phenomenon: str, known: dict[str, str], products: list[Product]) -> list[Candidate]: ...
     # status == "released" 且 phenomenon in solves 且 consistent；按 id 排序
 def correct_product(phenomenon: str, slots: dict[str, str], products: list[Product]) -> str | None: ...
@@ -341,6 +341,12 @@ class CustomerProfile(BaseModel):
     asked_mechanism: bool = False             # 客户是否明确要求了解原理
     evidence_quote: str = ""
 
+class TemperatureFill(BaseModel):             # V10.6 C2：当前需求温度与出处
+    celsius: tuple[float, float] | None       # 摄氏闭区间；单值端点相同
+    status: Literal["filled", "unknown"]
+    quote: str
+    turn_id: str
+
 class NeedState(BaseModel):
     session_id: str
     customer_id: str
@@ -353,14 +359,22 @@ class NeedState(BaseModel):
     profile: CustomerProfile = CustomerProfile()
     last_intent: Intent = "need"
     extracted_by: Literal["llm", "rule"] = "llm"
+    temperature: TemperatureFill | None = None # None = 尚未提及；unknown = 已明确待补/澄清
 
     def known(self) -> dict[str, str]: ...    # status == "filled" 的槽位 → 取值
+    def known_temperature(self) -> tuple[float, float] | None: ...
 
 class ExtractedSlot(BaseModel):               # 抽取 Agent 的输出单元
     slot: str
     value: str | None
     status: Literal["filled", "unknown"]
     confidence: float = Field(ge=0, le=1)
+    quote: str
+    turn_n: int
+
+class ExtractedTemperature(BaseModel):        # V10.6 C2：温度抽取输出
+    celsius: tuple[float, float] | None
+    status: Literal["filled", "unknown"]
     quote: str
     turn_n: int
 
@@ -372,6 +386,7 @@ class ExtractionResult(BaseModel):            # 抽取 Agent 结构化输出（c
     asked_slots: list[str] = []               # 最新一句业务员发言追问了哪些槽位
     profile: CustomerProfile
     product_refs: list[str] = []              # ⑰′ 这句话指到的产品编号（指代由抽取按上下文解析）
+    temperature: ExtractedTemperature | None = None # None = 本轮无新增/变化，不清空已有事实
 
 # huayan.l1.extract（WP-A2）
 class Extractor(Protocol):
@@ -1215,6 +1230,7 @@ class SessionView(BaseModel):
     viewer_level: Level
     turns: list[Turn]
     slots: list[SlotFill]                     # 槽位 + 原话
+    temperature: TemperatureFill | None = None # V10.6 C2：当前温度及原话，未提及为 None
     hints: list[AskHint]
     replies: list[AssistantReply]             # 已按查看者层级过滤
     card: RecommendationCard | None
@@ -1662,7 +1678,7 @@ class Candidate(BaseModel):
 - `load_seeds` 给每个产品（含立项产品）按 `solves × applicable` 填好第 0 天情境，`capability_id = cap:applicable:<pid>:<ph>`。这样直接拿种子产品调匹配函数的地方（测试、`sim/`、`confirm_translation` 找立项产品）行为不变，也不需要兜底分支。
 - `migrate_seeds(seeds, at) -> tuple[list[KnowledgeUnit], list[Capability]]`：直接读已发布产品的这些情境生成适用能力，按 2.1 表生成追问能力；每个现象生成一条 L3 结论 `ku:claim:phen:<id>`（必问与先验的依据，确认人 `"seed"`）。**迁移不写事件。**
 - `view()` 用能力表重新算出情境，覆盖种子里的第 0 天情境；视图里的 `Product.solves` 取情境的现象并集，`Product.applicable` 置空。
-- `consistent(product, known)`：存在一个情境与已知条件相容（不看现象）。
+- `consistent(product, known, *, temperature_c=None)`：存在同一个情境，枚举条件相容且 `temperature_match(temperature_c, situation.temperature_c) != "outside"`（不看现象）；温度未知不算冲突。
 - `match_candidates(phenomenon, known, products, limited=(), *, temperature_c=None)`：取该现象下与已知条件相容的情境，每个产品优先取无限制且未知条件最少的那个；无未知/限制为 `confirmed`，否则 `possible`。新增温度关键字参数有默认值，原有枚举调用兼容。
 - `correct_product`：用命中情境里**限定的槽位个数**衡量具体程度（与 V6 的 `len(applicable)` 一致）。
 
@@ -1671,7 +1687,13 @@ V10.6 C2 首个最小差异：只增加上述 `Situation.temperature_c` 默认�
 现有迁移与能力视图保留该范围，旧能力缺省为 `None`。`domain.temperature_match(actual, allowed)` 返回
 `satisfied / unknown / outside`：客户区间完整包含于授权区间才满足，任一端越界即不命中；授权有范围而需求温度
 未知时为 `possible`，`unknown_slots` 增加 `temperature_c`。没有温度限制的旧情境保持既有含义。
-本小项不改 `NeedState` 或抽取输出，客户温度原话、未知状态与匹配调用接线由本包后续小项完成。
+C2 会话接线最小增量：`NeedState.temperature`、`ExtractionResult.temperature` 与
+`SessionView.temperature` 均默认 `None`，新增具体温度值/原话/轮次类型见契约③，枚举 `slots/known()` 不变。
+外部抽取边界验证客户逐字引文、轮次、状态与升序闭区间；漏提/漏抽保留既有事实，明确不清楚/否定无新值时
+记录 `unknown` 与原话。L1 匹配、能力失效后的重匹配通过 `known_temperature()` 传值；
+`find_products` 的扁平参数新增可选 `temperature_c=None` 并透传同一匹配函数。
+推荐说明只列所选能力情境的温度范围与待补条件，并显示对应能力编号；不把不同情境的温度合并。
+这些新增字段不进入既有 Jue-K 特征或枚举追问目录；实际模型抽取与真实专业范围确认仍需独立验收。
 
 ### 2.3 出口（契约 7.1）
 

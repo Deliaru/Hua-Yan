@@ -74,8 +74,11 @@ def _cited(sources, ev):
 
 
 def _key(payload) -> dict:
-    """比较用：适用条件的取值按集合比，顺序不同算相同。"""
-    return payload | {"conditions": {k: frozenset(v) for k, v in payload.get("conditions", {}).items()}}
+    """比较用：适用条件按集合比，温度闭区间统一为 tuple。"""
+    key = payload | {"conditions": {k: frozenset(v) for k, v in payload.get("conditions", {}).items()}}
+    if payload.get("temperature_c") is not None:
+        key["temperature_c"] = tuple(payload["temperature_c"])
+    return key
 
 
 def admit(proposals: list[Proposal], sources, kb) -> dict:

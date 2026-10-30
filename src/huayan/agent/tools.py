@@ -135,6 +135,7 @@ def save_escalate_note(ctx: ToolContext, args: Text) -> ToolResult:
 def get_need_card(ctx: ToolContext, args: NoArgs) -> ToolResult:
     v = ctx.app.view_session(ctx.session_id, ctx.principal.id)
     return ToolResult(data={"status": v.status, "slots": [{"slot": f.slot, "value": f.value, "quote": f.quote} for f in v.slots],
+                            "temperature": v.temperature.model_dump() if v.temperature is not None else None,
                             "turns": [{"turn_id": t.id, "speaker": t.speaker, "text": t.text} for t in v.turns],
                             "ask_hints": [h.ask_text for h in v.hints], "escalation_question_id": v.escalation_question_id,
                             "reply_draft": v.reply_draft, "escalate_note": v.escalate_note,
@@ -162,6 +163,7 @@ def get_session(ctx: ToolContext, args: SessionId) -> ToolResult:
     v = ctx.app.view_session(args.session_id, ctx.principal.id)
     return ToolResult(data={"turns": [{"turn_id": t.id, "speaker": t.speaker, "text": t.text} for t in v.turns],
                             "slots": {f.slot: f.value for f in v.slots}, "status": v.status,
+                            "temperature": v.temperature.model_dump() if v.temperature is not None else None,
                             "requirement_id": v.requirement.id if v.requirement else None})
 
 
@@ -180,16 +182,18 @@ def match_translations(ctx: ToolContext, args: MatchArgs) -> ToolResult:
 class ProductArgs(BaseModel):
     phenomenon: str
     slots: dict[str, str] = {}
+    temperature_c: tuple[float, float] | None = None
 
 
-@tool("find_products", "read", ["sales", "pm", "rd"], "按现象与已知条件查已发布产品中的候选（含还不知道的限定条件）", ProductArgs)
+@tool("find_products", "read", ["sales", "pm", "rd"], "按现象与已知条件查已发布产品中的候选；temperature_c 为摄氏闭区间，未知则省略", ProductArgs)
 def find_products(ctx: ToolContext, args: ProductArgs) -> ToolResult:
     phenomena = {p.id: p.label for p in ctx.app.seeds.phenomena}
     if args.phenomenon not in phenomena:      # 填了说法而不是 id 时如实报错，不当作「没有候选」
         raise ValueError(f"phenomenon 要填现象 id（需求单的 phenomenon 字段），{args.phenomenon} 不是；可选："
                          + "；".join(f"{k}={v}" for k, v in phenomena.items()))
     limited = ctx.app.kb.limits()
-    found = match_candidates(args.phenomenon, args.slots, ctx.app.kb.view(ctx.principal).products, limited)
+    found = match_candidates(args.phenomenon, args.slots, ctx.app.kb.view(ctx.principal).products, limited,
+                             temperature_c=args.temperature_c)
     # V9.5：带研发限制的适用标「可能」；产品经理、研发看得到限制原文，其他人只知道要研发处理
     shown = lambda c: (limited[c.capability_id] if level_of(ctx.principal) >= 2 else "带研发限制，需研发处理")
     return ToolResult(data=[{**c.model_dump(), **({"limits": shown(c)} if c.capability_id in limited else {})}

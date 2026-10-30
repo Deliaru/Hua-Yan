@@ -46,6 +46,7 @@ export interface Meta {
 // ③ 会话
 export interface Turn { id: string; n: number; speaker: "customer" | "sales" | "assistant"; text: string; ts: string }
 export interface SlotFill { slot: string; value: string | null; status: "filled" | "unknown"; confidence: number; quote: string; turn_id: string }
+export interface TemperatureFill { celsius: [number, number] | null; status: "filled" | "unknown"; quote: string; turn_id: string }
 export interface AskHint { slot: string; label: string; ask_text: string; p_need: number; scored_by: string }
 export interface AssistantReply { turn_id: string; text: string; ku_ids: string[]; blocked: boolean }
 export interface CardSection { title: string; text: string; ku_id: string; level: number }
@@ -67,6 +68,7 @@ export interface SessionView {
   viewer_level: number;
   turns: Turn[];
   slots: SlotFill[];
+  temperature: TemperatureFill | null;
   hints: AskHint[];
   replies: AssistantReply[];
   card: RecommendationCard | null;

@@ -31,13 +31,15 @@ def recommend(session, deps):
         return session
     products = {p.id: p for p in deps.kb.view(deps.actors[session.sales_id or session.customer_id]).products}
     limited = deps.kb.limits()
-    found = match_candidates(session.need.phenomenon, session.need.known(), list(products.values()), limited)
+    found = match_candidates(session.need.phenomenon, session.need.known(), list(products.values()), limited,
+                             temperature_c=session.need.known_temperature())
     # V9.5：带研发限制的适用不交 Jev 自动推荐，按常规转研发，由研发对照限制原文处理
     candidates = [c for c in found if c.capability_id not in limited]
     decision = deps.jev.match(session.need, candidates, products)
     at = get_clock().now()
     deps.events.append("match", _acting(session), {
         "phenomenon": session.need.phenomenon, "known": session.need.known(),
+        "temperature_c": session.need.known_temperature(),
         "customer_id": session.customer_id, "candidate_ids": [c.product_id for c in candidates],
         "limited_ids": [c.product_id for c in found if c.capability_id in limited],
         "p_choice": {c.product_id: decision.probabilities[c.product_id] for c in candidates},
@@ -69,19 +71,23 @@ def recommend(session, deps):
 def recommendation_note(session, deps):
     rec = session.recommendation
     candidate = next((c for c in rec.candidates if c.product_id == rec.product_id), None)
-    if candidate is None or candidate.status == "confirmed":
+    if candidate is None:
         return ""
     product = next(p for p in deps.kb.view(deps.actors[_acting(session)]).products if p.id == rec.product_id)
-    known, unknown = session.need.known(), {}
-    for situation in product.situations:
-        if situation.phenomenon != session.need.phenomenon or any(
-                value not in situation.conditions[slot] for slot, value in known.items() if slot in situation.conditions):
-            continue
-        for slot, values in situation.conditions.items():
-            if slot not in known:
-                unknown.setdefault(slot, []).extend(v for v in values if v not in unknown.get(slot, []))
+    situation = next((s for s in product.situations if s.capability_id == candidate.capability_id), None)
+    if situation is None:
+        return ""
     labels = {s.id: s.label for s in deps.seeds.slots}
-    return "可能适用：" + "；".join(f"{labels[slot]}为{'、'.join(values)}，请确认" for slot, values in unknown.items())
+    unknown = [f"{labels[slot]}为{'、'.join(values)}，请确认" for slot, values in situation.conditions.items()
+               if slot in candidate.unknown_slots]
+    scope = ""
+    if situation.temperature_c is not None:
+        lower, upper = situation.temperature_c
+        value = f"{lower:g}℃" if lower == upper else f"{lower:g}—{upper:g}℃"
+        scope = f"适用温度{value}；能力依据 {candidate.capability_id}"
+        if "temperature_c" in candidate.unknown_slots:
+            unknown.append(f"温度需在{value}内，请补充确认")
+    return "；".join(filter(None, ["可能适用：" + "；".join(unknown) if unknown else "", scope]))
 
 
 def ask_customer(session, hint, deps):
@@ -108,13 +114,14 @@ def handle_turn(session, speaker, text, deps, answering=False, asking=()):
     # ⑰′：这句话在问什么、指到哪些产品，只由抽取理解一次；下游只读这两个字段
     result = validate_extraction(deps.extractor.extract(session.turns, session.need, view, asking=asking if speaker == "customer" else ()), deps.seeds, session.turns,
                                  {p["id"] for p in view})
-    previous_conditions = session.need.phenomenon, session.need.known()
+    previous_conditions = session.need.phenomenon, session.need.known(), session.need.known_temperature()
     after_rec = bool(rec_id)
     session.need = apply_extraction(session.need, result, session.turns)
-    conditions_changed = previous_conditions != (session.need.phenomenon, session.need.known())
+    conditions_changed = previous_conditions != (session.need.phenomenon, session.need.known(), session.need.known_temperature())
     session.need.extracted_by = deps.extractor.name
     deps.events.append("extraction", _acting(session), {"intent": result.intent, "phenomenon": result.phenomenon,
         "filled": session.need.known(), "extracted_by": deps.extractor.name,
+        "temperature": session.need.temperature.model_dump(mode="json") if session.need.temperature is not None else None,
         "conditions_changed": conditions_changed, "turn_id": turn.id, "speaker": speaker,
         "customer_id": session.customer_id, "after_rec": after_rec, "products": result.product_refs}, session_id=session.id)
     matching = not answering and session.status not in ("escalated", "closed")

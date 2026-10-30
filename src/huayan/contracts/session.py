@@ -37,6 +37,13 @@ class CustomerProfile(BaseModel):
     evidence_quote: str = ""
 
 
+class TemperatureFill(BaseModel):
+    celsius: tuple[float, float] | None
+    status: Literal["filled", "unknown"]
+    quote: str
+    turn_id: str
+
+
 class NeedState(BaseModel):
     session_id: str
     customer_id: str
@@ -49,9 +56,13 @@ class NeedState(BaseModel):
     profile: CustomerProfile = Field(default_factory=CustomerProfile)
     last_intent: Intent = "need"
     extracted_by: Literal["llm", "rule"] = "llm"
+    temperature: TemperatureFill | None = None
 
     def known(self) -> dict[str, str]:
         return {slot: fill.value for slot, fill in self.slots.items() if fill.status == "filled"}
+
+    def known_temperature(self) -> tuple[float, float] | None:
+        return self.temperature.celsius if self.temperature is not None else None
 
 
 class ExtractedSlot(BaseModel):
@@ -59,6 +70,13 @@ class ExtractedSlot(BaseModel):
     value: str | None
     status: Literal["filled", "unknown"]
     confidence: float = Field(ge=0, le=1)
+    quote: str
+    turn_n: int
+
+
+class ExtractedTemperature(BaseModel):
+    celsius: tuple[float, float] | None
+    status: Literal["filled", "unknown"]
     quote: str
     turn_n: int
 
@@ -71,6 +89,7 @@ class ExtractionResult(BaseModel):            # caller "agent:extract"
     asked_slots: list[str] = []
     profile: CustomerProfile
     product_refs: list[str] = []              # ⑰′ 指到的产品编号（指代由抽取解析）
+    temperature: ExtractedTemperature | None = None
 
 
 class AskHint(BaseModel):

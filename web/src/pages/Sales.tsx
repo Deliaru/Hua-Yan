@@ -8,7 +8,7 @@ import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "..
 import { useGlow, useGuideArg, useGuide } from "../components/Guide";
 import { Popover } from "../components/Controls";
 import { Plus } from "../components/Icons";
-import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote, SlotPicker } from "../components/ui";
+import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote, SlotPicker, TemperatureCondition } from "../components/ui";
 import { RouteStrip, WorkloadCard } from "../components/Route";
 
 function SalesSidebar({ mine, current, guided, choose }: {
@@ -262,6 +262,7 @@ function NeedCard({ v, phenomenon, lit, setLit }: {
           <p className={`mt-1 text-[20px] font-semibold leading-7 ${phenomenon ? "" : "text-ink-3"}`}>{phenomenon ? L.phen(phenomenon) : "等客户描述"}</p>
           <p className="mt-0.5 text-[12px] text-ink-2">已确认 {v.slots.filter((s) => s.value).length} 项{asking.length ? ` · 待问 ${asking.length} 项` : ""}</p>
         </div>
+        <TemperatureCondition value={v.temperature} />
         <div className="grid grid-cols-2">
           {v.slots.map((s) => {
             const on = lit === s.turn_id;

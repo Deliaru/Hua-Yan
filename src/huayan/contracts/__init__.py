@@ -15,8 +15,8 @@ from .knowledge import (CUSTOMER_VERSIONS, KIND_LEVEL, AuditRecord, BlockedHint,
 from .meter import Meter, MeterRecord
 from .seeds import (ROLE_LEVEL, Actor, Candidate, Case, Situation, Level, Phenomenon, Product, Role, Seeds, SlotDef,
                     Translation)
-from .session import (AskHint, AssistantReply, CustomerProfile, ExtractedSlot, ExtractionResult, Intent, NeedState,
-                      Recommendation, Session, SlotFill, Turn)
+from .session import (AskHint, AssistantReply, CustomerProfile, ExtractedSlot, ExtractedTemperature, ExtractionResult,
+                      Intent, NeedState, Recommendation, Session, SlotFill, TemperatureFill, Turn)
 from .sim import Injection, NeedCard, WeekItem
 
 __all__ = [
@@ -26,6 +26,7 @@ __all__ = [
     "KUKind", "KIND_LEVEL", "KnowledgeUnit", "KnowledgeHit", "BlockedHint", "Version", "CUSTOMER_VERSIONS", "DecryptGrant",
     "CardSection", "RecommendationCard", "AuditRecord", "LedgerEntry",
     "Intent", "Turn", "SlotFill", "CustomerProfile", "NeedState", "ExtractedSlot", "ExtractionResult", "AskHint",
+    "TemperatureFill", "ExtractedTemperature",
     "Recommendation", "AssistantReply", "Session",
     "S1Noul", "S1Choice", "S1Score", "S1Question", "S1Answer", "S1Result", "System1Client", "JevDecision",
     "ObjectType", "Family", "JueObject", "JueState", "JueTemplate", "ScoredDecision", "JueOutput", "JueRecord", "QuestionModel",

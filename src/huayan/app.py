@@ -17,7 +17,7 @@ from huayan.contracts import (KIND_LEVEL, Actor, Candidate, Capability, AuditRec
     Evidence, JueRecord, JueState, KnowledgeUnit, LedgerEntry, MemoryEntry, NeedState, PendingAsk, PointsDraft, Question, Recommendation, ReqItem, Requirement,
     RequirementView, Resolution, ReuseProposal, ReuseView, RunStatus, Session, SessionView, SheetDraft, Trial,
     JueTimeline, Product, SHANGHAI, Situation, TimelineNode, TimelinePoint)
-from huayan.domain import consistent, load_seeds, match_candidates
+from huayan.domain import consistent, load_seeds, match_candidates, temperature_match
 from huayan.escalation import flow
 from huayan.escalation.translate import leak_hits
 from huayan.events import EventLog
@@ -325,7 +325,8 @@ class HuayanApp:
                               asking=[q.refs["slot"] for q in asks[:1]])     # V9.3：自助页一次显示一条回问
         answered = self._answer_ask_back(session, asks) if speaker == "customer" else set()
         # v8 收口：客户补条件只走一条路——会话里补的、回问答的，起草中的单都按会话条件重写，未经人改的条目清掉重写
-        changed = (previous.phenomenon, previous.known()) != (session.need.phenomenon, session.need.known())
+        changed = (previous.phenomenon, previous.known(), previous.known_temperature()) != (
+            session.need.phenomenon, session.need.known(), session.need.known_temperature())
         for req in self._requirements.values():
             if req.status == "draft" and session_id in req.session_ids and (changed or req.id in answered):
                 req.phenomenon, req.known_slots = session.need.phenomenon, session.need.known()
@@ -468,6 +469,7 @@ class HuayanApp:
         req = self.requirement_view(req.id, viewer_id).requirement if req and level > 1 else None
         return SessionView(session_id=session_id, viewer=viewer_id, viewer_level=level, turns=session.turns,
             slots=list(session.need.slots.values()), hints=session.hints, replies=session.replies,
+            temperature=session.need.temperature,
             card=card, status=session.status, escalation_question_id=rec.escalated_question_id if rec else None,
             requirement=req, reuse=reuse, asks=self._pending_asks(session_id),
             reply_draft=session.reply_draft if viewer_id == session.sales_id else "",
@@ -1360,7 +1362,8 @@ class HuayanApp:
         for sid in req.session_ids:            # V9.6a：原会话收到新产品，依据是本单发布的适用情境
             session = self._sessions[sid]
             situation = next((x for x in released.situations if x.phenomenon == session.need.phenomenon
-                              and consistent(released, session.need.known())), None)
+                              and consistent(released, session.need.known(),
+                                             temperature_c=session.need.known_temperature())), None)
             if session.status != "closed" and situation:
                 self._recommend_product(session, released.id, at, situation.capability_id)
                 self._save_session(session)
@@ -1559,10 +1562,12 @@ class HuayanApp:
             basis = caps.get(selected.capability_id) if selected and selected.capability_id else None
             if session.status not in {"escalated", "closed"} and basis and basis.status not in {"active", "proposed"}:
                 products = self.kb.view(self._actor(session.sales_id or session.customer_id)).products
-                other = next((c for c in match_candidates(session.need.phenomenon, session.need.known(), products, limited)
+                other = next((c for c in match_candidates(session.need.phenomenon, session.need.known(), products, limited,
+                                                        temperature_c=session.need.known_temperature())
                               if c.product_id == rec.product_id and c.capability_id not in limited), None)
                 if other:
                     selected.capability_id = other.capability_id
+                    selected.status, selected.unknown_slots = other.status, other.unknown_slots
                 else:
                     self.events.append("recommendation_withdrawn", by, {"product_id": rec.product_id,
                                        "capability_id": basis.id}, session_id=session.id)
@@ -1899,11 +1904,15 @@ class HuayanApp:
         why = None
         if match:
             known = match["known"]
+            temp = tuple(match["temperature_c"]) if match.get("temperature_c") else None
             mismatches = {p.id: [{"slot": k, "value": known[k], "allowed": v}
                                  for situation in p.situations for k, v in situation.conditions.items()
                                  if k in known and known[k] not in v]
+                                + [{"slot": "温度", "value": f"{temp[0]:g}℃" if temp[0] == temp[1] else f"{temp[0]:g}—{temp[1]:g}℃",
+                                    "allowed": [f"{s.temperature_c[0]:g}—{s.temperature_c[1]:g}℃"]}
+                                   for s in p.situations if temperature_match(temp, s.temperature_c) == "outside"]
                           for p in self.kb.products() if p.status == "released" and match["phenomenon"] in p.solves
-                          and p.id not in match["candidate_ids"] and not consistent(p, known)}
+                          and p.id not in match["candidate_ids"] and not consistent(p, known, temperature_c=temp)}
             excluded = [{"product_id": pid, "mismatch": m} for pid, m in mismatches.items() if m]
             why = {"by": esc.actor, "phenomenon": match["phenomenon"], "p_none": match["p_none"],
                    "scored_by": match["scored_by"], "excluded": excluded,

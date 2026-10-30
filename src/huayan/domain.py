@@ -22,9 +22,11 @@ def load_seeds(seeds_dir: str | Path) -> Seeds:
     return Seeds(**data, placeholder=placeholder)
 
 
-def consistent(product: Product, known: dict[str, str]) -> bool:
+def consistent(product: Product, known: dict[str, str], *, temperature_c: tuple[float, float] | None = None) -> bool:
     return any(all(value in situation.conditions[slot] for slot, value in known.items()
-                   if slot in situation.conditions) for situation in product.situations)
+                   if slot in situation.conditions)
+               and temperature_match(temperature_c, situation.temperature_c) != "outside"
+               for situation in product.situations)
 
 
 def temperature_match(actual: tuple[float, float] | None, allowed: tuple[float, float] | None

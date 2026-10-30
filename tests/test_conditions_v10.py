@@ -1,8 +1,17 @@
 """V10.6：合成授权 70—80℃，不代表真实产品的专业确认范围。"""
+from pathlib import Path
+
+import yaml
+
+from huayan.app import HuayanApp
+from huayan.clock import get_clock
+from huayan.contracts import CustomerProfile, ExtractedTemperature, ExtractionResult, NeedState, Turn
 from huayan.contracts import Situation
-from huayan.domain import match_candidates
+from huayan.domain import consistent, match_candidates
 from huayan.events import EventLog
+from huayan.ingest.compile import _key
 from huayan.knowledge import AuditLog, KnowledgeBase
+from huayan.l1.extract import RuleExtractor, apply_extraction, validate_extraction
 
 
 def test_temperature_range_survives_capability_view_and_matches(mini_seeds):
@@ -20,6 +29,10 @@ def test_temperature_range_survives_capability_view_and_matches(mini_seeds):
     assert unknown.status == "possible" and unknown.unknown_slots == ["temperature_c"]
     for actual in ((85, 85), (75, 85)):
         assert match_candidates("color_unlevel", known, products, temperature_c=actual) == []
+    viewed = next(p for p in products if p.id == "T-205")
+    assert consistent(viewed, known, temperature_c=(75, 75))
+    assert consistent(viewed, known)
+    assert not consistent(viewed, known, temperature_c=(85, 85))
     [limited] = match_candidates("color_unlevel", known, products, [unknown.capability_id], temperature_c=(75, 75))
     assert limited.status == "possible"
 
@@ -32,7 +45,119 @@ def test_temperature_stays_with_its_own_situation(mini_seeds):
         Situation(phenomenon="color_unlevel", conditions={"fiber": ["涤纶"]},
                   capability_id="cap:synthetic:hot", temperature_c=(90, 100))]
     assert match_candidates("color_unlevel", {"fiber": "锦纶氨纶"}, [product], temperature_c=(95, 95)) == []
+    assert not consistent(product, {"fiber": "锦纶氨纶"}, temperature_c=(95, 95))
     product.situations.append(Situation(phenomenon="color_unlevel", conditions={"fiber": ["锦纶氨纶"]},
                                        capability_id="cap:synthetic:unrestricted"))
     [candidate] = match_candidates("color_unlevel", {"fiber": "锦纶氨纶"}, [product])
     assert candidate.status == "confirmed" and candidate.capability_id == "cap:synthetic:unrestricted"
+
+
+def test_temperature_customer_turns_match_and_correct_current_recommendation(tmp_path):
+    config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
+    config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"))
+    path = tmp_path / "app.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    app = HuayanApp.build(str(path), run_id="temperature")
+    # 只在合成测试实例设置授权范围，不代表真人签字。
+    cap_id = "cap:applicable:T-205:color_unlevel"
+    app.kb._caps[cap_id].payload["temperature_c"] = [70, 80]
+    prefix = "染完布面深一块浅一块，锦纶氨纶的，溢流缸，"
+    for text, expected, value in (("温度75℃", "confirmed", (75, 75)),
+        ("温度72—78℃", "confirmed", (72, 78)), ("温度不清楚", "possible", None),
+        ("温度85℃", None, (85, 85)), ("温度75—85℃", None, (75, 85))):
+        session = app.start_session("customer:C01", "sales:S01")
+        session = app.add_turn(session.id, "customer", prefix + text)
+        assert session.need.known_temperature() == value
+        view = app.view_session(session.id, "customer:C01")
+        assert view.temperature.quote in session.turns[0].text
+        assert view.temperature.turn_id == session.turns[0].id
+        if expected is None:
+            assert session.recommendation is None and view.card is None
+            if value == (85, 85):
+                session = app.add_turn(session.id, "customer", "T-205怎么用")
+                assert "不适用于当前已知条件" in session.replies[-1].text
+                app.save_escalate_note(session.id, "（合成）温度超出授权范围，交研发判断", "sales:S01")
+                question = next(q for q in app.bus.list(family="escalate_need") if q.object_id == f"session:{session.id}")
+                app.mark_prepared(question.id, question.owner_id)
+                app.escalate(session.id, "sales:S01")
+                why = app.route_of(session.id, "customer:C01")["why"]
+                excluded = next(p for p in why["excluded"] if p["product_id"] == "T-205")
+                assert {"slot": "温度", "value": "85℃", "allowed": ["70—80℃"]} in excluded["mismatch"]
+        else:
+            [candidate] = session.recommendation.candidates
+            assert candidate.status == expected and candidate.capability_id == cap_id
+            assert candidate.unknown_slots == (["temperature_c"] if expected == "possible" else [])
+            assert "70—80℃" in view.card.note and cap_id in view.card.note
+            if expected == "possible":
+                assert "请补充确认" in view.card.note and view.temperature.status == "unknown"
+    session = app.start_session("customer:C02", "sales:S01")
+    session = app.add_turn(session.id, "customer", prefix + "先问一下")
+    assert session.need.temperature is None
+    session = app.add_turn(session.id, "customer", "温度75℃")
+    known = session.need.known()
+    session = app.add_turn(session.id, "customer", "谢谢")
+    assert session.need.known_temperature() == (75, 75)
+    session = app.add_turn(session.id, "customer", "不是75℃，是85℃")
+    assert session.need.known_temperature() == (85, 85) and session.recommendation is None
+    session = app.add_turn(session.id, "customer", "温度其实不确定")
+    assert session.need.temperature.status == "unknown" and session.need.known() == known
+    assert session.recommendation.candidates[0].status == "possible"
+    session = app.add_turn(session.id, "customer", "75℃")
+    assert session.need.known_temperature() == (75, 75)
+    for text in ("先60℃再75℃", "先60℃保温再升到75℃"):
+        session = app.add_turn(session.id, "customer", text)
+        assert session.need.temperature.status == "unknown"
+        assert session.need.known_temperature() is None
+        assert session.need.temperature.quote == text
+        assert session.recommendation.candidates[0].status == "possible"
+    session = app.add_turn(session.id, "customer", "不是75℃")
+    assert session.need.known_temperature() is None and session.recommendation.candidates[0].status == "possible"
+    resumed = HuayanApp.build(str(path), run_id="temperature", resume=True)
+    assert resumed._sessions[session.id].need.temperature == session.need.temperature
+
+
+def test_rule_temperature_units_and_local_negation(mini_seeds):
+    extractor = RuleExtractor(mini_seeds)
+    prev = NeedState(session_id="sess:1", customer_id="customer:C01", sales_id=None)
+    for text, expected in (("75℃", (75, 75)), ("75°C", (75, 75)), ("75摄氏度", (75, 75)),
+        ("75度", None), ("水硬度10度", None), ("色牢度4度", None), ("温度75度", (75, 75)),
+        ("我们温度是75℃，不是85℃", (75, 75)), ("不是75℃而是85℃", (85, 85)),
+        ("75℃，不对，改成85℃", (85, 85))):
+        turn = Turn(id="turn:sess:1:1", session_id="sess:1", n=1, speaker="customer", text=text, ts=get_clock().now())
+        output = extractor.extract([turn], prev)
+        if expected is None:
+            assert output.temperature is None
+        else:
+            assert output.temperature.status == "filled" and output.temperature.celsius == expected
+    question = turn.model_copy(update={"speaker": "sales", "text": "工艺温度是多少？"})
+    reply = turn.model_copy(update={"id": "turn:sess:1:2", "n": 2, "text": "75度"})
+    assert extractor.extract([question, reply], prev).temperature.celsius == (75, 75)
+    for word in ("硬度", "牢度", "白度", "浓度", "粘度", "酸度", "碱度"):
+        reply = reply.model_copy(update={"text": f"{word}10度"})
+        assert extractor.extract([question, reply], prev).temperature is None
+    for text in ("不是75℃", "75℃以上", "85—75℃", "先60℃再75℃", "先75℃再85℃"):
+        reply = reply.model_copy(update={"text": text})
+        assert extractor.extract([question, reply], prev).temperature.status == "unknown"
+
+
+def test_temperature_payload_comparison_normalizes_json_range():
+    payload = {"product_id": "T-205", "phenomenon": "color_unlevel", "conditions": {"fiber": ["锦纶氨纶"]},
+               "temperature_c": [70, 80]}
+    assert _key(payload) == _key({**payload, "temperature_c": (70, 80)})
+    assert _key(payload) != _key({**payload, "temperature_c": [70, 85]})
+
+
+def test_structured_temperature_uses_customer_quote_and_missing_keeps_previous(mini_seeds):
+    turn = Turn(id="turn:sess:1:1", session_id="sess:1", n=1, speaker="customer",
+                text="温度72—78℃", ts=get_clock().now())
+    result = ExtractionResult(intent="need", phenomenon=None, profile=CustomerProfile(),
+        temperature=ExtractedTemperature(celsius=(72, 78), status="filled", quote="72—78℃", turn_n=1))
+    prev = NeedState(session_id="sess:1", customer_id="customer:C01", sales_id=None)
+    valid = validate_extraction(result, mini_seeds, [turn], set())
+    known = apply_extraction(prev, valid, [turn])
+    assert known.known_temperature() == (72, 78) and known.temperature.turn_id == turn.id
+    for temperature in (None, result.temperature.model_copy(update={"quote": "75℃"}),
+                        result.temperature.model_copy(update={"celsius": (78, 72)})):
+        output = result.model_copy(update={"temperature": temperature})
+        validated = validate_extraction(output, mini_seeds, [turn], set())
+        assert apply_extraction(known, validated, [turn]).temperature == known.temperature

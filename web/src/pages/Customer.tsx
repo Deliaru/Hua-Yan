@@ -6,7 +6,7 @@ import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { Route, SessionView } from "../types";
 import { OpenRouteMenu, RouteStrip, SessionConditions, useRouteHint } from "../components/Route";
 import { useGlow } from "../components/Guide";
-import { EmptyState, Group, PageHead, SideHead } from "../components/ui";
+import { EmptyState, Group, PageHead, SideHead, TemperatureCondition } from "../components/ui";
 
 export function Customer() {
   const { me, focus } = useApp();
@@ -56,7 +56,10 @@ function Desk({ sid }: { sid: string }) {
           {route?.why && <WhyRd r={route} sid={sid} />}
           <div className="grid grid-cols-[minmax(320px,6fr)_minmax(280px,5fr)] items-start gap-5">
             <Chat v={v} route={route} />
-            <SessionConditions sessionId={sid} />
+            <div className="flex flex-col gap-5">
+              <Group title="客户提供的工艺条件"><TemperatureCondition value={v.temperature} /></Group>
+              <SessionConditions sessionId={sid} />
+            </div>
           </div>
           {v.card && <Card v={v} />}
         </div>
