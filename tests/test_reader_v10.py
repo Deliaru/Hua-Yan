@@ -10,6 +10,7 @@ from huayan.gateway.client import OpenAICompatGateway
 from huayan.ingest.reader.image import read_image
 from huayan.ingest.reader.evidence import EvidenceBlock
 from huayan.ingest.reader.trials import build_trial_record
+from huayan.ingest.reader.summary import summarize_trials
 from huayan.ingest.reader.word import read_docx, read_native_labels
 from huayan.meter import FileMeter
 
@@ -42,6 +43,15 @@ def test_native_report_groups_units_and_merged_curve():
     assert [r.conditions for r in b.curve_labels if r.stage == "保温"] == [["95℃"]]
     assert a.formula[0].evidence[1].cell == (2, 2)
     assert record.time.a is None and record.time.b is None  # 未标组别的总时间90min不回填A/B。
+    # 配方和曲线只存在于表格引用中，也必须可筛选并进入导出文本。
+    entries = [(Path("synthetic/trial-record.json"), record)]
+    sources = {record.source_id: source | {"title": "合成原生报告", "products": ["SYNTH-PRODUCT"]}}
+    for condition in ("SYNTH-A", "85℃*12min"):
+        row, = summarize_trials(entries, sources, condition=condition)["rows"]
+        assert condition in row["condition_text"]
+        assert "A组配方/曲线依据" in row["condition_text"]
+        assert "SYNTH-REPORT#table-1@" in row["condition_text"]
+        assert "单元格(2, 2)" in row["condition_text"]
 
 
 def test_text_recipe_keeps_unknown_amount_subprocesses_and_result_basis():
@@ -88,6 +98,37 @@ def test_negative_report_keeps_fabric_columns_curve_groups_and_missing_outcomes(
     assert record.cost == [] and record.time.calculated_saving is None
     assert record.time.a is None and record.time.b is None
     assert any("多织物配方表" in note for note in record.pending)
+
+
+def test_trial_summary_deduplicates_preserves_mixed_results_and_time_denominator():
+    records = []
+    for name in ("synthetic-summary-time.json", "synthetic-text-recipe.json"):
+        path = FIXTURE / name
+        source = {"source_id": name, "file_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                  "level": 3, "source": "internal", "kind": "paragraph"}
+        blocks = [EvidenceBlock(**source, **row) for row in json.loads(path.read_text(encoding="utf-8"))]
+        records.append(build_trial_record(blocks, [], []))
+    path = FIXTURE / "synthetic-negative.docx"
+    source = {"source_id": "SYNTH-NEGATIVE", "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+              "level": 3, "source": "internal"}
+    blocks = read_docx(path, source, {f"paragraph-{n}": [1] for n in range(1, 9)} | {"table-1": [1]}, ["synthetic.png"])
+    readings, pending = read_native_labels(blocks)
+    records.append(build_trial_record(blocks, readings, pending))
+    sources = {r.source_id: {"sha256": r.file_sha256, "title": "合成测试报告", "products": ["SYNTH-PRODUCT"]} for r in records}
+    entries = [(Path(f"synthetic/{r.source_id}/trial-record.json"), r) for r in records]
+    entries.append((Path("synthetic/duplicate/trial-record.json"), records[-1]))
+    summary = summarize_trials(entries, sources, product="SYNTH-PRODUCT")
+    assert summary["input_count"] == 4 and summary["unique_input_reports"] == summary["matched_reports"] == 3
+    assert len(summary["duplicate_inputs"]) == 1
+    assert summary["paired_time_reports"] == 1 and summary["paired_time_source_ids"] == [records[0].source_id]
+    assert summary["rows"][0]["record"]["time"]["calculated_saving"] == "20"
+    assert summary["rows"][1]["record"]["time"]["calculated_saving"] is None
+    negative = summarize_trials(entries, sources, product="SYNTH-PRODUCT", condition="合成乙", result="不合格")
+    row, = negative["rows"]
+    assert "合成甲布面合格" in row["result_text"] and "合成乙布面出现色花，不合格" in row["result_text"]
+    assert row["record"]["quality"][0]["evidence"][0]["fragment"].startswith("SYNTH-NEGATIVE#")
+    assert row["record"]["cost"] == [] and negative["paired_time_reports"] == 0
+    assert summarize_trials(entries, sources, product="UNKNOWN")["matched_reports"] == 0
 
 
 def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):

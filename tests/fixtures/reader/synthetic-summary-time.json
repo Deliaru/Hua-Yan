@@ -1,0 +1,5 @@
+[
+  {"span": "p1", "group": "A", "section": "三、工厂原工艺及配方", "text": "合成工艺曲线，升温总时长100min"},
+  {"span": "p2", "group": "B", "section": "四、试样工艺及配方", "text": "合成工艺曲线，升温总时长80min"},
+  {"span": "p3", "group": null, "section": "五、试样结果分析", "text": "合成结果：节省20min"}
+]
