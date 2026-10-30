@@ -8,7 +8,7 @@ from huayan.events import EventLog
 from huayan.ingest.compile import EvidenceRef, Proposal, admit
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource
-from huayan.knowledge import AuditLog, KnowledgeBase
+from huayan.knowledge import AuditLog, KnowledgeBase, PermissionDenied
 
 
 def test_unpublished_catalog_product_can_have_candidate_without_being_recommended():
@@ -61,18 +61,44 @@ def test_report_candidate_can_be_reviewed_and_confirmed_without_requirement(tmp_
         phenomenon="color_unlevel", evidence=[EvidenceRef(doc_id="synthetic-conditions", span="p1", quote="涤纶")])
     report = app.import_proposals([proposal], "rd:R01")
     ku_id = report["admitted"][0]["ku_id"]
+    # 合成复现：本人归属的待审候选尚未指定确认人。
+    app.kb.add(app.kb._units[ku_id].model_copy(update={"confirmed_by": None}))
     assert not app._requirements
     assert [u.id for u in GET["/api/claims"](app, {"viewer": "rd:R01"})] == [ku_id]
     assert GET["/api/claims"](app, {"viewer": "rd:R02"}) == []
     params = {"ku_ids": [ku_id], "by": "rd:R01"}
     review = POST["/api/qi/review"](app, params)
     assert review["fragments"][ku_id][0].text.startswith("合成测试资料")
+    with pytest.raises(PermissionDenied):
+        POST["/api/qi/withdraw"](app, {"ku_id": ku_id, "by": "rd:R02"})
+    with pytest.raises(ValueError, match="本人负责"):
+        POST["/api/qi/revise"](app, {"ku_id": ku_id, "text": "同事不能改写", "by": "rd:R02"})
+    revised = POST["/api/qi/revise"](app, {"ku_id": ku_id, "text": "合成修订：保留原条件，仍待专业确认", "by": "rd:R01"})
+    assert revised.id != ku_id and revised.status == "candidate" and revised.evidence == review["claims"][0].evidence
+    assert app.kb._units[ku_id].status == "withdrawn" and app.kb._units[ku_id].text == proposal.text
+    assert app.kb._units[ku_id].confirmed_by is None and revised.confirmed_by is None
+    assert not app.events.query(["claim_confirmed"])
+    with pytest.raises(ValueError, match="待审列表"):
+        POST["/api/qi/confirm"](app, params | {"reviewed_evidence": review["reviewed_evidence"]})
+    assert [u.id for u in GET["/api/claims"](app, {"viewer": "rd:R01"})] == [revised.id]
+    ku_id = revised.id
+    params = {"ku_ids": [ku_id], "by": "rd:R01"}
+    review = POST["/api/qi/review"](app, params)
+    assert review["claims"][0].text == revised.text
     with pytest.raises(ValueError, match="实际审阅"):
         POST["/api/qi/confirm"](app, params)
     assert app.kb._units[ku_id].status == "candidate"
     assert POST["/api/qi/confirm"](app, params | {"reviewed_evidence": review["reviewed_evidence"]}) is None
     assert app.kb._units[ku_id].status == "active"
     assert GET["/api/claims"](app, {"viewer": "rd:R01"}) == []
+    with pytest.raises(ValueError, match="待审候选"):
+        POST["/api/qi/revise"](app, {"ku_id": ku_id, "text": "已确认后不能原地改写", "by": "rd:R01"})
+    # 已确认结论仍只认确认人，不能因归属不同而放宽撤回权限。
+    app.kb.add(app.kb._units[ku_id].model_copy(update={"owner": "rd:R02"}))
+    with pytest.raises(PermissionDenied):
+        POST["/api/qi/withdraw"](app, {"ku_id": ku_id, "by": "rd:R02"})
+    POST["/api/qi/withdraw"](app, {"ku_id": ku_id, "by": "rd:R01"})
+    assert app.kb._units[ku_id].status == "withdrawn"
     assert not app._requirements
     assert not any(c.payload.get("product_id") == "T-206" for c in app.kb.capabilities())
 
@@ -94,6 +120,14 @@ def test_report_candidate_can_be_reviewed_and_confirmed_without_requirement(tmp_
     assert POST["/api/qi/review"](app, {"ku_ids": [own_id], "by": rd})["claims"][0].id == own_id
     with pytest.raises(ValueError, match="待审列表"):
         POST["/api/qi/confirm"](app, {"req_id": req.id, "ku_ids": [other_id], "by": rd})
+
+    # 修订判断不自动承接原用途；原依据撤回后仍沿已有挂起语义处理。
+    applicable = proposal.model_copy(update={"form": "applicable", "conditions": ["涤纶"], "author": "rd:R01"})
+    row = app.import_proposals([applicable], "rd:R01")["admitted"][0]
+    revised = app.revise_claim(row["ku_id"], "合成修订判断，拟用范围须重新准备", "rd:R01")
+    cap = app.kb._caps[row["capability_id"]]
+    assert cap.status == "suspended" and cap.based_on == [row["ku_id"]]
+    assert revised.id not in cap.based_on and revised.status == "candidate"
 
 
 def test_partial_conditions_and_new_evidence_stay_pending(tmp_path):

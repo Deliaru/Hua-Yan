@@ -32,6 +32,7 @@ from huayan.jue.state import collect_scheduled, realtime_state, requirement_stat
 from huayan.ingest.compile import admit, recheck
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource
+from huayan.ingest.reader.source import read_source
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder, can_read
 from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
@@ -97,6 +98,9 @@ class HuayanApp:
         app.kb.sources = [EvidenceReportSource(s["root"]) if Path(s["root"]).suffix == ".json" else
                          FolderSource(s["name"], s["kind"], s["root"], s.get("level"), app.kb._doc_levels)
                           for s in app.config["sources"]]
+        manifest = app.config.get("source_manifest")
+        app.source_owners = {s["source_id"]: s["owner_actor_id"] for s in
+                            json.loads(Path(manifest).read_text(encoding="utf-8"))["sources"]} if manifest else {}
         app._wire_models(byok)
         app._sessions = {s.id: s for s in map(Session.model_validate_json, _read_dir(app.run_dir / "sessions"))}
         app._requirements = {r.id: r for r in map(Requirement.model_validate_json, _read_dir(app.run_dir / "requirements"))}
@@ -1424,6 +1428,25 @@ class HuayanApp:
                 if u.kind == "claim" and u.status == "candidate"
                 and (u.owner == viewer_id if u.confirmed_by is None else can_read(actor, u, shared))
                 and (req.phenomenon in u.phenomenon_ids if req else (u.confirmed_by or u.owner) == viewer_id)]
+
+    def revise_claim(self, ku_id, text, by):
+        """保留旧稿，修订为新的本人待审候选；不替代专业确认或用途授予。"""
+        unit = next((u for u in self.candidate_claims(None, by) if u.id == ku_id), None)
+        if unit is None:
+            raise ValueError("只能修订本人负责的待审候选")
+        if not text.strip():
+            raise ValueError("候选正文不能为空")
+        revised = unit.model_copy(update={"id": self.kb.next_claim_id(), "text": text.strip(),
+                                          "created_at": get_clock().now()}, deep=True)
+        self.withdraw_claim(ku_id, by)
+        self.kb.add(revised)
+        self.scan()
+        return revised.model_copy(deep=True)
+
+    def read_source(self, doc_id, by, span=None):
+        """内部查证只返回原文与出处键，不产生结论、能力或专业签字。"""
+        actor = _find(self.actors, by, "主体")
+        return read_source(self.kb, doc_id, actor, self.source_owners, span)
 
     def review_claims(self, ku_ids, by):
         """读取本次审阅原文与固定指纹；返回值由人审阅后随确认提交，不写正式状态。"""

@@ -274,8 +274,9 @@ class KnowledgeBase:
 
     def withdraw(self, ku_id, by):
         unit = self._units[ku_id]
-        if unit.confirmed_by != by:
-            raise PermissionDenied("只有确认人可以撤回结论")
+        responsible = unit.owner if unit.status == "candidate" and unit.confirmed_by is None else unit.confirmed_by
+        if responsible != by:
+            raise PermissionDenied("只有确认人或未指定确认人的待审候选归属人可以撤回结论")
         unit.status = "withdrawn"
         self.events.append("claim_withdrawn", by, {"ku_id": ku_id})
         self._suspend(ku_id)
