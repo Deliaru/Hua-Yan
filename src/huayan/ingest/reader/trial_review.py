@@ -34,7 +34,7 @@ def write_trial_review(record, blocks, report, evidence_dir, output_dir):
             [escape(r.stage or "待关联"), escape(r.value + r.unit), escape("、".join(r.conditions)),
              links([cite(by_span[r.span], r.quote, r.cell)])] for r in group.curve_labels])
         group_html.append(f'<section><h2>{group.group}组 · {"工厂原工艺" if group.group == "A" else "试样工艺"}</h2>'
-                          f'{texts(group.formula_notes)}{formulas}<h3>曲线原生标签</h3>'
+                          f'<div style="white-space:pre-wrap">{texts(group.formula_notes)}</div>{formulas}<h3>曲线原生标签</h3>'
                           '<p>下列标签按原文提取顺序展示，不代表工艺执行顺序。速率与线段仍待补读。</p>'
                           f'{curves}<h3>操作经验与现场反馈原文</h3>{texts(group.operations)}</section>')
     changes = table(["变化项", "A组", "B组", "出处"], [

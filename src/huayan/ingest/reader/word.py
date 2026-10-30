@@ -35,7 +35,7 @@ def read_docx(path, source, pages, images):
         else:
             paragraph_number += 1
             span, kind, text, element = f"paragraph-{paragraph_number}", "paragraph", item.text, item._p
-            if re.match(r"^[一二三四五六七八九十]+[、．.]", text.strip()):
+            if re.match(r"^[一二三四五六七八九十]+[、，．.]", text.strip()):
                 section = text.strip()
                 group = "A" if "工厂原工艺" in section else "B" if "试样工艺" in section else None
         locations = [Location(page=p, image_path=images[p - 1]) for p in pages[span]]
@@ -43,14 +43,17 @@ def read_docx(path, source, pages, images):
                       source=source["source"], section=section, group=group, locations=locations)
         if text.strip():
             blocks.append(EvidenceBlock(**common, span=span, text=text, kind=kind, cells=cells))
-        for number, textbox in enumerate(element.xpath(".//w:txbxContent"), 1):
-            text = "\n".join(Paragraph(p, document).text for p in textbox.findall(qn("w:p")))
-            blocks.append(EvidenceBlock(**common, span=f"{span}/textbox-{number}", text=text, kind="textbox"))
+        textboxes = ["\n".join(Paragraph(p, document).text for p in box.findall(qn("w:p")))
+                     for box in element.xpath(".//w:txbxContent")]
+        labels = {text.strip() for text in textboxes}
+        box_group = "B" if "试样工艺" in labels else "A" if "客户原工艺" in labels else group
+        for number, text in enumerate(textboxes, 1):
+            blocks.append(EvidenceBlock(**(common | {"group": box_group}), span=f"{span}/textbox-{number}", text=text, kind="textbox"))
     return blocks
 
 
 HOLD = re.compile(r"(?P<temperature>\d+(?:\.\d+)?)(?:℃|°C)\s*[*×]\s*(?P<time>\d+(?:\.\d+)?)min")
-LABEL = re.compile(r"(?<![\d.])(?P<value>\d[\d.]*)\s*(?P<unit>℃/min|°C/min|g/㎡|kg|℃|°C|min)")
+LABEL = re.compile(r"(?<![\d.])(?P<value>\d[\d.]*(?:-\d+(?:\.\d+)?)?)\s*(?P<unit>℃/min|°C/min|g/㎡|kg|℃|°C|min)")
 
 
 def read_native_labels(blocks):
@@ -67,7 +70,7 @@ def read_native_labels(blocks):
             for label in LABEL.finditer(text):
                 if any(hold.start() <= label.start() < hold.end() for hold in holds):
                     continue
-                status = "native" if re.fullmatch(r"\d+(?:\.\d+)?", label["value"]) else "needs_reading"
+                status = "native" if re.fullmatch(r"\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?", label["value"]) else "needs_reading"
                 readings.append(Reading(**args, value=label["value"], unit=label["unit"], quote=label.group(), status=status))
                 if status == "needs_reading":
                     pending.append(f"{block.span} {cell}：原文数值 {label.group()} 写法异常，保留原样待补读。")
@@ -75,7 +78,7 @@ def read_native_labels(blocks):
                 c.column == cell[1] and c.row < cell[0] and "用量" in c.text for c in block.cells
             ):
                 pending.append(f"{block.span} r{cell[0]}c{cell[1]}：用量 {text.strip()} 未写单位。")
-        if "工艺曲线" in block.text:
+        if "工艺曲线" in block.text or (block.kind == "textbox" and block.text.strip() in {"客户原工艺", "试样工艺"}):
             pending.append(f"{block.span}：保温点已按原文配对；速率对应的升降温线段仍需结合原页判读。")
     return readings, pending
 

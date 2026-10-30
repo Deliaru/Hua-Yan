@@ -66,6 +66,30 @@ def test_text_recipe_keeps_unknown_amount_subprocesses_and_result_basis():
     assert record.professional_confirmation is None
 
 
+def test_negative_report_keeps_fabric_columns_curve_groups_and_missing_outcomes():
+    path = FIXTURE / "synthetic-negative.docx"
+    source = {"source_id": "SYNTH-NEGATIVE", "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+              "source": "internal", "level": 3}
+    pages = {f"paragraph-{n}": [1] for n in range(1, 9)} | {"table-1": [1]}
+    blocks = read_docx(path, source, pages, ["synthetic-page.png"])
+    readings, pending = read_native_labels(blocks)
+    assert [(r.group, r.value) for r in readings if r.stage == "保温"] == [("A", "7"), ("B", "7")]
+    assert [(r.group, r.value) for r in readings if r.unit == "℃/min"] == [("A", "0.5"), ("B", "0.8")]
+    assert [(r.group, r.value) for r in readings if r.unit == "℃"] == [("A", "40-50"), ("B", "40-50")]
+    record = build_trial_record(blocks, readings, pending)
+    assert [g.formula for g in record.groups] == [[], []]  # 两种织物列不是原/试样两套配方。
+    assert "合成甲染色配方" in record.groups[0].formula_notes[0].text
+    assert "合成乙染色配方" in record.groups[0].formula_notes[0].text
+    assert record.groups[1].formula_notes == []
+    assert record.quality[0].text == "1、合成甲布面合格，合成乙布面出现色花，不合格。"
+    assert record.quality[0].evidence[0].span == "paragraph-6"
+    assert "操作警告" in record.reported_results[1].text
+    assert "已取合成乙" in record.follow_up[0].text
+    assert record.cost == [] and record.time.calculated_saving is None
+    assert record.time.a is None and record.time.b is None
+    assert any("多织物配方表" in note for note in record.pending)
+
+
 def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
     sent = []
     readout = {"text": "合成图片读稿", "readings": [

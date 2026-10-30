@@ -100,6 +100,8 @@ def read_formula(blocks):
                 ingredients.append(Ingredient(name=match[1], value=match[2], unit=match[3], evidence=[cite(block)]))
             continue
         cells = {(c.row, c.column): c for c in block.cells}
+        if "染色配方" in block.text and not any(c.text.strip() == "用量" for c in block.cells):
+            notes.append(as_text(block))  # 多织物并列表保留整表列关系，不冒认成 A/B 配方。
         for header in [c for c in block.cells if c.text.strip() == "用量"]:
             for amount in [c for c in block.cells if c.column == header.column and c.row > header.row and c.text.strip()]:
                 name = cells[(amount.row, amount.column - 1)]
@@ -136,7 +138,7 @@ def build_trial_record(blocks: list[EvidenceBlock], readings: list[Reading], pen
     for group in ("A", "B"):
         own = [b for b in blocks if b.group == group]
         formula, notes = read_formula([b for b in own if b.kind == "table" or "配方" in b.section])
-        curves = [b for b in own if "工艺曲线" in b.text]
+        curves = [b for b in own if "工艺曲线" in b.text or b.kind == "textbox"]
         groups.append(TrialGroup(group=group, formula=formula, formula_notes=notes,
             curve_labels=[r for r in readings if r.group == group and r.span in {b.span for b in curves}],
             curve_evidence=[cite(b) for b in curves],
@@ -158,7 +160,7 @@ def build_trial_record(blocks: list[EvidenceBlock], readings: list[Reading], pen
         if before != after:
             changes.append(TrialChange(item="保温点：" + "、".join(conditions), before=before, after=after,
                 evidence=[cite(by_span[r.span], r.quote, r.cell) for r in (old, new) if r is not None]))
-    results = [x for x in body if "结果分析" in x.section]
+    results = [x for x in body if "结果" in x.section and "分析" in x.section]
     saving = find_minutes(results, r"(?:共)?节省\s*(\d+(?:\.\d+)?)\s*min", None)
     comparison = TimeComparison(a=a.reported_time, b=b.reported_time, reported_saving=saving,
         evidence=[cite(by_span[r.span], r.quote, r.cell) for r in (a.reported_time, b.reported_time, saving) if r is not None])
@@ -175,6 +177,8 @@ def build_trial_record(blocks: list[EvidenceBlock], readings: list[Reading], pen
             target = cost if "成本" in block.text else quality
         elif re.match(r"\d+[.、]\s*试样结论", block.text.strip()):
             target = None
+        elif target is None and re.search(r"布面.*(?:合格|色花|色点)", block.text):
+            quality.append(as_text(block))
         elif not re.match(r"\s*试样人[：:]", block.text) and target is not None:
             target.append(as_text(block))
     missing = list(pending)
@@ -184,6 +188,9 @@ def build_trial_record(blocks: list[EvidenceBlock], readings: list[Reading], pen
                    for group in groups for item in group.formula if item.value.upper() == "X")
     missing.extend(f"{block.span}：多阶段文字工艺保留原句，未结构化速率/阶段或从中重算总时长。"
                    for block in body if "升温速率及保温时间" in block.text)
+    missing.extend(f"{block.span}：多织物配方表按原列保留，未拆成原/试样配方；百分比基准未确认，不换算用量。"
+                   for block in blocks if block.kind == "table" and "染色配方" in block.text
+                   and not any(c.text.strip() == "用量" for c in block.cells))
     if comparison.matches_report is False:
         missing.append("报告 A/B 总时长差值与所写节省时间不一致，保留两者待核对。")
     return TrialRecord(source_id=blocks[0].source_id, file_sha256=blocks[0].file_sha256,
@@ -194,4 +201,5 @@ def build_trial_record(blocks: list[EvidenceBlock], readings: list[Reading], pen
                            and not re.fullmatch(r"\s*\d+[.、]\s*[^：:]+[：:]\s*", x.text)],
         groups=groups, changes=changes, time=comparison, quality=quality, cost=cost,
         reported_results=[as_text(x) for x in results if not re.match(r"\s*试样人[：:]", x.text)],
-        follow_up=[as_text(x) for x in body if "后续" in x.section or "计划" in x.section], pending=missing)
+        follow_up=[as_text(x) for x in body if "后续" in x.section or "计划" in x.section
+                   or re.search(r"已取.*(?:研究|改善)", x.text)], pending=missing)
