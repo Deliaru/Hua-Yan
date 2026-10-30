@@ -1448,6 +1448,44 @@ class HuayanApp:
         actor = _find(self.actors, by, "主体")
         return read_source(self.kb, doc_id, actor, self.source_owners, span)
 
+    def save_source_preparation(self, req_id, evidence, claim_ids, pending, by):
+        """保存本单资料准备草稿；原文仍在读取侧，不确认或授予。"""
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft", "rd_accepted"})
+        if not evidence and not claim_ids:
+            raise ValueError("准备材料需要依据或待审候选")
+        candidates = {u.id for u in self.candidate_claims(req_id, by)}
+        if not set(claim_ids) <= candidates:
+            raise ValueError("候选必须属于本单可审阅的待审列表")
+        documents = {}
+        for ref in evidence:
+            location, fingerprint = ref.rsplit("@", 1)
+            doc_id, span = location.rsplit("#", 1)
+            if doc_id not in documents:
+                documents[doc_id] = {f.span: f for f in self.read_source(doc_id, by)}
+            fragment = documents[doc_id].get(span)
+            if fragment is None or fragment.fingerprint != fingerprint:
+                raise ValueError("准备依据已变化或无法取回，请重新读取")
+        record = {"req_id": req.id, "evidence": list(evidence), "claim_ids": list(claim_ids),
+                  "pending": pending, "known_slots": dict(req.known_slots),
+                  "temperatures": {sid: self._sessions[sid].need.temperature.model_dump(mode="json")
+                                   if self._sessions[sid].need.temperature is not None else None for sid in req.session_ids},
+                  "by": f"agent:{by}" if self._agent_drafting else by, "at": get_clock().now().isoformat()}
+        path = self.run_dir / "source_preparations"
+        path.mkdir(exist_ok=True)
+        (path / f"{req.id.replace(':', '_')}.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+        return record
+
+    def source_preparation(self, req_id, by):
+        """准备草稿仅供接单研发查看；其他工作面沿原边界不返回 L3 材料。"""
+        actor = self._actor(by, {"pm", "rd", "supervisor"})
+        req = _find(self._requirements, req_id, "需求单")
+        if actor.id != req.assigned_rd:
+            return None
+        if self.kb.is_frozen(by):
+            raise PermissionDenied("上层知识读取已冻结")
+        path = self.run_dir / "source_preparations" / f"{req.id.replace(':', '_')}.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
     def review_claims(self, ku_ids, by):
         """读取本次审阅原文与固定指纹；返回值由人审阅后随确认提交，不写正式状态。"""
         actor = self._actor(by, {"rd", "pm"})

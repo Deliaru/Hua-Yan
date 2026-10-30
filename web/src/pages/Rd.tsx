@@ -72,6 +72,7 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
             <>
               <RouteStrip objectId={view.requirement.id} />
               <ReqHead view={view} />
+              <SourcePreparationCard reqId={view.requirement.id} />
               <ReadinessCard reqId={view.requirement.id} />
               <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
               <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />
@@ -93,6 +94,27 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
 }
 
 // ── 需求单抬头：要解决什么、已知条件、没能转译的客户信息 ─────────────
+function SourcePreparationCard({ reqId }: { reqId: string }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const draft = useData(() => api.sourcePreparation(reqId, me), [reqId, me]);
+  if (!draft) return null;
+  return <section className="rounded-xl border border-line bg-white p-5 text-[13px]">
+    <h3 className="font-semibold">本单资料准备草稿</h3>
+    <p className="mt-1 text-ink-2">保存于 {hhmm(draft.at)} · {draft.by}。供研发审阅，尚未确认或授予。</p>
+    <p className="mt-3">保存时条件：{Object.entries(draft.known_slots).map(([s, v]) => `${L.slot(s)}：${v}`).join("；") || "尚未填写"}</p>
+    {Object.entries(draft.temperatures).map(([sid, t]) => <p key={sid}>
+      {sid} 温度：{t?.status === "filled" ? `${t.celsius?.join("—")}℃` : t ? "明确未知" : "尚未询问"}
+      {t && <span className="text-ink-2"> · 原话：{t.quote}</span>}
+    </p>)}
+    <p className="mt-3 font-medium">依据出处</p>
+    {draft.evidence.map((ref, i) => <p key={i} className="break-all text-ink-2">{ref}</p>)}
+    <p className="mt-2">待审候选：{draft.claim_ids.join("、") || "未关联"}</p>
+    <p className="mt-2 whitespace-pre-wrap">待核对与补充：{draft.pending || "未填写；仍需研发审阅"}</p>
+    <p className="mt-3 text-ink-2">以上为保存时的材料；当前条件与候选状态请结合本单及上方审阅区核对。</p>
+  </section>;
+}
+
 // 离线骨架把条件与未转译的信息也写成条目（「条件：…」「未转译：…」）；这里归到条件与提醒里显示，条目本身不变。
 const isCond = (it: ReqItem) => it.text.startsWith("条件：");
 const untranslated = (it: ReqItem) => it.text.startsWith("未转译：");

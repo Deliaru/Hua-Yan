@@ -229,6 +229,7 @@ def demo_ledger(app, p):
 
 
 GET = {
+    "/api/source-preparation": lambda app, p: app.source_preparation(p["req_id"], p["viewer"]),
     "/api/sources/read": lambda app, p: app.read_source(p["doc_id"], p["viewer"], p.get("span")),
     "/api/capabilities": lambda app, p: app.capabilities(p["viewer"]),
     "/api/claims": lambda app, p: app.candidate_claims(p.get("req_id"), p["viewer"]),
@@ -264,6 +265,8 @@ GET = {
     "/api/trial/stamp": lambda app, p: {"events": len(app.events.events), "failures": len(app.agents.failures)},
 }
 POST = {
+    "/api/source-preparation": lambda app, p: app.save_source_preparation(
+        p["req_id"], p["evidence"], p.get("claim_ids", []), p.get("pending", ""), p["by"]),
     "/api/agents/forget": lambda app, p: app.forget(p["id"], p["by"]),
     "/api/qi/review": lambda app, p: app.review_claims(p["ku_ids"], p["by"]),
     "/api/qi/revise": lambda app, p: app.revise_claim(p["ku_id"], p["text"], p["by"]),

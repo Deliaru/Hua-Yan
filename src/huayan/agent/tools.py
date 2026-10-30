@@ -115,6 +115,26 @@ def read_source(ctx: ToolContext, args: SourceArgs) -> ToolResult:
     return ToolResult(data=[f.model_dump() for f in fragments])
 
 
+class SourcePreparationArgs(BaseModel):
+    req_id: str
+    evidence: list[str]
+    claim_ids: list[str] = []
+    pending: str = ""
+
+
+@tool("save_source_preparation", "draft", ["rd"],
+      "将依据指针 doc_id#span@fingerprint、已有待审候选编号及待补说明保存到原需求。"
+      "不复制原文，不导入候选，不确认或授予，也不标记事项已准备完成。", SourcePreparationArgs)
+def save_source_preparation(ctx: ToolContext, args: SourcePreparationArgs) -> ToolResult:
+    return ToolResult(data=ctx.app.save_source_preparation(
+        args.req_id, args.evidence, args.claim_ids, args.pending, ctx.principal.id))
+
+
+@tool("get_source_preparation", "read", ["rd"], "读取原需求已保存的资料准备草稿及当时条件，供继续补充与审阅。", ReqId)
+def get_source_preparation(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=ctx.app.source_preparation(args.req_id, ctx.principal.id))
+
+
 @tool("get_knowledge", "read", ["sales", "pm", "rd"], "读取一条知识的全文（越权会被拒绝）", KuId)
 def get_knowledge(ctx: ToolContext, args: KuId) -> ToolResult:
     u = ctx.app.kb.get(args.ku_id, ctx.principal)

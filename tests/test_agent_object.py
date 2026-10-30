@@ -11,6 +11,9 @@ from huayan.app import HuayanApp
 from huayan.clock import get_clock
 from huayan.contracts import LLMResponse, LLMToolCall, PendingAction, ReqItem, Tier, Usage
 from huayan.ingest.folder import FolderSource
+from huayan.ingest.compile import EvidenceRef, Proposal
+from huayan.knowledge import PermissionDenied
+from huayan.ui.server import GET, POST
 
 
 def _app(tmp_path):
@@ -70,10 +73,11 @@ def test_quote_rejection_names_the_bad_ref(tmp_path):
 
 class _SourcePreparation:
     """脚本化网关只驱动真实工具链；输出是合成准备摘要，不是模型能力测评。"""
-    def __init__(self, req_id, session_id):
+    def __init__(self, req_id, session_id, claim_ids=()):
         self.calls = [("get_requirement", {"req_id": req_id}), ("get_session", {"session_id": session_id}),
                       ("read_source", {"doc_id": "synthetic-conditions", "span": "p1"})]
         self.requests = []
+        self.claim_ids = list(claim_ids)
 
     def complete(self, req):
         self.requests.append(req)
@@ -82,11 +86,16 @@ class _SourcePreparation:
         if len(results) < len(self.calls):
             name, arguments = self.calls[len(results)]
             calls = [LLMToolCall(call_id=str(len(results)), name=name, arguments=arguments)]
+        elif len(results) == len(self.calls):
+            unit = results[2][0]
+            calls = [LLMToolCall(call_id="3", name="save_source_preparation", arguments={
+                "req_id": results[0]["req_id"], "evidence": [f"{unit['doc_id']}#{unit['span']}@{unit['fingerprint']}"],
+                "claim_ids": self.claim_ids, "pending": "（合成）涤纶报告与本单锦纶氨纶条件不同，待研发核对。"})]
         else:
-            unit = results[-1][0]
+            unit = results[2][0]
             content = (f"（脚本化合成摘要）{results[0]['req_id']}：已知条件 {results[0]['known_slots']}；"
                        f"依据 {unit['doc_id']}#{unit['span']}@{unit['fingerprint']}：{unit['text']}；"
-                       "报告条件与本单是否一致待研发核对，未导入候选、未确认或授予。")
+                       "已保存本单资料准备草稿，条件差异待研发核对，未确认或授予。")
         return LLMResponse(content=content, tool_calls=calls, usage=Usage(input_tokens=0, output_tokens=0),
                            latency_ms=0, model="scripted-source-preparation", tier=Tier.FAST, cost=None)
 
@@ -102,7 +111,11 @@ def test_agent_reads_report_for_current_requirement_without_signing(tmp_path):
     source = FolderSource("合成内部资料", "internal", "tests/fixtures/reader")
     app.kb.sources = [source]
     app.source_owners = {"synthetic-conditions": req.assigned_rd}
-    gateway = _SourcePreparation(req.id, session.id)
+    proposal = Proposal(title="合成报告观察", text="涤纶操作观察，未判断本单适用", product="T-206",
+        author=req.assigned_rd, phenomenon=req.phenomenon,
+        evidence=[EvidenceRef(doc_id="synthetic-conditions", span="p1", quote="涤纶")])
+    claim_id = app.import_proposals([proposal], req.assigned_rd)["admitted"][0]["ku_id"]
+    gateway = _SourcePreparation(req.id, session.id, [claim_id])
     app.gateway, app.config["gateway_mock"] = gateway, False
     before = app.kb.state_path.read_bytes()
     conv = app.agents.chat(req.assigned_rd, "请读取 synthetic-conditions 的 p1，为本单准备查证摘要。", focus=req.id)
@@ -110,7 +123,8 @@ def test_agent_reads_report_for_current_requirement_without_signing(tmp_path):
     assert conv.id == f"conv:{req.assigned_rd}:{req.id}"
     assert conv.messages[-1].target == req.id and req.id in conv.messages[-1].text
     assert f"{fragment.doc_id}#{fragment.span}@{fragment.fingerprint}" in conv.messages[-1].text
-    assert [s.tool for s in app.agents.trace(conv.id) if s.tool] == ["get_requirement", "get_session", "read_source"]
+    assert [s.tool for s in app.agents.trace(conv.id) if s.tool] == [
+        "get_requirement", "get_session", "read_source", "save_source_preparation"]
     assert all(r.caller == "agent:rd" for r in gateway.requests)
     session_read = json.loads(next(m.content for m in gateway.requests[-1].messages
                                   if m.role == "tool" and m.tool_call_id == "1"))
@@ -119,3 +133,23 @@ def test_agent_reads_report_for_current_requirement_without_signing(tmp_path):
     assert read["data"] == [fragment.model_dump()]
     assert not app.agents.pending(req.assigned_rd) and not app.events.query(["claim_confirmed"])
     assert app.kb.state_path.read_bytes() == before
+    saved = GET["/api/source-preparation"](app, {"req_id": req.id, "viewer": req.assigned_rd})
+    assert saved["claim_ids"] == [claim_id] and saved["req_id"] == req.id
+    assert saved["evidence"] == [f"{fragment.doc_id}#{fragment.span}@{fragment.fingerprint}"]
+    assert saved["temperatures"][session.id]["celsius"] == [75.0, 75.0]
+    assert "条件不同" in saved["pending"] and app.kb._units[claim_id].status == "candidate"
+    assert GET["/api/source-preparation"](app, {"req_id": req.id, "viewer": "pm:agent"}) is None
+    colleague = "rd:R02" if req.assigned_rd == "rd:R01" else "rd:R01"
+    assert GET["/api/source-preparation"](app, {"req_id": req.id, "viewer": colleague}) is None
+    with pytest.raises(PermissionDenied):
+        POST["/api/source-preparation"](app, saved | {"by": colleague})
+    with pytest.raises(ValueError, match="依据已变化"):
+        POST["/api/source-preparation"](app, saved | {"by": req.assigned_rd, "evidence": [f"{fragment.doc_id}#{fragment.span}@old"]})
+    with pytest.raises(ValueError, match="待审列表"):
+        POST["/api/source-preparation"](app, saved | {"by": req.assigned_rd, "claim_ids": ["ku:claim:999"]})
+    assert app.source_preparation(req.id, req.assigned_rd) == saved
+    # 条件变化不把保存时的条件冒充当前事实；再次准备时保存明确未知。
+    app.add_turn(session.id, "customer", "实际温度不清楚")
+    updated = POST["/api/source-preparation"](app, saved | {"by": req.assigned_rd})
+    assert updated["temperatures"][session.id]["status"] == "unknown"
+    assert updated["temperatures"][session.id]["celsius"] is None

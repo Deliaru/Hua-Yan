@@ -1446,6 +1446,16 @@ V10.9 新增只读原子工具 `read_source(doc_id, span=None)`，供 sales/pm/r
 研发按当前需求先读 `get_requirement` 与关联 `get_session`，再按已知编号读取来源，摘要保留本单条件、来源指纹及待核对项。
 摘要随现有对象对话保存，不等于需求单已保存正式准备材料、候选已导入或事项已准备完成；专业确认、授予仍沿原入口。
 
+V10.9 资料准备草稿：`HuayanApp.save_source_preparation(req_id, evidence, claim_ids, pending, by)`
+只允许接单研发在 draft/rd_accepted 阶段保存。依据为 `doc_id#span@fingerprint`，经统一读取入口核对权限与当前指纹；
+claim_ids 只关联本单可审阅的既有待审候选，不导入新结论。保存时附本单已知枚举条件、各关联会话的温度状态与原话、起草人和时间。
+材料按 req_id 写入本运行的 `source_preparations/req_<n>.json`，保存替换该单草稿，原文/读数仍在读取侧，
+不新增冻结 Requirement 字段、不写入 qi_state。`source_preparation(req_id, by)` 仅向接单研发返回材料，其他内部工作面返回 None，冻结主体拒绝读取。
+HTTP 为 GET/POST `/api/source-preparation`，参数沿门面透传，身份仍由服务端绑定。
+原子工具 `save_source_preparation(req_id, evidence, claim_ids=[], pending="")` 为 rd 的 draft 工具，
+`get_source_preparation(req_id)` 为 rd 的 read 工具；不调用确认/授予、不改变事项准备状态，preparation_gap 仍检查各事项原有业务草稿。
+研发工作面展示保存时条件、依据指针、候选编号和待补说明；这份材料不作为当前适用判断或固定指纹签字的替代。
+
 ```python
 ToolKind = Literal["read", "draft", "effect"]
 
