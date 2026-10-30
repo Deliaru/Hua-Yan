@@ -51,6 +51,7 @@ export interface SourcePreparation {
   req_id: string; evidence: string[]; claim_ids: string[]; pending: string;
   known_slots: Record<string, string>; temperatures: Record<string, TemperatureFill | null>;
   by: string; at: string;
+  compilation?: { ir_id: string; at: string; report: { admitted: { ku_id: string }[]; unaligned: string[]; dropped: string[] } };
 }
 export interface AskHint { slot: string; label: string; ask_text: string; p_need: number; scored_by: string }
 export interface AssistantReply { turn_id: string; text: string; ku_ids: string[]; blocked: boolean }

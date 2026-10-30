@@ -265,6 +265,7 @@ GET = {
     "/api/trial/stamp": lambda app, p: {"events": len(app.events.events), "failures": len(app.agents.failures)},
 }
 POST = {
+    "/api/source-preparation/compile": lambda app, p: app.compile_source_preparation(p["req_id"], p["doc_id"], p["by"]),
     "/api/source-preparation": lambda app, p: app.save_source_preparation(
         p["req_id"], p["evidence"], p.get("claim_ids", []), p.get("pending", ""), p["by"]),
     "/api/agents/forget": lambda app, p: app.forget(p["id"], p["by"]),

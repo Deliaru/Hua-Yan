@@ -31,7 +31,7 @@ from huayan.jue.records import load_records
 from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
 from huayan.ingest.compile import admit, recheck
 from huayan.ingest.folder import FolderSource
-from huayan.ingest.trial_ir import EvidenceReportSource
+from huayan.ingest.trial_ir import EvidenceReportSource, OperationIR
 from huayan.ingest.reader.source import read_source
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder, can_read
@@ -1456,15 +1456,7 @@ class HuayanApp:
         candidates = {u.id for u in self.candidate_claims(req_id, by)}
         if not set(claim_ids) <= candidates:
             raise ValueError("候选必须属于本单可审阅的待审列表")
-        documents = {}
-        for ref in evidence:
-            location, fingerprint = ref.rsplit("@", 1)
-            doc_id, span = location.rsplit("#", 1)
-            if doc_id not in documents:
-                documents[doc_id] = {f.span: f for f in self.read_source(doc_id, by)}
-            fragment = documents[doc_id].get(span)
-            if fragment is None or fragment.fingerprint != fingerprint:
-                raise ValueError("准备依据已变化或无法取回，请重新读取")
+        self._source_fragments(evidence, by)
         record = {"req_id": req.id, "evidence": list(evidence), "claim_ids": list(claim_ids),
                   "pending": pending, "known_slots": dict(req.known_slots),
                   "temperatures": {sid: self._sessions[sid].need.temperature.model_dump(mode="json")
@@ -1473,6 +1465,51 @@ class HuayanApp:
         path = self.run_dir / "source_preparations"
         path.mkdir(exist_ok=True)
         (path / f"{req.id.replace(':', '_')}.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+        return record
+
+    def _source_fragments(self, evidence, by):
+        documents = {}
+        fragments = []
+        for ref in evidence:
+            location, fingerprint = ref.rsplit("@", 1)
+            doc_id, span = location.rsplit("#", 1)
+            if doc_id not in documents:
+                documents[doc_id] = {f.span: f for f in self.read_source(doc_id, by)}
+            fragment = documents[doc_id].get(span)
+            if fragment is None or fragment.fingerprint != fingerprint:
+                raise ValueError("准备依据已变化或无法取回，请重新读取")
+            fragments.append(fragment)
+        return fragments
+
+    def compile_source_preparation(self, req_id, doc_id, by):
+        """将读取侧已准备的操作观察 IR 导入本单候选；不推断用途范围。"""
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft", "rd_accepted"})
+        prepared = self.source_preparation(req_id, by)
+        ir_path = self.config.get("source_irs", {}).get(doc_id)
+        if prepared is None or ir_path is None:
+            raise ValueError("请先保存本单依据，并登记该来源的操作观察 IR")
+        self._source_fragments(prepared["evidence"], by)
+        candidates = {u.id for u in self.candidate_claims(req_id, by)}
+        if not set(prepared["claim_ids"]) <= candidates:
+            raise ValueError("准备关联的候选状态已变化，请重新准备")
+        ir = OperationIR.model_validate_json(Path(ir_path).read_text(encoding="utf-8"))
+        source = next(s for s in self.kb.sources if doc_id in s.list_docs())
+        if not isinstance(source, EvidenceReportSource) or ir.file_sha256 != source.file_sha256:
+            raise ValueError("IR 与试样读取记录的文件指纹不一致")
+        if ir.source_id != doc_id or not {c.fragment for c in ir.evidence} <= set(prepared["evidence"]):
+            raise ValueError("请先将该 IR 的完整依据保存到本单准备材料")
+        if ir.proposal.phenomenon != req.phenomenon or ir.proposal.form is not None:
+            raise ValueError("本入口只导入与本单现象一致的操作观察，不推断适用范围")
+        text = "\n".join([f"{ir.group}组单次观察：{ir.proposal.text}", "报告完整条件：",
+                          *(c.text for c in ir.conditions), "限制原文：", ir.proposal.limits,
+                          "待核对：", *ir.pending])
+        report = self.import_proposals([ir.proposal.model_copy(update={"text": text})], by)
+        claim_ids = prepared["claim_ids"] + [row["ku_id"] for row in report["admitted"]]
+        pending = "\n".join(dict.fromkeys([prepared["pending"], *ir.pending]))
+        record = prepared | {"claim_ids": claim_ids, "pending": pending,
+                             "compilation": {"ir_id": ir.id, "at": get_clock().now().isoformat(), "report": report}}
+        path = self.run_dir / "source_preparations" / f"{req.id.replace(':', '_')}.json"
+        path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
         return record
 
     def source_preparation(self, req_id, by):

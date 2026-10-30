@@ -12,6 +12,7 @@ from huayan.clock import get_clock
 from huayan.contracts import LLMResponse, LLMToolCall, PendingAction, ReqItem, Tier, Usage
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.compile import EvidenceRef, Proposal
+from huayan.ingest.trial_ir import EvidenceReportSource
 from huayan.knowledge import PermissionDenied
 from huayan.ui.server import GET, POST
 
@@ -153,3 +154,46 @@ def test_agent_reads_report_for_current_requirement_without_signing(tmp_path):
     updated = POST["/api/source-preparation"](app, saved | {"by": req.assigned_rd})
     assert updated["temperatures"][session.id]["status"] == "unknown"
     assert updated["temperatures"][session.id]["celsius"] is None
+
+
+def test_prepared_ir_imports_candidate_with_full_conditions_on_original_requirement(tmp_path):
+    app = _app(tmp_path)
+    session = app.start_session("customer:C01", "sales:S01")
+    app.add_turn(session.id, "customer", "染完布面深一块浅一块，锦纶氨纶的，气流缸，75℃")
+    app.save_escalate_note(session.id, "（合成）交研发对照操作报告", "sales:S01")
+    q = next(q for q in app.bus.list(family="escalate_need") if q.object_id == f"session:{session.id}")
+    app.mark_prepared(q.id, q.owner_id)
+    req = app.escalate(session.id, "sales:S01")
+    doc = "synthetic-conditions"
+    fragments = FolderSource("合成资料", "internal", "tests/fixtures/reader").fetch(doc)
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(json.dumps({"source_id": doc, "file_sha256": "synthetic",
+        "fragments": [f.model_dump() for f in fragments]}), encoding="utf-8")
+    app.kb.sources = [EvidenceReportSource(evidence_path)]
+    app.source_owners = {doc: req.assigned_rd}
+    ir = json.loads(Path("tests/fixtures/reader/synthetic-operation-ir.json").read_text(encoding="utf-8"))
+    ir["proposal"]["author"] = req.assigned_rd
+    ir_path = tmp_path / "operation-ir.json"
+    ir_path.write_text(json.dumps(ir), encoding="utf-8")
+    app.config["source_irs"] = {doc: str(ir_path)}
+    pointers = [f"{f.doc_id}#{f.span}@{f.fingerprint}" for f in fragments]
+    app.save_source_preparation(req.id, pointers[:1], [], "本单与报告纤维不同，待核对", req.assigned_rd)
+    params = {"req_id": req.id, "doc_id": doc, "by": req.assigned_rd}
+    before = app.kb.state_path.read_bytes()
+    with pytest.raises(ValueError, match="完整依据"):
+        POST["/api/source-preparation/compile"](app, params)
+    assert app.kb.state_path.read_bytes() == before
+    app.save_source_preparation(req.id, pointers, [], "本单与报告纤维不同，待核对", req.assigned_rd)
+    ctx = app.agents.context(req.assigned_rd, thread=req.id)
+    result = app.agents.call_tool(ctx, "compile_source_preparation", {"req_id": req.id, "doc_id": doc})
+    assert result.ok
+    saved = app.source_preparation(req.id, req.assigned_rd)
+    row = saved["compilation"]["report"]["admitted"][0]
+    unit = app.kb._units[row["ku_id"]]
+    assert saved == result.data and saved["claim_ids"] == [unit.id]
+    assert "纤维不同" in saved["pending"] and ir["pending"][0] in saved["pending"]
+    assert unit.status == "candidate" and unit.level == 3 and row["capability_id"] is None
+    assert unit.evidence == pointers and unit.id in {u.id for u in app.candidate_claims(req.id, req.assigned_rd)}
+    assert "B组单次观察" in unit.text and all(c["text"] in unit.text for c in ir["conditions"])
+    assert ir["proposal"]["limits"] in unit.text and "锦纶氨纶" in unit.text
+    assert not app.events.query(["claim_confirmed"]) and not app.agents.pending(req.assigned_rd)

@@ -110,6 +110,11 @@ function SourcePreparationCard({ reqId }: { reqId: string }) {
     <p className="mt-3 font-medium">依据出处</p>
     {draft.evidence.map((ref, i) => <p key={i} className="break-all text-ink-2">{ref}</p>)}
     <p className="mt-2">待审候选：{draft.claim_ids.join("、") || "未关联"}</p>
+    {draft.compilation && <div className="mt-2">
+      <p>操作观察 IR：{draft.compilation.ir_id} · {hhmm(draft.compilation.at)} 导入 {draft.compilation.report.admitted.length} 条待审候选</p>
+      {!!draft.compilation.report.unaligned.length && <p>待对齐：{draft.compilation.report.unaligned.join("、")}</p>}
+      {!!draft.compilation.report.dropped.length && <p>引文核对未通过：{draft.compilation.report.dropped.join("、")}</p>}
+    </div>}
     <p className="mt-2 whitespace-pre-wrap">待核对与补充：{draft.pending || "未填写；仍需研发审阅"}</p>
     <p className="mt-3 text-ink-2">以上为保存时的材料；当前条件与候选状态请结合本单及上方审阅区核对。</p>
   </section>;

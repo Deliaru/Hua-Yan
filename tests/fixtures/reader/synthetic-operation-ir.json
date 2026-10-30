@@ -1,0 +1,40 @@
+{
+  "id": "synthetic-conditions:B:operation-1",
+  "source_id": "synthetic-conditions",
+  "file_sha256": "synthetic",
+  "level": 3,
+  "product_raw": "T-206",
+  "group": "B",
+  "observation": "合成涤纶操作观察，不能推出锦纶氨纶适用。",
+  "conditions": [
+    {
+      "text": "涤纶在气流染色机上使用，升温速率不超过1℃/min。",
+      "group": null,
+      "evidence": [{"fragment": "synthetic-conditions#p1@eed62ac5a0dc", "span": "p1", "pages": [1], "quote": "涤纶在气流染色机上使用，升温速率不超过1℃/min。"}]
+    },
+    {
+      "text": "相同材料与设备条件下，升温速率不超过1℃/min。",
+      "group": "B",
+      "stage": "现场操作",
+      "evidence": [{"fragment": "synthetic-conditions#p2@191192f5db77", "span": "p2", "pages": [1], "quote": "相同材料与设备条件下，升温速率不超过1℃/min。"}]
+    }
+  ],
+  "evidence": [
+    {"fragment": "synthetic-conditions#p1@eed62ac5a0dc", "span": "p1", "pages": [1], "quote": "涤纶在气流染色机上使用，升温速率不超过1℃/min。"},
+    {"fragment": "synthetic-conditions#p2@191192f5db77", "span": "p2", "pages": [1], "quote": "相同材料与设备条件下，升温速率不超过1℃/min。"}
+  ],
+  "pending": ["合成单次观察，复用范围待研发判断；升温速率尚未结构化。"],
+  "proposal": {
+    "title": "合成 B 组操作观察",
+    "text": "合成涤纶操作观察，不能推出锦纶氨纶适用。",
+    "phenomenon": "color_unlevel",
+    "product": "T-206",
+    "author": "rd:R01",
+    "conditions": ["涤纶", "气流染色机", "升温速率不超过1℃/min"],
+    "limits": "升温速率不超过1℃/min",
+    "evidence": [
+      {"doc_id": "synthetic-conditions", "span": "p1", "quote": "涤纶在气流染色机上使用，升温速率不超过1℃/min。"},
+      {"doc_id": "synthetic-conditions", "span": "p2", "quote": "相同材料与设备条件下，升温速率不超过1℃/min。"}
+    ]
+  }
+}
