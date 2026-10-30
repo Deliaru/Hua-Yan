@@ -112,6 +112,16 @@ def test_temperature_customer_turns_match_and_correct_current_recommendation(tmp
         assert session.recommendation.candidates[0].status == "possible"
     session = app.add_turn(session.id, "customer", "不是75℃")
     assert session.need.known_temperature() is None and session.recommendation.candidates[0].status == "possible"
+    for text in ("75℃不对，实际温度不清楚", "说明书写75℃，实际温度不知道",
+                 "实际温度不知道，说明书写75℃", "温度75℃，不确定",
+                 "实际温度不清楚，75℃", "温度不清楚，说明书确认75℃"):
+        session = app.add_turn(session.id, "customer", "75℃")
+        assert session.recommendation.candidates[0].status == "confirmed"
+        session = app.add_turn(session.id, "customer", text)
+        assert session.need.temperature.status == "unknown"
+        assert session.need.known_temperature() is None and session.need.temperature.quote == text
+        assert session.recommendation.candidates[0].status == "possible"
+        assert session.recommendation.candidates[0].unknown_slots == ["temperature_c"]
     resumed = HuayanApp.build(str(path), run_id="temperature", resume=True)
     assert resumed._sessions[session.id].need.temperature == session.need.temperature
 
@@ -122,7 +132,9 @@ def test_rule_temperature_units_and_local_negation(mini_seeds):
     for text, expected in (("75℃", (75, 75)), ("75°C", (75, 75)), ("75摄氏度", (75, 75)),
         ("75度", None), ("水硬度10度", None), ("色牢度4度", None), ("温度75度", (75, 75)),
         ("我们温度是75℃，不是85℃", (75, 75)), ("不是75℃而是85℃", (85, 85)),
-        ("75℃，不对，改成85℃", (85, 85))):
+        ("75℃，不对，改成85℃", (85, 85)), ("温度不清楚，问过了是75℃", (75, 75)),
+        ("温度不清楚，刚实测确认75℃", (75, 75)),
+        ("说明书写85℃，我们实际75℃", (75, 75)), ("温度75℃，水硬度不清楚", (75, 75))):
         turn = Turn(id="turn:sess:1:1", session_id="sess:1", n=1, speaker="customer", text=text, ts=get_clock().now())
         output = extractor.extract([turn], prev)
         if expected is None:

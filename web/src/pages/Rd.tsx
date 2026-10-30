@@ -22,23 +22,26 @@ export function Rd() {
   const reqs = (useData(() => api.requirements(me), [me]) ?? []).slice().reverse();
   const [qid, setQid] = useState<string | null>(null);
   const [chosenReq, setChosenReq] = useState<string | null>(focus);   // v6：从轨迹条跳来时打开同一张单
-  useEffect(() => { if (focus) { setChosenReq(focus); setQid(null); } }, [focus]);
+  const [showCandidates, setShowCandidates] = useState(false);
+  useEffect(() => { if (focus) { setChosenReq(focus); setQid(null); setShowCandidates(false); } }, [focus]);
   // 导览要你签的那项决策：没手动选过就直接打开它；导览换到新的一项时，回到它
   const g = useGuide();
   const guided = g.who === me ? ready.find((q) => `sign:${q.family}` === g.target) ?? null : null;
-  useEffect(() => { if (guided) { setQid(null); setChosenReq(null); } }, [guided?.id]);
+  useEffect(() => { if (guided) { setQid(null); setChosenReq(null); setShowCandidates(false); } }, [guided?.id]);
   const question = all.find((q) => q.id === qid)
     ?? (chosenReq ? ready.find((q) => reqsOf(q).includes(chosenReq)) ?? null : guided ?? ready[0] ?? null);
   // 不挂在需求单上的决策（解密申请、知识冲突、泄露风险）只显示签字区
-  const reqId = question ? reqsOf(question)[0] ?? null : chosenReq ?? (reqs.find((r) => r.status !== "merged") ?? reqs[0])?.id ?? null;
+  const reqId = showCandidates ? null : question ? reqsOf(question)[0] ?? null : chosenReq ?? (reqs.find((r) => r.status !== "merged") ?? reqs[0])?.id ?? null;
   return (
     <>
       <Side>
         <InboxSidebar selected={qid || (guided && question?.id === guided.id) ? question?.id ?? null : null} guided={guided && guided.id !== question?.id ? guided.id : null}
-                      reqs={reqs} select={(q) => { setQid(q.id); setChosenReq(null); }} />
+                      reqs={reqs} select={(q) => { setQid(q.id); setChosenReq(null); setShowCandidates(false); }} />
+        <SideHead>资料审阅</SideHead>
+        <button className={`side-row ${showCandidates ? "on" : ""}`} onClick={() => setShowCandidates(true)}>本人资料候选</button>
         <SideHead>需求单</SideHead>
         {reqs.map((r) => (
-          <button key={r.id} onClick={() => { setChosenReq(r.id); setQid(null); }}
+          <button key={r.id} onClick={() => { setChosenReq(r.id); setQid(null); setShowCandidates(false); }}
                   className={`side-row ${r.id === reqId ? "on" : ""}`}>
             <p className="text-[13px] font-semibold">{L.phen(r.phenomenon)}</p>
             <p className="truncate text-[12px] text-ink-2">{[r.customer_ids.map(L.name).join("、"), REQ_STATUS[r.status]].filter(Boolean).join(" · ")}</p>
@@ -46,7 +49,7 @@ export function Rd() {
         ))}
         {!reqs.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">暂无需求单</p>}
       </Side>
-      <RdDesk key={`${me}:${reqId}`} question={question} reqId={reqId} />
+      <RdDesk key={`${me}:${reqId}`} question={showCandidates ? null : question} reqId={reqId} />
     </>
   );
 }
@@ -64,17 +67,17 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
         <div className="mx-auto flex max-w-[1080px] flex-col gap-6 px-8 pb-24 pt-7">
           <PendingActions />
           <GrantedCapabilities />
+          <CandidateClaims key={reqId ?? "my-candidates"} reqId={reqId} />
           {view ? (
             <>
               <RouteStrip objectId={view.requirement.id} />
               <ReqHead view={view} />
               <ReadinessCard reqId={view.requirement.id} />
-              <CandidateClaims reqId={view.requirement.id} />
               <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
               <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />
             </>
           ) : question ? <SignArea key={question.id} q={question} view={null} />
-            : <EmptyState title="选一项待签的决策" text="收件箱里是觉提出、由你签字的决策；准备中的由产品经理 Agent 或你的 Agent 在起草。" />}
+            : <EmptyState title="资料审阅与研发决策" text="可在上方审阅本人资料候选，或从左侧选择需求单及待签决策。" />}
         </div>
       </div>
       <AgentPanel title={view ? "这张单的来历" : "Agent 协作"} sessionId={null} focus={focus}>
@@ -925,19 +928,22 @@ function QiEvidenceReview({ q, dismiss, evidence }: { q: Question; dismiss: Reac
   </div></>;
 }
 
-function CandidateClaims({ reqId }: { reqId: string }) {
+function CandidateClaims({ reqId }: { reqId: string | null }) {
   const { me } = useApp();
+  const L = useLabels();
   const claims = useData(() => api.claims(reqId, me), [reqId, me]) ?? [];
   const [selected, setSelected] = useState<string[]>([]);
   const [review, setReview] = useState<Awaited<ReturnType<typeof api.reviewClaims>> | null>(null);
   if (!claims.length) return null;
-  return <Group title="本单候选结论 · 待研发确认">
+  return <Group title={reqId ? "本单候选结论 · 待研发确认" : "本人资料候选 · 待研发确认"}
+    foot="归属人是待确认负责人；点击签字才记录专业确认。用途授予与适用范围批准另行办理。">
     {claims.map((c) => <label key={c.id} className="row !items-start text-[13px] leading-5">
       <input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => {
         setReview(null);
         setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id));
       }} />
-      <span><strong>{c.title}</strong><br />{c.text}<br /><span className="text-ink-3">依据：{c.evidence.join("；") || "研发直接判断"}</span></span>
+      <span><strong>{c.title}</strong><br /><span className="text-ink-3">{c.id} · 待确认 · 归属 {L.name(c.owner)}</span>
+        <br />{c.text}<br /><span className="text-ink-3">依据：{c.evidence.join("；") || "研发直接判断"}</span></span>
     </label>)}
     <div className="row"><Act label="读取所选结论的审阅依据" disabled={!selected.length}
       run={() => api.reviewClaims(selected, me).then(setReview)} /></div>

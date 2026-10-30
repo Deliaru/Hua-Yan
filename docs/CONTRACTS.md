@@ -1650,6 +1650,11 @@ V10.7 C7 最小参数差异：`reviewed_evidence: dict[str, list[str]] | None = 
 确认时将提交值与一次取回的当前依据比对，缺少或不一致即拒绝，不自动刷新旧指纹。
 相同 payload 的补充依据经确认才挂接到待挂接能力，沿现有 `claim_confirmed` 事件记录指纹、目标与原贡献人。
 `HuayanApp.review_claims(ku_ids, by)` 向有权的真人研发/产品经理提供本次原文与指纹，拒绝 `pm:agent`；
+`candidate_claims(req_id, viewer_id)` 与 `confirm_claims(req_id, ku_ids, by, reviewed_evidence=None)`
+允许 `req_id=None`：仅列出/确认本人负责的待审资料候选，不要求先建立需求单；确认仍核对显式审阅指纹。
+对应 `/api/claims` 与 `/api/qi/confirm` 可省略 `req_id`；提供编号时保留原有需求单相关候选路径。
+有需求单时，相关现象筛选同样叠加现有 `can_read` 与 active `share` 边界；未指定确认人的候选仅其 owner 可读，不能仅凭现象相同返回其他研发的候选全文。
+无需求单确认返回 `None`，有需求单仍返回 `Requirement`，确认不等于用途授予或产品范围批准。
 确认、授予、不立项引用、复核及 `extend_scope(..., reviewed_evidence=None)` 门面透传该可选参数。
 服务端不得在签字时自行取当前指纹替代审阅值。公开来源 `applicable` 批准的兼容路径：当有待确认结论且
 未显式传参时，`approve` 只使用候选中保存的编译时指纹交 `confirm` 比对，来源改变仍拒绝；不改用当前来源新指纹。

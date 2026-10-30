@@ -26,11 +26,24 @@ def _temperature(turns, asking):
     for i, match in enumerate(matches):
         start = matches[i - 1].end() if i else 0
         prefix = re.split(r"[，,。；;]", turn.text[start:match.start()])[-1]
+        # 引用资料的数值不是客户自己的实际工艺条件。
+        if any(w in prefix for w in ("说明书", "资料", "报告")):
+            continue
         lower = float(match["lower"])
         upper = float(match["upper"]) if match["upper"] is not None else lower
         if lower <= upper and not any(w in prefix for w in ("不是", "不在", "不超过", "低于", "高于", "小于", "大于")) \
                 and not re.match(r"\s*(?:以上|以下)", turn.text[match.end():]):
             valid.append((match, lower, upper))
+    unknown = [c for c in re.finditer(r"[^，,。；;]+", turn.text)
+               if any(w in c.group() for w in ("不清楚", "不知道", "不确定", "没测过"))
+               and not any(w in c.group() for w in ("说明书", "资料", "报告"))
+               and ("温" in c.group() or _CELSIUS.search(c.group())
+                    or re.fullmatch(r"\s*(?:我|实际|其实|这个)?(?:不清楚|不知道|不确定|没测过)[？！!?\s]*", c.group()))]
+    if unknown:
+        # 未知只能由明确补充的实际读数解除，不能靠后出现的数字解除。
+        valid = [item for item in valid if item[0].start() >= unknown[-1].end()
+                 and re.search(r"问过|测过|实测|确认|更正|改成|改为",
+                               re.split(r"[，,。；;]", turn.text[:item[0].start()])[-1])]
     if valid and (len(valid) == 1 or any(w in turn.text[valid[-2][0].end():valid[-1][0].start()]
                                        for w in ("不对", "说错", "改成", "改为", "其实", "更正"))):
         match, lower, upper = valid[-1]

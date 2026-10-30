@@ -46,6 +46,56 @@ def test_report_source_explore_exposes_candidate_only_to_owning_rd(tmp_path):
     assert ku_id not in {u.id for u in customer.units}
 
 
+def test_report_candidate_can_be_reviewed_and_confirmed_without_requirement(tmp_path):
+    import yaml
+    from huayan.app import HuayanApp
+    from huayan.ui.server import GET, POST
+
+    config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
+    config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"))
+    config_path = tmp_path / "app.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    app = HuayanApp.build(str(config_path))
+    app.kb.sources = [FolderSource("合成报告", "internal", "tests/fixtures/reader")]
+    proposal = Proposal(title="合成资料观察", text="仅为合成观察，待审", product="T-206", author="rd:R01",
+        phenomenon="color_unlevel", evidence=[EvidenceRef(doc_id="synthetic-conditions", span="p1", quote="涤纶")])
+    report = app.import_proposals([proposal], "rd:R01")
+    ku_id = report["admitted"][0]["ku_id"]
+    assert not app._requirements
+    assert [u.id for u in GET["/api/claims"](app, {"viewer": "rd:R01"})] == [ku_id]
+    assert GET["/api/claims"](app, {"viewer": "rd:R02"}) == []
+    params = {"ku_ids": [ku_id], "by": "rd:R01"}
+    review = POST["/api/qi/review"](app, params)
+    assert review["fragments"][ku_id][0].text.startswith("合成测试资料")
+    with pytest.raises(ValueError, match="实际审阅"):
+        POST["/api/qi/confirm"](app, params)
+    assert app.kb._units[ku_id].status == "candidate"
+    assert POST["/api/qi/confirm"](app, params | {"reviewed_evidence": review["reviewed_evidence"]}) is None
+    assert app.kb._units[ku_id].status == "active"
+    assert GET["/api/claims"](app, {"viewer": "rd:R01"}) == []
+    assert not app._requirements
+    assert not any(c.payload.get("product_id") == "T-206" for c in app.kb.capabilities())
+
+    # 同一现象的需求单也不能把未授权的同事候选全文交给接单研发。
+    session = app.start_session("customer:C01", "sales:S01")
+    app.add_turn(session.id, "customer", "深一块浅一块，锦纶氨纶的，气流缸")
+    app.save_escalate_note(session.id, "（合成）现有产品不匹配，交研发", "sales:S01")
+    question = next(q for q in app.bus.list(family="escalate_need") if q.object_id == f"session:{session.id}")
+    app.mark_prepared(question.id, question.owner_id)
+    req = app.escalate(session.id, "sales:S01")
+    rd = req.assigned_rd
+    colleague = "rd:R02" if rd == "rd:R01" else "rd:R01"
+    own = app.import_proposals([proposal.model_copy(update={"author": rd, "title": "本人的合成待审判断"})], rd)
+    other = app.import_proposals([proposal.model_copy(update={"author": colleague, "text": "合成同事未授权正文"})], colleague)
+    own_id, other_id = own["admitted"][0]["ku_id"], other["admitted"][0]["ku_id"]
+    listed = GET["/api/claims"](app, {"req_id": req.id, "viewer": rd})
+    assert [u.id for u in listed] == [own_id]
+    assert "合成同事未授权正文" not in json.dumps([u.model_dump(mode="json") for u in listed], ensure_ascii=False)
+    assert POST["/api/qi/review"](app, {"ku_ids": [own_id], "by": rd})["claims"][0].id == own_id
+    with pytest.raises(ValueError, match="待审列表"):
+        POST["/api/qi/confirm"](app, {"req_id": req.id, "ku_ids": [other_id], "by": rd})
+
+
 def test_partial_conditions_and_new_evidence_stay_pending(tmp_path):
     seeds = load_seeds("tests/fixtures/mini_seeds")
     state = tmp_path / "qi_state.json"

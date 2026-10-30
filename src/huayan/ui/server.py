@@ -230,7 +230,7 @@ def demo_ledger(app, p):
 
 GET = {
     "/api/capabilities": lambda app, p: app.capabilities(p["viewer"]),
-    "/api/claims": lambda app, p: app.candidate_claims(p["req_id"], p["viewer"]),
+    "/api/claims": lambda app, p: app.candidate_claims(p.get("req_id"), p["viewer"]),
     "/api/demo/ledger": demo_ledger,
     "/api/demo/route-next": route_next,
     "/api/demo/next": next_line,
@@ -265,7 +265,7 @@ GET = {
 POST = {
     "/api/agents/forget": lambda app, p: app.forget(p["id"], p["by"]),
     "/api/qi/review": lambda app, p: app.review_claims(p["ku_ids"], p["by"]),
-    "/api/qi/confirm": lambda app, p: app.confirm_claims(p["req_id"], p["ku_ids"], p["by"], p.get("reviewed_evidence")),
+    "/api/qi/confirm": lambda app, p: app.confirm_claims(p.get("req_id"), p["ku_ids"], p["by"], p.get("reviewed_evidence")),
     "/api/qi/grant": lambda app, p: app.sign_qi_grant(p["question_id"], p["by"], p.get("claim_ids", ()), p.get("note", ""),
                                                   p.get("reviewed_evidence")),
     "/api/qi/revoke": lambda app, p: app.revoke_capability(p["cap_id"], p["by"]),

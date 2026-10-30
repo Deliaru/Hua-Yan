@@ -1413,11 +1413,17 @@ class HuayanApp:
         return report
 
     def candidate_claims(self, req_id, viewer_id):
-        req, _ = self._requirement(req_id, viewer_id, {"rd"},
-            {"draft", "rd_accepted", "rd_confirmed", "released", "rejected", "reused", "merged"})
+        if req_id is None:
+            actor = self._actor(viewer_id, {"rd"})
+            req = None
+        else:
+            req, actor = self._requirement(req_id, viewer_id, {"rd"},
+                {"draft", "rd_accepted", "rd_confirmed", "released", "rejected", "reused", "merged"})
+        shared = self.kb._shared(actor)
         return [u.model_copy(deep=True) for u in self.kb._units.values()
                 if u.kind == "claim" and u.status == "candidate"
-                and req.phenomenon in u.phenomenon_ids]
+                and (u.owner == viewer_id if u.confirmed_by is None else can_read(actor, u, shared))
+                and (req.phenomenon in u.phenomenon_ids if req else (u.confirmed_by or u.owner) == viewer_id)]
 
     def review_claims(self, ku_ids, by):
         """读取本次审阅原文与固定指纹；返回值由人审阅后随确认提交，不写正式状态。"""
@@ -1441,11 +1447,12 @@ class HuayanApp:
     def confirm_claims(self, req_id, ku_ids, by, reviewed_evidence=None):
         candidates = {u.id for u in self.candidate_claims(req_id, by)}
         if not set(ku_ids) <= candidates:
-            raise ValueError("只能确认本单相关的候选结论")
+            raise ValueError("只能确认当前待审列表中的候选结论")
         self.kb.confirm(ku_ids, by, reviewed_evidence=reviewed_evidence)
-        self._after(req_ids=[req_id])
+        if req_id is not None:
+            self._after(req_ids=[req_id])
         self.scan()
-        return self.requirement_view(req_id, by).requirement
+        return self.requirement_view(req_id, by).requirement if req_id is not None else None
 
     def sign_qi_grant(self, question_id, by, claim_ids=(), note="", reviewed_evidence=None):
         self._actor(by, {"rd"})
