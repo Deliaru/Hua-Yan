@@ -1482,12 +1482,12 @@ class HuayanApp:
         return fragments
 
     def compile_source_preparation(self, req_id, doc_id, by):
-        """将读取侧已准备的操作观察 IR 导入本单候选；不推断用途范围。"""
+        """将读取侧已准备的操作或负例观察 IR 导入本单候选；不推断用途范围。"""
         req, _ = self._requirement(req_id, by, {"rd"}, {"draft", "rd_accepted"})
         prepared = self.source_preparation(req_id, by)
         ir_path = self.config.get("source_irs", {}).get(doc_id)
         if prepared is None or ir_path is None:
-            raise ValueError("请先保存本单依据，并登记该来源的操作观察 IR")
+            raise ValueError("请先保存本单依据，并登记该来源的观察 IR")
         self._source_fragments(prepared["evidence"], by)
         candidates = {u.id for u in self.candidate_claims(req_id, by)}
         if not set(prepared["claim_ids"]) <= candidates:
@@ -1499,9 +1499,12 @@ class HuayanApp:
         if ir.source_id != doc_id or not {c.fragment for c in ir.evidence} <= set(prepared["evidence"]):
             raise ValueError("请先将该 IR 的完整依据保存到本单准备材料")
         if ir.proposal.phenomenon != req.phenomenon or ir.proposal.form is not None:
-            raise ValueError("本入口只导入与本单现象一致的操作观察，不推断适用范围")
-        text = "\n".join([f"{ir.group}组单次观察：{ir.proposal.text}", "报告完整条件：",
-                          *(c.text for c in ir.conditions), "限制原文：", ir.proposal.limits,
+            raise ValueError("本入口只导入与本单现象一致的观察，不推断适用范围")
+        scope = f"{ir.group}组" if ir.group else "报告层"
+        conditions = [f"[{c.group + '组' if c.group else '原文范围' if c.stage else '共同'}"
+                      f" / {c.stage or '条件'}] {c.text}" for c in ir.conditions]
+        text = "\n".join([f"{scope}单次观察：{ir.proposal.text}", "报告完整条件：",
+                          *conditions, "限制原文：", ir.proposal.limits,
                           "待核对：", *ir.pending])
         report = self.import_proposals([ir.proposal.model_copy(update={"text": text})], by)
         claim_ids = prepared["claim_ids"] + [row["ku_id"] for row in report["admitted"]]

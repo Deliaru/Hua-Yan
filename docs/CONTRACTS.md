@@ -1458,12 +1458,13 @@ HTTP 为 GET/POST `/api/source-preparation`，参数沿门面透传，身份仍�
 
 V10.9 `HuayanApp.compile_source_preparation(req_id, doc_id, by)` 消费服务端配置 `source_irs: {doc_id: IR路径}`
 中已登记的 V10.5 OperationIR。接单研发先保存本单完整依据，入口再按当前来源核对指纹，检查试样读取记录的文件指纹、
-IR 来源和完整证据集；只接与本单现象一致且 form=null 的操作观察，不从本单条件推断报告适用范围。
+IR 来源和完整证据集；只接与本单现象一致且 form=null 的操作或负例观察，不从本单条件推断报告适用范围。
 沿 `import_proposals → admit` 导入，候选正文保留组别、完整条件、限制原文与待补项，状态为 candidate；不确认或授予。
+读取侧 IR 的 group=null 显示为报告层观察；各条件分别保留A/B组、阶段或原文范围，混合品质负例不推定为产品通用不适用。
 导入报告及 IR 编号写回本单准备材料的 compilation，新增候选编号并入 claim_ids，保留原待补项和保存时条件/时间，编译时间单列。
 原子工具同名，为 rd 的 draft 工具，仅两个扁平参数 req_id/doc_id，身份从 ToolContext 绑定；
 HTTP 为 POST `/api/source-preparation/compile`，不接受模型或浏览器提供的本地路径。
-首版只消费已有操作观察 IR，不调用生成模型；未登记 IR、未对齐或引文丢弃均如实返回，不自动标记事项准备完成。
+首版只消费已有操作或负例观察 IR，不调用生成模型；归属沿原导入规则须已指定本人负责，未对齐或引文丢弃记回编译报告，不自动标记事项准备完成。
 
 V10.9 `HuayanApp.source_preparation_status(req_id, by)` / GET `/api/source-preparation/status`
 在原准备材料的接单研发边界内，复用 `can_read` 和本人能力视图，只读投影关联结论的当前状态及相关用途能力。

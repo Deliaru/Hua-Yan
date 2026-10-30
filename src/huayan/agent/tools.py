@@ -141,7 +141,7 @@ class CompileSourceArgs(BaseModel):
 
 
 @tool("compile_source_preparation", "draft", ["rd"],
-      "将服务端登记的该来源完整操作观察 IR 经现有编译器导入本单待审候选，并保存导入结果与待补项。"
+      "将服务端登记的该来源完整操作或负例观察 IR 经现有编译器导入本单待审候选，并保存导入结果与待补项。"
       "须先保存完整依据；只产生候选，不确认、授予或标记事项准备完成。", CompileSourceArgs)
 def compile_source_preparation(ctx: ToolContext, args: CompileSourceArgs) -> ToolResult:
     return ToolResult(data=ctx.app.compile_source_preparation(args.req_id, args.doc_id, ctx.principal.id))

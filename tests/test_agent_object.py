@@ -1,6 +1,7 @@
 """V9.4：助手按当前对象装配上下文——派来的问题以它的对象为当前工作面，只看本段对话的确认卡；
 签字前要有的草稿派单时写明；引用不了的原话说清是哪条、能引哪些。"""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,7 +13,9 @@ from huayan.clock import get_clock
 from huayan.contracts import LLMResponse, LLMToolCall, PendingAction, ReqItem, Tier, Usage
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.compile import EvidenceRef, Proposal
-from huayan.ingest.trial_ir import EvidenceReportSource
+from huayan.ingest.trial_ir import EvidenceReportSource, prepare_negative
+from huayan.ingest.reader.trials import build_trial_record
+from huayan.ingest.reader.word import read_docx, read_native_labels
 from huayan.knowledge import PermissionDenied
 from huayan.ui.server import GET, POST
 
@@ -154,6 +157,65 @@ def test_agent_reads_report_for_current_requirement_without_signing(tmp_path):
     updated = POST["/api/source-preparation"](app, saved | {"by": req.assigned_rd})
     assert updated["temperatures"][session.id]["status"] == "unknown"
     assert updated["temperatures"][session.id]["celsius"] is None
+
+
+def test_report_level_negative_preparation_preserves_scope_and_alignment_gap(tmp_path):
+    app = _app(tmp_path)
+    session = app.start_session("customer:C01", "sales:S01")
+    app.add_turn(session.id, "customer", "深一块浅一块，锦纶氨纶的，气流缸，75℃")
+    app.save_escalate_note(session.id, "（合成）对照历史负例，不能直接归因", "sales:S01")
+    q = next(q for q in app.bus.list(family="escalate_need") if q.object_id == f"session:{session.id}")
+    app.mark_prepared(q.id, q.owner_id)
+    req = app.escalate(session.id, "sales:S01")
+    path = Path("tests/fixtures/reader/synthetic-negative.docx")
+    doc = "SYNTH-NEGATIVE"
+    source = {"source_id": doc, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+              "source": "internal", "level": 3}
+    blocks = read_docx(path, source, {f"paragraph-{n}": [1] for n in range(1, 9)} | {"table-1": [1]}, ["synthetic.png"])
+    readings, pending = read_native_labels(blocks)
+    ir = prepare_negative(build_trial_record(blocks, readings, pending), app.seeds, "SYNTH-PRODUCT（试样版）")
+    evidence = tmp_path / "negative-evidence.json"
+    evidence.write_text(json.dumps({"source_id": doc, "file_sha256": source["sha256"],
+        "fragments": [b.fragment().model_dump() for b in blocks]}), encoding="utf-8")
+    app.kb.sources = [EvidenceReportSource(evidence)]
+    app.source_owners = {doc: req.assigned_rd}
+    ir_path = tmp_path / "negative-ir.json"
+    ir_path.write_text(ir.model_dump_json(), encoding="utf-8")
+    app.config["source_irs"] = {doc: str(ir_path)}
+    pointers = list(dict.fromkeys(c.fragment for c in ir.evidence))
+    app.save_source_preparation(req.id, pointers, [], "（合成）混合品质结果，仅作比较材料", req.assigned_rd)
+    before = app.kb.state_path.read_bytes()
+    with pytest.raises(ValueError, match="已指定本人负责"):
+        app.compile_source_preparation(req.id, doc, req.assigned_rd)
+    # 仅在合成临时实例指定本条归属；型号未对齐仍保留在原单编译报告中。
+    ir.proposal.author = req.assigned_rd
+    ir_path.write_text(ir.model_dump_json(), encoding="utf-8")
+    ctx = app.agents.context(req.assigned_rd, thread=req.id)
+    result = app.agents.call_tool(ctx, "compile_source_preparation", {"req_id": req.id, "doc_id": doc})
+    assert result.ok and result.data["claim_ids"] == []
+    report = result.data["compilation"]["report"]
+    assert report["admitted"] == [] and report["dropped"] == []
+    assert report["unaligned_details"][0]["reasons"] == ["产品未对齐：SYNTH-PRODUCT（试样版）"]
+    assert app.kb.state_path.read_bytes() == before
+    # 明确登记独立的合成试样型号，不把后缀隐式折叠到基础产品。
+    product = next(p for p in app.seeds.products if p.id == "T-206")
+    app.kb.seeds.products.append(product.model_copy(update={"id": ir.product_raw, "owner": req.assigned_rd}))
+    result = app.agents.call_tool(ctx, "compile_source_preparation", {"req_id": req.id, "doc_id": doc})
+    assert result.ok
+    saved = app.source_preparation(req.id, req.assigned_rd)
+    row = saved["compilation"]["report"]["admitted"][0]
+    unit = app.kb._units[row["ku_id"]]
+    assert saved["claim_ids"] == [unit.id] and unit.product_id == ir.product_raw
+    assert unit.text.startswith("报告层单次观察：") and "None组" not in unit.text
+    assert "合成甲布面合格" in unit.text and "合成乙布面出现色花，不合格" in unit.text
+    assert "[A组 / 工艺曲线]" in unit.text and "[B组 / 工艺曲线]" in unit.text
+    assert "[原文范围 / 配方原文（按原对象及列）]" in unit.text
+    assert all(c.text in unit.text for c in ir.conditions) and ir.proposal.limits in unit.text
+    assert set(unit.evidence) == set(pointers) and all(note in saved["pending"] for note in ir.pending)
+    assert unit.status == "candidate" and unit.level == 3 and row["capability_id"] is None
+    assert not app.events.query(["claim_confirmed", "capability_granted"])
+    assert app.authorized_source_replies(session.id, "customer:C01") == []
+    assert saved["temperatures"][session.id]["celsius"] == [75.0, 75.0]
 
 
 def test_prepared_ir_imports_candidate_with_full_conditions_on_original_requirement(tmp_path):
