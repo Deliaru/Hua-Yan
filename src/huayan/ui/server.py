@@ -234,6 +234,7 @@ GET = {
     "/api/source-preparation": lambda app, p: app.source_preparation(p["req_id"], p["viewer"]),
     "/api/sources/read": lambda app, p: app.read_source(p["doc_id"], p["viewer"], p.get("span")),
     "/api/sources/trial": lambda app, p: app.read_trial_record(p["doc_id"], p["viewer"]),
+    "/api/sources/image": lambda app, p: app.read_source_image(p["doc_id"], int(p["page"]), p["viewer"], p.get("span")),
     "/api/capabilities": lambda app, p: app.capabilities(p["viewer"]),
     "/api/claims": lambda app, p: app.candidate_claims(p.get("req_id"), p["viewer"]),
     "/api/demo/ledger": demo_ledger,
