@@ -27,9 +27,12 @@ def migrate_seeds(seeds, at):
         if product.status != "released":
             continue
         for situation in product.situations:
+            payload = {"product_id": product.id, "phenomenon": situation.phenomenon,
+                       "conditions": situation.conditions}
+            if situation.temperature_c is not None:
+                payload["temperature_c"] = list(situation.temperature_c)
             caps.append(Capability(id=situation.capability_id, form="applicable", audience=0,
-                payload={"product_id": product.id, "phenomenon": situation.phenomenon,
-                         "conditions": situation.conditions}, based_on=[f"ku:sheet:{product.id}"],
+                payload=payload, based_on=[f"ku:sheet:{product.id}"],
                 granted_by=product.owner, approved_by="seed", status="active", at=at))
     for phen in seeds.phenomena:
         unit = KnowledgeUnit(id=f"ku:claim:phen:{phen.id}", kind="claim", level=3,
@@ -131,7 +134,8 @@ class KnowledgeBase:
         products = []
         for product in self._products.values():
             situations = [Situation(phenomenon=c.payload["phenomenon"], conditions=c.payload["conditions"],
-                capability_id=c.id) for c in caps if c.form == "applicable" and c.payload["product_id"] == product.id]
+                capability_id=c.id, temperature_c=c.payload.get("temperature_c"))
+                for c in caps if c.form == "applicable" and c.payload["product_id"] == product.id]
             products.append(product.model_copy(update={"situations": situations, "applicable": {},
                 "solves": list(dict.fromkeys(s.phenomenon for s in situations))}, deep=True))
         return self.seeds.model_copy(update={"phenomena": phenomena, "products": products}, deep=True)

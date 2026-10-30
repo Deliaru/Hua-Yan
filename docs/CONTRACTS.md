@@ -1646,6 +1646,7 @@ class Situation(BaseModel):
     phenomenon: str
     conditions: dict[str, list[str]]     # 同时成立；未列出的槽位不限
     capability_id: str
+    temperature_c: tuple[float, float] | None = None  # V10.6 C2：摄氏闭区间，单值两端相同
 
 class Product(BaseModel):
     ...                                  # 种子文件格式不变
@@ -1662,8 +1663,15 @@ class Candidate(BaseModel):
 - `migrate_seeds(seeds, at) -> tuple[list[KnowledgeUnit], list[Capability]]`：直接读已发布产品的这些情境生成适用能力，按 2.1 表生成追问能力；每个现象生成一条 L3 结论 `ku:claim:phen:<id>`（必问与先验的依据，确认人 `"seed"`）。**迁移不写事件。**
 - `view()` 用能力表重新算出情境，覆盖种子里的第 0 天情境；视图里的 `Product.solves` 取情境的现象并集，`Product.applicable` 置空。
 - `consistent(product, known)`：存在一个情境与已知条件相容（不看现象）。
-- `match_candidates(phenomenon, known, products)`：签名不变；取该现象下与已知条件相容的情境，每个产品取未知条件最少的那个；无未知条件为 `confirmed`，否则 `possible`。
+- `match_candidates(phenomenon, known, products, limited=(), *, temperature_c=None)`：取该现象下与已知条件相容的情境，每个产品优先取无限制且未知条件最少的那个；无未知/限制为 `confirmed`，否则 `possible`。新增温度关键字参数有默认值，原有枚举调用兼容。
 - `correct_product`：用命中情境里**限定的槽位个数**衡量具体程度（与 V6 的 `len(applicable)` 一致）。
+
+V10.6 C2 首个最小差异：只增加上述 `Situation.temperature_c` 默认字段及匹配关键字参数，保留枚举 `conditions`。
+`applicable.payload` 可选 `temperature_c: [lower, upper]`，固定为摄氏闭区间，单值写作 `[value, value]`；
+现有迁移与能力视图保留该范围，旧能力缺省为 `None`。`domain.temperature_match(actual, allowed)` 返回
+`satisfied / unknown / outside`：客户区间完整包含于授权区间才满足，任一端越界即不命中；授权有范围而需求温度
+未知时为 `possible`，`unknown_slots` 增加 `temperature_c`。没有温度限制的旧情境保持既有含义。
+本小项不改 `NeedState` 或抽取输出，客户温度原话、未知状态与匹配调用接线由本包后续小项完成。
 
 ### 2.3 出口（契约 7.1）
 

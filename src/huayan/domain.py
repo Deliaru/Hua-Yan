@@ -1,5 +1,6 @@
 """契约 1.5：所有包共用的领域函数。"""
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -26,16 +27,30 @@ def consistent(product: Product, known: dict[str, str]) -> bool:
                    if slot in situation.conditions) for situation in product.situations)
 
 
-def match_candidates(phenomenon: str, known: dict[str, str], products: list[Product], limited=()) -> list[Candidate]:
+def temperature_match(actual: tuple[float, float] | None, allowed: tuple[float, float] | None
+                      ) -> Literal["satisfied", "unknown", "outside"]:
+    if allowed is None:
+        return "satisfied"
+    if actual is None:
+        return "unknown"
+    return "satisfied" if allowed[0] <= actual[0] <= actual[1] <= allowed[1] else "outside"
+
+
+def match_candidates(phenomenon: str, known: dict[str, str], products: list[Product], limited=(), *,
+                     temperature_c: tuple[float, float] | None = None) -> list[Candidate]:
     """limited：带研发限制原文的适用能力 id；同一产品优先取不带限制的情境，带限制的只算「可能」。"""
     candidates = []
     for product in sorted(products, key=lambda p: p.id):
         matches = [s for s in product.situations if s.phenomenon == phenomenon
-                   and all(value in s.conditions[slot] for slot, value in known.items() if slot in s.conditions)]
+                   and all(value in s.conditions[slot] for slot, value in known.items() if slot in s.conditions)
+                   and temperature_match(temperature_c, s.temperature_c) != "outside"]
         if product.status != "released" or not matches:
             continue
-        situation = min(matches, key=lambda s: (s.capability_id in limited, sum(slot not in known for slot in s.conditions)))
+        situation = min(matches, key=lambda s: (s.capability_id in limited, sum(slot not in known for slot in s.conditions)
+                        + (temperature_match(temperature_c, s.temperature_c) == "unknown")))
         unknown = [slot for slot in situation.conditions if slot not in known]
+        if temperature_match(temperature_c, situation.temperature_c) == "unknown":
+            unknown.append("temperature_c")
         candidates.append(Candidate(product_id=product.id, unknown_slots=unknown,
             status="possible" if unknown or situation.capability_id in limited else "confirmed",
             capability_id=situation.capability_id))

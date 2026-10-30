@@ -38,6 +38,7 @@ class Situation(BaseModel):
     phenomenon: str
     conditions: dict[str, list[str]]
     capability_id: str
+    temperature_c: tuple[float, float] | None = None   # 摄氏闭区间；单值用相同端点
 
 
 class Product(BaseModel):

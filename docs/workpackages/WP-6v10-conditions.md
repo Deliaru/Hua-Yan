@@ -1,6 +1,6 @@
 # WP-6v10｜温度一个字段的抽取与范围匹配
 
-> 决赛必需，单字段｜状态：待实施｜首版只处理摄氏温度和闭区间。
+> 决赛必需，单字段｜状态：C2 范围字段、能力视图与闭区间匹配已完成首个小项；客户抽取、会话接线与真实范围确认待完成｜首版只处理摄氏温度和闭区间。
 
 ## 目标
 
@@ -39,4 +39,11 @@ pH/用量/时间等多字段、开区间、单位换算平台，以及数值条�
 
 ## 完成记录
 
-待填写：C2 最小差异、温度抽取与比较结果、下一单记录。交 V10.7/V10.9。
+### 2026-10-30｜C2 最小范围字段与现有候选匹配
+
+- **范围与基线**：分支 `v10 @ 7d1b773`，开始时工作区干净。按用户要求进入 M2 的 V10.6 首个小项；编程前已完整重读 AGENTS、总计划、相关契约/QI 和本包，按最小增量、条件保真及禁止过度防御要求自查。真人签字继续留待研发测试，不代替 JianMing Xi 确认真实范围。
+- **C2 最小差异**：`contracts/seeds.py::Situation` 只增加 `temperature_c: tuple[float, float] | None = None`，表示摄氏闭区间；单值用相同端点。保留枚举 `conditions` 和旧情境默认含义。`match_candidates` 只增加有默认值的关键字参数 `temperature_c=None`，原有调用兼容。`applicable.payload` 使用可选 `[lower, upper]`；未加温度时不新增 payload 键，现有种子迁移和能力视图保留已表达的范围。已同步 `docs/CONTRACTS.md`，未建设通用数值条件平台。
+- **实现**：`domain.temperature_match` 统一返回满足/待补/超范围，直接接入原 `match_candidates`。完整包含且枚举条件已知、无原文限制才为 `confirmed`；温度未知则 `possible` 并增加 `unknown_slots=["temperature_c"]`；任一端超范围则该情境不命中。选择同一产品的情境时把温度待补计入未知条件数量，保持温度与该情境的其他条件绑定。没有新增匹配链路、重试或重复权限检查。
+- **必要回归**：新增 `tests/test_conditions_v10.py` 两项合成行为测试，验证迁移→有效能力视图→匹配，75℃、72—78℃与闭区间边界70—80℃命中，未知温度待补，85℃和75—85℃不命中；同时覆盖原文限制仍为可能、不同情境的温度/面料不交叉组合、优先选择已满足情境。运行 `uv run --no-sync pytest -q tests/test_conditions_v10.py tests/test_wp0.py tests/test_applicable_limits.py tests/test_compiler_v10.py`，14项通过（2.22秒）。
+- **运行与真实资料边界**：运行合成70—80℃案例并只读核对真实 `first-report` 状态，产物为 `data/knowledge_v10/checks/temperature-core-first-report.json`。五个指定案例依次为 `confirmed / confirmed / possible / 不命中 / 不命中`。真实报告 `ku:claim:1` 的15条依据指纹仍一致，状态仍为 `candidate`，未写入真实温度授权，原正式状态文件字节未变。本次没有生成模型、视觉模型或 Jev 调用；上述范围仅为合成测试授权，不代表 TF-213HE 的适用结论。
+- **交接与未完成**：首个小项完成，未提交或推送，停下交用户评审。下一小项在同包接入抽取输出、`NeedState` 与会话匹配及温度展示，保持未提及与明确不清楚的区别；实际模型抽取、真实专业范围确认、授予及下一单复用仍待完成，不能将 V10.6 整包记为通过。
