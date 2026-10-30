@@ -74,10 +74,11 @@ export default {
             return fail("Only response_format.type=json_object is supported", 400);
           }
           // 提示约束不等于模型强制 JSON 模式；实际结构由 gateway.structured 校验。
-          messages.unshift({ role: "system", content: "只返回一个符合所给结构的合法 JSON 对象，不要 Markdown 或额外说明。" });
+          messages.unshift({ role: "system", content: "Return only one valid JSON object matching the supplied schema. Do not use Markdown or add explanations." });
         }
         input = {
-          messages,
+          // 视觉模型的原生输入使用 prompt；把 schema、任务、上下文和纠错历史一起保留。
+          prompt: messages.map(({ role, content }) => `${role.toUpperCase()}:\n${content}`).join("\n\n"),
           image: images[0],
           max_tokens: body.max_tokens ?? 4096,
           temperature: body.temperature ?? 0,
@@ -92,6 +93,10 @@ export default {
     try {
       result = await env.AI.run(model, input);
     } catch (error) {
+      // 此模型把首次接受成功也放入 5016 异常；仅识别实际出现的成功确认。
+      if (path === "/license" && error.message.startsWith("5016: Thank you for agreeing to this model's terms.")) {
+        return Response.json({ status: "accepted", message: error.message }, { headers });
+      }
       // 上游失败明确返回错误，不伪造空读数或“成功”结果。
       if (path === "/") {
         return Response.json({ error: error.message }, { status: 502, headers });

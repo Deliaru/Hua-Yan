@@ -58,6 +58,7 @@ class KnowledgeBase:
         self._version = 0
         self._claim_seq = self._cap_seq = 0
         self._doc_levels = {}
+        self._pending_evidence = {}
         self.sources = []
         self._seed_units = {}
 
@@ -94,6 +95,7 @@ class KnowledgeBase:
             kb._caps.update({c["id"]: Capability.model_validate(c) for c in data["capabilities"]})
             kb._version, kb._doc_levels = data["version"], data["doc_levels"]
             kb._claim_seq, kb._cap_seq = data["claim_seq"], data["cap_seq"]
+            kb._pending_evidence = data.get("pending_evidence", {})  # 兼容此前保存的状态文件。
         kb._save()
         return kb
 
@@ -258,11 +260,10 @@ class KnowledgeBase:
         self._suspend(ku_id)
 
     def attach_evidence(self, cap_id, ku: KnowledgeUnit):
-        """编译出与已有能力完全相同的结论：由该能力的授予人确认入库并挂为依据。能力行为不变，只多一条可复核的依据。"""
+        """补充依据先候选化；保留贡献人与待挂接目标，由 V10.7 审阅后挂接。"""
         cap = self._caps[cap_id]
-        self.add(ku.model_copy(update={"owner": cap.granted_by, "confirmed_by": cap.granted_by, "status": "active"}))
-        cap.based_on.append(ku.id)
-        self._save()
+        self._pending_evidence[ku.id] = {"capability_id": cap_id, "contributor": ku.owner}
+        self.add(ku.model_copy(update={"owner": cap.granted_by, "confirmed_by": cap.granted_by, "status": "candidate"}))
 
     def next_cap_id(self):
         self._cap_seq += 1
@@ -286,7 +287,8 @@ class KnowledgeBase:
                 "products": [p.model_dump(mode="json") for p in self._products.values()
                     if self._units[f"ku:sheet:{p.id}"].source != "seed"],
                 "capabilities": [c.model_dump(mode="json") for c in self._caps.values()],
-                "doc_levels": self._doc_levels, "claim_seq": self._claim_seq, "cap_seq": self._cap_seq}
+                "doc_levels": self._doc_levels, "claim_seq": self._claim_seq, "cap_seq": self._cap_seq,
+                "pending_evidence": self._pending_evidence}
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         temp = self.state_path.with_suffix(".tmp")
         temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")

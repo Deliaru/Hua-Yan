@@ -80,7 +80,8 @@ def _key(payload) -> dict:
 
 def admit(proposals: list[Proposal], sources, kb) -> dict:
     """核对引文、定级、对齐，写入候选结论与同层能力提议；返回报告。"""
-    report = {"admitted": [], "dropped": [], "duplicates": [], "conflicts": [], "unaligned": []}
+    report = {"admitted": [], "dropped": [], "duplicates": [], "conflicts": [], "unaligned": [],
+              "unaligned_details": [], "pending_evidence": []}
     slot_ids = {s.id for s in kb.seeds.slots}
     for p in proposals:
         fragments = [_cited(sources, ev) for ev in p.evidence]
@@ -98,15 +99,23 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
             payload = {"phenomenon": found[0], "slot": p.slot, "required": True}
         elif p.form == "applicable" and product and found:
             conditions = {}
+            limits = [p.limits.strip()] if p.limits.strip() else []
             for text in p.conditions:
-                for slot, (value, _) in find_slot_values(text, kb.seeds.slots).items():
+                matched = find_slot_values(text, kb.seeds.slots)
+                for slot, (value, _) in matched.items():
                     conditions.setdefault(slot, []).append(value)
-            # 原文不限条件 → 不限（同种子 applicable 为空）；写了条件却一个也认不出 → 对不上
+                # 认出一个枚举不代表整句条件已表达；其余信息以完整原句交研发判断。
+                if not matched or not any(text.strip().strip("，。；") == phrase for _, phrase in matched.values()):
+                    limits.append(text)
+            # 原文不限条件 → 不限；全部未识别的条件只能留在待审提议的 limits。
             payload = ({"product_id": product.id, "phenomenon": found[0], "conditions": conditions}
-                       | ({"limits": p.limits.strip()} if p.limits.strip() else {})
-                       if conditions or not p.conditions else None)
+                       | ({"limits": "\n".join(dict.fromkeys(limits))} if limits else {}))
         if found is None or confirmer is None or (p.product and product is None) or (p.form and payload is None):
             report["unaligned"].append(p.title)        # 新概念或待认领：交人决定是否扩展结构
+            reasons = (["现象未对齐"] if found is None else []) + (["专业确认人待安排"] if confirmer is None else [])
+            reasons += [f"产品未对齐：{p.product}"] if p.product and product is None else []
+            reasons += ["能力形式或条件待判断"] if p.form and payload is None else []
+            report["unaligned_details"].append({"title": p.title, "reasons": reasons})
             continue
         level = max(f.level for f in fragments)
         existing = [c for c in kb.capabilities() if payload and c.form == p.form and c.audience == level
@@ -117,9 +126,10 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
             confirmed_by=confirmer, status="candidate", source="contributed", created_at=at,
             evidence=[f"{f.doc_id}#{f.span}@{f.fingerprint}" for f in fragments])
         same = next((c for c in existing if _key(c.payload) == _key(payload)), None)
-        if same:                                       # 与已有能力完全相同：挂为它的依据（第 0 天内容也有指纹）
+        if same:                                       # 新依据先候选，确认挂接留给 V10.7。
             kb.attach_evidence(same.id, unit)
             report["duplicates"].append(p.title)
+            report["pending_evidence"].append({"ku_id": unit.id, "capability_id": same.id, "title": p.title})
             continue
         if any(all(c.payload.get(k) == payload.get(k) for k in ("phenomenon", "product_id", "slot"))
                and set(c.payload.get("conditions", {})) == set(payload.get("conditions", {})) for c in existing):

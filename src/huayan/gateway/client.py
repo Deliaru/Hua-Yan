@@ -36,7 +36,8 @@ class OpenAICompatGateway:
     def _client(self, tier):
         if tier not in self.clients:
             cfg = self.tiers[tier]
-            self.clients[tier] = openai.OpenAI(base_url=cfg["base_url"], api_key=os.environ[cfg["api_key_env"]], max_retries=0)
+            self.clients[tier] = openai.OpenAI(base_url=cfg["base_url"], api_key=os.environ[cfg["api_key_env"]],
+                                             default_headers=cfg.get("default_headers"), max_retries=0)
         return self.clients[tier]
 
     def _order(self, tier):

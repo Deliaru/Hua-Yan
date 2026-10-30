@@ -1,6 +1,6 @@
 # WP-2v10｜选定资料的解析与证据读取
 
-> 决赛必需，按样例交付｜状态：首份 Word 报告原生读取已实现，待用户评审；图片模型实调与 PPT 图表读取另记｜先处理首份报告用到的格式。
+> 决赛必需，按样例交付｜状态：首份 Word 报告原生读取已实现；Cloudflare 实调尚未取得合格图片读数，最新验证交用户评审；PPT 图表读取另记｜先处理首份报告用到的格式。
 
 ## 目标
 
@@ -88,3 +88,21 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 - **兼容**：读取侧 `ClefWorkerClient.path="/"` 已核对，无需修改 Python 客户端；CORS/OPTIONS 保留，允许请求头加入 `Authorization`。现有网关、模型配置和契约均未修改，没有扩展检索或编译工作包。
 - **验证**：JavaScript 语法检查通过；使用合成请求在本地进行一次两路转发检查，确认 Clef 输入与返回原样保留、视觉请求送到指定视觉模型并保留图片和生成文本，全部通过。未新增测试文件，未调用真实模型或上传企业资料，不作为读图效果成绩。
 - **交接**：已重新完整阅读 AGENTS，再读总计划、相关契约/QI 与本包，按其约束完成本小项。用户可将合并文件全文替换原 Worker 后部署；当前停下等待用户评审，真实接入和读图仍待完成，未提交或推送。工作区原有的 `huayan_knowledge_compiler_design_v3.html` 未改动。
+
+### 2026-10-30｜Cloudflare 接入与首轮真实调用，待部署输入修正
+
+- **配置**：当前基线 `feb4e7a`。新增 `config/models.vision.cloudflare.yaml`，仅读图使用 `strong` 档、现有 Worker `/v1` 地址和实际 Llama 3.2 11B 模型名；`scripts/read_report.py --vision` 默认使用该配置。SDK 的环境变量 `CLOUDFLARE_WORKER_KEY` 使用占位字符串 `unused`，未读取或发送旧供应商密钥。上游失败不自动重试，JSON 结构仍走现有 `gateway.structured` 的限定尝试。
+- **协议**：先验证已部署路径，再通过现有网关发送首份报告第1页与原生上下文，模型返回未接受协议的 5016。用户将误选的“跳过”明确更正为同意后，向 `/license` 提交一次 `prompt="agree"`。上游确认接受，但旧 Worker 将该确认包装为 HTTP 502；随后已取得真实模型响应，协议已生效。原始确认保存在读取侧 `cloudflare-license-acceptance.json`，未重复提交。
+- **实际兼容问题**：本机 SDK 的 HTTP 客户端在解压响应时出现 `Decompressor.decompress() got an unexpected keyword argument 'output_buffer_limit'`。`gateway/client.py` 仅增加向 SDK 透传配置可选 `default_headers`；本读图配置设置 `Accept-Encoding: identity` 后已正常取得响应。其余配置不传该字段，保持 SDK 默认行为；未扩展冻结契约或重试框架。
+- **真实结果**：复用 Word COM 的原生3页图，原件指纹核对一致。第1页首轮返回英文摘要，两次结构纠错仍未生成规定 JSON，校验明确失败；第2、3页未调用，没有合格结构化读数，也没有完成真实缓存回放。3条无效模型响应保存在 `cloudflare-reading-check.json`，仅清除对应3个无效缓存文件，以便部署修正后重跑；原生30块、33条读数与7项原生待补读保持，审阅页新增当前失败说明。未把摘要补造为读数或专业判断。
+- **最小输入修正**：`scripts/cloudflare_vision_worker.mjs` 将视觉请求从 `messages + image` 改为模型参数页列出的 `prompt + image`，在 prompt 中保留角色标签、schema、任务、上下文及纠错历史；仅对已实际出现的协议接受成功确认做明确返回。Clef 根路径及透传内容保留。该修正是针对真实失败的适配，效果待用户更新 Worker 后实调验证；不宣称模型已能稳定读准。
+- **验证与交接**：受影响的现有读取测试2项通过（1.15秒）；Worker 语法及一次合成转发检查通过，确认 schema/任务/上下文/纠错历史进入 prompt、Clef 输入保持。未新增测试文件。编程前按要求重读 AGENTS、总计划、相关契约/QI 和本包，评审由用户进行。目前等待用户重新部署本地 Worker 文件，协议无需再接受；本小项未完成真实读图，未推进 V10.5，未提交或推送。
+
+### 2026-10-30｜用户更新部署后的实调，结构化读图仍未完成
+
+- **本轮范围**：用户确认已部署 `prompt + image` 版本后继续验证同一份报告，分支仍为 `v10`、基线 `feb4e7a`。编程前已重新完整阅读 AGENTS，再读总计划、相关契约/QI 与本包，并按最小改动和禁止过度防御要求自查；评审由用户进行。没有再次接受协议，没有扩展检索或推进 V10.5。
+- **部署验证**：复用指纹一致的 Word COM 三页原图及原生上下文；第1页经统一网关、`caller="ingest:extract"` 取得3次真实响应，返回模型名为 `@cf/meta/llama-3.2-11b-vision-instruct`，无降级。两次为说明文字、一次为带说明的 JSON Schema，均未通过既有 `ImageReadout` 结构校验。实际响应和调用记录保存于 `data/knowledge_v10/evidence/SRC-3a2130604c/cloudflare-prompt-reading-check.json`。
+- **最小修改**：`reader/image.py` 在图片输入末尾明确要求输出 JSON 数据实例，并提供不含真实业务数值的结构示例，针对已复现的“返回结构定义而非读数”问题；校验、缓存和错误处理继续沿用现有网关。该提示首次调用触及60秒本地超时，因此仅将逐页读图请求的现有 `timeout_s` 设为180，未增加重试或降级机制，Worker 无需再次部署。
+- **最终真实结果**：延长等待后得到上游 HTTP 502、`3046: Request timeout`，不是模型协议未接受。两次超时分别记录在 `cloudflare-instance-reading-check.json` 和 `cloudflare-report-reading-check.json`。本轮没有合格图片读数，第2、3页未调用，真实缓存回放未完成；结构化读图验收明确未通过，未将输出补造为成功结果。
+- **产物与检查**：`evidence.json`、`review.html` 已更新为本轮失败说明；原生30块、33条标签及7项原生待补读保持，图片读数为空，专业确认仍为空。已有首份原生 TrialRecord 未修改。提示修改后运行 `.venv/Scripts/uv.exe run --no-sync pytest -q tests/test_reader_v10.py`，2项通过（1.17秒）；后续等待参数由本次实际调用验证，无新增或重复测试文件。含企业内容的响应和缓存继续只留在被忽略的 `data/`。
+- **交接**：本轮验证停止并交用户评审；Cloudflare 接口已取得真实响应，但完整读图和缓存回放仍待完成。首份原生报告与 TrialRecord 继续保留，后续主线按用户评审结果推进。未写正式知识状态，未提交或推送。

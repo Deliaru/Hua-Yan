@@ -1,9 +1,10 @@
 """读取清单中的一份 Word 报告，输出原文对照与读取侧 JSON；不写正式状态。
 
 uv run python scripts/read_report.py --source SRC-3a2130604c
-密钥保存在项目根目录 .env 时：
-uv run --env-file .env python scripts/read_report.py --source SRC-3a2130604c --vision
-配置好现有模型网关后，加 --vision 完成试样报告逐页结构化读图；不加时仅完成原生解析。
+Cloudflare Worker 已部署时，在 PowerShell 设置 $env:CLOUDFLARE_WORKER_KEY="unused"，再运行：
+uv run python scripts/read_report.py --source SRC-3a2130604c --vision
+默认读图配置为 config/models.vision.cloudflare.yaml；可用 --models 指定其他网关配置。
+使用项目根目录 .env 中的环境变量时，uv run 后加 --env-file .env。不加 --vision 时仅完成原生解析。
 """
 import argparse
 import json
@@ -20,7 +21,7 @@ def main():
     parser.add_argument("--source", required=True)
     parser.add_argument("--out")
     parser.add_argument("--vision", action="store_true")
-    parser.add_argument("--models", default="config/models.yaml")
+    parser.add_argument("--models", default="config/models.vision.cloudflare.yaml")
     args = parser.parse_args()
     sources = json.loads(Path(args.manifest).read_text(encoding="utf-8"))["sources"]
     source = {s["source_id"]: s for s in sources}[args.source]
