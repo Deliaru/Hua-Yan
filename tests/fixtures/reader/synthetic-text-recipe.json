@@ -1,0 +1,15 @@
+[
+  {"span": "p1", "group": null, "section": "二、试样基本信息", "text": "合成测试资料，非企业报告：合成织物在合成设备处理。"},
+  {"span": "p2", "group": "A", "section": "三、工厂原工艺及配方", "text": "  SYNTH-DYE          X"},
+  {"span": "p3", "group": "A", "section": "三、工厂原工艺及配方", "text": "SYNTH-ACID          0.4 g/L"},
+  {"span": "p4", "group": "A", "section": "三、工厂原工艺及配方", "text": "SYNTH-OLD          0.3%"},
+  {"span": "p5", "group": "A", "section": "三、工厂原工艺及配方", "text": "升温速率及保温时间：A.深色先60度再85度，B.浅色75度保温9分钟。"},
+  {"span": "p6", "group": "B", "section": "四、试样工艺及配方", "text": "SYNTH-DYE          X"},
+  {"span": "p7", "group": "B", "section": "四、试样工艺及配方", "text": "SYNTH-ACID          0.4g/L"},
+  {"span": "p8", "group": "B", "section": "四、试样工艺及配方", "text": "SYNTH-NEW          0.8 g/L"},
+  {"span": "p9", "group": "B", "section": "四、试样工艺及配方", "text": "升温速率及保温时间：深色85度不保温，B.浅色75度不保温。"},
+  {"span": "p10", "group": null, "section": "五、试样结果分析", "text": "试样品质方面："},
+  {"span": "p11", "group": null, "section": "五、试样结果分析", "text": "合成结果：布面未见异常。"},
+  {"span": "p12", "group": null, "section": "五、试样结果分析", "text": "2.试样结论:"},
+  {"span": "p13", "group": null, "section": "五、试样结果分析", "text": "合成结果：深色每缸节省17分钟，浅色每缸节省9分钟。"}
+]

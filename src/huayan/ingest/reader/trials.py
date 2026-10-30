@@ -76,6 +76,7 @@ class TrialRecord(BaseModel):
     cost: list[TrialText]
     follow_up: list[TrialText]
     pending: list[str]
+    reported_results: list[TrialText] = []
     review_notes: list[TrialText] = []
     professional_confirmation: str | None = None
 
@@ -93,6 +94,11 @@ def as_text(block):
 def read_formula(blocks):
     ingredients, notes = [], []
     for block in blocks:
+        if block.kind == "paragraph":
+            match = re.fullmatch(r"\s*(.+?)\s{2,}(\d+(?:\.\d+)?|[Xx])\s*(g/L|%)?\s*", block.text)
+            if match:
+                ingredients.append(Ingredient(name=match[1], value=match[2], unit=match[3], evidence=[cite(block)]))
+            continue
         cells = {(c.row, c.column): c for c in block.cells}
         for header in [c for c in block.cells if c.text.strip() == "用量"]:
             for amount in [c for c in block.cells if c.column == header.column and c.row > header.row and c.text.strip()]:
@@ -129,7 +135,7 @@ def build_trial_record(blocks: list[EvidenceBlock], readings: list[Reading], pen
     groups = []
     for group in ("A", "B"):
         own = [b for b in blocks if b.group == group]
-        formula, notes = read_formula([b for b in own if b.kind == "table"])
+        formula, notes = read_formula([b for b in own if b.kind == "table" or "配方" in b.section])
         curves = [b for b in own if "工艺曲线" in b.text]
         groups.append(TrialGroup(group=group, formula=formula, formula_notes=notes,
             curve_labels=[r for r in readings if r.group == group and r.span in {b.span for b in curves}],
@@ -164,13 +170,20 @@ def build_trial_record(blocks: list[EvidenceBlock], readings: list[Reading], pen
     quality, cost = [], []
     target = None
     for block in results:
-        if re.match(r"\d+[.、]\s*.*(?:品质|质量|成本)", block.text.strip()):
+        if re.match(r"\d+[.、]\s*.*(?:品质|质量|成本)", block.text.strip()) or re.fullmatch(
+            r"试样(?:品质|质量|成本)方面[：:]", block.text.strip()):
             target = cost if "成本" in block.text else quality
+        elif re.match(r"\d+[.、]\s*试样结论", block.text.strip()):
+            target = None
         elif not re.match(r"\s*试样人[：:]", block.text) and target is not None:
             target.append(as_text(block))
     missing = list(pending)
     missing.extend(f"{group.group}组 {item.name}：百分比基准未记载，不默认解释为 %owf。"
                    for group in groups for item in group.formula if item.unit == "%")
+    missing.extend(f"{group.group}组 {item.name}：原文用量为 {item.value}，具体数值及单位待补，不按零处理。"
+                   for group in groups for item in group.formula if item.value.upper() == "X")
+    missing.extend(f"{block.span}：多阶段文字工艺保留原句，未结构化速率/阶段或从中重算总时长。"
+                   for block in body if "升温速率及保温时间" in block.text)
     if comparison.matches_report is False:
         missing.append("报告 A/B 总时长差值与所写节省时间不一致，保留两者待核对。")
     return TrialRecord(source_id=blocks[0].source_id, file_sha256=blocks[0].file_sha256,
@@ -180,4 +193,5 @@ def build_trial_record(blocks: list[EvidenceBlock], readings: list[Reading], pen
         common_conditions=[as_text(x) for x in body if "基本信息" in x.section
                            and not re.fullmatch(r"\s*\d+[.、]\s*[^：:]+[：:]\s*", x.text)],
         groups=groups, changes=changes, time=comparison, quality=quality, cost=cost,
+        reported_results=[as_text(x) for x in results if not re.match(r"\s*试样人[：:]", x.text)],
         follow_up=[as_text(x) for x in body if "后续" in x.section or "计划" in x.section], pending=missing)

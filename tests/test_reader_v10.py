@@ -8,6 +8,7 @@ import openai
 
 from huayan.gateway.client import OpenAICompatGateway
 from huayan.ingest.reader.image import read_image
+from huayan.ingest.reader.evidence import EvidenceBlock
 from huayan.ingest.reader.trials import build_trial_record
 from huayan.ingest.reader.word import read_docx, read_native_labels
 from huayan.meter import FileMeter
@@ -41,6 +42,28 @@ def test_native_report_groups_units_and_merged_curve():
     assert [r.conditions for r in b.curve_labels if r.stage == "保温"] == [["95℃"]]
     assert a.formula[0].evidence[1].cell == (2, 2)
     assert record.time.a is None and record.time.b is None  # 未标组别的总时间90min不回填A/B。
+
+
+def test_text_recipe_keeps_unknown_amount_subprocesses_and_result_basis():
+    rows = json.loads((FIXTURE / "synthetic-text-recipe.json").read_text(encoding="utf-8"))
+    blocks = [EvidenceBlock(source_id="SYNTH-TEXT", file_sha256="synthetic", level=3, source="internal",
+                            kind="paragraph", **row) for row in rows]
+    record = build_trial_record(blocks, [], [])
+    a, b = record.groups
+    assert [(x.name, x.value, x.unit) for x in a.formula] == [
+        ("SYNTH-DYE", "X", None), ("SYNTH-ACID", "0.4", "g/L"), ("SYNTH-OLD", "0.3", "%")]
+    assert [(x.name, x.value, x.unit) for x in b.formula] == [
+        ("SYNTH-DYE", "X", None), ("SYNTH-ACID", "0.4", "g/L"), ("SYNTH-NEW", "0.8", "g/L")]
+    assert a.formula[0].evidence[0].quote == rows[1]["text"]
+    assert a.formula[0].evidence[0].fragment.startswith("SYNTH-TEXT#p2@")
+    assert a.formula[-1].basis is None and any("百分比基准" in note for note in record.pending)
+    assert sum("具体数值及单位待补" in note for note in record.pending) == 2
+    assert rows[4]["text"] in [x.text for x in a.operations]
+    assert rows[8]["text"] not in [x.text for x in a.operations]
+    assert [x.text for x in record.quality] == [rows[10]["text"]]
+    assert record.reported_results[-1].text == rows[-1]["text"]
+    assert record.time.calculated_saving is None and record.time.reported_saving is None
+    assert record.professional_confirmation is None
 
 
 def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):

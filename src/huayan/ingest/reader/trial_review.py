@@ -54,7 +54,7 @@ h1,h2,h3{{color:#145b67}}section{{padding:20px;background:white;border:1px solid
 td,th{{border:1px solid #d8e0e5;padding:8px;text-align:left;overflow-wrap:anywhere}}small{{font-size:12px}}
 .notice{{padding:16px;background:#fff3d4}}figure{{max-width:1050px;margin:24px auto}}img{{width:100%}}
 @media(max-width:1000px){{.pair{{grid-template-columns:1fr}}}}</style>
-<h1>首份 A/B 成对试样记录</h1><p>{escape(record.source_id)} · L{record.level} · {escape(record.source)}</p>
+<h1>A/B 成对试样记录</h1><p>{escape(record.source_id)} · L{record.level} · {escape(record.source)}</p>
 <p class="notice">原生解析／规则整理的草稿；尚未专业确认。生成模型读取按用户要求跳过，Jev 尚未核对。
 资料观察不等于适用范围或获授予能力。配方与内部原文仅供本地研发审阅。</p>
 <p><a href="trial-record.json">结构化记录</a> · <a href="{escape(evidence_review)}">原文证据审阅包</a></p>
@@ -62,7 +62,8 @@ td,th{{border:1px solid #d8e0e5;padding:8px;text-align:left;overflow-wrap:anywhe
 <h2>共同条件（仅此报告）</h2>{texts(record.common_conditions)}<div class="pair">{"".join(group_html)}</div>
 <h2>A/B 已读变化</h2><p>“未列出”只表示这一组的原表未列出，不按零用量或未执行处理。</p>{changes}
 <h2>时间结果</h2><p>{escape(time.basis)}</p><p>{escape(arithmetic)}；报告所写节省：{escape(stated)}；{match}。</p>
-<p>{links(time.evidence)}</p><h2>品质结果原文</h2>{texts(record.quality)}
+<p>{links(time.evidence)}</p><h2>报告结果原文（保留各条件与口径）</h2>{texts(record.reported_results)}
+<h2>品质结果原文</h2>{texts(record.quality)}
 <h2>成本结果原文</h2>{texts(record.cost)}<p>仅保留报告表述，本小项未推算金额或节约比例。</p>
 <h2>后续计划</h2>{texts(record.follow_up)}<h2>待补读／运行状态</h2><ul>
 {"".join(f'<li>{escape(note)}</li>' for note in record.pending)}</ul>
