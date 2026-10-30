@@ -165,7 +165,7 @@ class KnowledgeBase:
         self._save()
         return cap.model_copy(deep=True)
 
-    def approve(self, cap_id, by):
+    def approve(self, cap_id, by, *, reviewed_evidence=None):
         actor = next(a for a in self.seeds.actors if a.id == by)
         if actor.role != "pm" or by == "pm:agent":
             raise PermissionDenied("适用能力必须由真人产品经理批准")
@@ -176,7 +176,9 @@ class KnowledgeBase:
         if any(self._units[u].confirmed_by != by for u in pending):
             raise ValueError("依据结论尚未确认")
         if pending:                      # 公开产品页的结论由批准它的产品经理核对，批准即确认
-            self.confirm(pending, by)
+            if reviewed_evidence is None:
+                reviewed_evidence = {u: list(self._units[u].evidence) for u in pending}
+            self.confirm(pending, by, reviewed_evidence=reviewed_evidence)
         cap.approved_by, cap.status = by, "active"
         self._save()
         return cap.model_copy(deep=True)
@@ -212,23 +214,45 @@ class KnowledgeBase:
         for evidence in unit.evidence:
             location = evidence.rsplit("@", 1)[0]
             doc_id, span = location.rsplit("#", 1)
-            source = next(s for s in self.sources if doc_id in s.list_docs())
-            fragments.append(source.fetch(doc_id, span))
+            source = next((s for s in self.sources if doc_id in s.list_docs()), None)
+            fragment = source.fetch(doc_id, span) if source and span in {f.span for f in source.fetch(doc_id)} else None
+            if fragment is None:
+                raise ValueError(f"依据无法取回，请重新审阅：{unit.id}")
+            fragments.append(fragment)
         return fragments
 
-    def confirm(self, ku_ids, by):
+    def confirm(self, ku_ids, by, *, reviewed_evidence=None):
+        """有来源的结论须提交本次审阅的 {ku_id: [证据指针@指纹]}；全部核对后再生效。"""
         units = [self._units[ku_id] for ku_id in ku_ids]
+        checked = {}
         for unit in units:
             if unit.confirmed_by not in (None, by):
                 raise PermissionDenied("只能确认本人负责的结论")
             fragments = self._fragments(unit)
             if fragments and all(f.source == "external" for f in fragments):
                 raise ValueError("只依据外部片段的结论不能确认")
+            current = [f"{f.doc_id}#{f.span}@{f.fingerprint}" for f in fragments]
+            if unit.evidence and (reviewed_evidence is None or unit.id not in reviewed_evidence):
+                raise ValueError(f"请提交本次实际审阅的证据指纹：{unit.id}")
+            if unit.evidence and reviewed_evidence[unit.id] != current:
+                raise ValueError(f"依据已变化，请重新审阅：{unit.id}")
+            pending = self._pending_evidence.get(unit.id)
+            if pending is not None:
+                target = self._caps[pending["capability_id"]]
+                if target.granted_by != by or target.status == "revoked":
+                    raise ValueError("补充依据的目标能力已撤销或不属于本确认人")
+            checked[unit.id] = current
         for unit in units:
-            if unit.evidence:
-                unit.evidence = [f"{f.doc_id}#{f.span}@{f.fingerprint}" for f in self._fragments(unit)]
+            if unit.status == "active" and unit.confirmed_by == by and unit.evidence == checked[unit.id]:
+                continue
+            unit.evidence = checked[unit.id]
             unit.status, unit.confirmed_by, unit.owner = "active", by, by
-            self.events.append("claim_confirmed", by, {"ku_id": unit.id})
+            payload = {"ku_id": unit.id, "reviewed_evidence": unit.evidence}
+            pending = self._pending_evidence.pop(unit.id, None)
+            if pending is not None:
+                self._caps[pending["capability_id"]].based_on.append(unit.id)
+                payload.update(pending)
+            self.events.append("claim_confirmed", by, payload)
         for cap in self._caps.values():
             if cap.status not in {"proposed", "suspended"} or not set(cap.based_on) & set(ku_ids):
                 continue

@@ -32,7 +32,7 @@ from huayan.jue.state import collect_scheduled, realtime_state, requirement_stat
 from huayan.ingest.compile import recheck
 from huayan.ingest.folder import FolderSource
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
-from huayan.knowledge.permission import colleague_l3, holder
+from huayan.knowledge.permission import colleague_l3, holder, can_read
 from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
 from huayan.l1.extract import LLMExtractor, RuleExtractor
 from huayan.l1.session import handle_turn, recommend, record_disclosure, recommendation_note
@@ -746,7 +746,7 @@ class HuayanApp:
         session.status = "recommended"
         record_disclosure(card, self)
 
-    def decline_project(self, req_id, reason, by, applicable_product=None, claim_ids=(), limits=""):
+    def decline_project(self, req_id, reason, by, applicable_product=None, claim_ids=(), limits="", reviewed_evidence=None):
         """v6：研发不立项。给出 applicable_product = 已有产品适用（只是超出标注范围），客户会话收到该产品推荐；
         否则客户收到「暂无方案、已记录」（会话 closed）。V9.5：limits = 槽位表达不了的限制原文，随适用能力保存。"""
         req, _ = self._requirement(req_id, by, {"rd"}, {"draft"})
@@ -763,7 +763,7 @@ class HuayanApp:
         if applicable_product:
             self.kb.product(applicable_product)
             if claim_ids:
-                self.kb.confirm(claim_ids, by)
+                self.kb.confirm(claim_ids, by, reviewed_evidence=reviewed_evidence)
             else:
                 unit = KnowledgeUnit(id=self.kb.next_claim_id(), kind="claim", level=3,
                     title="研发判定已有产品适用", text=reason, product_id=applicable_product,
@@ -800,7 +800,7 @@ class HuayanApp:
             raise PermissionDenied("产品经理 Agent 只能起草，不能签字")
         return actor
 
-    def extend_scope(self, question_id, note, by):
+    def extend_scope(self, question_id, note, by, reviewed_evidence=None):
         """v6：产品经理签字扩展产品适用范围。写进本门面内该产品的 solves（不改种子文件），
         沉淀为产品经理名下的 L2 知识；此后同类需求在 L1 匹配时命中，被引用时给本人记分。"""
         actor = self._human_pm(by)
@@ -813,7 +813,7 @@ class HuayanApp:
             raise ValueError("问题尚在准备中")
         if not note.strip():
             raise ValueError("请写明扩展依据")
-        capability = self.kb.approve(q.refs["capability_id"], by)
+        capability = self.kb.approve(q.refs["capability_id"], by, reviewed_evidence=reviewed_evidence)
         self.events.append("scope_extended", by, {"question_id": q.id,
             "product_id": capability.payload["product_id"], "phenomenon": capability.payload["phenomenon"],
             "capability_id": capability.id, "note": note,
@@ -1405,16 +1405,35 @@ class HuayanApp:
                 if u.kind == "claim" and u.status == "candidate"
                 and req.phenomenon in u.phenomenon_ids]
 
-    def confirm_claims(self, req_id, ku_ids, by):
+    def review_claims(self, ku_ids, by):
+        """读取本次审阅原文与固定指纹；返回值由人审阅后随确认提交，不写正式状态。"""
+        actor = self._actor(by, {"rd", "pm"})
+        if by == "pm:agent":
+            raise PermissionDenied("审阅确认须由真人负责")
+        units = [self.kb._units[ku_id] for ku_id in ku_ids]
+        if any(unit.owner != by if unit.confirmed_by is None else
+               not can_read(actor, unit, self.kb._shared(actor)) for unit in units):
+            raise PermissionDenied("无权审阅所选结论")
+        if self.kb.is_frozen(by) and any(unit.level > 1 for unit in units):
+            raise PermissionDenied("上层知识读取已冻结")
+        fragments = {u.id: self.kb._fragments(u) for u in units}
+        return {"claims": [u.model_copy(deep=True) for u in units],
+            "fragments": fragments,
+            "reviewed_evidence": {ku_id: [f"{f.doc_id}#{f.span}@{f.fingerprint}" for f in items]
+                                  for ku_id, items in fragments.items()},
+            "pending_evidence": {u.id: dict(self.kb._pending_evidence[u.id]) for u in units
+                                 if u.id in self.kb._pending_evidence}}
+
+    def confirm_claims(self, req_id, ku_ids, by, reviewed_evidence=None):
         candidates = {u.id for u in self.candidate_claims(req_id, by)}
         if not set(ku_ids) <= candidates:
             raise ValueError("只能确认本单相关的候选结论")
-        self.kb.confirm(ku_ids, by)
+        self.kb.confirm(ku_ids, by, reviewed_evidence=reviewed_evidence)
         self._after(req_ids=[req_id])
         self.scan()
         return self.requirement_view(req_id, by).requirement
 
-    def sign_qi_grant(self, question_id, by, claim_ids=(), note=""):
+    def sign_qi_grant(self, question_id, by, claim_ids=(), note="", reviewed_evidence=None):
         self._actor(by, {"rd"})
         q = _find(self.bus.questions, question_id, "问题")
         if q.family != "qi_grant" or q.status != "open" or q.prepared_at is None:
@@ -1443,7 +1462,7 @@ class HuayanApp:
         if claim_ids:
             if not set(claim_ids) <= set(source.based_on):
                 raise ValueError("只能确认此项能力依据的结论")
-            self.kb.confirm(claim_ids, by)
+            self.kb.confirm(claim_ids, by, reviewed_evidence=reviewed_evidence)
         cap = self.kb.grant(source.model_copy(update={"id": self.kb.next_cap_id(),
             "audience": int(q.refs["audience"]), "granted_by": by, "approved_by": None,
             "status": "active", "at": get_clock().now()}))
@@ -1635,7 +1654,7 @@ class HuayanApp:
         return publish(out, state, self.templates, self.bus, self.config["thresholds"]["publish"],
                        seeds=self.seeds, refs=refs)
 
-    def resolve(self, question_id, action, by, note=""):
+    def resolve(self, question_id, action, by, note="", reviewed_evidence=None):
         actor = self._actor(by)
         q = _find(self.bus.questions, question_id, "问题")
         if q.status != "open":
@@ -1660,7 +1679,7 @@ class HuayanApp:
             self.events.append("sheet_updated", by, {"product_id": pid, "slot": slot, "removed": value})
             self._invalidate_capabilities(by)
         elif q.family == "qi_review" and action == "sign":
-            self.kb.confirm([q.refs["ku_id"]], by)
+            self.kb.confirm([q.refs["ku_id"]], by, reviewed_evidence=reviewed_evidence)
         elif action == "freeze_access":
             self.kb.freeze(q.refs["actor_id"], by, get_clock().now())
         result = self._settle(question_id, Resolution(action=action, by=by, note=note))

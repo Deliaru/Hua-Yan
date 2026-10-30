@@ -1625,9 +1625,19 @@ class BlockedHint(BaseModel):            # v7.8 加一个字段（已批准）
 
 - `from_seeds(seeds, events, audit, *, state_path=None)`：只加一个有默认值的参数，现有三参数调用不变；
 - 新增 `view(actor) -> Seeds`、`products()`（= 研发层视图的产品，只供系统内部扫描与内部各层使用）、`explore(query, actor) -> ExploreResult`、`capabilities(...)`、`decrypt_grants() -> list[DecryptGrant]`；
-- 新增写入：`confirm(ku_ids, by)`、`withdraw(ku_id, by)`、`grant(cap) -> Capability`、`approve(cap_id, by)`、`revoke(cap_id, by)`、`evidence_changed(ku_id)`；每次写入后整体保存有效状态；
+- 新增写入：`confirm(ku_ids, by, *, reviewed_evidence=None)`、`withdraw(ku_id, by)`、`grant(cap) -> Capability`、`approve(cap_id, by, *, reviewed_evidence=None)`、`revoke(cap_id, by)`、`evidence_changed(ku_id)`；每次写入后整体保存有效状态；
 - 删除：`update_applicable`、`extend_solves`；
 - `search`、`search_blocked`、`get`、`list` 的签名不变；可读条件加一条「结论状态为 `active`」（候选只经 `explore` 的 `candidates` 给研发，撤回的不再可读）。
+
+V10.7 C7 最小参数差异：`reviewed_evidence: dict[str, list[str]] | None = None` 为本次实际审阅的
+`{ku_id: ["doc_id#span@fingerprint", ...]}`。无来源的直接判断仍兼容原调用；有来源的结论必须显式提交。
+确认时将提交值与一次取回的当前依据比对，缺少或不一致即拒绝，不自动刷新旧指纹。
+相同 payload 的补充依据经确认才挂接到待挂接能力，沿现有 `claim_confirmed` 事件记录指纹、目标与原贡献人。
+`HuayanApp.review_claims(ku_ids, by)` 向有权的真人研发/产品经理提供本次原文与指纹，拒绝 `pm:agent`；
+确认、授予、不立项引用、复核及 `extend_scope(..., reviewed_evidence=None)` 门面透传该可选参数。
+服务端不得在签字时自行取当前指纹替代审阅值。公开来源 `applicable` 批准的兼容路径：当有待确认结论且
+未显式传参时，`approve` 只使用候选中保存的编译时指纹交 `confirm` 比对，来源改变仍拒绝；不改用当前来源新指纹。
+没有新增冻结模型字段。
 
 ### 2.2 领域（契约 1.5，`contracts/seeds.py`、`domain.py`）
 

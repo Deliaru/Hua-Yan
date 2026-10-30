@@ -95,7 +95,13 @@ export const api = {
   // 契的签字入口
   capabilities: (viewer: string) => call<Capability[]>(`capabilities?${q({ viewer })}`),
   claims: (req_id: string, viewer: string) => call<Claim[]>(`claims?${q({ req_id, viewer })}`),
-  confirmClaims: (req_id: string, ku_ids: string[], by: string) => call("qi/confirm", { req_id, ku_ids, by }),
+  reviewClaims: (ku_ids: string[], by: string) => call<{
+    claims: Claim[]; reviewed_evidence: Record<string, string[]>;
+    fragments: Record<string, { doc_id: string; span: string; text: string; fingerprint: string }[]>;
+    pending_evidence: Record<string, { capability_id: string; contributor: string }>;
+  }>("qi/review", { ku_ids, by }),
+  confirmClaims: (req_id: string, ku_ids: string[], by: string, reviewed_evidence?: Record<string, string[]>) =>
+    call("qi/confirm", { req_id, ku_ids, by, reviewed_evidence }),
   grantCapability: (question_id: string, by: string, note = "") => call("qi/grant", { question_id, by, note }),
   revokeCapability: (cap_id: string, by: string) => call("qi/revoke", { cap_id, by }),
   requestShare: (ku_id: string, by: string) => call("qi/request-share", { ku_id, by }),
@@ -119,8 +125,8 @@ export const api = {
     call("decrypt/decide", { question_id, approve, text, by }),
   trial: (req_id: string, result: "pass" | "fail", by: string, cause = "none", missing_slots: string[] = []) =>
     call("trial", { req_id, result, by, cause, missing_slots }),
-  resolve: (question_id: string, action: "dismiss" | "update_sheet" | "freeze_access" | "take_over" | "sign", by: string, note = "") =>
-    call("resolve", { question_id, action, by, note }),
+  resolve: (question_id: string, action: "dismiss" | "update_sheet" | "freeze_access" | "take_over" | "sign", by: string, note = "", reviewed_evidence?: Record<string, string[]>) =>
+    call("resolve", { question_id, action, by, note, reviewed_evidence }),
   unfreeze: (actor_id: string, by: string) => call("unfreeze", { actor_id, by }),
 
   // v6：路由、开工条件、岗位工作、产品经理协作、研发不立项

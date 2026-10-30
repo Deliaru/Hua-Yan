@@ -264,29 +264,31 @@ GET = {
 }
 POST = {
     "/api/agents/forget": lambda app, p: app.forget(p["id"], p["by"]),
-    "/api/qi/confirm": lambda app, p: app.confirm_claims(p["req_id"], p["ku_ids"], p["by"]),
-    "/api/qi/grant": lambda app, p: app.sign_qi_grant(p["question_id"], p["by"], p.get("claim_ids", ()), p.get("note", "")),
+    "/api/qi/review": lambda app, p: app.review_claims(p["ku_ids"], p["by"]),
+    "/api/qi/confirm": lambda app, p: app.confirm_claims(p["req_id"], p["ku_ids"], p["by"], p.get("reviewed_evidence")),
+    "/api/qi/grant": lambda app, p: app.sign_qi_grant(p["question_id"], p["by"], p.get("claim_ids", ()), p.get("note", ""),
+                                                  p.get("reviewed_evidence")),
     "/api/qi/revoke": lambda app, p: app.revoke_capability(p["cap_id"], p["by"]),
     "/api/qi/request-share": lambda app, p: app.request_share(p["ku_id"], p["by"]),
     "/api/qi/withdraw": lambda app, p: app.withdraw_claim(p["ku_id"], p["by"]),
     "/api/sessions": lambda app, p: app.start_session(p["customer_id"], p.get("sales_id")),
     "/api/turn": lambda app, p: app.add_turn(*writable_turn(app, p), p["text"]),
     "/api/recommend": lambda app, p: app.recommend_now(p["session_id"]),
-    "/api/resolve": lambda app, p: app.resolve(p["question_id"], p["action"], p["by"], p.get("note", "")),
+    "/api/resolve": lambda app, p: app.resolve(p["question_id"], p["action"], p["by"], p.get("note", ""), p.get("reviewed_evidence")),
     "/api/unfreeze": lambda app, p: app.unfreeze_access(p["actor_id"], p["by"]),     # v8 Q9.8
     "/api/escalate": lambda app, p: app.escalate(p["session_id"], p["by"]),
     "/api/reuse/adopt": lambda app, p: app.adopt_reuse(p["req_id"], p["by"]),
     "/api/reuse/decline": lambda app, p: app.decline_reuse(p["req_id"], p["reason"], p["by"]),
     "/api/reuse-note": lambda app, p: app.update_reuse_note(p["req_id"], p["text"], p["by"]),
     "/api/merge": lambda app, p: app.merge_requirements(p["question_id"], p["by"], p.get("note", "")),
-    "/api/scope/extend": lambda app, p: app.extend_scope(p["question_id"], p["note"], p["by"]),   # v6
+    "/api/scope/extend": lambda app, p: app.extend_scope(p["question_id"], p["note"], p["by"], p.get("reviewed_evidence")),
     "/api/contribute_l2": lambda app, p: app.contribute_l2(p["req_id"], p["item_index"], p["scene_phrase"],
                                                            p["product_term"], p["by"]),   # v6
     "/api/prepared": lambda app, p: app.mark_prepared(p["question_id"], p["by"]),   # v6 退回纠偏：修改完成，交研发
     "/api/demo/open": open_route,   # v6 开场入口
     "/api/accept": lambda app, p: app.accept_requirement(p["req_id"], p["by"]),
     "/api/decline": lambda app, p: app.decline_project(p["req_id"], p["reason"], p["by"], p.get("product_id"), p.get("claim_ids", ()),
-                                                     p.get("limits", "")),   # v7
+                                                     p.get("limits", ""), p.get("reviewed_evidence")),   # v7
     "/api/return": lambda app, p: app.return_requirement(p["req_id"], p["reason"], p["by"]),
     "/api/req-item": lambda app, p: app.edit_req_item(p["req_id"], p["index"], ReqItem.model_validate(p["item"]), p["by"]),
     "/api/confirm": lambda app, p: app.confirm_translation(p["req_id"], p["by"]),

@@ -222,6 +222,7 @@ def test_translation_release_and_ownership(tmp_path):
         phenomenon_ids=["color_unlevel"], source="contributed", created_at=get_clock().now())
     app.kb.add(unit)
     assert not any(h.ku.id == unit.id for h in app.kb.search("环保", app.actors["rd:R01"]))
+    assert app.review_claims([unit.id], "rd:R01")["reviewed_evidence"] == {unit.id: []}
     app.kb.confirm([unit.id], "rd:R01")
     local = app.kb.grant(Capability(id=app.kb.next_cap_id(), form="ask", audience=3,
         payload={"phenomenon": "color_unlevel", "slot": "constraint", "required": True},
@@ -357,7 +358,8 @@ def test_translation_release_and_ownership(tmp_path):
                        for h in app.kb.search("无APEO 涤纶 气流 升温", app.actors[viewer]))
     with pytest.raises(ValueError, match="外部"):
         app.kb.confirm([external["ku_id"]], "rd:R01")
-    app.kb.confirm([ask["ku_id"]], "rd:R01")
+    reviewed = app.review_claims([ask["ku_id"]], "rd:R01")["reviewed_evidence"]
+    app.kb.confirm([ask["ku_id"]], "rd:R01", reviewed_evidence=reviewed)
     assert app.kb._caps[ask["capability_id"]].status == "active"
     assert "constraint" in next(p for p in app.kb.view(r01).phenomena if p.id == "color_unlevel").required_slots
     report_path = rag / "internal" / "RPT-T1.md"

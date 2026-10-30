@@ -425,9 +425,7 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
     if (q.family === "qi_grant" && q.refs.form === "statement") return <StatementGrant q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant") return <>{evidence}<div className="row gap-2">
       <Act label="签字授予" run={() => api.grantCapability(q.id, me)} />{dismiss}</div></>;
-    if (q.family === "qi_review") return <>{evidence}<div className="row gap-2">
-      <Act label="复核后保留" run={() => api.resolve(q.id, "sign", me)} />
-      <Act kind="plain" label="撤回结论" run={() => api.withdrawClaim(q.refs.ku_id, me)} />{dismiss}</div></>;
+    if (q.family === "qi_review") return <QiEvidenceReview key={q.id} q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "decrypt_request") return <DecryptReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (!req) return <>{evidence}<div className="row text-[13px] text-ink-2">证据 {q.evidence.length} 条</div><div className="row gap-2">{q.family === "knowledge_conflict" && <Act label="更新适用表" run={() => api.resolve(q.id, "update_sheet", me)} />}{q.family === "leak_risk" && <Act label="冻结上层知识检索" run={() => api.resolve(q.id, "freeze_access", me)} />}{dismiss}</div></>;
     switch (q.family) {
@@ -908,17 +906,55 @@ function GrantedCapabilities() {
   </Group>;
 }
 
+function QiEvidenceReview({ q, dismiss, evidence }: { q: Question; dismiss: React.ReactNode; evidence: React.ReactNode }) {
+  const { me } = useApp();
+  const [review, setReview] = useState<Awaited<ReturnType<typeof api.reviewClaims>> | null>(null);
+  return <>{evidence}<div className="row">
+    <Act label="读取本次复核原文" run={() => api.reviewClaims([q.refs.ku_id], me).then(setReview)} />
+  </div>{review && review.claims.map((c) => <div key={c.id} className="row !block text-[13px] leading-5">
+    <strong>{c.title}</strong><p>{c.text}</p>
+    <p>原确认依据：{c.evidence.join("；")}</p>
+    {review.fragments[c.id].map((f, i) => <div key={i}>
+      <p>当前依据：{f.doc_id}#{f.span}@{f.fingerprint}</p>
+      <pre className="whitespace-pre-wrap">{f.text}</pre>
+    </div>)}
+  </div>)}<div className="row gap-2">
+    <Act label="复核后保留" disabled={!review}
+      run={() => api.resolve(q.id, "sign", me, "", review!.reviewed_evidence)} />
+    <Act kind="plain" label="撤回结论" run={() => api.withdrawClaim(q.refs.ku_id, me)} />{dismiss}
+  </div></>;
+}
+
 function CandidateClaims({ reqId }: { reqId: string }) {
   const { me } = useApp();
   const claims = useData(() => api.claims(reqId, me), [reqId, me]) ?? [];
   const [selected, setSelected] = useState<string[]>([]);
+  const [review, setReview] = useState<Awaited<ReturnType<typeof api.reviewClaims>> | null>(null);
   if (!claims.length) return null;
   return <Group title="本单候选结论 · 待研发确认">
     {claims.map((c) => <label key={c.id} className="row !items-start text-[13px] leading-5">
-      <input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))} />
+      <input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => {
+        setReview(null);
+        setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id));
+      }} />
       <span><strong>{c.title}</strong><br />{c.text}<br /><span className="text-ink-3">依据：{c.evidence.join("；") || "研发直接判断"}</span></span>
     </label>)}
-    <div className="row"><Act label="签字确认所选结论" disabled={!selected.length}
-      run={() => api.confirmClaims(reqId, selected, me).then(() => setSelected([]))} /></div>
+    <div className="row"><Act label="读取所选结论的审阅依据" disabled={!selected.length}
+      run={() => api.reviewClaims(selected, me).then(setReview)} /></div>
+    {review && review.claims.map((c) => <div key={c.id} className="row !block text-[13px] leading-5">
+      <strong>{c.title}</strong><p>{c.text}</p>
+      {c.evidence.join(";") !== review.reviewed_evidence[c.id].join(";") &&
+        <p className="text-amber-700">来源与编译时不同，请核对当前原文与候选判断后再签字。</p>}
+      {review.fragments[c.id].map((f, i) => <div key={i}>
+        <p className="text-ink-3">{f.doc_id} · {f.span} · 指纹 {f.fingerprint}</p>
+        <pre className="whitespace-pre-wrap">{f.text}</pre>
+      </div>)}
+      {review.pending_evidence[c.id] && <p>补充依据：待挂接 {review.pending_evidence[c.id].capability_id}；
+        原贡献人 {review.pending_evidence[c.id].contributor}</p>}
+    </div>)}
+    <div className="row"><Act label="签字确认已审阅结论" disabled={!selected.length || !review}
+      run={() => api.confirmClaims(reqId, selected, me, review!.reviewed_evidence).then(() => {
+        setSelected([]); setReview(null);
+      })} /></div>
   </Group>;
 }

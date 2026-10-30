@@ -102,7 +102,8 @@ def main():
         d.question("accept_requirement", requirement_id=req.id)
         d.post("/api/accept", req_id=req.id, by=req.assigned_rd)
         if not prep:
-            d.post("/api/qi/confirm", req_id=req.id, ku_ids=[C4], by=req.assigned_rd)
+            reviewed = d.post("/api/qi/review", ku_ids=[C4], by=req.assigned_rd)["reviewed_evidence"]
+            d.post("/api/qi/confirm", req_id=req.id, ku_ids=[C4], by=req.assigned_rd, reviewed_evidence=reviewed)
         prep.append({"session_id": sid, "requirement_id": req.id, "rd": req.assigned_rd})
     app.scan()
     grant = d.question("qi_grant", audience="0")
@@ -125,7 +126,8 @@ def main():
     s1 = d.visit("customer:C02", [SAME])
     req = d.ticket(s1)
     d.question("accept_requirement", requirement_id=req.id)
-    d.post("/api/decline", req_id=req.id, by=req.assigned_rd, product_id="HY-LV205", claim_ids=[C2],
+    reviewed = d.post("/api/qi/review", ku_ids=[C2], by=req.assigned_rd)["reviewed_evidence"]
+    d.post("/api/decline", req_id=req.id, by=req.assigned_rd, product_id="HY-LV205", claim_ids=[C2], reviewed_evidence=reviewed,
            reason="已有产品适用：HY-LV205 可用于锦纶氨纶弹力面料的经轴染色")
     scope = d.question("scope_update", requirement_ids=req.id)
     k5 = scope.refs["capability_id"]

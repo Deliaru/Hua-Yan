@@ -441,7 +441,8 @@ class LLMHumans:
                 (p.name, p.category) for p in app.seeds.products if p.id == app._requirements[rid].product_id)))},
             "qi_grant": {"grant": Button("签字授予", lambda c: app.sign_qi_grant(q.id, by, note=c.text),
                                          "text" if q.refs.get("form") == "statement" else "")},
-            "qi_review": {"keep": Button("复核后保留", lambda c: app.resolve(q.id, "sign", by)),
+            "qi_review": {"keep": Button("复核后保留", lambda c: app.resolve(q.id, "sign", by,
+                reviewed_evidence=app.review_claims([q.refs["ku_id"]], by)["reviewed_evidence"])),
                           "withdraw": Button("撤回结论", lambda c: app.withdraw_claim(q.refs["ku_id"], by))},
             "knowledge_conflict": {"update": Button("更新适用表", lambda c: app.resolve(q.id, "update_sheet", by))},
             "decrypt_request": {"approve": Button("批准，写机理说明", lambda c: app.decide_decrypt(q.id, by, True, c.text), "text"),
@@ -457,7 +458,8 @@ class LLMHumans:
         buttons = table.get(f, {})
         if f in {"accept_requirement", "confirm_translation"} and self.app.candidate_claims(rid, by):
             buttons["claims"] = Button("确认勾选的候选结论（编号写进 slots）",
-                                       lambda c: app.confirm_claims(rid, c.slots, by), "slots")
+                                       lambda c: app.confirm_claims(rid, c.slots, by,
+                                           reviewed_evidence=app.review_claims(c.slots, by)["reviewed_evidence"]), "slots")
         return buttons
 
     def _take_over(self, q: Question, by: str) -> None:

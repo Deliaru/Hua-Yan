@@ -75,7 +75,8 @@ class Arm:
         self.app = self.api.app
         admit(Proposals(items=yaml.safe_load(Path("seeds/rag/proposals.yaml").read_text(encoding="utf-8"))["items"]).items,
               self.app.kb.sources, self.app.kb)
-        self.app.kb.confirm([C4], RD.id)             # 研发已确认 C4：研发层要求 pH（同 demo_qi 第一张单）
+        reviewed = self.app.review_claims([C4], RD.id)["reviewed_evidence"]
+        self.app.kb.confirm([C4], RD.id, reviewed_evidence=reviewed)  # 模拟研发确认 C4，与 demo_qi 一致。
         self.snaps = defaultdict(list)               # session_id → [(at, NeedState)]，模拟一侧补标签用
         self.cards, self.windows, self.rows, self.cells = {}, {}, [], {}
 
