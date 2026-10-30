@@ -2,7 +2,7 @@
 // 身份由界面选择后作为 viewer / by 传入，裁剪与可签条件都在门面里；门面拒绝时原样显示它返回的 error。
 import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
-  RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation,
+  RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus,
   Route, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor,
 } from "./types";
 
@@ -68,6 +68,7 @@ export const api = {
   frozenActors: (viewer: string) => call<FrozenActor[]>(`frozen_actors?${q({ viewer })}`),
   requirement: (id: string, viewer: string) => call<RequirementView>(`requirement?${q({ id, viewer })}`),
   sourcePreparation: (req_id: string, viewer: string) => call<SourcePreparation | null>(`source-preparation?${q({ req_id, viewer })}`),
+  sourcePreparationStatus: (req_id: string, viewer: string) => call<SourcePreparationStatus | null>(`source-preparation/status?${q({ req_id, viewer })}`),
   leak: (id: string, viewer: string) => call<LeakHit[]>(`leak?${q({ id, viewer })}`),
   timeline: (target: string, viewer: string) => call<JueTimeline>(`timeline?${q({ target_id: target, viewer })}`),
   ledger: () => call<Record<string, number>>("ledger"),

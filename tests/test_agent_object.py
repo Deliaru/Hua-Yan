@@ -197,3 +197,31 @@ def test_prepared_ir_imports_candidate_with_full_conditions_on_original_requirem
     assert "B组单次观察" in unit.text and all(c["text"] in unit.text for c in ir["conditions"])
     assert ir["proposal"]["limits"] in unit.text and "锦纶氨纶" in unit.text
     assert not app.events.query(["claim_confirmed"]) and not app.agents.pending(req.assigned_rd)
+    material_path = app.run_dir / "source_preparations" / f"{req.id.replace(':', '_')}.json"
+    material = material_path.read_bytes()
+    status_params = {"req_id": req.id, "viewer": req.assigned_rd}
+    pending = GET["/api/source-preparation/status"](app, status_params)
+    assert pending == {"claims": [{"id": unit.id, "status": "candidate", "confirmed_by": None}], "capabilities": []}
+    assert GET["/api/source-preparation/status"](app, status_params | {"viewer": "pm:agent"}) is None
+    # 以下签字仅在合成临时实例中模拟；复用已有 C7 读取与真人确认入口。
+    review = POST["/api/qi/review"](app, {"ku_ids": [unit.id], "by": req.assigned_rd})
+    POST["/api/qi/confirm"](app, {"req_id": req.id, "ku_ids": [unit.id], "by": req.assigned_rd,
+                               "reviewed_evidence": review["reviewed_evidence"]})
+    confirmed = GET["/api/source-preparation/status"](app, status_params)
+    assert confirmed["claims"] == [{"id": unit.id, "status": "active", "confirmed_by": req.assigned_rd}]
+    assert confirmed["capabilities"] == []
+    # 现有“本层答不了”信号提出授予事项，模拟研发签字后状态回到原单。
+    app.kb.explore(unit.title, app.actors["sales:S01"], session_id=session.id)
+    app.scan()
+    grant = next(q for q in app.bus.list(family="qi_grant")
+                 if q.refs.get("ku_id") == unit.id and q.refs.get("form") == "statement")
+    app.mark_prepared(grant.id, grant.owner_id)
+    cap = app.sign_qi_grant(grant.id, req.assigned_rd, note="（合成）请联系专员安排沟通。")
+    granted = GET["/api/source-preparation/status"](app, status_params)
+    assert granted["capabilities"] == [{"id": cap.id, "form": "statement", "audience": cap.audience,
+        "status": "active", "granted_by": req.assigned_rd, "approved_by": None}]
+    app.withdraw_claim(unit.id, req.assigned_rd)
+    withdrawn = GET["/api/source-preparation/status"](app, status_params)
+    assert withdrawn["claims"][0]["status"] == "withdrawn"
+    assert withdrawn["capabilities"][0]["status"] == "suspended"
+    assert material_path.read_bytes() == material

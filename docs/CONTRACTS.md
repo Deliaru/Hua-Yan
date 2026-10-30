@@ -1465,6 +1465,13 @@ IR 来源和完整证据集；只接与本单现象一致且 form=null 的操作
 HTTP 为 POST `/api/source-preparation/compile`，不接受模型或浏览器提供的本地路径。
 首版只消费已有操作观察 IR，不调用生成模型；未登记 IR、未对齐或引文丢弃均如实返回，不自动标记事项准备完成。
 
+V10.9 `HuayanApp.source_preparation_status(req_id, by)` / GET `/api/source-preparation/status`
+在原准备材料的接单研发边界内，复用 `can_read` 和本人能力视图，只读投影关联结论的当前状态及相关用途能力。
+结论仍为 candidate 时 confirmed_by 返回 None，避免把预指定归属人当作已签字；active 时显示实际确认人，withdrawn 显示已撤回。
+能力返回已有编号、形式、目标层/对象、当前状态和归属/批准人，不返回能力正文；proposed 不等于已完成授予或批准。
+研发准备卡以该投影显示当前处理结果，不再固定声称“尚未确认或授予”。投影不回写准备文件、不新建事件、签字或能力，
+保存时条件、依据与待补项仍为历史准备材料；确认、授予、撤回和来源复核继续沿原入口，确认不等于产品适用或可推荐。
+
 ```python
 ToolKind = Literal["read", "draft", "effect"]
 

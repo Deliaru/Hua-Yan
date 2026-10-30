@@ -98,10 +98,14 @@ function SourcePreparationCard({ reqId }: { reqId: string }) {
   const { me } = useApp();
   const L = useLabels();
   const draft = useData(() => api.sourcePreparation(reqId, me), [reqId, me]);
+  const current = useData(() => api.sourcePreparationStatus(reqId, me), [reqId, me]);
+  const claimStatus = { candidate: "待确认", active: "已确认", withdrawn: "已撤回" };
+  const capabilityStatus = { proposed: "待确认或批准", active: "生效", suspended: "已挂起", revoked: "已撤销" };
+  const forms: Record<string, string> = { ask: "追问", applicable: "适用情境", statement: "可说的话", decrypt: "解密", share: "查看原文" };
   if (!draft) return null;
   return <section className="rounded-xl border border-line bg-white p-5 text-[13px]">
     <h3 className="font-semibold">本单资料准备草稿</h3>
-    <p className="mt-1 text-ink-2">保存于 {hhmm(draft.at)} · {draft.by}。供研发审阅，尚未确认或授予。</p>
+    <p className="mt-1 text-ink-2">保存于 {hhmm(draft.at)} · {draft.by}。保存草稿不代表专业确认；处理结果见下方当前状态。</p>
     <p className="mt-3">保存时条件：{Object.entries(draft.known_slots).map(([s, v]) => `${L.slot(s)}：${v}`).join("；") || "尚未填写"}</p>
     {Object.entries(draft.temperatures).map(([sid, t]) => <p key={sid}>
       {sid} 温度：{t?.status === "filled" ? `${t.celsius?.join("—")}℃` : t ? "明确未知" : "尚未询问"}
@@ -109,7 +113,19 @@ function SourcePreparationCard({ reqId }: { reqId: string }) {
     </p>)}
     <p className="mt-3 font-medium">依据出处</p>
     {draft.evidence.map((ref, i) => <p key={i} className="break-all text-ink-2">{ref}</p>)}
-    <p className="mt-2">待审候选：{draft.claim_ids.join("、") || "未关联"}</p>
+    <p className="mt-2">关联结论：{draft.claim_ids.join("、") || "未关联"}</p>
+    {current && <div className="mt-2">
+      <p className="font-medium">当前确认与用途状态</p>
+      {current.claims.map((c) => <p key={c.id}>{c.id} · {claimStatus[c.status]}
+        {c.confirmed_by && <span> · 确认人：{L.name(c.confirmed_by)}</span>}
+      </p>)}
+      {current.capabilities.map((c) => <p key={c.id}>
+        {c.id} · {forms[c.form] ?? c.form} · {capabilityStatus[c.status]} ·
+        {typeof c.audience === "number" ? `给 L${c.audience}` : `给 ${L.name(c.audience)}`}
+        {c.approved_by && <span> · 批准人：{L.name(c.approved_by)}</span>}
+      </p>)}
+      {!current.capabilities.length && <p className="text-ink-2">尚无关联用途能力；确认观察不等于可用于推荐。</p>}
+    </div>}
     {draft.compilation && <div className="mt-2">
       <p>操作观察 IR：{draft.compilation.ir_id} · {hhmm(draft.compilation.at)} 导入 {draft.compilation.report.admitted.length} 条待审候选</p>
       {!!draft.compilation.report.unaligned.length && <p>待对齐：{draft.compilation.report.unaligned.join("、")}</p>}

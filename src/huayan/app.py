@@ -1523,6 +1523,21 @@ class HuayanApp:
         path = self.run_dir / "source_preparations" / f"{req.id.replace(':', '_')}.json"
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
+    def source_preparation_status(self, req_id, by):
+        """由当前结论和能力投影本单处理结果，不回写准备材料。"""
+        prepared = self.source_preparation(req_id, by)
+        if prepared is None:
+            return None
+        actor, shared = self.actors[by], self.kb._shared(self.actors[by])
+        units = [self.kb._units[uid] for uid in prepared["claim_ids"]]
+        units = [u for u in units if (u.owner == by if u.confirmed_by is None else can_read(actor, u, shared))]
+        ids = {u.id for u in units}
+        return {"claims": [{"id": u.id, "status": u.status,
+                            "confirmed_by": u.confirmed_by if u.status == "active" else None} for u in units],
+                "capabilities": [{"id": c.id, "form": c.form, "audience": c.audience, "status": c.status,
+                                  "granted_by": c.granted_by, "approved_by": c.approved_by}
+                                 for c in self.capabilities(by) if ids.intersection(c.based_on)]}
+
     def review_claims(self, ku_ids, by):
         """读取本次审阅原文与固定指纹；返回值由人审阅后随确认提交，不写正式状态。"""
         actor = self._actor(by, {"rd", "pm"})
