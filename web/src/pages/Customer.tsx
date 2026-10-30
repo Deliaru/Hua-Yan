@@ -6,6 +6,7 @@ import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { Route, SessionView } from "../types";
 import { OpenRouteMenu, RouteStrip, SessionConditions, useRouteHint } from "../components/Route";
 import { useGlow } from "../components/Guide";
+import { AuthorizedReplies } from "../components/AuthorizedReplies";
 import { EmptyState, Group, PageHead, SideHead, TemperatureCondition } from "../components/ui";
 
 export function Customer() {
@@ -62,6 +63,7 @@ function Desk({ sid }: { sid: string }) {
             </div>
           </div>
           {v.card && <Card v={v} />}
+          <AuthorizedReplies sessionId={sid} />
         </div>
       </div>
       <aside className="inspector fixed bottom-0 right-0 top-[52px] z-10 flex w-[372px] flex-col gap-5 overflow-y-auto border-l border-sep px-5 py-5">

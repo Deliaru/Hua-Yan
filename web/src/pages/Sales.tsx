@@ -10,6 +10,7 @@ import { Popover } from "../components/Controls";
 import { Plus } from "../components/Icons";
 import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote, SlotPicker, TemperatureCondition } from "../components/ui";
 import { RouteStrip, WorkloadCard } from "../components/Route";
+import { AuthorizedReplies } from "../components/AuthorizedReplies";
 
 function SalesSidebar({ mine, current, guided, choose }: {
   mine: SessionSummary[]; current: string | null; guided: string | null; choose: (id: string) => void;
@@ -111,6 +112,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
           )}
           {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的上层知识检索已被主管冻结：检索不再显示上层知识的归属、读不到研发授予的结论，推荐只披露到用法，暂不能申请解密；日常跟单不受影响。</p>}
           <PendingActions />
+          <AuthorizedReplies sessionId={v.session_id} />
           <div className="grid grid-cols-[minmax(280px,5fr)_minmax(320px,6fr)] items-start gap-5">
             <Timeline v={v} lit={lit} />
             <NeedCard v={v} phenomenon={summary.phenomenon} lit={lit} setLit={setLit} />

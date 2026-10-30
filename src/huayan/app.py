@@ -1523,6 +1523,23 @@ class HuayanApp:
         path = self.run_dir / "source_preparations" / f"{req.id.replace(':', '_')}.json"
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
+    def authorized_source_replies(self, session_id, by):
+        """把原需求关联结论的已授权说明回到本会话，不返回内部准备材料。"""
+        actor = self._actor(by, {"customer", "sales"})
+        self.view_session(session_id, by)
+        if self.kb.is_frozen(by):
+            return []
+        claim_ids = set()
+        for req in self._requirements.values():
+            if session_id not in req.session_ids:
+                continue
+            path = self.run_dir / "source_preparations" / f"{req.id.replace(':', '_')}.json"
+            if path.exists():
+                claim_ids.update(json.loads(path.read_text(encoding="utf-8"))["claim_ids"])
+        return [{"ref": c.id, "text": render_refs(f"[[{c.id}]]", level_of(actor), self.kb), "audience": c.audience}
+                for c in self.kb._visible_caps(actor)
+                if c.form == "statement" and claim_ids.intersection(c.based_on)]
+
     def source_preparation_status(self, req_id, by):
         """由当前结论和能力投影本单处理结果，不回写准备材料。"""
         prepared = self.source_preparation(req_id, by)

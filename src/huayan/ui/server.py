@@ -229,6 +229,7 @@ def demo_ledger(app, p):
 
 
 GET = {
+    "/api/source-preparation/replies": lambda app, p: app.authorized_source_replies(p["session_id"], p["viewer"]),
     "/api/source-preparation/status": lambda app, p: app.source_preparation_status(p["req_id"], p["viewer"]),
     "/api/source-preparation": lambda app, p: app.source_preparation(p["req_id"], p["viewer"]),
     "/api/sources/read": lambda app, p: app.read_source(p["doc_id"], p["viewer"], p.get("span")),

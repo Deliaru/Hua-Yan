@@ -202,6 +202,8 @@ def test_prepared_ir_imports_candidate_with_full_conditions_on_original_requirem
     status_params = {"req_id": req.id, "viewer": req.assigned_rd}
     pending = GET["/api/source-preparation/status"](app, status_params)
     assert pending == {"claims": [{"id": unit.id, "status": "candidate", "confirmed_by": None}], "capabilities": []}
+    reply_params = {"session_id": session.id, "viewer": "sales:S01"}
+    assert GET["/api/source-preparation/replies"](app, reply_params) == []
     assert GET["/api/source-preparation/status"](app, status_params | {"viewer": "pm:agent"}) is None
     # 以下签字仅在合成临时实例中模拟；复用已有 C7 读取与真人确认入口。
     review = POST["/api/qi/review"](app, {"ku_ids": [unit.id], "by": req.assigned_rd})
@@ -210,6 +212,7 @@ def test_prepared_ir_imports_candidate_with_full_conditions_on_original_requirem
     confirmed = GET["/api/source-preparation/status"](app, status_params)
     assert confirmed["claims"] == [{"id": unit.id, "status": "active", "confirmed_by": req.assigned_rd}]
     assert confirmed["capabilities"] == []
+    assert GET["/api/source-preparation/replies"](app, reply_params) == []
     # 现有“本层答不了”信号提出授予事项，模拟研发签字后状态回到原单。
     app.kb.explore(unit.title, app.actors["sales:S01"], session_id=session.id)
     app.scan()
@@ -220,8 +223,36 @@ def test_prepared_ir_imports_candidate_with_full_conditions_on_original_requirem
     granted = GET["/api/source-preparation/status"](app, status_params)
     assert granted["capabilities"] == [{"id": cap.id, "form": "statement", "audience": cap.audience,
         "status": "active", "granted_by": req.assigned_rd, "approved_by": None}]
+    assert GET["/api/source-preparation/replies"](app, reply_params) == [
+        {"ref": cap.id, "text": cap.payload["text"], "audience": 1}]
+    assert GET["/api/source-preparation/replies"](app, reply_params | {"viewer": "customer:C01"}) == []
+    sales_ctx = app.agents.context("sales:S01", session_id=session.id)
+    assert app.agents.call_tool(sales_ctx, "get_authorized_replies", {}).data == app.authorized_source_replies(session.id, "sales:S01")
+    with pytest.raises(PermissionDenied):
+        app.save_reply_draft(session.id, f"[[{cap.id}]]", "sales:S01")
+    # 客户层另外授权后，客户只看到这一句；研发原文和本单待补说明不随之返回。
+    app.kb.explore(unit.title, app.actors["customer:C01"], session_id=session.id)
+    app.scan()
+    customer_grant = next(q for q in app.bus.list(family="qi_grant")
+                          if q.refs.get("ku_id") == unit.id and q.refs.get("audience") == "0")
+    app.mark_prepared(customer_grant.id, customer_grant.owner_id)
+    public = app.sign_qi_grant(customer_grant.id, req.assigned_rd, note="（合成）客户可查看的流程说明。")
+    shown = GET["/api/source-preparation/replies"](app, reply_params | {"viewer": "customer:C01"})
+    assert shown == [{"ref": public.id, "text": public.payload["text"], "audience": 0}]
+    assert unit.text not in json.dumps(shown, ensure_ascii=False)
+    another = app.start_session("customer:C01", "sales:S01")
+    assert app.authorized_source_replies(another.id, "customer:C01") == []
+    next_customer = app.start_session("customer:C02")
+    reused = app.add_turn(next_customer.id, "customer", f"{unit.title}，为什么会这样？")
+    assert public.payload["text"] in reused.replies[-1].text and unit.text not in reused.replies[-1].text
+    assert any(e.session_id == reused.id and e.payload["capability_id"] == public.id
+               for e in app.events.query(["capability_used"]))
+    with pytest.raises(PermissionDenied):
+        GET["/api/source-preparation/replies"](app, reply_params | {"viewer": "customer:C02"})
     app.withdraw_claim(unit.id, req.assigned_rd)
     withdrawn = GET["/api/source-preparation/status"](app, status_params)
     assert withdrawn["claims"][0]["status"] == "withdrawn"
     assert withdrawn["capabilities"][0]["status"] == "suspended"
+    assert GET["/api/source-preparation/replies"](app, reply_params) == []
+    assert app.authorized_source_replies(session.id, "customer:C01") == []
     assert material_path.read_bytes() == material

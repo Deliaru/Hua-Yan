@@ -57,6 +57,7 @@ export interface SourcePreparationStatus {
   claims: { id: string; status: "candidate" | "active" | "withdrawn"; confirmed_by: string | null }[];
   capabilities: Pick<Capability, "id" | "form" | "audience" | "status" | "granted_by" | "approved_by">[];
 }
+export interface AuthorizedSourceReply { ref: string; text: string; audience: number }
 export interface AskHint { slot: string; label: string; ask_text: string; p_need: number; scored_by: string }
 export interface AssistantReply { turn_id: string; text: string; ku_ids: string[]; blocked: boolean }
 export interface CardSection { title: string; text: string; ku_id: string; level: number }

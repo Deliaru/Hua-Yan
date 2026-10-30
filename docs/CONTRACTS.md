@@ -1472,6 +1472,14 @@ V10.9 `HuayanApp.source_preparation_status(req_id, by)` / GET `/api/source-prepa
 研发准备卡以该投影显示当前处理结果，不再固定声称“尚未确认或授予”。投影不回写准备文件、不新建事件、签字或能力，
 保存时条件、依据与待补项仍为历史准备材料；确认、授予、撤回和来源复核继续沿原入口，确认不等于产品适用或可推荐。
 
+V10.9 `HuayanApp.authorized_source_replies(session_id, by)` / GET `/api/source-preparation/replies`
+沿 `view_session` 的会话归属检查，面向客户或业务员返回本会话需求准备材料所关联结论的生效 statement。
+仅消费 `kb._visible_caps(actor)` 并通过原 `render_refs` 披露，冻结主体不返回说明；返回 ref/text/audience，
+不返回准备材料、候选编号或研发原文。业务员层授权不会跨到客户层，撤回/挂起/撤销后不再返回。
+业务员只读原子工具 `get_authorized_replies()` 绑定当前会话与委托人；回复草稿仍须走原 `save_reply_draft` 的客户层引用校验。
+客户/业务员工作面展示原授权文字，不代发消息或改变需求/推荐状态。查询回流说明不记能力使用；
+下一单经原 L1 回答实际引用时仍由既有 `_use_capability` 记录，不新建匹配或使用计数链路。
+
 ```python
 ToolKind = Literal["read", "draft", "effect"]
 

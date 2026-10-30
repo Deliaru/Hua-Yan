@@ -164,6 +164,12 @@ def list_my_questions(ctx: ToolContext, args: NoArgs) -> ToolResult:
 
 # ---- 业务员（绑定当前客户会话） ----
 
+@tool("get_authorized_replies", "read", ["sales"],
+      "查看当前会话对应需求已有的生效授权说明；只返回授予业务员层及以下的文字和能力编号，不返回报告或待审判断。", NoArgs)
+def get_authorized_replies(ctx: ToolContext, args: NoArgs) -> ToolResult:
+    return ToolResult(data=ctx.app.authorized_source_replies(ctx.session_id, ctx.principal.id))
+
+
 @tool("save_reply_draft", "draft", ["sales"], "将回复草稿写入当前会话，供业务员查看、修改后发送", Text)
 def save_reply_draft(ctx: ToolContext, args: Text) -> ToolResult:
     session = ctx.app.save_reply_draft(ctx.session_id, args.text, ctx.principal.id)
