@@ -102,6 +102,19 @@ class KuId(BaseModel):
     ku_id: str
 
 
+class SourceArgs(BaseModel):
+    doc_id: str
+    span: str | None = None
+
+
+@tool("read_source", "read", ["sales", "pm", "rd"],
+      "按已知来源编号读取原文；span 可指定块。返回原文、密级与指纹，不返回文件路径。"
+      "使用委托人权限，内部资料需归属或整份来源分享；查证不代表结论已确认或已授权。", SourceArgs)
+def read_source(ctx: ToolContext, args: SourceArgs) -> ToolResult:
+    fragments = ctx.app.read_source(args.doc_id, ctx.principal.id, args.span)
+    return ToolResult(data=[f.model_dump() for f in fragments])
+
+
 @tool("get_knowledge", "read", ["sales", "pm", "rd"], "读取一条知识的全文（越权会被拒绝）", KuId)
 def get_knowledge(ctx: ToolContext, args: KuId) -> ToolResult:
     u = ctx.app.kb.get(args.ku_id, ctx.principal)

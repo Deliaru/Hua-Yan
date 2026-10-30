@@ -1441,6 +1441,11 @@ v5：业务员、研发各有一个**协作 Agent**，产品经理由**产品经
 - **没有委托人的 Agent 没有生效工具**：`pm:agent` 只有 read / draft 工具；
 - 觉不是助手，不调用大模型；它提出的问题经总线派给主人准备。
 
+V10.9 新增只读原子工具 `read_source(doc_id, span=None)`，供 sales/pm/rd 助手调用。
+只调用 `HuayanApp.read_source`，委托人从 ToolContext 绑定，不接受身份字段，不在工具内重复 ACL。
+研发按当前需求先读 `get_requirement` 与关联 `get_session`，再按已知编号读取来源，摘要保留本单条件、来源指纹及待核对项。
+摘要随现有对象对话保存，不等于需求单已保存正式准备材料、候选已导入或事项已准备完成；专业确认、授予仍沿原入口。
+
 ```python
 ToolKind = Literal["read", "draft", "effect"]
 
