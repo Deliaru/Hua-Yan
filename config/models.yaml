@@ -1,9 +1,10 @@
-# 格式同 JUE。密钥通过 BACKUP_API_KEY 环境变量读取，不入库。
-# 当前三个 tier 使用同一服务，不配置重复调用同一模型的备用链。
+# 智谱OpenAI兼容网关。通过 uv run --env-file .env 注入密钥，所有请求串行。
+concurrency: 1
+retry_waits: [5, 15, 30]
 tiers:
-  fast:   {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: BACKUP_API_KEY,
-           price_per_1k: {input: null, output: null}, fallbacks: []}
-  strong: {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: BACKUP_API_KEY,
-           price_per_1k: {input: null, output: null}, fallbacks: []}
-  backup: {base_url: "https://api.soranori.com/v1", model: "gemini-3.8-flash-high", api_key_env: BACKUP_API_KEY,
+  fast:   {base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash", api_key_env: BACKUP_API_KEY,
+           price_per_1k: {input: null, output: null}, fallbacks: [backup]}
+  strong: {base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash", api_key_env: BACKUP_API_KEY,
+           price_per_1k: {input: null, output: null}, fallbacks: [backup]}
+  backup: {base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.1v-thinking-flash", api_key_env: BACKUP_API_KEY,
            price_per_1k: {input: null, output: null}, fallbacks: []}

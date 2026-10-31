@@ -12,6 +12,7 @@ node_modules/
 .env
 .env.*
 *.key
+/2-主办方资料目录.md
 
 # 生成物（只提交 runs/demo_record/、data/.gitkeep 与 models/jue_k/：说明文件与训练好的 model.pkl，回放与离线试用直接可用）
 runs/*
