@@ -132,25 +132,30 @@ def test_trial_summary_deduplicates_preserves_mixed_results_and_time_denominator
 
 
 def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
-    sent = []
+    sent, waits, traces = [], [], []
     readout = {"text": "合成图片读稿", "readings": [
         {"object": "合成布样", "group": "A", "stage": "保温", "value": "12", "unit": "min",
          "conditions": ["85℃"], "position": "上部原工艺横线", "quote": "85℃*12min"},
         {"object": "合成布样", "group": "B", "stage": "保温", "value": "6", "unit": "min",
-         "conditions": ["95℃"], "position": "下部试样工艺横线", "quote": "95℃*6min"}], "pending": []}
+         "conditions": ["95℃"], "position": "下部试样工艺横线", "quote": "95℃*6min"},
+        {"object": "未标注阶段", "group": "A", "stage": None, "value": None, "unit": None,
+         "conditions": [], "position": "未读清的曲线起点", "quote": None}], "pending": []}
 
     def handle(request):
         sent.append(json.loads(request.content))
+        if len(sent) == 1:
+            return httpx.Response(429, headers={"Retry-After": "2"}, json={"error": {"message": "synthetic rate limit"}})
         return httpx.Response(200, json={"id": "synthetic-response", "object": "chat.completion", "created": 0,
             "model": sent[-1]["model"], "choices": [{"index": 0, "finish_reason": "stop",
-                "message": {"role": "assistant", "content": json.dumps(readout, ensure_ascii=False)}}],
+                "message": {"role": "assistant", "content": "synthetic reasoning</think>" + json.dumps(readout, ensure_ascii=False)}}],
             "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20}})
 
-    client = openai.OpenAI(api_key="synthetic-key", base_url="https://gateway.invalid/v1",
+    client = openai.OpenAI(api_key="synthetic-key", base_url="https://gateway.invalid/v1", max_retries=0,
                           http_client=httpx.Client(transport=httpx.MockTransport(handle)))
-    gateway = OpenAICompatGateway({"tiers": {"strong": {"model": "synthetic-vision", "fallbacks": [],
+    gateway = OpenAICompatGateway({"concurrency": 1, "retry_waits": [7], "tiers": {"strong": {"model": "synthetic-vision", "fallbacks": [],
         "price_per_1k": {"input": None, "output": None}}}}, clients={"strong": client},
-        cache_dir=tmp_path / "cache", meter=FileMeter(tmp_path, "synthetic-reader"))
+        cache_dir=tmp_path / "cache", meter=FileMeter(tmp_path, "synthetic-reader"), sleep=waits.append,
+        trace=lambda event, **fields: traces.append({"event": event, **fields}))
     image = tmp_path / "input.png"
     # 合成传输字节：HTTP 替身不做图片解码，此测试只检验请求序列化与缓存隔离。
     image.write_bytes(b"synthetic-image-A")
@@ -159,15 +164,19 @@ def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
     image.write_bytes(b"synthetic-image-B")
     read_image(image, "合成上下文", gateway)
     assert first.text == repeated.text == "合成图片读稿" and response.model == "synthetic-vision"
-    assert len(sent) == 2
-    assert [(r.group, r.value, r.unit, r.conditions) for r in repeated.readings] == [
+    assert len(sent) == 3 and waits == [2]
+    assert any(t["event"] == "llm" and t["cached"] for t in traces)
+    assert [(r.group, r.value, r.unit, r.conditions) for r in repeated.readings[:2]] == [
         ("A", "12", "min", ["85℃"]), ("B", "6", "min", ["95℃"])]
+    assert repeated.readings[-1].quote is None and any("未读清" in note for note in repeated.pending)
     gateway.tiers["strong"]["model"] = "synthetic-vision-v2"
     _, updated_response = read_image(image, "合成上下文", gateway)
-    assert len(sent) == 3 and updated_response.model == "synthetic-vision-v2"
+    assert len(sent) == 4 and updated_response.model == "synthetic-vision-v2"
     content = sent[0]["messages"][-1]["content"]
     assert content[0] == {"type": "text", "text": "合成上下文"}
     assert base64.b64decode(content[1]["image_url"]["url"].split(",", 1)[1]) == b"synthetic-image-A"
     assert sent[0]["response_format"] == {"type": "json_object"}
     records = [json.loads(line) for line in (tmp_path / "metering.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert all(row["caller"] == "ingest:extract" and row["input_tokens"] == 12 for row in records)
+    assert all(row["caller"] == "ingest:extract" for row in records)
+    assert sum(not row["ok"] for row in records) == 1
+    assert all(row["input_tokens"] == 12 for row in records if row["ok"])

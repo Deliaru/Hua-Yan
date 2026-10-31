@@ -5,7 +5,9 @@ import hashlib
 import json
 import os
 import time
+from contextlib import nullcontext
 from pathlib import Path
+from threading import Lock
 
 import openai
 from pydantic import ValidationError
@@ -22,8 +24,11 @@ class ReplayMiss(RuntimeError):
 
 
 class OpenAICompatGateway:
+    _serial = Lock()  # 免费层单并发；同一进程的网关实例共用，不在读取器/脚本另建锁。
+
     def __init__(self, config, meter=None, *, clients=None, cache_dir=None, trace=None, sleep=time.sleep):
         self.tiers = config["tiers"]
+        self.serial = config.get("concurrency") == 1
         # 每档失败后的等待秒数，次数即重试次数。默认 5、20、80、80、80 秒：试用接口过载时要求至少退避 60 秒，
         # 整月录制里遇到过几分钟的超时；有人在界面前等的试用实例配得短，失败早点报出来、由人重跑（V9.2）
         self.retry_waits = config.get("retry_waits", [5, 20, 80, 80, 80])
@@ -60,6 +65,14 @@ class OpenAICompatGateway:
                        cached=cached, fallback_used=response.fallback_used, latency_ms=response.latency_ms)
 
     def _complete(self, req, schema=None):
+        with self._serial if self.serial else nullcontext():
+            response = self._request(req, schema)
+        # 实调也出现省略起始标签、仅以 </think> 结束的推理前缀；缓存同样在此处理。
+        if response.content and "</think>" in response.content:
+            response.content = response.content.rsplit("</think>", 1)[1].strip()
+        return response
+
+    def _request(self, req, schema=None):
         if not req.caller:
             raise ValueError("Every model call needs caller")
         cache_key = hashlib.sha256(json.dumps({"request": req.model_dump(mode="json"),
@@ -99,6 +112,10 @@ class OpenAICompatGateway:
                         kwargs["tools"] = req.tools
                     if schema is not None:
                         kwargs["response_format"] = {"type": "json_object"}
+                    if cfg.get("extra_body"):
+                        kwargs["extra_body"] = cfg["extra_body"]
+                    if self.trace is not None:
+                        self.trace("llm_request", caller=req.caller, model=cfg["model"], attempt=attempt)
                     raw = self._client(tier).chat.completions.create(**kwargs)
                     latency = (time.perf_counter() - started) * 1000
                     usage = Usage(input_tokens=raw.usage.prompt_tokens if raw.usage else 0,
@@ -130,7 +147,15 @@ class OpenAICompatGateway:
                     if not retryable:
                         raise
                     if attempt < len(self.retry_waits):
-                        self.sleep(self.retry_waits[attempt])
+                        wait = self.retry_waits[attempt]
+                        if isinstance(exc, openai.APIStatusError) and exc.status_code == 429:
+                            retry_after = exc.response.headers.get("Retry-After")
+                            if retry_after is not None:
+                                try:
+                                    wait = max(0, float(retry_after))
+                                except ValueError:  # 外部响应未给秒数，沿配置退避。
+                                    pass
+                        self.sleep(wait)
         raise last_error
 
     def complete(self, req):

@@ -3,8 +3,10 @@ concurrency: 1
 retry_waits: [5, 15, 30]
 tiers:
   fast:   {base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash", api_key_env: BACKUP_API_KEY,
+           extra_body: {thinking: {type: disabled}},
            price_per_1k: {input: null, output: null}, fallbacks: [backup]}
   strong: {base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash", api_key_env: BACKUP_API_KEY,
+           extra_body: {thinking: {type: disabled}},
            price_per_1k: {input: null, output: null}, fallbacks: [backup]}
   backup: {base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.1v-thinking-flash", api_key_env: BACKUP_API_KEY,
            price_per_1k: {input: null, output: null}, fallbacks: []}

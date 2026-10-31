@@ -16,7 +16,7 @@ class ImageReading(BaseModel):
     unit: str | None
     conditions: list[str]
     position: str
-    quote: str
+    quote: str | None
 
 
 class ImageReadout(BaseModel):
@@ -43,4 +43,8 @@ def read_image(image_path, context, gateway):
                                        '"position":"图中标题及相对位置","quote":"图中原文标签"}],"pending":[]}。'
                                        '每个可见数值填写一条 reading，值和单位保留原文字符串；'
                                        '组别仅 A、B 或 null；缺失或冲突说明写入 pending。')])])
-    return gateway.structured(request, ImageReadout)
+    readout, response = gateway.structured(request, ImageReadout)
+    for row in readout.readings:
+        if row.value is None or row.unit is None or row.quote is None:
+            readout.pending.append(f"{row.object} · {row.position}：数值、原单位或原文标签未读清，待人工补读。")
+    return readout, response
