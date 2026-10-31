@@ -351,8 +351,10 @@ class Api:
             if isinstance(client, OneJevClient):
                 client.trace = self.emit
         if TRIAL:      # 等模型时让出会话锁；计量在锁外写，另加一把锁免得行交错
-            complete, ask = app.gateway._complete, app.system1.ask
-            app.gateway._complete = lambda req, schema=None: self.lock.outside(lambda: complete(req, schema))
+            if not app.config["gateway_mock"]:
+                complete = app.gateway._complete
+                app.gateway._complete = lambda req, schema=None: self.lock.outside(lambda: complete(req, schema))
+            ask = app.system1.ask
             app.system1.ask = lambda *a, **k: self.lock.outside(lambda: ask(*a, **k))
             if not hasattr(app.meter, "unlocked_record"):
                 app.meter.unlocked_record, meter_lock = app.meter.record, Lock()

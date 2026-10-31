@@ -36,6 +36,25 @@ def test_trial_params_take_identity_from_server(monkeypatch):
         server.trial_params("s-rd", "POST", "/api/sessions", {"customer_id": "customer:C01"})
 
 
+def test_shared_instance_starts_offline_and_resumes(tmp_path, monkeypatch):
+    """标准试用装配路径须能启动离线实例，并续跑已经录入的业务。"""
+    config = _config(tmp_path)
+    monkeypatch.setattr(server, "TRIAL", "offline-trial")
+    api = server.Api(None, config)
+    api.build()
+    assert isinstance(api.lock, server.TrialGate)
+    assert api.call("GET", "/api/meta", {})["status"].gateway_mock
+    session = api.call("POST", "/api/sessions", {"customer_id": "customer:C01", "sales_id": "sales:S01"})
+    api.call("POST", "/api/turn", {"session_id": session.id, "speaker": "customer",
+        "text": "锦纶氨纶的布面染花，温度75℃", "by": "sales:S01"})
+    resumed = server.Api(None, config)
+    resumed.build()
+    restored = resumed.app.sessions()
+    assert len(restored) == 1 and restored[0].id == session.id
+    assert restored[0].turns[0].text == "锦纶氨纶的布面染花，温度75℃"
+    assert restored[0].need.known_temperature() == (75.0, 75.0)
+
+
 class _DownGateway:
     """模型接口断开：每次调用都连不上。"""
     cache_dir = replay = trace = None
