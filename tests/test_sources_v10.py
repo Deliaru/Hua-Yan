@@ -11,12 +11,27 @@ import yaml
 
 from huayan.app import HuayanApp
 from huayan.clock import get_clock
-from huayan.contracts import Capability, KnowledgeUnit
+from huayan.contracts import Capability, KnowledgeUnit, LLMResponse, LLMToolCall, Tier, Usage
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.reader.trials import build_trial_record
 from huayan.ingest.reader.word import read_docx, read_native_labels
 from huayan.knowledge import PermissionDenied
 from huayan.ui import server
+
+
+class _ImageTurn:
+    """离线脚本只核对真实工具及多模态消息传递，不判断模型读图质量。"""
+    def __init__(self, doc_id):
+        self.doc_id, self.requests = doc_id, []
+
+    def complete(self, req):
+        self.requests.append(req.model_copy(deep=True))
+        calls = [LLMToolCall(call_id="image", name="read_source_image", arguments={
+            "doc_id": self.doc_id, "page": 1, "span": "table-2"}),
+            LLMToolCall(call_id="text", name="read_source", arguments={"doc_id": self.doc_id, "span": "table-2"})]
+        return LLMResponse(content="（脚本化）本轮图像传递核对，非专业结论。",
+            tool_calls=calls if len(self.requests) == 1 else [], usage=Usage(input_tokens=0, output_tokens=0),
+            latency_ms=0, model="scripted-image-transport", tier=Tier.FAST, cost=None)
 
 
 def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp_path, monkeypatch):
@@ -74,6 +89,28 @@ def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp
     assert "file_sha256" not in tool.data and "professional_confirmation" not in tool.data
     denied = app.agents.call_tool(app.agents.context("pm:agent"), "read_trial_record", {"doc_id": doc_id})
     assert not denied.ok and "无权读取" in denied.error and not app.agents.pending("rd:R01")
+    # 一次响应含多个工具时，所有tool回复先齐备，再将真正图片送给下一轮网关。
+    gateway = _ImageTurn(doc_id)
+    app.gateway, app.config["gateway_mock"] = gateway, False
+    conv = app.agents.chat("rd:R01", "（合成）请回看table-2第1页的已登记区域。")
+    request = gateway.requests[1]
+    assert request.caller == "agent:rd"
+    assert [m.role for m in request.messages[-3:]] == ["tool", "tool", "user"]
+    metadata = json.loads(request.messages[-3].content)["data"]
+    assert metadata["kind"] == "region" and metadata["span"] == "table-2" and "image_url" not in metadata
+    text, picture = request.messages[-1].content
+    assert text.type == "text" and doc_id in text.text
+    assert picture.type == "image_url" and picture.image_url.url == region["image_url"]
+    assert all("data:image" not in row.result_summary for row in app.agents.trace(conv.id))
+    app.agents.chat("rd:R01", "（合成）结束本次查看。")
+    assert all(isinstance(m.content, str) for m in gateway.requests[-1].messages)
+    assert "data:image" not in conv.model_dump_json() and not app.agents.pending("rd:R01")
+    denied_gateway = _ImageTurn(doc_id)
+    app.gateway = denied_gateway
+    app.agents.chat("pm:agent", "（合成）请求内部图像，应由原入口拒绝。")
+    rejected = denied_gateway.requests[1]
+    assert all(isinstance(m.content, str) for m in rejected.messages)
+    assert all(not json.loads(m.content)["ok"] for m in rejected.messages if m.role == "tool")
     monkeypatch.setattr(server, "trial_roles", {"sales-session": "sales:S01"})
     bound = server.trial_params("sales-session", "GET", "/api/sources/trial", params)
     with pytest.raises(PermissionDenied):

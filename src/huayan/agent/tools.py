@@ -115,6 +115,19 @@ def read_source(ctx: ToolContext, args: SourceArgs) -> ToolResult:
     return ToolResult(data=[f.model_dump() for f in fragments])
 
 
+class SourceImageArgs(BaseModel):
+    doc_id: str
+    page: int
+    span: str | None = None
+
+
+@tool("read_source_image", "read", ["sales", "pm", "rd"],
+      "按来源编号、页码和可选块span回取原页或已登记区域，图像随本轮输入提供。"
+      "没有区域坐标时返回整页；不接受文件路径或自由坐标，使用委托人权限，读取不确认或授予。", SourceImageArgs)
+def read_source_image(ctx: ToolContext, args: SourceImageArgs) -> ToolResult:
+    return ToolResult(data=ctx.app.read_source_image(args.doc_id, args.page, ctx.principal.id, args.span))
+
+
 class SourceTrialArgs(BaseModel):
     doc_id: str
 
