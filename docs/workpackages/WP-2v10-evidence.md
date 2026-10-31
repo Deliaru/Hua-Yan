@@ -1,6 +1,6 @@
 # WP-2v10｜选定资料的解析与证据读取
 
-> 决赛必需，按样例交付｜状态：首份 Word 报告原生读取已实现；Cloudflare 实调尚未取得合格图片读数，最新验证交用户评审；PPT 图表读取另记｜先处理首份报告用到的格式。
+> 决赛必需，按样例交付｜状态：首份 Word 报告原生读取及4处经开发者核对的表格页区域已登记；MinerU自动版面/OCR、合格图片模型读数与PPT图表读取仍待完成｜先处理首份报告用到的格式。
 
 ## 目标
 
@@ -106,3 +106,12 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 - **最终真实结果**：延长等待后得到上游 HTTP 502、`3046: Request timeout`，不是模型协议未接受。两次超时分别记录在 `cloudflare-instance-reading-check.json` 和 `cloudflare-report-reading-check.json`。本轮没有合格图片读数，第2、3页未调用，真实缓存回放未完成；结构化读图验收明确未通过，未将输出补造为成功结果。
 - **产物与检查**：`evidence.json`、`review.html` 已更新为本轮失败说明；原生30块、33条标签及7项原生待补读保持，图片读数为空，专业确认仍为空。已有首份原生 TrialRecord 未修改。提示修改后运行 `.venv/Scripts/uv.exe run --no-sync pytest -q tests/test_reader_v10.py`，2项通过（1.17秒）；后续等待参数由本次实际调用验证，无新增或重复测试文件。含企业内容的响应和缓存继续只留在被忽略的 `data/`。
 - **交接**：本轮验证停止并交用户评审；Cloudflare 接口已取得真实响应，但完整读图和缓存回放仍待完成。首份原生报告与 TrialRecord 继续保留，后续主线按用户评审结果推进。未写正式知识状态，未提交或推送。
+
+### 2026-10-31｜首份报告已核对表格页区域登记
+
+- **范围与基线**：`v10 @ 001637c`，开始时工作区干净。已完整重读AGENTS、REPLAN、相关CONTRACTS/QI与本包，按G2/G6、Office原生转换、极简及禁止过度防御要求自查；应用PDF技能仅检查已有原生PDF及PNG，没有编辑PDF、使用LibreOffice或调用图片模型。本轮只补首份实际区域坐标，不宣称自动版面/OCR或专业判读完成。
+- **最小入口**：新增scripts/register_report_regions.py，命令为`.venv/Scripts/uv.exe run --no-sync python scripts/register_report_regions.py --evidence data/knowledge_v10/evidence/SRC-3a2130604c/evidence.json --regions data/knowledge_v10/evidence/SRC-3a2130604c/region-locations.json`。外部登记文件携带来源/原件指纹、原生PDF指纹、各span/page/bbox及对应PNG指纹；复用EvidenceBlock/Location解析，核对页内非空区域后仅更新读取侧Location.bbox并重写原文审阅包。全部条目核对后才调用既有write_review，没有正式状态写入、Fragment字段改动、ACL、模型、重试、锁或版本系统。重新导出PDF/PNG后须重新核对登记，旧指纹不静默沿用。
+- **坐标来源与实际交付**：本机未安装MinerU。本次读取既有Word COM导出的原生PDF路径边框，开发者对照完整第1、2页核对表格范围；按实际PNG尺寸换算为左上原点像素并外扩2像素保留边框。登记A组配方table-1/第1页、A组曲线table-2/第1页标题及第2页正文、B组配方与曲线table-3/第2页，共4处。region-locations.json在读取侧保留原生PDF边框与换算后坐标、原页指纹和开发者核对方法；它是定位记录，不是研发签字、MinerU输出或曲线线段专业确认。原生XML/单元格读数继续独立保留，未靠图像替换。
+- **真实回取**：data/knowledge_v10/checks/report-regions-2b2576c3/summary.json及4张裁图。首份状态副本经既有GET对应门面回取4处，均kind=region，图像像素与原生PNG按登记bbox裁取完全一致，裁图逐张查看，表头、单位、曲线标签和边框完整。A组跨页标题与正文各在原页，不拼成同页；B组裁图873×549，经AgentHub已有read_source_image工具返回同一区域。未改UI，未将门面检查混报为本轮浏览器验收。
+- **保真与边界检查**：原文块、单元格、A/B组别、fragments/指纹、33条原生读数及现有pending逐项不变；TrialRecord回取仍通过、A/B各5项配方。原件、原生PDF、原生DOCX、TrialRecord、原实例qi_state字节未变；隔离装载后的qi_state也未因读取改变。对实际登记文件只改一处图像指纹，CLI拒绝且evidence不被部分覆盖。含企业原文和坐标的产物仅留data，不入库；未用图中可见写法静默修正原生异常标签或关闭待补项。
+- **验证与交接**：受影响读取/来源7项通过（1.52秒），全量pytest57项通过（27.55秒），不为已真实运行的CLI增加镜像测试；未改web，不重复构建。真实模型调用和新增专业签字0，隔离应用为mock网关/System1、规则抽取。MinerU自动版面/OCR、真实结构化读图与缓存回放、选定PPT图表题及最终证据整理继续待办，非研发部分尚未全部完成；真实专业判断仍按用户安排暂缓。本小项完成后停下等待评审，未提交或推送。
