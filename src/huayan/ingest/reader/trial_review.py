@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from .trials import cite, formula_amount
+from .report import render_block_images
 
 
 def write_trial_review(record, blocks, report, evidence_dir, output_dir):
@@ -36,6 +37,7 @@ def write_trial_review(record, blocks, report, evidence_dir, output_dir):
         group_html.append(f'<section><h2>{group.group}组 · {"工厂原工艺" if group.group == "A" else "试样工艺"}</h2>'
                           f'<div style="white-space:pre-wrap">{texts(group.formula_notes)}</div>{formulas}<h3>曲线原生标签</h3>'
                           '<p>下列标签按原文提取顺序展示，不代表工艺执行顺序。速率与线段仍待补读。</p>'
+                          f'{render_block_images(report, [c.span for c in group.curve_evidence], output)}'
                           f'{curves}<h3>操作经验与现场反馈原文</h3>{texts(group.operations)}</section>')
     changes = table(["变化项", "A组", "B组", "出处"], [
         [escape(x.item), escape(x.before if x.before is not None else "未列出"),
@@ -55,7 +57,7 @@ td,th{{border:1px solid #d8e0e5;padding:8px;text-align:left;overflow-wrap:anywhe
 .notice{{padding:16px;background:#fff3d4}}figure{{max-width:1050px;margin:24px auto}}img{{width:100%}}
 @media(max-width:1000px){{.pair{{grid-template-columns:1fr}}}}</style>
 <h1>A/B 成对试样记录</h1><p>{escape(record.source_id)} · L{record.level} · {escape(record.source)}</p>
-<p class="notice">原生解析／规则整理的草稿；尚未专业确认。生成模型读取按用户要求跳过，Jev 尚未核对。
+<p class="notice">原生解析／规则整理的草稿；尚未专业确认。图片模型辅助稿按实际模型标注、待人工审阅；无读稿时为待补读。Jev 尚未核对。
 资料观察不等于适用范围或获授予能力。配方与内部原文仅供本地研发审阅。</p>
 <p><a href="trial-record.json">结构化记录</a> · <a href="{escape(evidence_review)}">原文证据审阅包</a></p>
 <h2>报告信息</h2>{texts(record.metadata)}<h2>试样目的</h2>{texts(record.purpose)}

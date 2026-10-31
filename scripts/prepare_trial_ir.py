@@ -52,7 +52,7 @@ def main():
         if citation.fragment != f"{fragment.doc_id}#{fragment.span}@{fragment.fingerprint}" or citation.quote not in fragment.text:
             raise ValueError(f"引文或指纹不匹配：{citation.span}")
     relative_review = Path(os.path.relpath(evidence_path.parent / "review.html", args.out)).as_posix()
-    write_operation_review(ir, args.out, relative_review)
+    write_operation_review(ir, args.out, relative_review, report=evidence)
     print(f"IR {ir.id}；条件 {len(ir.conditions)} 项；待处理 {len(ir.pending)} 项；审阅包 {args.out}/review.html")
 
 

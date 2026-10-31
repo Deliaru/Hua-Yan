@@ -72,3 +72,33 @@ def export_word(path, output_dir):
             images.append(str(image_path))
     return {"format": file_format, "reading_copy": str(docx), "preview_pdf": str(pdf),
             "images": images, "pages": pages, "renderer": renderer}
+
+
+def export_powerpoint(path, output_dir):
+    """PPT形状图表只由本机Office渲染；不解析或重绘折线/箭头。"""
+    import pythoncom
+    import win32com.client
+
+    output = Path(output_dir).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    local = output / "original.pptx"
+    shutil.copyfile(path, local)
+    pdf, images_dir = output / "original.pdf", output / "slides"
+    pythoncom.CoInitialize()
+    try:
+        app = win32com.client.DispatchEx("PowerPoint.Application")
+        app.DisplayAlerts = 1
+        try:
+            deck = app.Presentations.Open(str(local), ReadOnly=True, WithWindow=False)
+            try:
+                deck.SaveAs(str(images_dir), 18)
+                deck.SaveAs(str(pdf), 32)
+                count, version = deck.Slides.Count, app.Version
+            finally:
+                deck.Close()
+        finally:
+            app.Quit()
+    finally:
+        pythoncom.CoUninitialize()
+    return {"preview_pdf": str(pdf), "images": [str(images_dir / f"幻灯片{n}.PNG") for n in range(1, count + 1)],
+            "renderer": f"Microsoft PowerPoint {version} COM"}

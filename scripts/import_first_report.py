@@ -69,7 +69,8 @@ def main():
     (output / "import-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if report["admitted"]:
         review = Path(os.path.relpath(Path(args.evidence).resolve().parent / "review.html", Path(args.ir).resolve().parent)).as_posix()
-        write_operation_review(ir, Path(args.ir).parent, review, candidate_id=report["admitted"][0]["ku_id"])
+        write_operation_review(ir, Path(args.ir).parent, review, candidate_id=report["admitted"][0]["ku_id"],
+                               report=json.loads(Path(args.evidence).read_text(encoding="utf-8")))
     print(f"候选 {len(report['admitted'])} 条，未对齐 {len(report['unaligned'])} 条；配置：{config_path}")
 
 

@@ -29,7 +29,8 @@ def main():
         if citation.fragment != f"{f.doc_id}#{f.span}@{f.fingerprint}" or citation.quote not in f.text:
             raise ValueError(f"引文或指纹不匹配：{citation.span}")
     evidence_review = Path(os.path.relpath(Path(args.evidence).resolve().parent / "review.html", Path(args.out).resolve())).as_posix()
-    write_operation_review(ir, args.out, evidence_review)
+    write_operation_review(ir, args.out, evidence_review,
+                           report=json.loads(Path(args.evidence).read_text(encoding="utf-8")))
     print(json.dumps({"ir_id": ir.id, "conditions": len(ir.conditions), "evidence": len(ir.evidence),
                       "proposal_form": ir.proposal.form, "review": str(Path(args.out) / "review.html")}, ensure_ascii=False))
 

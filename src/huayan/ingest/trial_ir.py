@@ -10,6 +10,7 @@ from huayan.contracts import Actor, Fragment
 from huayan.domain import find_phenomenon, find_slot_values
 from huayan.ingest.compile import EvidenceRef, Proposal
 from huayan.ingest.reader.trials import Citation, TrialRecord, TrialText
+from huayan.ingest.reader.report import render_block_images
 from huayan.knowledge.store import _grams
 
 
@@ -156,7 +157,7 @@ def _prepare_observation(record, seeds, group, product, operation, conditions, i
         observation=operation.text, conditions=conditions, evidence=evidence, pending=pending, proposal=proposal)
 
 
-def write_operation_review(ir, output, evidence_review, *, candidate_id=None):
+def write_operation_review(ir, output, evidence_review, *, candidate_id=None, report=None):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     (output / "operation-ir.json").write_text(ir.model_dump_json(indent=2) + "\n", encoding="utf-8")
@@ -167,7 +168,8 @@ def write_operation_review(ir, output, evidence_review, *, candidate_id=None):
         return "<br>".join(f'<a href="{esc(evidence_review)}#{esc(c.span)}">'
             f'{esc(c.span)} · 第{esc(str(c.pages))}页</a><pre>{esc(c.quote)}</pre>' for c in items)
     rows = "".join(f'<tr><td>{c.group or ("原文范围" if c.stage else "共同")} · {esc(c.stage or "共同条件")}</td>'
-        f'<td><pre>{esc(c.text)}</pre></td><td>{esc(str(c.structured)) if c.structured else "保留原文待判断"}</td>'
+        f'<td>{render_block_images(report, [e.span for e in c.evidence], output) if report is not None and c.stage == "工艺曲线" else ""}'
+        f'<pre>{esc(c.text)}</pre></td><td>{esc(str(c.structured)) if c.structured else "保留原文待判断"}</td>'
         f'<td>{citations(c.evidence)}</td></tr>' for c in ir.conditions)
     pending = "".join(f"<li>{esc(note)}</li>" for note in ir.pending)
     assignee = (f"候选研发归属：{esc(ir.assigned_rd.name)}（{esc(ir.assigned_rd.id)}）；专业确认待本人签字。"
@@ -187,7 +189,7 @@ def write_operation_review(ir, output, evidence_review, *, candidate_id=None):
     page = f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>操作经验 IR 审阅</title>
 <style>body{{font:16px/1.6 'Microsoft YaHei',sans-serif;margin:32px;color:#183044}}
 table{{width:100%;border-collapse:collapse}}td,th{{border:1px solid #ccd6df;padding:10px;text-align:left}}
-pre{{white-space:pre-wrap;overflow-wrap:anywhere}}.notice{{background:#fff3d4;padding:16px}}</style>
+pre{{white-space:pre-wrap;overflow-wrap:anywhere}}img{{max-width:100%}}figure{{margin:12px 0}}.notice{{background:#fff3d4;padding:16px}}</style>
 <h1>现场观察 IR · {esc(ir.id)}</h1><p class="notice">L{ir.level} 内部资料；规则整理的单次观察草稿，
 {admission}；未专业确认，未授予能力。产品原词与未结构化限制交人判断；配方保持原密级。</p>
 <p>{assignee}</p>

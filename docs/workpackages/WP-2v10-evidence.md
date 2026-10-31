@@ -1,6 +1,6 @@
 # WP-2v10｜选定资料的解析与证据读取
 
-> 决赛必需，按样例交付｜状态：首份Word原生读取及4处表格页区域已登记，选定课件第15页原生文字/表格与区域回取已验证；首份MinerU本地版面/OCR辅助读取已运行，曲线补读及合格图片模型读数仍待完成；读取题核验见V10.10记录｜先处理实际选定材料。
+> 决赛必需，按样例交付｜状态：首份Word原生读取及4处表格页区域已登记，选定课件第15页原生文字/表格与区域回取已验证；首份及选定PPT页已完成智谱在线结构化读取与原生图内联，模型稿仍有阶段/单位及跨页问题待人工审阅；35题离线扩写按用户要求停止｜先处理实际选定材料。
 
 ## 目标
 
@@ -140,3 +140,14 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 - **结果与局限**：`layout-mineru/review.html`将原生页图、自动区域与原始OCR结构并排展示，HTML表格内容转义显示。实际查看第2页区域覆盖了A组曲线及B组表格，但A曲线仅作为image，B曲线标签未完整读取，OCR中132匹配数为0；不能以区域已找到代替读数已读出。辅助块全部needs_review、group=null，不从前后次序自动赋予A/B，不覆盖既有人工核对区域、原生Fragment、单位或未决条件。完整曲线及图片模型结构化读数仍待补。
 - **保真与验证**：`data/knowledge_v10/checks/mineru-first-report/summary.json`记录输入字节核对、逐页/类型计数与局限，附第2页区域核对图。evidence.json、原生DOC/PDF/DOCX、TrialRecord、原实例qi_state及依赖清单/锁文件字节均未变；原生仍30块、33条标签，现有pending保留。全量pytest57项通过（28.34秒）；按真实运行核对，不新增镜像测试。未改web，不重复构建；含企业原文的产物和工具缓存不入库。
 - **交接**：本地版面/OCR辅助入口可复现，尚未自动挂接为原生证据。真实模型读图与缓存回放、线上Agent模型走链、最终证据整理仍有未完成部分，非研发事项尚未全部完成；专业判断及四类真人试用继续按用户后续安排。本小项停下等待评审，未提交或推送。
+
+
+### 2026-10-31｜停止扩题，改用智谱在线读取与原生曲线审阅
+
+- **范围与自查**：按用户新指令停止35题扩写和规则刷题，重读AGENTS、VISION、REPLAN、CONTRACTS/QI；遵守铁律2/3/4/10/11，冻结Fragment及其他领域契约不变。根目录资料目录已从索引移除且本地保留，.env/data/runs继续忽略，未读取或打印密钥；运行均经`uv run --env-file .env`。Cloudflare只保留Clef，本轮不修改或部署Worker。
+- **网关**：默认config/models.yaml改为智谱glm-4.6v-flash，备用glm-4.1v-thinking-flash，同一BACKUP_API_KEY引用。真实image_url+json_object请求已取得两模型响应；实调发现推理前缀（含省略起始标签）、短预算截断及Schema回传，前缀只在OpenAICompatGateway边界处理，结构不合格沿既有structured纠错并保留失败记录，不截取任意JSON或补造数据。单并发仅在网关统一约束，重试沿既有retry_waits=[5,15,30]，429优先使用Retry-After秒数；SDK不另做重试。
+- **原生图与审阅**：report.py仅按已登记bbox裁切Office原生PNG，不解析或重绘VML/DrawingML形状。read_report默认智谱，复用指纹一致的Word COM原生3页和登记区域，顺序读取3张整页及3个曲线区域；report/trial_review/trial_ir内联原生裁图及实际模型名、待人工审阅辅助稿。首份报告无原生chart series，原生文字/单元格及33条标签保持；model quote=null允许留空，缺值/单位/标签列入pending。
+- **真实运行与缓存**：`uv run --env-file .env python scripts/read_report.py --source SRC-3a2130604c --vision`成功，紧接着同参数第二遍10条响应全命中已有网关缓存（含结构纠错响应），新增网络请求0，记录`data/knowledge_v10/checks/glm-online/first-report-replay.json`。cache位于data/knowledge_v10/cache/，键包含图片完整内容和请求/Schema/模型参数；meter不等于网络次数，实际请求以gateway-trace.jsonl的llm_request计。
+- **A/B核对结果与限制**：原生图保留两组各自的升降温走线、保温点、原单位、终点操作和红字时间口径，具体值与核对说明仅保存在被忽略的native-curve-check.json。模型尚不能视作准确的完整工艺：table-2第1页标题区域输出了区域不可见的数值，部分阶段/单位拆分不全；原始模型稿保留并在三类审阅页明确待审，没有并入正式判断或覆盖原生读数。
+- **PPT真实读取**：`uv run --env-file .env python scripts/read_pptx_slide.py --source SRC-18358d2dd7 --page 15 --vision`由PowerPoint16.0 COM后台SaveAs原生PNG/PDF，python-pptx同步读取原生表格；该页原生chart数0，不将表格冒称系列图。5次网络尝试（主模型4次429后备用成功），glm-4.1v-thinking-flash返回24条数值辅助稿，24条缺单位待补；原生24个数值单元格继续可回查，不将模型稿当真值。
+- **产物与交接**：evidence/SRC-3a2130604c/review.html、trials/SRC-3a2130604c/review.html、professional-review/glm-first-report/review.html及evidence/SRC-18358d2dd7/review.html均在data/knowledge_v10下。专业审阅包是新读取侧副本，原正式IR/知识状态不由本轮读取改写。在线读取通道已通，读数专业审阅仍未完成；真实签字、授予与范围批准继续等待人，不以模型输出替代。

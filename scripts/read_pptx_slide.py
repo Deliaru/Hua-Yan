@@ -1,6 +1,6 @@
-"""读取已选定课件的一页，复用已核对的PowerPoint COM原生导出，不调用模型。
+"""读取已选定课件的一页；--vision 使用PowerPoint COM原生导出和统一智谱网关。
 
-uv run python scripts/read_pptx_slide.py --source SRC-18358d2dd7 --page 15
+uv run --env-file .env python scripts/read_pptx_slide.py --source SRC-18358d2dd7 --page 15 --vision
 原生导出来自V10.0清单；本入口先交付文字/表格页，其他形状保留待补。
 """
 import argparse
@@ -11,6 +11,10 @@ import shutil
 
 from huayan.ingest.reader.powerpoint import read_pptx_slide
 from huayan.ingest.reader.report import write_review
+from huayan.ingest.reader.report import read_report_images
+from huayan.ingest.reader.office import export_powerpoint
+from huayan.gateway import build_gateway
+from huayan.meter import FileMeter
 
 
 def main():
@@ -19,6 +23,8 @@ def main():
     parser.add_argument("--source", required=True)
     parser.add_argument("--page", required=True, type=int)
     parser.add_argument("--out")
+    parser.add_argument("--vision", action="store_true")
+    parser.add_argument("--models", default="config/models.yaml")
     args = parser.parse_args()
     source = next(s for s in json.loads(Path(args.manifest).read_text(encoding="utf-8"))["sources"]
                   if s["source_id"] == args.source)
@@ -48,7 +54,22 @@ def main():
               "format": "pptx", "renderer": "PowerPoint COM原生导出（复用V10.0，python-pptx原生读取）",
               "preview_pdf": str(output / "native/original.pdf"), "images": images, "selected_pages": [args.page],
               **extracted, "readings": [], "image_readouts": [], "professional_confirmation": None}
+    if args.vision:
+        native = export_powerpoint(source["path"], output / "native")
+        # 原生COM新图的实际尺寸用于区域映射；不重绘形状。
+        reread = read_pptx_slide(source["path"], source, args.page, native["images"])
+        reread.pop("slide_xml")
+        report.update(native | reread)
     write_review(report, output)
+    if args.vision:
+        gateway = build_gateway(args.models, False, FileMeter(output, "read_pptx_slide"))
+        gateway.cache_dir = Path("data/knowledge_v10/cache/image-readings")
+        def trace(event, **fields):
+            with (output / "gateway-trace.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"event": event, **fields}, ensure_ascii=False) + "\n")
+        gateway.trace = trace
+        report["image_readouts"] = read_report_images(report, gateway)
+        write_review(report, output)
     print(f"读取第{args.page}页，{len(report['blocks'])}个原生块；产物：{output / 'review.html'}")
 
 
