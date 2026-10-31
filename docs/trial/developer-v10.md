@@ -56,6 +56,8 @@
 
 ## 已核验开发题的证据读取核对
 
-运行 `.venv/Scripts/uv.exe run --locked --no-sync python -m huayan.eval.reading_v10 --evidence <evidence.json> <另一份evidence.json>`。默认使用本地evaluations/questions.jsonl及selected_chart.json；金标只在eval侧核对，不进入检索工具。当前运行产物在data/knowledge_v10/validation/reading-evidence-fd727f5a/。
+运行 `.venv/Scripts/uv.exe run --locked --no-sync python -m huayan.eval.reading_v10 --evidence <evidence.json> <另一份evidence.json>`。默认使用本地evaluations/questions.jsonl及verified_charts.json；核对记录可为多题列表，也可用`--gold`指定已有单题对象，须覆盖本次全部已核验题。金标只在eval侧核对，不进入检索工具。当前运行产物在data/knowledge_v10/validation/reading-evidence-b9adf6d8/，早先fd727f5a保留为单题历史运行。
 
-当前可核对1题，其他34题保留未运行；4份资料8个页面中，既有关键词检索首位来源页命中1/1，事后指定的2个原生单元格一致。原单位、表头、条件和引用留在summary.json，predictions.json保留实际检索返回。这里只证明证据查准与原生数据保真，模型回答可评分分母为0，不证明自主选行列、单位解释或问答正确率；线上模型与专业签字继续按用户安排暂缓。
+当前可核对2题，其他33题保留未运行；5份资料9个已读页面中，既有关键词检索首位来源页命中2/2，事后指定的3个原生单元格一致。新增03-Q01已由开发者对照PowerPoint原生PNG、表格及XML核验，读取SRC-e8e260b85a第21页；同表在课件其他章节重复出现，本次未读取/索引整本198页。原单位、表头、条件和引用留在summary.json，predictions.json保留实际检索返回。这里只证明受控已读页集的证据查准与原生数据保真，模型回答可评分分母为0，不证明自主选行列、单位解释或问答正确率；线上模型与专业签字继续按用户安排暂缓。
+
+本机新增来源使用manifest/lowcarbon-source.json的只读元数据，复用`scripts/read_pptx_slide.py --manifest data/knowledge_v10/manifest/lowcarbon-source.json --source SRC-e8e260b85a --page 21`读取。该元数据不含题目或答案，不在evaluations目录，读取器不接触评测金标；未将此来源登记进真实试用实例或指定研发归属。
