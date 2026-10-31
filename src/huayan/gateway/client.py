@@ -27,7 +27,11 @@ class OpenAICompatGateway:
     _serial = Lock()  # 免费层单并发；同一进程的网关实例共用，不在读取器/脚本另建锁。
 
     def __init__(self, config, meter=None, *, clients=None, cache_dir=None, trace=None, sleep=time.sleep):
-        self.tiers = config["tiers"]
+        self.tiers = {
+            k: ({**v, "extra_body": {"thinking": {"type": "disabled"}, **v.get("extra_body", {})}}
+                if v["model"].startswith("glm-4.6v") else v)
+            for k, v in config["tiers"].items()
+        }
         self.serial = config.get("concurrency") == 1
         # 每档失败后的等待秒数，次数即重试次数。默认 5、20、80、80、80 秒：试用接口过载时要求至少退避 60 秒，
         # 整月录制里遇到过几分钟的超时；有人在界面前等的试用实例配得短，失败早点报出来、由人重跑（V9.2）
@@ -112,8 +116,10 @@ class OpenAICompatGateway:
                         kwargs["tools"] = req.tools
                     if schema is not None:
                         kwargs["response_format"] = {"type": "json_object"}
-                    if cfg.get("extra_body"):
-                        kwargs["extra_body"] = cfg["extra_body"]
+                    extra_body = ({"thinking": {"type": "disabled"}} if cfg["model"].startswith("glm-4.6v") else {}) | (
+                        cfg.get("extra_body") or {})
+                    if extra_body:
+                        kwargs["extra_body"] = extra_body
                     if self.trace is not None:
                         self.trace("llm_request", caller=req.caller, model=cfg["model"], attempt=attempt)
                     raw = self._client(tier).chat.completions.create(**kwargs)

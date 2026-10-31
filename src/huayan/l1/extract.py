@@ -149,7 +149,8 @@ class LLMExtractor:
             messages=[Message(role="system", content=self.prompt),
                 Message(role="user", content=json.dumps(data, ensure_ascii=False) +
                     "\n请现在分析以上真实输入，返回 ExtractionResult 的 JSON 数据实例，不是 JSON Schema。"
-                    "temperature 只能是本轮新增或改口后的一个对象或 null，不是历轮列表。"
+                    "slots 仅填上方 slots 定义的枚举项（字段只有 slot、value、status、confidence、quote、turn_n），禁止把 temperature 或 celsius 放进 slots。"
+                    "temperature 只能放在顶层字段（本轮新增或改口后的一个对象或 null，不是历轮列表）。"
                     "quote 必须逐字存在于所引客户发言，不得增添标点。只输出 JSON，不输出分析。")]), ExtractionResult)
         return output
 

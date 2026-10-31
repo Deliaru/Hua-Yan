@@ -169,9 +169,10 @@ def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
     assert [(r.group, r.value, r.unit, r.conditions) for r in repeated.readings[:2]] == [
         ("A", "12", "min", ["85℃"]), ("B", "6", "min", ["95℃"])]
     assert repeated.readings[-1].quote is None and any("未读清" in note for note in repeated.pending)
-    gateway.tiers["strong"]["model"] = "synthetic-vision-v2"
+    gateway.tiers["strong"]["model"] = "glm-4.6v-flash"
     _, updated_response = read_image(image, "合成上下文", gateway)
-    assert len(sent) == 4 and updated_response.model == "synthetic-vision-v2"
+    assert len(sent) == 4 and updated_response.model == "glm-4.6v-flash"
+    assert sent[-1]["thinking"] == {"type": "disabled"}
     content = sent[0]["messages"][-1]["content"]
     assert content[0] == {"type": "text", "text": "合成上下文"}
     assert base64.b64decode(content[1]["image_url"]["url"].split(",", 1)[1]) == b"synthetic-image-A"
