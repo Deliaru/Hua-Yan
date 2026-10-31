@@ -53,3 +53,9 @@
 两分支都先给75℃会话产生推荐，再修改引用片段、手工recheck，查看结论待复核、能力挂起、推荐撤回与qi_review。`restore`只将70—80℃连接符改为70～80℃，模拟研发显式审阅新指纹后签字，原能力恢复；`replace`把范围缩为70—74℃，模拟研发撤回旧判断，重新导入、审阅确认及授予，再模拟产品经理批准。后者旧能力持续挂起，75℃仍无推荐，72℃下一会话用新能力。
 
 `summary.json`记录修改前后片段、新旧证据、挂起快照、总线中的复核最终状态、能力和使用事件；`report.md`对照两种处置。全部专业判断与签字合成，mock/规则运行，无模型实调；恢复后的原会话由脚本显式重匹配。此入口验证软件演示，不代表真实岗位复核或Agent自主准备已完成。
+
+## 已核验开发题的证据读取核对
+
+运行 `.venv/Scripts/uv.exe run --locked --no-sync python -m huayan.eval.reading_v10 --evidence <evidence.json> <另一份evidence.json>`。默认使用本地evaluations/questions.jsonl及selected_chart.json；金标只在eval侧核对，不进入检索工具。当前运行产物在data/knowledge_v10/validation/reading-evidence-fd727f5a/。
+
+当前可核对1题，其他34题保留未运行；4份资料8个页面中，既有关键词检索首位来源页命中1/1，事后指定的2个原生单元格一致。原单位、表头、条件和引用留在summary.json，predictions.json保留实际检索返回。这里只证明证据查准与原生数据保真，模型回答可评分分母为0，不证明自主选行列、单位解释或问答正确率；线上模型与专业签字继续按用户安排暂缓。
