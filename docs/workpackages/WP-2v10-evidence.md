@@ -1,6 +1,6 @@
 # WP-2v10｜选定资料的解析与证据读取
 
-> 决赛必需，按样例交付｜状态：首份 Word 报告原生读取及4处经开发者核对的表格页区域已登记；MinerU自动版面/OCR、合格图片模型读数与PPT图表读取仍待完成｜先处理首份报告用到的格式。
+> 决赛必需，按样例交付｜状态：首份Word原生读取及4处表格页区域已登记，选定课件第15页原生文字/表格与区域回取已验证；MinerU自动版面/OCR、合格图片模型读数及读取题核验仍待完成｜先处理实际选定材料。
 
 ## 目标
 
@@ -115,3 +115,13 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 - **真实回取**：data/knowledge_v10/checks/report-regions-2b2576c3/summary.json及4张裁图。首份状态副本经既有GET对应门面回取4处，均kind=region，图像像素与原生PNG按登记bbox裁取完全一致，裁图逐张查看，表头、单位、曲线标签和边框完整。A组跨页标题与正文各在原页，不拼成同页；B组裁图873×549，经AgentHub已有read_source_image工具返回同一区域。未改UI，未将门面检查混报为本轮浏览器验收。
 - **保真与边界检查**：原文块、单元格、A/B组别、fragments/指纹、33条原生读数及现有pending逐项不变；TrialRecord回取仍通过、A/B各5项配方。原件、原生PDF、原生DOCX、TrialRecord、原实例qi_state字节未变；隔离装载后的qi_state也未因读取改变。对实际登记文件只改一处图像指纹，CLI拒绝且evidence不被部分覆盖。含企业原文和坐标的产物仅留data，不入库；未用图中可见写法静默修正原生异常标签或关闭待补项。
 - **验证与交接**：受影响读取/来源7项通过（1.52秒），全量pytest57项通过（27.55秒），不为已真实运行的CLI增加镜像测试；未改web，不重复构建。真实模型调用和新增专业签字0，隔离应用为mock网关/System1、规则抽取。MinerU自动版面/OCR、真实结构化读图与缓存回放、选定PPT图表题及最终证据整理继续待办，非研发部分尚未全部完成；真实专业判断仍按用户安排暂缓。本小项完成后停下等待评审，未提交或推送。
+
+### 2026-10-31｜选定课件第15页原生文字、表格与位置
+
+- **范围与基线**：`v10 @ 7c70118`，开始时工作区干净。按要求完整重读AGENTS、REPLAN、相关CONTRACTS/QI、本包和V10.0选样约定，按G2/G6、Office原生读取、极简及禁止过度防御要求自查。本轮仅处理既定来源SRC-18358d2dd7第15页，没有读取evaluations金标、扩展全题库、调用模型或进行专业签字。
+- **入口与实现**：新增reader/powerpoint.py与scripts/read_pptx_slide.py；运行`.venv/Scripts/uv.exe run --locked --no-sync python scripts/read_pptx_slide.py --source SRC-18358d2dd7 --page 15`。python-pptx直接读取原件文字和表格单元格，六字段Fragment继续由既有EvidenceBlock生成；合并格只取原单元格，同时在读取侧table_layout保留行列和合并跨度，原始slide XML另存document.xml。形状位置按实际原生PNG尺寸换算为Location.bbox；不是MinerU/OCR或模型推定坐标。当前入口针对文字/表格页，其他形状保留待补，不宣称全格式或原生chart系列解析完成。
+- **原生导出与审阅**：核对V10.0清单中的PPTX原件、字节相同的COM输入副本和原生PDF指纹，复用已批准的PowerPoint COM原生25页PNG/PDF，没有重新转换或使用LibreOffice。读取产物在data/knowledge_v10/evidence/SRC-18358d2dd7/：evidence.json、review.html、document.xml、table-region.png及native副本。为保持既有页码回取接口的索引，保留25张原生页图副本；仅第15页形成证据块，selected_pages使审阅页只展示这一页。report.py只补该选择并将Word专用页图说明改为通用“原生页”，原Word报告仍默认显示全部页面。
+- **真实结果**：第15页为4个文字块和1张6行8列表格，24个数值正文单元格、6处合并关系均与原件逐项一致。标题、列头、用量/单位及测试方法文字保留原样，未将其编成适用范围或把S自动换算为其他单位。本页native_chart_count=0，属于原生表格而不是chart系列；未虚构系列值。readings为空表示尚未另行展开带完整多层表头的Reading记录，不代表表格没有数值或模型结构化读取已通过。
+- **隔离核对与归属**：data/knowledge_v10/checks/ppt-slide-363ac910/summary.json。原始slide XML、单元格/文字及第15页PNG逐项/逐字节一致；EvidenceReportSource的fetch/search能回取当前片段。来源清单owner仍为None，正常统一入口按原规则拒绝；仅在隔离应用内存临时指定已存在研发账号核对回取软件，表格裁图kind=region、密级L3，裁图已查看且表头、行列和数值完整。没有把该课件登记为真实研发所有或挂入正式实例，没有导入候选/能力；原课件、清单、原配置及qi_state字节未变，隔离装载后的qi_state也未因读取改变。
+- **依赖与检查**：声明本次实际使用的python-pptx>=1.0.2。uv lock --offline因跨Python版本缓存缺httpx元数据失败，随后正常uv lock完成，uv lock --check通过；同步锁文件也补入此前已在清单声明而未入锁的Word/PDF及可选reader-embedding依赖。未新增嵌入功能、下载模型或执行GPU安装，实际原生读取使用本机已有python-pptx 1.0.2。受影响读取/来源7项通过（1.80秒）；全量pytest57项通过（28.70秒），差异格式检查通过。按一次真实原生读取核对交付，没有新增镜像测试；未改web，不重复构建。
+- **交接**：本小项只交付选定页的原生证据与回取，不报告题库通过率。模型、Jev、嵌入或OCR实调0，隔离应用为mock网关/System1、规则抽取。下一小项可由eval侧消费这些证据核验已核验题子集；MinerU自动版面/OCR、真实图片模型读数和最终证据整理仍待完成，专业归属、判断及真人试用按用户后续安排。非研发部分尚未全部完成；未提交或推送，停下等待用户评审。

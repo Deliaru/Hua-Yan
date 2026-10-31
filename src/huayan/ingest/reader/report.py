@@ -53,6 +53,8 @@ def write_review(report, output_dir):
                     + esc(str(reading["cell"]) if reading["cell"] else "") + "</td></tr>")
     pages = []
     for page, image_path in enumerate(report["images"], 1):
+        if page not in report.get("selected_pages", range(1, len(report["images"]) + 1)):
+            continue
         texts = []
         for block in report["blocks"]:
             locations = block["locations"]
@@ -63,7 +65,7 @@ def write_review(report, output_dir):
                          f'<p>{esc(block["section"])}</p><pre>{esc(block["text"])}</pre></section>')
         relative_image = Path(image_path).relative_to(output).as_posix()
         pages.append(f'<h2 id="page-{page}">原生第 {page} 页</h2><div class="page"><img src="{esc(relative_image)}" '
-                     f'alt="Word 原生第 {page} 页"><div>{"".join(texts)}</div></div>')
+                     f'alt="原生第 {page} 页"><div>{"".join(texts)}</div></div>')
     pending = "".join(f"<li>{esc(note)}</li>" for note in report["pending"])
     visual = []
     for item in report["image_readouts"]:
@@ -87,7 +89,7 @@ h1,h2{{color:#145b67}}table{{border-collapse:collapse;width:100%;background:whit
 section{{background:white;padding:12px;margin-bottom:12px;border:1px solid #d8e0e5}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 monospace}}
 .notice{{padding:16px;background:#fff3d4}}@media(max-width:950px){{.page{{grid-template-columns:1fr}}img{{position:static}}}}</style>
 <h1>报告原文与读取结果</h1><p>{esc(report["source_id"])} · {esc(report["renderer"])}</p>
-<p class="notice">原生文字与标签读数，尚未专业确认。A＝工厂原工艺，B＝试样工艺；未分组内容保留所在节标题。曲线速率未自动关联线段。</p>
+<p class="notice">原生文字与表格／标签读数，尚未专业确认。试样报告中A＝工厂原工艺，B＝试样工艺；未分组内容保留所在节标题。曲线速率未自动关联线段。</p>
 <p><a href="native/original.pdf">原生 PDF</a> · <a href="evidence.json">完整读取记录</a> · <a href="document.xml">原始 XML</a></p>
 <h2>待补读</h2><ul>{pending}</ul><h2>数值与出处</h2><table><thead><tr><th>组别</th><th>阶段</th><th>值与原单位</th><th>局部条件</th><th>原文标签</th><th>出处／行列</th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table>{"".join(pages)}
