@@ -32,12 +32,12 @@ def page_chunks(paths):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--questions", default="data/knowledge_v10/evaluations/questions.jsonl")
-    parser.add_argument("--gold", default="data/knowledge_v10/evaluations/selected_chart.json")
+    parser.add_argument("--gold", default="data/knowledge_v10/evaluations/verified_charts.json")
     parser.add_argument("--evidence", nargs="+", required=True)
     parser.add_argument("--out")
     args = parser.parse_args()
     questions = [json.loads(line) for line in Path(args.questions).read_text(encoding="utf-8").splitlines() if line]
-    # 当前只有一题完成开发者原页核验；其余题保留完整状态，不以有文字答案代替已核验。
+    # 只运行完成开发者原页核验的题；不以有文字答案代替已核验。
     eligible = [q for q in questions if q["source_state"] == "verified"
                 and q["answer_verification"] == "developer_compared_native_office_visual_and_xml"]
     chunks = page_chunks(args.evidence)
@@ -52,10 +52,14 @@ def main():
                             "retrieval": "keyword", "top_k": 1, "hits": hits,
                             "elapsed_ms": (perf_counter() - start) * 1000})
     (output / "predictions.json").write_text(json.dumps(predictions, ensure_ascii=False, indent=2), encoding="utf-8")
-    gold = json.loads(Path(args.gold).read_text(encoding="utf-8"))
+    records = json.loads(Path(args.gold).read_text(encoding="utf-8"))
+    # CLI核对文件支持已有单题对象和多题列表；答案仍在预测落盘后才读取。
+    records = records if isinstance(records, list) else [records]
+    gold_by_id = {record["question_id"]: record for record in records}
     results = []
     for prediction in predictions:
-        if prediction["question_id"] != gold["question_id"]:
+        gold = gold_by_id.get(prediction["question_id"])
+        if gold is None:
             raise ValueError("已核验题尚缺对应核对记录，不计入本次分母")
         hit = prediction["hits"][0] if prediction["hits"] else None
         found = hit is not None and (hit["source_id"], hit["page"], hit["file_sha256"]) == (
