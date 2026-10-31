@@ -1,19 +1,6 @@
 """读取侧 Jev 辅助核对；复用 System1 协议、概率解析与计量，不产生专业签字。"""
 from huayan.contracts import S1Noul, System1Client
-from huayan.jev.system1 import ClefClient, OneJevClient
-
-
-class ClefWorkerClient(ClefClient):
-    """同一 Clef 协议经用户部署的 Worker 转发，返回原始 model/answers/usage。"""
-    path = "/"
-
-    def __init__(self, worker_url, meter, timeout_s=120):
-        OneJevClient.__init__(self, worker_url, "clef", meter, timeout_s)
-
-    def _unwrap(self, raw):
-        if "model" not in raw or "answers" not in raw:
-            raise ValueError("Worker 尚未返回 Clef 的 model/answers，请检查服务端是否使用 Clef 正式协议")
-        return raw
+from huayan.jev.system1 import ClefWorkerClient
 
 
 class JevVerifier:

@@ -1,0 +1,4 @@
+kind: cloudflare_worker
+base_url: https://jev-proxy.xi1092183542.workers.dev
+model: clef
+timeout_s: 120

@@ -182,6 +182,19 @@ class ClefClient(OneJevClient):
         pass   # 没有健康检查端点，首个请求即探测
 
 
+class ClefWorkerClient(ClefClient):
+    """用户 Worker 转发 Clef 原始 model/answers/usage，复用既有概率与计量协议。"""
+    path = "/"
+
+    def __init__(self, worker_url, meter, timeout_s=120):
+        OneJevClient.__init__(self, worker_url, "clef", meter, timeout_s)
+
+    def _unwrap(self, raw):
+        if "model" not in raw or "answers" not in raw:
+            raise ValueError("Worker 尚未返回 Clef 的 model/answers，请检查服务端是否使用 Clef 正式协议")
+        return raw
+
+
 class _FallbackProbabilities(BaseModel):
     model_config = ConfigDict(extra="forbid")
     answers: dict[str, dict[str, float]]
@@ -227,7 +240,9 @@ def build_system1(impl, config_path, gateway, meter):
     if impl != "onejev":
         raise ValueError(f"Unknown System 1 implementation: {impl}")
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
-    if cfg.get("kind") == "cloudflare":
+    if cfg.get("kind") == "cloudflare_worker":
+        client = ClefWorkerClient(cfg["base_url"], meter, cfg["timeout_s"])
+    elif cfg.get("kind") == "cloudflare":
         client = ClefClient(os.environ[cfg["account_id_env"]], os.environ[cfg["api_key_env"]], cfg["model"], meter,
                             cfg["timeout_s"], media_root=cfg.get("media_root"))
     else:
