@@ -145,8 +145,12 @@ class LLMExtractor:
                 # V9.3：研发的回问显示在客户自助页上，不在对话里；客户这句可能就是在答它
                 "asking": [{"slot": s, "label": slots[s].label, "ask_text": slots[s].ask_text} for s in asking]}
         output, _ = self.gateway.structured(LLMRequest(tier=Tier.FAST, caller="agent:extract",
-            temperature=0, messages=[Message(role="system", content=self.prompt),
-                Message(role="user", content=json.dumps(data, ensure_ascii=False))]), ExtractionResult)
+            temperature=0, max_tokens=4096, timeout_s=180,
+            messages=[Message(role="system", content=self.prompt),
+                Message(role="user", content=json.dumps(data, ensure_ascii=False) +
+                    "\n请现在分析以上真实输入，返回 ExtractionResult 的 JSON 数据实例，不是 JSON Schema。"
+                    "temperature 只能是本轮新增或改口后的一个对象或 null，不是历轮列表。"
+                    "quote 必须逐字存在于所引客户发言，不得增添标点。只输出 JSON，不输出分析。")]), ExtractionResult)
         return output
 
 

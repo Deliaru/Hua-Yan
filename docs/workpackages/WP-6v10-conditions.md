@@ -1,6 +1,6 @@
 # WP-6v10｜温度一个字段的抽取与范围匹配
 
-> 决赛必需，单字段｜状态：C2 离线链路及温度提议编译接线已完成；此前 P1 修复已获用户评审通过；实际模型抽取、真实专业范围确认及下一单真实复用待完成｜首版只处理摄氏温度和闭区间。
+> 决赛必需，单字段｜状态：C2 离线链路及温度提议编译接线已完成；此前 P1 修复已获用户评审通过；智谱实际模型抽取已验证；真实专业范围确认及下一单真实复用待完成｜首版只处理摄氏温度和闭区间。
 
 ## 目标
 
@@ -73,3 +73,12 @@ pH/用量/时间等多字段、开区间、单位换算平台，以及数值条�
 - **纵向验证**：新增一项基于 `tests/fixtures/reader/synthetic-temperature.txt` 的合成集成测试，经现有门面完成候选导入→固定证据确认→同层适用批准→既有 qi_grant 研发授予→客户范围批准→下一单匹配。全程保持70—80℃；待批准能力不进入客户视图，批准后75℃为 confirmed、未知为 possible、85℃不命中。签字均为测试临时实例中的模拟，不计作真人专业确认。全量 `uv run --no-sync pytest -q` 47项通过（23.09秒），前端构建通过（仅既有体积提示），差异格式检查通过。
 - **真实报告**：使用既有 `scripts/compile_qi.py --config data/knowledge_v10/instance-first-report/app.yaml --ir data/knowledge_v10/compiler/SRC-3a2130604c/operation-ir.json --evidence data/knowledge_v10/evidence/SRC-3a2130604c/evidence.json --out data/knowledge_v10/checks/temperature-proposal-first-report/compile-report.md` 进行内存预览。候选1、引文丢弃0、未对齐0、能力提议0；原 IR 仍为 observation、form=null、temperature_c=None。实际 `ku:claim:1` 仍 candidate，TF-213HE 无适用能力，不从报告132℃推断授权范围。摘要在同目录 `summary.json`，未写正式状态、未调用模型或替真人签字。
 - **交接**：本小项完成，签字材料展示详见 V10.7 同日记录。实际模型抽取、JianMing Xi 的专业判断、真实用途授予、必要批准及下一单真实复用仍待后续。未提交或推送，停下等待用户评审。
+
+
+### 2026-10-31｜智谱LLMExtractor在线温度主线
+
+- **实际入口**：`uv run --env-file .env python scripts/run_online_temperature.py --run-id temperature-online-2`。运行时使用config/app.online.yaml（gateway_mock=false、extractor=llm、agent_threads=object，models_config当时为config/models.yaml；后续Agent配置调整单列V10.9记录），调用现有LLMExtractor→validate_extraction→apply_extraction→domain.match_candidates，没有添加温度规则或第二条匹配链。
+- **针对真实接口问题的最小调整**：实调返回了只含结束标签的推理前缀、非数据Schema及2048 token截断；前缀处理归统一网关。LLMExtractor仅将请求预算改为4096/180秒并要求返回单个temperature对象、逐字quote和JSON数据实例；字段、领域比较及未知语义均保持。首轮失败与中止记录保留，不用规则结果代替模型。
+- **在线结果**：依次输入75℃、72—78℃、改口85℃、实际温度不清楚、75—85℃，得到[75,75]、[72,78]、[85,85]、unknown/null、[75,85]；进入现有匹配器后为confirmed、confirmed、不命中、possible（unknown_slots含temperature_c）、不命中。未知已覆盖旧85℃事实。70—80℃只是在内存中的合成软件范围，不导入为TF-213HE授权、不声称专业适用。
+- **计量**：temperature-online-2/gateway-trace.jsonl为23次真实网络尝试：glm-4.6v-flash20次、glm-4.1v-thinking-flash3次；获得7条响应（主4/备3，包含结构纠错），最后形成5次合格抽取，缓存命中0。meter、原始缓存及逐轮temperature-check.json留在data/knowledge_v10下。caller全为agent:extract，未写专业结论或用途能力。
+- **验证与边界**：全量离线pytest57项通过（27.43秒），不依赖外网或密钥；真实模型调用单独运行，不并入测试成绩。已按AGENTS铁律2/3/4/10/11自查。线上抽取和三态匹配已通，真实范围判断、确认授予及下一单专业复用仍需研发办理，不能由合成范围或模型代替。

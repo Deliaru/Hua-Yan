@@ -1,0 +1,54 @@
+agent_memory: false
+agent_threads: object
+customer_sales:
+  customer:C01: sales:S01
+  customer:C02: sales:S01
+  customer:C03: sales:S01
+  customer:C04: sales:S02
+extractor: llm
+gateway_mock: false
+jue_k_dir: models/jue_k
+llm_cache_dir: data/knowledge_v10/cache/gateway
+models_config: config/models.agent.yaml
+pm_lines: {}
+points:
+  cited: 1
+  contributed: 5
+  product_released: 10
+  shared: 2
+  trial_pass: 5
+  used: 1
+qi_state: null
+realtime_model: jue_proto
+replay: false
+run_root: data/knowledge_v10/online/runs
+scheduled_model: jue_proto
+seeds_dir: data/knowledge_v10/instance-first-report/seeds
+source_irs:
+  SRC-3a2130604c: data/knowledge_v10/compiler/SRC-3a2130604c/operation-ir.json
+source_manifest: data/knowledge_v10/manifest/sources.json
+source_trials:
+  SRC-3a2130604c: data/knowledge_v10/trials/SRC-3a2130604c/trial-record.json
+sources:
+- kind: internal
+  name: SRC-3a2130604c
+  root: data/knowledge_v10/evidence/SRC-3a2130604c/evidence.json
+- kind: internal
+  name: SRC-38a27ac7a5
+  root: data/knowledge_v10/products/TF-213HE/sds/evidence.json
+- kind: internal
+  name: SRC-eb043d626f
+  root: data/knowledge_v10/products/TF-213HE/sheet/evidence.json
+system1_impl: onejev
+templates_dir: config/templates
+thresholds:
+  ask: 0.5
+  ask_jue_k: 0.15
+  match: 0.5
+  max_asks: 2
+  publish: 0.5
+windows:
+  actor_hours: 168
+  knowledge_days: 7
+  theme_days: 7
+system1_config: config/system1.cloudflare-worker.yaml
