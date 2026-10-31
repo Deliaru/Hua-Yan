@@ -1,6 +1,6 @@
 # WP-2v10｜选定资料的解析与证据读取
 
-> 决赛必需，按样例交付｜状态：首份Word原生读取及4处表格页区域已登记，选定课件第15页原生文字/表格与区域回取已验证；MinerU自动版面/OCR、合格图片模型读数及读取题核验仍待完成｜先处理实际选定材料。
+> 决赛必需，按样例交付｜状态：首份Word原生读取及4处表格页区域已登记，选定课件第15页原生文字/表格与区域回取已验证；首份MinerU本地版面/OCR辅助读取已运行，曲线补读及合格图片模型读数仍待完成；读取题核验见V10.10记录｜先处理实际选定材料。
 
 ## 目标
 
@@ -131,3 +131,12 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 
 - `v10 @ 643208e`，按用户评审仅更正记录。已按AGENTS重读相关规则与工作包：document.xml保存的是python-pptx重序列化的slide.part.blob，不能称为原始ZIP条目的逐字节副本。上条入口说明与核对结论已改为“XML语义一致”，原生PNG的逐字节一致结论保留。
 - 从实际PPTX ZIP条目取回第15页XML，与document.xml解析后比较，语义一致、原始字节不一致；本地ppt-slide-363ac910/summary.json同步明确这两个结果及输出来源。未修改主体代码、XML输出、表格或正式状态；仅做这次定点核对与差异格式检查，不新增测试或重跑无关测试。停下等待用户评审，未推进下一小项。
+
+### 2026-10-31｜首份报告本地MinerU版面与OCR辅助稿
+
+- **范围与基线**：`v10 @ 072f741`，开始时工作区干净。已完整重读AGENTS、REPLAN、相关CONTRACTS/QI和本包，按G2/G5/G6、原生Office规则、极简与禁止过度防御要求自查。本小项完成首份报告的本地版面/OCR运行，不恢复用户暂停的生成模型实调，不进行研发签字。
+- **入口与依赖**：新增`scripts/read_report_layout.py`及同名`.md`。从既有evidence.json定位Word COM导出的PDF，调用独立工具环境中的MinerU 4.1.3，固定Basic、OCR、ONNX CPU及local模型来源；输出日志、原始middle.json、带来源/输入指纹和像素坐标的layout.json、原生PNG副本及红框审阅页。只在外部CLI/协议边界检查PDF头、输出协议与坐标；不新增框架、契约、ACL、自动挂接或正式写入。工具和公开模型下载在被忽略的data/tools，ModelScope缓存也定向到该目录，遥测关闭，项目pyproject.toml、uv.lock及运行环境不变。
+- **真实运行与模型**：`.venv/Scripts/uv.exe run --locked --no-sync python scripts/read_report_layout.py --evidence data/knowledge_v10/evidence/SRC-3a2130604c/evidence.json --out data/knowledge_v10/evidence/SRC-3a2130604c/layout-mineru`。同一份3页原生PDF实际完成，工具耗时11.54秒（含启动，日志推理7.44秒）；返回36块，逐页20/6/10，含2表、1图像，全部有归一化及原生PNG像素坐标。日志实际加载OCR检测/识别、版面及UNet模型，均为CPUExecutionProvider；没有VLM、外部生成模型、Jev或嵌入调用。没有将本地OCR当成专业真值。
+- **结果与局限**：`layout-mineru/review.html`将原生页图、自动区域与原始OCR结构并排展示，HTML表格内容转义显示。实际查看第2页区域覆盖了A组曲线及B组表格，但A曲线仅作为image，B曲线标签未完整读取，OCR中132匹配数为0；不能以区域已找到代替读数已读出。辅助块全部needs_review、group=null，不从前后次序自动赋予A/B，不覆盖既有人工核对区域、原生Fragment、单位或未决条件。完整曲线及图片模型结构化读数仍待补。
+- **保真与验证**：`data/knowledge_v10/checks/mineru-first-report/summary.json`记录输入字节核对、逐页/类型计数与局限，附第2页区域核对图。evidence.json、原生DOC/PDF/DOCX、TrialRecord、原实例qi_state及依赖清单/锁文件字节均未变；原生仍30块、33条标签，现有pending保留。全量pytest57项通过（28.34秒）；按真实运行核对，不新增镜像测试。未改web，不重复构建；含企业原文的产物和工具缓存不入库。
+- **交接**：本地版面/OCR辅助入口可复现，尚未自动挂接为原生证据。真实模型读图与缓存回放、线上Agent模型走链、最终证据整理仍有未完成部分，非研发事项尚未全部完成；专业判断及四类真人试用继续按用户后续安排。本小项停下等待评审，未提交或推送。
