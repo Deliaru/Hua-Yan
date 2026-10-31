@@ -1697,7 +1697,9 @@ V10.1 `HuayanApp.read_source_image(doc_id, page, by, span=None)` / GET `/api/sou
 先复用整份来源权限检查一次，再从报告读取记录取回原页。page从1开始；span给出时必须属于该页。
 块的Location.bbox为原生页图像素(left, top, right, bottom)，左上原点；有已登记坐标则裁图，无坐标明确返回kind="page"及bbox=null，不推测区域。
 返回doc_id/span/page/bbox、kind、密级/来源类别、图像尺寸、图像字节指纹及data URL，不返回本地路径；HTTP不接受任意文件路径或自由裁图坐标。
-图像及块定位仍留在读取侧，不改Fragment六字段，不创建正式状态或调用视觉模型；Agent/UI消费与自动区域定位分别接续。
+图像及块定位仍留在读取侧，不改Fragment六字段，不创建正式状态或调用视觉模型。
+研发工作面的试样记录出处按doc_id/span/page主动回取，弹窗显示原页或已登记区域、密级和图像指纹；无区域时明确显示整页，服务端拒绝原因原样呈现。
+界面不输入本地路径、自由裁图坐标或另判权限；Agent图像消费与自动区域定位仍待接续。
 
 `KnowledgeBase` 的接口变化：
 

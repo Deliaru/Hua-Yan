@@ -61,6 +61,11 @@ export interface AuthorizedSourceReply { ref: string; text: string; audience: nu
 
 // 读取侧试样记录的显示字段，与正式业务Trial分开。
 export interface SourceCitation { fragment: string; span: string; pages: number[]; quote: string; cell: [number, number] | null }
+export interface SourceImage {
+  doc_id: string; span: string | null; page: number; bbox: [number, number, number, number] | null;
+  kind: "page" | "region"; level: number; source: "public" | "internal" | "external";
+  width: number; height: number; fingerprint: string; image_url: string;
+}
 export interface SourceTrialText { text: string; evidence: SourceCitation[] }
 export interface SourceReading {
   span: string; cell: [number, number] | null; object: string; group: "A" | "B" | null;
