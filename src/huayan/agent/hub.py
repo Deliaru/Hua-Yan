@@ -218,6 +218,9 @@ class AgentHub:
                     target = q.refs.get("requirement_id") or q.refs.get("session_id") or q.object_id
                     text = (f"{target}：{q.title}（觉的问题 {q.id}，{q.family}；调用工具时用 {target}，不要用问题编号）。引用：{q.refs}。"
                             f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。")
+                    if q.owner_role in {"pm", "rd"} and "requirement_id" in q.refs:
+                        text += (f"首先实际调用 get_requirement(req_id=\"{target}\") 读取本单。"
+                                 "后续检索及草稿参数从本单返回内容取，不把工具说明文字当需求。")
                     # 授予现有能力：形式与目标层已由觉算出，Agent 只告知委托人，不起草
                     text += ("请告知委托人待签的授予，不起草，不签字。" if q.family == "qi_grant" and "capability_id" in q.refs
                              else "请告知委托人：同事申请查看这条知识，附上申请人碰到过它的需求单，不起草，不签字。"

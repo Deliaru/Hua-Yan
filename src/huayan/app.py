@@ -1482,6 +1482,8 @@ class HuayanApp:
         documents = {}
         fragments = []
         for ref in evidence:
+            if "@" not in ref or "#" not in ref.rsplit("@", 1)[0]:
+                raise ValueError("evidence须为doc_id#span@fingerprint指针数组；请复制read_trial_record中evidence[].fragment，不能填写原文或摘要")
             location, fingerprint = ref.rsplit("@", 1)
             doc_id, span = location.rsplit("#", 1)
             if doc_id not in documents:

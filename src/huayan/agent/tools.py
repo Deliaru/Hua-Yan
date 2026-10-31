@@ -4,6 +4,8 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
+from pydantic import Field
+
 from huayan.clock import get_clock
 from huayan.contracts import Actor, ContributionDraft, KUKind, ReqItem, Role, SheetDraft, ToolKind, ToolResult, ToolSpec, Trial
 from huayan.contracts._base import BaseModel
@@ -142,7 +144,7 @@ def read_trial_record(ctx: ToolContext, args: SourceTrialArgs) -> ToolResult:
 
 class SourcePreparationArgs(BaseModel):
     req_id: str
-    evidence: list[str]
+    evidence: list[str] = Field(description="仅填doc_id#span@fingerprint指针数组；可逐字复制read_trial_record中evidence[].fragment。不能填原文、摘要或Python列表字符串。")
     claim_ids: list[str] = []
     pending: str = ""
 
