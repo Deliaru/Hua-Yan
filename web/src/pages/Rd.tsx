@@ -960,12 +960,13 @@ type ClaimReview = Awaited<ReturnType<typeof api.reviewClaims>>;
 type ReviewFragment = ClaimReview["fragments"][string][number];
 
 function EvidenceSummary({ refs }: { refs: string[] }) {
-  return <div className="mt-2 text-[12px] text-ink-2">
-    <p>{refs.length ? `关联依据：${new Set(refs.map((r) => r.split("#")[0])).size}份资料 · ${refs.length}处原文定位` : "依据：研发直接判断"}</p>
-    {!!refs.length && <details className="mt-1"><summary className="cursor-pointer">查看引用编号</summary>
-      {refs.map((r, i) => <p key={i} className="mt-1 break-all font-mono">{r}</p>)}
-    </details>}
-  </div>;
+  if (!refs.length) return <p className="mt-1.5 text-[12px] text-ink-3">依据：研发直接判断</p>;
+  return <details className="mt-1.5 text-[12px] text-ink-2">
+    <summary className="cursor-pointer">关联依据：{new Set(refs.map((r) => r.split("#")[0])).size} 份资料 · {refs.length} 处定位（点击查看引用编号）</summary>
+    <div className="mt-1.5 space-y-1 rounded-lg bg-slate-50 p-2.5 font-mono text-[11.5px]">
+      {refs.map((r, i) => <p key={i} className="break-all">{r}</p>)}
+    </div>
+  </details>;
 }
 
 function FragmentText({ text }: { text: string }) {
@@ -1003,7 +1004,7 @@ function GroupedFragments({ fragments }: { fragments: ReviewFragment[] }) {
 }
 
 // 只投影展示数据；确认与复核始终提交原始review.reviewed_evidence。
-function EvidenceReviewPanel({ review }: { review: ClaimReview }) {
+function EvidenceReviewPanel({ review, compactSingle = false }: { review: ClaimReview; compactSingle?: boolean }) {
   const { me } = useApp();
   const L = useLabels();
   const fragments = review.claims.flatMap((c) => review.fragments[c.id]);
@@ -1015,21 +1016,34 @@ function EvidenceReviewPanel({ review }: { review: ClaimReview }) {
   for (const f of current) { const root = f.span.split("/")[0]; counts.set(root, (counts.get(root) ?? 0) + 1); }
   const preferredSpans = [...counts.keys()].sort((a, b) =>
     Number(/^(table|chart|slide)/.test(b)) - Number(/^(table|chart|slide)/.test(a)) || counts.get(b)! - counts.get(a)!);
-  const conclusions = <div className="space-y-3">{review.claims.map((c) => <div key={c.id}>
-    <h4 className="font-semibold">{c.title}</h4><p className="mt-1 text-[12px] text-ink-2">归属 {L.name(c.owner)} · 请对照完整条件审阅</p>
-    <blockquote className="mt-2 whitespace-pre-wrap border-l-4 border-accent bg-accent/5 p-3 leading-6">{c.text}</blockquote>
-    {c.evidence.join(";") !== review.reviewed_evidence[c.id].join(";") &&
-      <p role="alert" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 font-medium text-amber-900">来源与原确认／编译时不同，请核对当前原文与候选判断后再签字。</p>}
-    <details className="mt-2 text-[12px] text-ink-2"><summary className="cursor-pointer">查看原确认／编译依据编号</summary>
-      {c.evidence.map((ref, i) => <p key={i} className="mt-1 break-all font-mono">{ref}</p>)}
-    </details>
-    {review.pending_evidence[c.id] && <p className="mt-2 text-ink-2">补充依据：待挂接 {review.pending_evidence[c.id].capability_id}；原贡献人 {L.name(review.pending_evidence[c.id].contributor)}</p>}
-  </div>)}</div>;
+  const hideBody = compactSingle && review.claims.length === 1;
+  const items = review.claims.map((c) => {
+    const changed = c.evidence.join(";") !== review.reviewed_evidence[c.id].join(";");
+    const pending = review.pending_evidence[c.id];
+    if (hideBody && !changed && !pending) return null;
+    return <div key={c.id} className="space-y-2">
+      {!hideBody && <>
+        <div>
+          <h4 className="font-semibold">{c.title}</h4>
+          <p className="mt-0.5 text-[12px] text-ink-2">归属 {L.name(c.owner)} · 请对照完整条件审阅</p>
+        </div>
+        <blockquote className="whitespace-pre-wrap rounded-r-lg border-l-4 border-accent bg-accent/5 px-3 py-2 leading-6">{c.text}</blockquote>
+      </>}
+      {changed && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 font-medium text-amber-900">
+        来源与原确认／编译时不同，请核对当前原文与候选判断后再签字。
+      </p>}
+      {pending && <p className="rounded-lg bg-slate-50 px-3 py-2 text-ink-2">
+        补充依据：待挂接 {pending.capability_id}；原贡献人 {L.name(pending.contributor)}
+      </p>}
+    </div>;
+  }).filter(Boolean);
+  const conclusions = items.length ? <div className="space-y-3">{items}</div> : undefined;
   return <div className="row !block text-[13px] leading-5">
-    {docs.length > 1 && <div className="flex flex-wrap gap-2" role="group" aria-label="审阅来源">{docs.map((id) => <button key={id} type="button"
+    {docs.length > 1 && <div className="mb-2 flex flex-wrap gap-2" role="group" aria-label="审阅来源">{docs.map((id) => <button key={id} type="button"
       className={`btn ${doc === id ? "btn-plain" : "btn-quiet"}`} aria-pressed={doc === id} onClick={() => setChosenDoc(id)}>{id}</button>)}</div>}
-    {doc ? <SourceTrial key={`${me}:${doc}`} docId={doc} autoLoad preferredSpans={preferredSpans}>{conclusions}</SourceTrial> : conclusions}
-    <GroupedFragments fragments={current} />
+    {doc ? <SourceTrial key={`${me}:${doc}`} docId={doc} autoLoad preferredSpans={preferredSpans}
+      rawEvidence={<GroupedFragments fragments={current} />}>{conclusions}</SourceTrial>
+      : <>{conclusions}<GroupedFragments fragments={current} /></>}
   </div>;
 }
 
@@ -1062,7 +1076,7 @@ function CandidateClaims({ reqId }: { reqId: string | null }) {
         setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id));
       }} />
       <span className="min-w-0"><strong>{c.title}</strong><br /><span className="text-ink-3">待确认 · 归属 {L.name(c.owner)}</span>
-        <span className="mt-2 block whitespace-pre-wrap leading-6">{c.text}</span></span>
+        <span className="mt-1.5 block whitespace-pre-wrap leading-6">{c.text}</span></span>
     </label>{c.owner === me && <div className="flex shrink-0 gap-2">
       <button type="button" className="btn btn-plain" onClick={() => {
         setReview(null); setSelected([]); setEditing(c.id); setText(c.text);
@@ -1070,7 +1084,7 @@ function CandidateClaims({ reqId }: { reqId: string | null }) {
       <Act kind="quiet" label="撤回候选" run={() => api.withdrawClaim(c.id, me).then(() => {
         setSelected([]); setReview(null); setEditing(null);
       })} />
-    </div>}<div className="basis-full"><EvidenceSummary refs={c.evidence} /></div></div>)}
+    </div>}<div className="basis-full pl-6"><EvidenceSummary refs={c.evidence} /></div></div>)}
     {editing && <div className="row !block">
       <Field value={text} onChange={setText} rows={5} label="修订后的候选正文" />
       <p className="my-2 text-[12px] text-ink-2">保存后原稿撤回，新稿仍待确认。原依据保持不变，请重新审阅；原稿的用途能力按原有撤回规则处理。</p>
@@ -1083,7 +1097,7 @@ function CandidateClaims({ reqId }: { reqId: string | null }) {
     </div>}
     <div className="row"><Act label="读取所选结论的审阅依据" disabled={!selected.length || editing !== null}
       run={() => api.reviewClaims(selected, me).then(setReview)} /></div>
-    {review && <EvidenceReviewPanel key={JSON.stringify(review.reviewed_evidence)} review={review} />}
+    {review && <EvidenceReviewPanel key={JSON.stringify(review.reviewed_evidence)} review={review} compactSingle />}
     <div className="row"><Act label="签字确认已审阅结论" disabled={!selected.length || !review || editing !== null}
       run={() => api.confirmClaims(reqId, selected, me, review!.reviewed_evidence).then(() => {
         setSelected([]); setReview(null);

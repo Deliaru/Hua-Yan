@@ -54,33 +54,45 @@ function ImageDetails({ image }: { image: ImageResult }) {
 }
 
 // 放大复用本次服务端返回的图像，不重复请求；切图和切身份均重新经原API读取。
-export function SourceImageCard({ docId, span, page, label }: {
-  docId: string; span?: string; page: number; label: string;
+export function SourceImageCard({ docId, span, page, label, initialImage }: {
+  docId: string; span?: string; page: number; label: string; initialImage?: ImageResult;
 }) {
   const { me } = useApp();
-  const [image, setImage] = useState<ImageResult | null>(null);
+  const [image, setImage] = useState<ImageResult | null>(initialImage ?? null);
   const [error, setError] = useState<string | null>(null);
   const [enlarged, setEnlarged] = useState(false);
   useEffect(() => {
     let alive = true;
-    setImage(null); setError(null); setEnlarged(false);
+    setError(null); setEnlarged(false);
+    if (initialImage && initialImage.doc_id === docId && initialImage.page === page && (initialImage.span ?? undefined) === span) {
+      setImage(initialImage);
+      return () => { alive = false; };
+    }
+    setImage(null);
     api.sourceImage(docId, page, me, span).then(
       (data) => { if (alive) setImage(data); },
       (e: Error) => { if (alive) setError(e.message); },
     );
     return () => { alive = false; };
-  }, [docId, span, page, me]);
-  return <figure className="rounded-xl border border-line bg-white p-3">
-    <figcaption className="mb-3 flex flex-wrap justify-between gap-2"><strong>{label}</strong><span className="text-[12px] text-ink-2">Office原生依据</span></figcaption>
-    {!image && !error && <p role="status" className="py-12 text-center text-ink-2">正在读取原生图像……</p>}
+  }, [docId, span, page, me, initialImage]);
+  return <figure className="rounded-xl border border-line bg-white p-3 shadow-xs">
+    <figcaption className="mb-2.5 flex items-center justify-between gap-2 text-[13px]">
+      <strong className="text-ink">{label}</strong>
+      <span className="rounded bg-slate-100 px-2 py-0.5 text-[11.5px] text-ink-2">
+        {image ? (image.kind === "region" ? "Office原生区域裁图" : "Office原生整页") : "Office原生依据"}
+      </span>
+    </figcaption>
+    {!image && !error && <p role="status" className="rounded-lg bg-slate-50 py-12 text-center text-ink-2">正在读取原生图像……</p>}
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-danger">{error}</p>}
     {image && <>
-      <button type="button" className="block w-full cursor-zoom-in" onClick={() => setEnlarged(true)} aria-label={`放大${label}`}>
+      <button type="button" className="block w-full cursor-zoom-in rounded-lg bg-slate-50/50 p-1 transition hover:bg-slate-100/70" onClick={() => setEnlarged(true)} aria-label={`放大${label}`}>
         <img src={image.image_url} width={image.width} height={image.height} alt={`${label}，第${image.page}页${image.kind === "region" ? "高清区域裁图" : "原页图像"}`}
-          className="h-auto max-h-[640px] w-full rounded border border-line object-contain" />
+          className="mx-auto h-auto max-h-[520px] w-full rounded border border-line bg-white object-contain" />
       </button>
-      <p className="mt-2 text-[12px] text-ink-2">{image.kind === "region" ? "已登记区域高清裁图" : "原页图像（未提供区域或此块未登记区域）"} · 点击图片放大</p>
-      <ImageDetails image={image} />
+      <div className="mt-2 flex items-center justify-between text-[12px] text-ink-2">
+        <span>🔍 点击图片全屏放大核对细节</span>
+        <span>第{image.page}页 · L{image.level}</span>
+      </div>
       {enlarged && <SourceImage docId={docId} span={span} page={page} initialImage={image} onClose={() => setEnlarged(false)} />}
     </>}
   </figure>;
