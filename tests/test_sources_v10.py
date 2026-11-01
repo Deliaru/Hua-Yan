@@ -11,9 +11,10 @@ import yaml
 
 from huayan.app import HuayanApp
 from huayan.clock import get_clock
-from huayan.contracts import Capability, KnowledgeUnit, LLMResponse, LLMToolCall, Tier, Usage
+from huayan.contracts import Capability, Fragment, KnowledgeUnit, LLMResponse, LLMToolCall, Tier, Usage
 from huayan.ingest.folder import FolderSource
-from huayan.ingest.reader.trials import build_trial_record
+from huayan.ingest.trial_ir import EvidenceReportSource
+from huayan.ingest.reader.trials import Citation, TrialText, build_trial_record
 from huayan.ingest.reader.word import read_docx, read_native_labels
 from huayan.knowledge import PermissionDenied
 from huayan.ui import server
@@ -83,6 +84,28 @@ def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp
     assert [r.conditions for r in b.curve_labels if r.stage == "保温"] == [["95℃"]]
     assert fetched.pending == pending and fetched.time.a is None and fetched.time.b is None
     assert "path" not in json.dumps(fetched.model_dump(mode="json"))
+    # 专家补充属于另一份内部来源：能读报告不隐含能读该补充。
+    expert = Fragment(doc_id="SYNTH-EXPERT", span="q1", text="合成专家补充：保留原组别。",
+        level=3, source="internal", fingerprint="synthetic-expert-v1")
+    expert_path = tmp_path / "expert-evidence.json"
+    expert_path.write_text(json.dumps({"source_id": expert.doc_id, "file_sha256": "synthetic",
+        "fragments": [expert.model_dump()]}), encoding="utf-8")
+    expert_source = EvidenceReportSource(expert_path)
+    app.kb.sources.append(expert_source)
+    app.source_owners[expert.doc_id] = "rd:R02"
+    citation = Citation(fragment=f"{expert.doc_id}#{expert.span}@{expert.fingerprint}", span=expert.span,
+                        pages=[], quote=expert.text)
+    record.review_notes.append(TrialText(text=expert.text, evidence=[citation]))
+    trial_path.write_text(record.model_dump_json(), encoding="utf-8")
+    with pytest.raises(PermissionDenied):
+        server.GET["/api/sources/trial"](app, params)
+    app.source_owners[expert.doc_id] = "rd:R01"
+    fetched = server.GET["/api/sources/trial"](app, params)
+    assert fetched.review_notes == record.review_notes and fetched.level == 3
+    expert_source.fragments[expert.span] = expert.model_copy(update={"fingerprint": "changed"})
+    with pytest.raises(ValueError, match="依据已变化"):
+        app.read_trial_record(doc_id, "rd:R01")
+    expert_source.fragments[expert.span] = expert
     tool = app.agents.call_tool(app.agents.context("rd:R01"), "read_trial_record", {"doc_id": doc_id})
     assert tool.ok and tool.data["groups"][0]["formula"][0]["name"] == "SYNTH-A"
     assert tool.data["groups"][1]["formula"][0]["unit"] == "kg" and tool.data["pending"] == pending

@@ -53,6 +53,35 @@ def test_unpublished_catalog_product_can_have_candidate_without_being_recommende
     assert "T-206" not in {p.id for p in kb.products()}
 
 
+def test_pending_scope_follows_explicit_product_line_pm(tmp_path):
+    import yaml
+    from huayan.app import HuayanApp
+    from huayan.contracts import Actor
+
+    config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
+    config.update(seeds_dir="tests/fixtures/mini_seeds", run_root=str(tmp_path / "runs"))
+    path = tmp_path / "app.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    app = HuayanApp.build(str(path))
+    app.kb.sources = [FolderSource("合成报告", "internal", "tests/fixtures/reader")]
+    proposal = Proposal(title="合成待批准范围", text="仅合成范围，待确认", product="T-205", author="rd:R01",
+        phenomenon="color_unlevel", form="applicable", conditions=["涤纶"],
+        evidence=[EvidenceRef(doc_id="synthetic-conditions", span="p1", quote="涤纶")])
+    admitted = app.import_proposals([proposal], "rd:R01")["admitted"][0]
+    q = next(q for q in app.bus.list(family="scope_update") if q.refs["capability_id"] == admitted["capability_id"])
+    assert q.signer_id == "pm:P01"
+    new_pm = Actor(id="pm:P02", role="pm", name="合成新产品经理")
+    app.seeds.actors.append(new_pm)
+    app.actors[new_pm.id] = new_pm
+    app.config["pm_lines"]["color_unlevel"] = new_pm.id
+    app.scan()
+    assert q.signer_id == new_pm.id and q.status == "open"
+    assert q.id in {item.id for item in app.questions(new_pm.id)}
+    assert app.kb._units[admitted["ku_id"]].status == "candidate"
+    assert app.kb._caps[admitted["capability_id"]].status == "proposed"
+    assert not app.events.query(["claim_confirmed", "scope_extended"])
+
+
 def test_report_source_explore_exposes_candidate_only_to_owning_rd(tmp_path):
     seeds = load_seeds("tests/fixtures/mini_seeds")
     kb = KnowledgeBase.from_seeds(seeds, EventLog(), AuditLog())

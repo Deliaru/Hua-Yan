@@ -10,7 +10,8 @@ gateway_mock: false
 jue_k_dir: models/jue_k
 llm_cache_dir: data/knowledge_v10/cache/gateway
 models_config: config/models.agent.yaml
-pm_lines: {}
+pm_lines:
+  color_unlevel: pm:HongZongLi
 points:
   cited: 1
   contributed: 5
@@ -25,10 +26,12 @@ run_root: data/knowledge_v10/online/runs
 scheduled_model: jue_proto
 seeds_dir: data/knowledge_v10/instance-first-report/seeds
 source_irs:
-  SRC-3a2130604c: data/knowledge_v10/compiler/SRC-3a2130604c/operation-ir.json
+  SRC-3a2130604c: data/knowledge_v10/professional-review/expert-feedback-20261101/compiler/SRC-3a2130604c/operation-ir.json
+  SRC-fa320dba1c: data/knowledge_v10/professional-review/expert-feedback-20261101/compiler/SRC-fa320dba1c/operation-ir.json
 source_manifest: data/knowledge_v10/manifest/sources.json
 source_trials:
-  SRC-3a2130604c: data/knowledge_v10/trials/SRC-3a2130604c/trial-record.json
+  SRC-3a2130604c: data/knowledge_v10/professional-review/expert-feedback-20261101/trials/SRC-3a2130604c/trial-record.json
+  SRC-fa320dba1c: data/knowledge_v10/professional-review/expert-feedback-20261101/trials/SRC-fa320dba1c/trial-record.json
 sources:
 - kind: internal
   name: SRC-3a2130604c
@@ -39,6 +42,12 @@ sources:
 - kind: internal
   name: SRC-eb043d626f
   root: data/knowledge_v10/products/TF-213HE/sheet/evidence.json
+- name: SRC-c2e98b9ed2
+  kind: internal
+  root: data/knowledge_v10/professional-review/expert-feedback-20261101/expert-source/evidence.json
+- name: SRC-fa320dba1c
+  kind: internal
+  root: data/knowledge_v10/evidence/SRC-fa320dba1c/evidence.json
 system1_impl: onejev
 templates_dir: config/templates
 thresholds:

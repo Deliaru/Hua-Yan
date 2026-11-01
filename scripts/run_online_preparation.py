@@ -1,4 +1,4 @@
-"""真实模型准备真实报告；需求为隔离开发者演练，不代表JianMing Xi本人操作。
+"""真实模型准备真实报告；需求为隔离开发者演练，不代表JianChao Xi本人操作。
 
 不确认结论、不授予、不批准范围、不发布。所有业务写入均经HuayanApp。
 uv run --env-file .env python scripts/run_online_preparation.py
@@ -39,7 +39,7 @@ def main():
         if event in {"llm", "s1"}:
             print(json.dumps({"event": event, **fields}, ensure_ascii=False), flush=True)
     app.gateway.trace = app.system1.trace = tracing
-    rd = "rd:JianMingXi"
+    rd = "rd:JianChaoXi"
     actors = app.actors
     # 隔离演练只选这位来源归属研发接收合成需求；不改原实例编制或来源归属。
     app.actors = {k: a for k, a in actors.items() if a.role != "rd" or k == rd}

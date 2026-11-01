@@ -1686,7 +1686,8 @@ V10.1 内部查证：`HuayanApp.read_source(doc_id, by, span=None) -> list[Fragm
 
 V10.1 `HuayanApp.read_trial_record(doc_id, by)` 与 `GET /api/sources/trial?doc_id=...` 回取读取侧TrialRecord。
 服务端配置 `source_trials: {doc_id: 试样记录JSON路径}`，调用方只给来源编号，主体仍由服务端绑定。
-入口先复用上述整份来源检查一次，再核对记录来源/文件指纹及其引用与当前原文一致；来源变化时交重新整理。
+入口对主报告及引用涉及的每份补充来源各复用上述检查一次，再核对记录来源/文件指纹及其引用与当前原文一致；来源变化时交重新整理。
+多来源记录继承全部依据的最高密级，含内部补充时标为内部；能读主报告不隐含能读补充来源。
 返回保留A/B、单位、阶段、时间口径和待补项，密级/来源类别继承当前来源，不含底层文件路径；不产生确认、授予或正式业务Trial。
 TrialRecord仍定义在ingest内部，未新增冻结模型、匹配链路或权限机制。
 消费入口：Agent只读工具 `read_trial_record(doc_id)`（sales/pm/rd）只调用上述门面，委托人由ToolContext绑定。

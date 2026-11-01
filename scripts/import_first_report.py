@@ -44,7 +44,7 @@ def main():
     actors_path = seeds / "actors.yaml"
     actors = yaml.safe_load(actors_path.read_text(encoding="utf-8"))
     actors["items"] = [a for a in actors["items"] if a["id"] != ir.assigned_rd.id] + [ir.assigned_rd.model_dump(mode="json")]
-    actors["source"] += "；JianMing Xi 为用户指定的真实研发归属，其余模拟人物保留。"
+    actors["source"] += "；JianChao Xi 为用户指定的真实研发归属，其余模拟人物保留。"
     actors_path.write_text(yaml.safe_dump(actors, allow_unicode=True, sort_keys=False), encoding="utf-8")
     # project 仅表示尚未在化言发布。空白发布文本保留未知，L3 资料不写入 L1 的 sheet/usage。
     alignment = ir.product_alignment

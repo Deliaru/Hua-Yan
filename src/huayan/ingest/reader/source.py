@@ -54,10 +54,13 @@ def read_trial_record(kb, doc_id, actor, owners, path):
     for group in record.groups:
         citations += [c for item in group.formula + group.formula_notes + group.operations for c in item.evidence]
         citations += group.curve_evidence
+    for cited_doc in sorted({c.fragment.split("#", 1)[0] for c in citations} - {doc_id}):
+        fragments += read_source(kb, cited_doc, actor, owners)
     current = {f"{f.doc_id}#{f.span}@{f.fingerprint}": f.text for f in fragments}
     if any(c.fragment not in current or c.quote not in current[c.fragment] for c in citations):
         raise ValueError("试样记录依据已变化或无法取回，请重新整理")
-    return record.model_copy(update={"level": max(f.level for f in fragments), "source": fragments[0].source})
+    return record.model_copy(update={"level": max(f.level for f in fragments),
+        "source": "internal" if any(f.source == "internal" for f in fragments) else fragments[0].source})
 
 
 def read_source_image(kb, doc_id, actor, owners, page, span=None):

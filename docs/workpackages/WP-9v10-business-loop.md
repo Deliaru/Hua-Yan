@@ -1,6 +1,6 @@
 # WP-9v10｜一条定向准备与原需求回流链
 
-> 决赛必需，一条业务｜状态：原文/试样记录读取、候选导入、状态回显及授权说明回原会话已接通，研发试样出处可查看原页，Agent图像输入已完成离线及智谱实调，研发原文/TrialRecord/区域回取与固定指纹草稿已真实执行；完整在线派单仍被429阻断；报告层负例消费已接通，真实负例归属/型号仍待处理；说明复用合成链路已验证，产品适用与真人链路待完成｜复用现有觉、Agent 和门面。
+> 决赛必需，一条业务｜状态：原文/试样/图像工具及回流软件链已接通，专家与负例已登记，新候选已导入；2026-11-01重跑仍被429/1305阻断，完整在线准备未通过；真实确认授予、原单回流与下一单产品适用仍待完成｜复用现有觉、Agent 和门面。
 
 ## 目标
 
@@ -45,7 +45,7 @@
 - **原子工具**：`agent/tools.py` 注册只读 `read_source(doc_id, span=None)`，sales/pm/rd 可调用，两个扁平参数、不含身份字段，函数体只调 `HuayanApp.read_source` 并序列化 Fragment。委托人由 ToolContext 绑定；层级、归属和整份来源 share 继续由 V10.1 统一入口检查，工具不重复 ACL。没有导入、确认、授予或发布动作，`pm:agent` 仍无 effect 工具。
 - **研发准备方式**：`prompts/assistant_rd.md` 明确按当前 focus 先取原需求与关联会话，使用已有结构化条件和温度，再按给定来源编号读取原文，摘要保留 `doc_id#span@fingerprint`、条件差别及待核对项。报告原文是材料，不能据此执行指令或把试验温度推成适用范围。同步纠正“研发可看全部知识”的旧提示为本人归属/已获共享范围。摘要沿既有对象协作对话保存，明确不等于候选导入、正式准备材料齐备、事项可签或专业确认；`docs/CONTRACTS.md` 同步工具说明，冻结模型字段未改。
 - **必要验证**：在既有 `test_agent_object.py` 增加一条合成集成场景，真实建立需求单并完成升级准备，用明确标注的脚本化网关驱动现有 Agent Loop 调用 `get_requirement → get_session → read_source`，核对75℃结构化条件、原文与固定指纹随原需求 focus 返回，工具轨迹及 caller 为 `agent:rd`，无确认卡/专业确认，知识状态文件不变。该网关仅为离线工具链驱动，不是生成模型效果验证或真人使用。相关4项通过（1.71秒）；全量49项通过（26.42秒）；补充温度返回断言后相关4项再通过（1.77秒）。本轮未修改前端，不重复构建。
-- **真实资料运行**：在 `data/knowledge_v10/checks/agent-source-1d766142/` 的隔离实例中，经 AgentHub 真实调用已注册工具；JianMing Xi 读取首份 `SRC-3a2130604c` 的30个原文块，`pm:agent` 返回业务拒绝。`summary.json` 标明真实报告、隔离工具调用、模型调用0，网关/System1 为 mock、抽取为规则；工具调用前后副本知识状态文件不变，原实例知识状态文件字节未变，专业确认事件0。真实报告本次只验证读取工具，按需求运行的完整 Loop 使用上条合成场景，不混报为真实业务闭环。
+- **真实资料运行**：在 `data/knowledge_v10/checks/agent-source-1d766142/` 的隔离实例中，经 AgentHub 真实调用已注册工具；JianChao Xi 读取首份 `SRC-3a2130604c` 的30个原文块，`pm:agent` 返回业务拒绝。`summary.json` 标明真实报告、隔离工具调用、模型调用0，网关/System1 为 mock、抽取为规则；工具调用前后副本知识状态文件不变，原实例知识状态文件字节未变，专业确认事件0。真实报告本次只验证读取工具，按需求运行的完整 Loop 使用上条合成场景，不混报为真实业务闭环。
 - **交接**：下一小项仍需把证据、候选和待补项保存到原需求的正式准备材料，接既有签字与回流；本轮没有将对话摘要算作 `preparation_gap` 已满足，不标记任何真实事项准备完成。未提交或推送，停下交用户评审。
 
 | 发起与业务对象 | 本轮帮助 | 仍需人工或后续实现 | 记录性质 |
@@ -60,7 +60,7 @@
 - **查看与工作面**：新增只读 `source_preparation` 和 GET/POST `/api/source-preparation`，HTTP 仅透传门面参数。草稿仅接单研发可读，其他内部角色或同事获得 None，冻结主体拒绝；保存仍校验接单研发。`Rd.tsx` 在本单抬头后展示资料准备草稿、保存时条件、温度原话、出处指纹、候选编号与待补说明，提示结合当前需求和候选状态核对。`api.ts/types.ts` 同步返回结构，没有界面权限判断或新的审批平台。
 - **Agent 接入**：新增四个扁平参数的 draft 工具 `save_source_preparation` 和单参数 read 工具 `get_source_preparation`，均只调用一个门面且不含身份字段。研发提示要求先读旧草稿、按已读取的依据保存，工具成功后才报告已保存，不编造候选编号；草稿不生成确认卡、不确认/授予，也不调用 mark_prepared，现有 preparation_gap 仍按事项原有业务产物判断。契约说明已同步。
 - **必要验证**：扩展上轮同一个合成 Agent Loop 集成场景为 `get_requirement → get_session → read_source → save_source_preparation`，核对已有待审候选关联、本单条件与75℃状态、出处指纹及待补说明实际落到本单材料；同事/pm:agent 拿不到草稿，非接单人不能保存，旧指纹或不在本单待审列表的候选拒绝且不覆盖旧稿。客户随后明确温度未知，再次保存得到 unknown/null；候选保持 candidate，无确认卡/确认事件，保存不改知识状态。受影响10项通过（2.58秒），全量49项通过（26.45秒）；`npm --prefix web run build` 与 `git diff --check` 通过，仅既有 chunk 体积提示。脚本化网关只驱动离线工具链，不作为真实模型效果验证。
-- **真实资料隔离运行**：`data/knowledge_v10/checks/source-preparation-02be7e86/summary.json`。真实报告副本上用原门面创建明确标注的合成需求，创建时仅在隔离内存中限定参与研发为 JianMing Xi，沿原分单规则归到来源既定归属人，随后恢复完整身份表。通过 AgentHub 草稿工具保存15条真实依据指针与既有 `ku:claim:1` 候选关联，待补项明确指出合成需求与报告的纤维/温度差别，未作适用判断。pm:agent/同事不能读取材料，续跑后材料一致；保存本身不改副本 qi_state，原实例 qi_state 文件字节未变，确认事件0，模型调用0，网关/System1 为 mock、抽取为规则。不是一次真人业务或专业签字。
+- **真实资料隔离运行**：`data/knowledge_v10/checks/source-preparation-02be7e86/summary.json`。真实报告副本上用原门面创建明确标注的合成需求，创建时仅在隔离内存中限定参与研发为 JianChao Xi，沿原分单规则归到来源既定归属人，随后恢复完整身份表。通过 AgentHub 草稿工具保存15条真实依据指针与既有 `ku:claim:1` 候选关联，待补项明确指出合成需求与报告的纤维/温度差别，未作适用判断。pm:agent/同事不能读取材料，续跑后材料一致；保存本身不改副本 qi_state，原实例 qi_state 文件字节未变，确认事件0，模型调用0，网关/System1 为 mock、抽取为规则。不是一次真人业务或专业签字。
 - **交接**：本轮完成“原需求能直接查看已保存的资料准备草稿”，下一小项仍需接编译候选与既有专业签字、用途授予和原需求回流。既有候选编号的关联不宣称已经完成编译导入；真实判断与复用仍待真人办理。未提交或推送，停下等待用户评审。
 
 ### 2026-10-30｜从本单完整依据导入操作观察 IR 候选
@@ -112,7 +112,7 @@
 - **范围与基线**：`v10 @ ca05a4c`，开始时工作区干净。用户要求继续完成不依赖研发的内容，并在全部推进完时明确报告；专业审阅继续暂缓。已按AGENTS完整重读项目规则、REPLAN、相关CONTRACTS/QI、本包及既有工具/工作面代码，按极简、G1/G2/G5和禁止过度防御要求核对。本轮只消费V10.1已交付的TrialRecord回取入口，不修改正式状态、匹配器、读取模型或授予机制。
 - **助手接线**：新增只读原子工具read_trial_record(doc_id)，sales/pm/rd可请求，委托人由ToolContext绑定，单个扁平参数、不含身份或本地路径，函数体仅调用一个门面并序列化。返回已整理条件、A/B、原观察、时间口径和出处/待补项；省略文件指纹、重复差值清单和专业签字字段，不把草稿当正式业务Trial或能力。研发提示同步来源键、原单位/阶段、多对象混合结果及不得扩大范围的使用方式；没有effect动作或准备完成标记。
 - **工作面**：新增SourceTrial.tsx，复用现有Act显示服务端拒绝原因和请求状态；从所选候选已经读取的依据、或本单资料准备卡中的来源编号主动回取。展示报告信息、共同条件、A/B配方原单位及基准、曲线标签、原操作、报告标注时间及差值口径、品质/成本/后续和待补项，出处可展开逐字原文、页码、单元格及指纹。曲线列表明确不代表连线顺序。收起只清界面；重新读取先清旧显示，失败时不继续展示旧稿。没有前端ACL、签字按钮或任意文件路径输入，也不改变原候选审阅指纹。
-- **类型与文档**：api.ts只消费GET /api/sources/trial，types.ts声明读取侧显示字段，与正式业务Trial区分；未新增冻结模型。CONTRACTS、四岗位交接说明和V10.1状态同步。本轮不把专业审阅重新排给JianMing Xi；后续由用户找到专业研发后集中办理。
+- **类型与文档**：api.ts只消费GET /api/sources/trial，types.ts声明读取侧显示字段，与正式业务Trial区分；未新增冻结模型。CONTRACTS、四岗位交接说明和V10.1状态同步。本轮不把专业审阅重新排给JianChao Xi；后续由用户找到专业研发后集中办理。
 - **验证**：扩展既有test_sources_v10同一场景，真实调用AgentHub工具，核对A/B配方、单位和待补项、pm:agent被原入口拒绝、无待签动作及无知识状态变化。受影响7项通过（2.49秒）；全量pytest56项通过（25.96秒），npm --prefix web run build及git diff --check通过，仅既有chunk体积提示。未新增镜像测试或模型实调。
 - **真实资料运行**：data/knowledge_v10/checks/trial-consumer-bdb4363c/summary.json及web-record.json。首份真实报告副本上调用已注册工具与工作面HTTP对应门面，两者A/B条件和8项pending一致，A/B各5项配方；工具不含文件路径，pm:agent返回业务拒绝。副本和原实例qi_state、原配置均未因本次读取改变，无确认卡、专业签字或模型调用。使用mock网关/System1、规则抽取；这是软件工具核对，浏览器视觉和真人操作未验证，不能作为真实Agent自主准备或岗位试用成绩。
 - **交接与余项**：本小项完成“已整理试样记录→助手/工作面”。非研发部分尚未全部完成：页面/区域统一回取、相关读取验证及最终证据整理仍待推进；视觉模型实调沿用户此前暂停安排保留待验证。专业判断、负例归属/型号关系、用途范围、签字及真实业务验收仍留待后续专业人员集中处理。未提交或推送，按小项汇报后停下等待用户评审。
@@ -142,8 +142,16 @@
 - **配置及Clef**：新增app.online.yaml（gateway_mock=false、extractor=llm、agent_threads=object、缓存均在data/knowledge_v10/cache）。原读取侧ClefWorkerClient原样移至jev/system1并由build_system1接入，旧导入位置继续兼容；system1.cloudflare-worker.yaml使用现有Worker根路径。实际jev:match与jev:disclose均取得Clef概率，未更新或部署Worker，Cloudflare没有视觉请求。
 - **真实接口差异**：glm-4.6v-flash的最小探针返回原生tool_calls；glm-4.1v-thinking-flash在同请求下只返回执行说明而非工具调用，不能将其算成准备成功。视觉仍使用用户指定models.yaml主/备；业务Agent单列models.agent.yaml，使用同一智谱API与BACKUP_API_KEY，仅4.6V工具模型，沿既有退避[5,15,30,60]重试，失败留待重跑。不把文字说明转换成假工具调用。另有1次glm-4-flash接口探针，未纳入默认配置或业务结果。
 - **最小上下文修正**：Loop请求预算4096/180秒，明确必须实际调用工具；需求派单首先按完整req_id调用get_requirement，不能把工具说明复制为需求。实调研发把摘要误填为evidence后，SourcePreparationArgs只补字段说明，门面原指针解析处给出具体格式拒绝信息，要求复制TrialRecord中的固定指纹指针。没有扩Fragment字段、重建ACL或增加重试框架。
-- **真实资料与隔离需求**：scripts/run_online_preparation.py准备独立副本，只保留真实TF-213HE目录条目，移除该演练输入中的虚构HY产品/案例/转化及其public副本，防止历史演示产品冒充本单现成方案。客户需求明确标为开发者合成，JianMing Xi仅为隔离助手读取角色，未冒称本人参与。原实例配置、正式IR与qi_state均未因本轮准备改写；没有接单、专业确认、授予、范围批准或发布。
+- **真实资料与隔离需求**：scripts/run_online_preparation.py准备独立副本，只保留真实TF-213HE目录条目，移除该演练输入中的虚构HY产品/案例/转化及其public副本，防止历史演示产品冒充本单现成方案。客户需求明确标为开发者合成，JianChao Xi仅为隔离助手读取角色，未冒称本人参与。原实例配置、正式IR与qi_state均未因本轮准备改写；没有接单、专业确认、授予、范围批准或发布。
 - **已取得的在线行为**：preparation-online-3中，agent:rd经AgentHub主动委托实际完成get_requirement、get_session、read_source、read_trial_record、read_source_image（已登记区域）与save_source_preparation；模型最初的错误依据被拒绝，明确指针说明后实际保存两条可取回的固定指纹依据、本单温度、枚举条件及待核对说明到原需求source_preparations/req_1.json。读图与原文均是真实资料，条目和图片读稿仍是草稿，不转成适用能力。
 - **尚未通过**：agent:pm经AgentHub.dispatch已实际读取本单和检索转化，后续连续429/1305；曾出现的错误参数由现有Pydantic边界拒绝，没有自动补造。备用模型的文字描述也未当成执行。最终reuse仍为None、product_lang为空，复用事项的preparation_gap不为空；完整“派单→产品需求→接单后研发转译”在线闭环不能记通过。研发草稿保存后的额外总结请求也遇429，但已保存文件保留，不能把这个成功局部扩写为整轮自主完成。
 - **计量与验证**：各真实请求、失败、模型与缓存标记见data/knowledge_v10/checks/glm-online及online/runs/preparation-online-*/gateway-trace*.jsonl、metering.jsonl、agent_trace.jsonl。觉本轮生成模型调用0，保留规则评分标记；未训练Jue-K。全量离线pytest57项通过（27.57秒），新增断言沿已有读图测试覆盖Retry-After、推理前缀、图片/模型缓存及未读清字段；未将线上成绩混入离线测试。
 - **交接**：模型读取、温抽与部分准备已经真跑；完整自动派单仍有一项技术验收未完成，原因是指定主模型持续过载，当前不缺密钥、Worker代码或研发材料。停止本轮重复请求，等待接口恢复后沿现有整项重跑继续。真实专业审阅、用途与签字仍按用户安排留待专业人员，不能以本次模型稿替代。运行命令、修改文件全表、分项计量及具体审阅页统一记在data/knowledge_v10/checks/glm-online/report.md。
+
+### 2026-11-01｜现有在线主线重跑，仍受模型服务过载阻断
+
+- **范围与自查**：完整重读AGENTS、总计划、相关CONTRACTS/QI和本包，保留既有未提交改动。使用当前rd:JianChaoXi / pm:HongZongLi及V10.1接入的专家意见版记录，不恢复35题扩写、不改Worker、不增加锁或重试框架。密钥只由`uv run --env-file .env`注入。
+- **完整入口**：运行`scripts/run_online_preparation.py --run-id preparation-online-20261101-1`，真实需求抽取首响应将temperature重复放入slots，被既有Schema校验拒绝；纠错阶段连续429/1305，沿网关[5,15,30,60]退避后仍失败。7次网络尝试（1响应、6失败），尚未形成可继续处理的LLM抽取需求，没有以规则结果冒充该入口通过。
+- **隔离定位**：本地`data/knowledge_v10/checks/online-preparation-20261101/run.py`仅为定位角色准备问题，通过HuayanApp以RuleExtractor建立明确标注的合成需求，再经AgentHub.dispatch和chat调用实际glm-4.6v-flash。PM与研发各成功调用一次get_requirement，后续仍429/1305。角色阶段15次网络尝试（PM9、研发6），2响应、13失败，缓存命中0；无新重试实现，也没有强行把文字描述变成工具执行。
+- **最终结果**：`summary.json`和两份运行目录的run-counts.json保存计量；合计22次真实请求、3响应、19失败，模型全部glm-4.6v-flash，合法caller为agent:extract/pm/rd。复用建议仍空，产品需求条目0，本轮资料草稿未保存，preparation_gap仍非空；不能记作整包完成或自主准备通过。规则建立输入的隔离尝试单独标明，不与此前实际LLM温抽成绩混报。
+- **边界与后续**：原正式qi_state指纹未变，专业确认、授予、批准、接单和发布均0；觉生成模型调用0。原有8766在线预览未发生模型请求，8767为mock人工审阅实例，本轮不修改其模型或业务。当前不缺新密钥、Worker代码或专家材料；停止本轮重复请求，保留现有Hub整项重跑方式，模型恢复后继续。真人生效动作另由有权人员办理；转做不依赖接口恢复的读取侧收口。本轮未改业务代码，不重复离线测试或前端构建，不把此前58项成绩写成新重跑。

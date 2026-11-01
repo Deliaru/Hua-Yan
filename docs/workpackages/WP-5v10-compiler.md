@@ -1,6 +1,6 @@
 # WP-5v10｜从试样记录形成完整条件候选
 
-> 决赛必需｜状态：首条真实观察曾入库，当前旧稿已撤回；专家书面意见已取得，五项新候选草稿及一项同层适用提议已内存预览；正式新稿导入、确认与用途能力生效待后续｜先编译一条值得复用的判断。
+> 决赛必需｜状态：首版候选编译交付完成；专家意见对应五项L3新候选ku:claim:2—6及一项L3 proposed适用提议cap:1已入库，完整条件与IR映射可审阅；旧稿继续撤回，专业确认与用途生效交V10.7｜先编译一条值得复用的判断。
 
 ## 目标
 
@@ -69,10 +69,10 @@
 - **结果与验收边界**：已更新 `data/knowledge_v10/compiler/SRC-3a2130604c/` 的 IR、审阅页与编译报告。原11项条件不变，产品资料新增9项事实，待办现为16项。预览引文丢弃0、真实候选0，报告列明“专业确认人待安排”“产品身份已有依据，正式目录登记待归属”；`identity_supported=true`、`catalog_registered=false`，IR映射仍为 `pending_alignment`。型号身份和用途资料缺口已补齐；正式目录登记及候选入库尚未完成，不能标记整包通过。
 - **必要验证与交接**：执行当前真实材料读取、IR准备和内存编译预览；受影响既有回归 `pytest -q tests/test_compiler_v10.py tests/test_reader_v10.py` 为3项通过（1.22秒），未新增冗余测试，未调用模型或 Jev。确认人与真实签字按用户要求暂缓，不新增占位身份；后续继续完成 V10.7 的固定证据审阅与确认挂接功能。未写共享试用状态、未改冻结契约、未提交或推送。本小项停下交用户评审。
 
-### 2026-10-30｜按用户指定登记研发归属 JianMing Xi
+### 2026-10-30｜按用户指定登记研发归属 JianChao Xi
 
-- **用户指定与范围**：用户明确指定研发人员为 JianMing Xi。当前基线 `v10 @ d35d159`，开始时工作区干净；已完整重读 AGENTS、总计划、相关契约/QI 与本包并按要求自查。此次完成候选归属材料的小项，不替本人执行确认或授予。
-- **身份记录**：现有种子和本地试点资料中未找到同名账号，建立读取侧本地 Actor 资料 `data/knowledge_v10/actors/jianming-xi.json`：`id=rd:JianMingXi`、`role=rd`、`name=JianMing Xi`。这是为用户指定人准备的本地标识，尚未写入共享试用实例的角色/登录配置；保留所有既有模拟人物，不冒用 R01/R02。姓名指定不等于专业签字。
+- **用户指定与范围**：用户明确指定研发人员为 JianChao Xi。当前基线 `v10 @ d35d159`，开始时工作区干净；已完整重读 AGENTS、总计划、相关契约/QI 与本包并按要求自查。此次完成候选归属材料的小项，不替本人执行确认或授予。
+- **身份记录**：现有种子和本地试点资料中未找到同名账号，建立读取侧本地 Actor 资料 `data/knowledge_v10/actors/jianming-xi.json`：`id=rd:JianChaoXi`、`role=rd`、`name=JianChao Xi`。这是为用户指定人准备的本地标识，尚未写入共享试用实例的角色/登录配置；保留所有既有模拟人物，不冒用 R01/R02。姓名指定不等于专业签字。
 - **接入**：`OperationIR` 增加读取侧可选字段 `assigned_rd: Actor | None = None`，不改冻结契约。`prepare_trial_ir.py --reviewer <Actor JSON>` 将指定人写入 IR 和现有 Proposal 的候选归属字段 `author`，删除“专业确认人待安排”的过时提示，审阅页与编译报告显示姓名及标识。报告原来的试样人员与原始引文保留，不将新指定的确认人写成原报告作者。
 - **真实运行**：在原 IR 准备入口加 `--reviewer data/knowledge_v10/actors/jianming-xi.json` 重跑，更新原11项条件、产品材料、审阅页和确认准备记录；再执行现有编译内存预览。结果引文丢弃0、候选0、待对齐1，剩余原因仅为“产品身份已有依据，正式目录登记待完成”；确认准备记录改为 `awaiting_candidate`，`confirmation_submitted=false`。研发归属缺口已经解决，正式 Product 登记和候选入库仍未完成。
 - **验证与交接**：本次验证限于上述真实材料整理与编译预览，不为可选字段或 Pydantic 行为添加冗余测试；没有调用模型、没有写共享实例状态、没有专业签字或授予。后续小项为真实产品目录登记与候选导入，并将该研发标识接入实际试用角色配置。未提交或推送，当前停下交用户评审。
@@ -80,10 +80,10 @@
 ### 2026-10-30｜本地产品目录登记与首条真实候选入库
 
 - **范围与基线**：沿 `v10 @ d35d159` 和上次研发归属材料的未提交改动推进当前小项。编程前已完整重读 AGENTS、总计划、相关契约/QI 与本包，并按最小实现、密级和禁止过度防御要求自查；评审由用户进行。用户明确允许暂缓真人签字，继续完成产品登记和候选入库。
-- **产品与角色登记**：新增 `scripts/import_first_report.py`，从既有真实 IR 和资料身份记录准备独立本地种子/实例配置。`TF-213HE` 使用现有 `Product` 结构登记为 `status="project"`：只表示尚未在化言发布，不推断其实际市场发布状态；`solves=[]`、无适用情境、发布文本为空。SDS/说明书原文及配方仍在 L3 读取侧，未复制进 L1 的 `sheet/usage`。JianMing Xi（`rd:JianMingXi`）已加入该实例角色配置，既有模拟底座保留并明确标注，未修改仓库通用模拟种子。
+- **产品与角色登记**：新增 `scripts/import_first_report.py`，从既有真实 IR 和资料身份记录准备独立本地种子/实例配置。`TF-213HE` 使用现有 `Product` 结构登记为 `status="project"`：只表示尚未在化言发布，不推断其实际市场发布状态；`solves=[]`、无适用情境、发布文本为空。SDS/说明书原文及配方仍在 L3 读取侧，未复制进 L1 的 `sheet/usage`。JianChao Xi（`rd:JianChaoXi`）已加入该实例角色配置，既有模拟底座保留并明确标注，未修改仓库通用模拟种子。
 - **最小接线**：`admit` 的产品识别读取已登记种子目录并叠加当前知识库产品，因此能接受未发布条目的观察候选，不另建匹配链。新增 `HuayanApp.import_proposals`，只允许导入已指定本人负责的提议，正式候选写入经门面完成。应用/既有编译脚本的来源入口复用 `EvidenceReportSource` 读取配置中明确指向 `.json` 的读取记录；原文件夹来源保留。这样实例续跑仍可按原段号和指纹取回依据，而不需要临时挂接内存来源。未新增冻结契约或配置开关。
 - **真实运行入口**：`.venv/Scripts/uv.exe run --no-sync python scripts/import_first_report.py --ir data/knowledge_v10/compiler/SRC-3a2130604c/operation-ir.json --evidence data/knowledge_v10/evidence/SRC-3a2130604c/evidence.json --out data/knowledge_v10/instance-first-report`。该首次导入入口要求新建输出目录，已有实例使用现有续跑方式，不覆盖重建或重置。实例配置为 `data/knowledge_v10/instance-first-report/app.yaml`，运行号 `first-report`，状态在该目录的 `runs/first-report/qi_state.json`。
-- **结果与编号**：实际写入 `ku:claim:1`（L3、`candidate`、产品 `TF-213HE`、归属 `rd:JianMingXi`），IR映射为 `SRC-3a2130604c:B:operation-1` → `ku:claim:1`。候选1、未对齐0、引文丢弃0；当前只承载单次操作观察，`form=null`、能力提议0，不将现场结果升级成通用适用判断。`import-report.json` 保存实际入库结果；原审阅页显示真实候选编号，确认准备记录为 `awaiting_professional_confirmation`，不再显示待指定研发/待入库的过时状态。
+- **结果与编号**：实际写入 `ku:claim:1`（L3、`candidate`、产品 `TF-213HE`、归属 `rd:JianChaoXi`），IR映射为 `SRC-3a2130604c:B:operation-1` → `ku:claim:1`。候选1、未对齐0、引文丢弃0；当前只承载单次操作观察，`form=null`、能力提议0，不将现场结果升级成通用适用判断。`import-report.json` 保存实际入库结果；原审阅页显示真实候选编号，确认准备记录为 `awaiting_professional_confirmation`，不再显示待指定研发/待入库的过时状态。
 - **验证**：针对本包实际问题新增一项合成回归，验证未发布目录产品可形成候选、不会因此进入推荐；执行 `pytest -q tests/test_compiler_v10.py tests/test_wp_a3.py tests/test_trial.py`，13项通过（3.02秒）。在真实本地实例上续跑读取，研发角色可取得候选的固定审阅依据；客户检索不可读该候选，目标产品无生效能力且不在推荐产品视图中，`claim_confirmed` 事件为0。只读准备、状态与运行配置记录在 `readiness-check.json` 和既有 `confirmation-preparation.json`。实例仍使用明确标注的 mock 网关/System1 与规则抽取配置，本次未调用生成模型或远端 Jev。
 - **交接**：本小项的目录登记、真实候选入库和实例角色登记已完成。启动已有实例可用 `uv run python -m huayan.ui.server --trial first-report --config data/knowledge_v10/instance-first-report/app.yaml`；本次未启动服务。后续在工作面组织该候选的审阅，真人确认/授予/必要批准、下一单复用和温度链路仍待完成，负例材料后续补充。未更改其他共享试用实例，未提交或推送；当前停下交用户评审。
 
@@ -91,7 +91,7 @@
 
 - **范围**：按用户指定的两点最小修复，已重读 AGENTS、总计划、契约/QI 与本包，并按极简实现及禁止过度防御要求自查。
 - **修改**：`trial_ir.py::EvidenceReportSource.search` 复用 `knowledge.store._grams`，沿用 `FolderSource.search` 的重叠比例评分、文档/段号排序与前 k 项返回；权限继续复用知识库。`docs/CONTRACTS.md` 门面说明补入 `HuayanApp.import_proposals(proposals, by)`，不增加契约字段。
-- **验证**：`tests/test_compiler_v10.py` 新增一项合成回归，覆盖该来源挂入 `kb.sources` 后研发可从 `.candidates` 看到本人候选、客户不可见且查询不报错。运行 `uv run --no-sync pytest -q tests/test_compiler_v10.py`，5项通过（1.48秒）。续跑真实 `first-report` 本地实例，三个读取记录来源均接入，`rd:JianMingXi` 可检索 `ku:claim:1`，客户不可见；候选仍为 `candidate`，未执行确认、授予或模型调用。
+- **验证**：`tests/test_compiler_v10.py` 新增一项合成回归，覆盖该来源挂入 `kb.sources` 后研发可从 `.candidates` 看到本人候选、客户不可见且查询不报错。运行 `uv run --no-sync pytest -q tests/test_compiler_v10.py`，5项通过（1.48秒）。续跑真实 `first-report` 本地实例，三个读取记录来源均接入，`rd:JianChaoXi` 可检索 `ku:claim:1`，客户不可见；候选仍为 `candidate`，未执行确认、授予或模型调用。
 - **交接**：此次修复完成，未提交或推送；停下等待用户评审，不开始下一小项。
 
 ### 2026-10-30｜消费 V10.6 的显式温度范围提议
@@ -118,3 +118,11 @@
 - **真实运行**：运行本机 `prepare.py` 后，既有 admit 在无 state_path 的内存知识库中得到五条 L3 candidate、一条 L3 proposed applicable，丢弃0、未对齐0，原候选未恢复。预览编号与正式编号明确区分。再分别运行 `uv run --env-file .env python scripts/compile_qi.py --config <preview-config.yaml> --ir <两份新IR之一> --evidence <对应原报告evidence.json> --out <compile-report.md>`，均为候选1、丢弃0、未对齐0，不传 --state。
 - **验证**：扩展既有合成负例回归，覆盖专家补充 Citation 经 IR 转换仍指向独立来源，不新增测试文件。最终 `.venv/Scripts/uv.exe run --env-file .env --locked --no-sync pytest -q` 为57项通过（32.64秒）。本地 `check.py` 核对210处链接及锚点（含13处专家来源链接）、10份输入SHA不变；`git diff --check`通过。未修改本项以外的前端，不重复构建；未触碰冻结契约，data/runs未入库，密钥仅由 --env-file 注入。
 - **交接**：本项真实模型调用0、正式状态写入0、正式确认/授予/范围批准0；原实例旧稿仍为withdrawn，产品仍未在化言发布。书面意见已收到不再列为缺失，但新稿尚未导入工作面或生效；下一步在用户评审后接来源与候选，再由有权人员办理系统生效动作。未提交或推送，完成本小项后停止等待用户评审。
+
+### 2026-11-01｜首版收口：五项新候选经门面正式导入
+
+- **范围与自查**：切包前再次完整重读AGENTS、总计划、相关CONTRACTS/QI及本包；保留V10.1未提交改动，按C7、G2/G3/G6及极简要求自查。本包只处理完整条件候选和同层提议，不代办专业确认、下行授予、产品批准或发布。
+- **实际导入**：确认本地8766未运行服务后，使用`uv run --env-file .env --locked --no-sync python data/knowledge_v10/professional-review/expert-feedback-20261101/import_candidates.py`续跑first-report。只通过HuayanApp.import_proposals导入既有五项提议，没有改写qi_state或直接调用底层写入口。得到ku:claim:2（正例操作观察）、3（负例混合结果观察）、4（拟对外话术判断）、5（正式范围判断）、6（负例风险判断），均为L3 candidate；cap:1为audience=3、status=proposed的适用提议，保留125–130℃、枚举子范围及完整limits。
+- **来源与状态**：原报告组别、阶段、单位及限制仍保存在两份读取侧记录/IR和候选完整指纹引用中；两份观察IR对应正式编号写入mapping，话术与风险保持逐字专业表述。ku:claim:1仍withdrawn，未恢复或复签；产品仍project。编译器预指定confirmed_by不计专业签字，capability_granted中的proposed记录不计正式授予。
+- **核对与产物**：`formal-import/import-report.json`保存实际编号、IR映射和状态，review.html为当前交接入口；开发者经现有GET /api/claims及POST /api/qi/review回取五条候选的全部依据，指纹顺序与候选一致，同事拒绝、客户检索不可见。回取快照仅供交接，签字前仍须在工作台重新读取。此包复用V10.1最终57项离线回归，未改业务源码或新增镜像测试；真实导入检查通过，新增专业确认/正式授予/批准/发布/模型调用均0。
+- **交接工作面**：当前first-report共享实例已用原CLI后台启动，http://127.0.0.1:8766/及/api/meta均200；使用既有mock/System1与规则抽取供人工审阅，不能把它记成在线模型业务验证。原审阅入口标明预览历史，链接实际入库交接。整包首版候选与补充依据候选机制已交付，正式签字、范围批准和下一单复用归V10.7；用户现在无需重复提供已取得的专家判断。未提交或推送，按工作包汇报后继续可独立推进的内容。

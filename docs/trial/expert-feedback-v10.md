@@ -34,4 +34,8 @@ uv run --env-file .env python data/knowledge_v10/professional-review/expert-feed
 
 ## 下一小项
 
-先由用户评审此包。通过后再把专家依据及新稿接入现有工作面，通过 `HuayanApp` 导入候选并重新取得实际审阅指纹；正式确认、用途授予、产品范围批准与发布仍交有权人员。不能把本项的内存预览计为上述动作或下一单复用完成。
+2026-11-01已完成来源接入：首份本地实例及在线配置已登记专家、负例及两份新记录，按每份依据的权限和当前指纹回取。HTTP结果在 `data/knowledge_v10/checks/expert-source-entry-20261101/summary.json`。前述准备阶段summary中的配置与清单SHA是历史快照，此次登记明确修改了它们；原报告读取文件与正式知识状态不变。
+
+新候选已通过 `HuayanApp` 导入：`ku:claim:2`—`ku:claim:6`均为L3 candidate，`cap:1`为L3 proposed适用提议。实际编号、IR映射与当前入口见 `formal-import/import-report.json`、`formal-import/review.html`；旧预览编号不作为正式编号。当前共享工作台地址为 http://127.0.0.1:8767/（8766保留旧预览），以 `rd:JianChaoXi`（JianChao Xi）查看“本人资料候选”；本次范围批准人已指定为 `pm:HongZongLi`（HongZong Li）。
+
+正式确认、用途授予、产品范围批准与发布仍交有权人员，签字前在工作台重新读取实际指纹。不能把候选导入、内存预览或资料回取计为上述动作或下一单复用完成。后续按用户安排，每个工作包完成后统一汇报，需要人协助时单独说明。

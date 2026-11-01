@@ -69,7 +69,7 @@ V10.4/V10.5/V10.7/V10.9 主链，温度场景接 V10.6。V10.3/V10.8 完成后�
 
 - **范围与基线**：`v10 @ 08329e9`，开始时工作区干净，上一项经用户评审通过。重读AGENTS、REPLAN、相关CONTRACTS/QI与本包，核对现有角色指南、V9试用记录要求及当前UI/服务入口；按极简、禁止过度防御和真实/模拟分开要求自查。本轮只做交付物2的交接准备，不邀请人员、不代签或进行模型实调。
 - **交付**：新增 [首份报告四岗位交接](../trial/first-report-v10.md) 与 [真人试用记录模板](../trial/v10-session-template.md)，在sales/pm/rd/supervisor现有指南补链接。说明共享实例启动与续跑、当前候选审阅按钮、按需授予/批准、原单说明与下一单产品适用的分别验收，以及真实温度范围未定时的记录方式。模板记录实际岗位/账号、模型状态、原话、事项/事件、人工帮助、耗时、阻断和反馈；未发生的步骤保留未开始。
-- **只读核对**：本地 `data/knowledge_v10/validation/trial-handoff-14e18af9/` 保存snapshot.json及report.md。首份 `ku:claim:1` 仍candidate，owner及预指定confirmed_by为rd:JianMingXi，当前正式claim_confirmed事件0条；预指定账号不当作签字。TF-213HE仍project，该产品正式能力0条。当前mock网关/System1、规则抽取/觉、agent_threads=inbox如实标明；按对象对话与真实可用模型仍是正式Agent走链前的配置待办，没有改配置或虚报自主准备通过。
+- **只读核对**：本地 `data/knowledge_v10/validation/trial-handoff-14e18af9/` 保存snapshot.json及report.md。首份 `ku:claim:1` 仍candidate，owner及预指定confirmed_by为rd:JianChaoXi，当前正式claim_confirmed事件0条；预指定账号不当作签字。TF-213HE仍project，该产品正式能力0条。当前mock网关/System1、规则抽取/觉、agent_threads=inbox如实标明；按对象对话与真实可用模型仍是正式Agent走链前的配置待办，没有改配置或虚报自主准备通过。
 - **数据与边界**：只读取首份配置、种子、状态及已有事件，原配置/qi_state字节未变；三份开发者摘要均存在，分别保留真实报告配合成签字与全合成演练的分类。真实参与名单与操作列表为空。含角色、指纹的快照留data，不入库；本轮未启动服务、创建需求、确认、授予、批准或发布。
 - **验证与交接**：本轮仅文档和本地只读快照，核对指南内本地链接与差异格式；未改代码/前端，不重复跑pytest或前端构建。真人试用、真实专业判断/范围、原单回流及下一单复用、真实业务来源复核和读取题核验继续待完成。交接材料齐备不等于M3或整包通过；本小项结束后停下等待用户评审，未提交或推送。
 

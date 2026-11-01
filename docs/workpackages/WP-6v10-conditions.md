@@ -41,7 +41,7 @@ pH/用量/时间等多字段、开区间、单位换算平台，以及数值条�
 
 ### 2026-10-30｜C2 最小范围字段与现有候选匹配
 
-- **范围与基线**：分支 `v10 @ 7d1b773`，开始时工作区干净。按用户要求进入 M2 的 V10.6 首个小项；编程前已完整重读 AGENTS、总计划、相关契约/QI 和本包，按最小增量、条件保真及禁止过度防御要求自查。真人签字继续留待研发测试，不代替 JianMing Xi 确认真实范围。
+- **范围与基线**：分支 `v10 @ 7d1b773`，开始时工作区干净。按用户要求进入 M2 的 V10.6 首个小项；编程前已完整重读 AGENTS、总计划、相关契约/QI 和本包，按最小增量、条件保真及禁止过度防御要求自查。真人签字继续留待研发测试，不代替 JianChao Xi 确认真实范围。
 - **C2 最小差异**：`contracts/seeds.py::Situation` 只增加 `temperature_c: tuple[float, float] | None = None`，表示摄氏闭区间；单值用相同端点。保留枚举 `conditions` 和旧情境默认含义。`match_candidates` 只增加有默认值的关键字参数 `temperature_c=None`，原有调用兼容。`applicable.payload` 使用可选 `[lower, upper]`；未加温度时不新增 payload 键，现有种子迁移和能力视图保留已表达的范围。已同步 `docs/CONTRACTS.md`，未建设通用数值条件平台。
 - **实现**：`domain.temperature_match` 统一返回满足/待补/超范围，直接接入原 `match_candidates`。完整包含且枚举条件已知、无原文限制才为 `confirmed`；温度未知则 `possible` 并增加 `unknown_slots=["temperature_c"]`；任一端超范围则该情境不命中。选择同一产品的情境时把温度待补计入未知条件数量，保持温度与该情境的其他条件绑定。没有新增匹配链路、重试或重复权限检查。
 - **必要回归**：新增 `tests/test_conditions_v10.py` 两项合成行为测试，验证迁移→有效能力视图→匹配，75℃、72—78℃与闭区间边界70—80℃命中，未知温度待补，85℃和75—85℃不命中；同时覆盖原文限制仍为可能、不同情境的温度/面料不交叉组合、优先选择已满足情境。运行 `uv run --no-sync pytest -q tests/test_conditions_v10.py tests/test_wp0.py tests/test_applicable_limits.py tests/test_compiler_v10.py`，14项通过（2.22秒）。
@@ -57,14 +57,14 @@ pH/用量/时间等多字段、开区间、单位换算平台，以及数值条�
 - **候选比较修复**：`ingest/compile.py::_key` 将非空 `temperature_c` 归一为 tuple，与既有条件集合比较一起使用，避免 JSON list 与内存 tuple 导致相同 payload 被误判为不同；不同温度范围仍不同。
 - **助手与工作面**：`agent/tools.py` 的现有需求卡/会话读取返回温度，`find_products` 增加一个默认 `None` 的扁平温度参数并只透传原匹配函数。`web/src/types.ts`、`components/ui.tsx`、客户页与业务员页显示温度单值/范围、原话及“尚未提供/温度待补充”的区别；能力范围及编号沿既有推荐卡说明展示，不增加审批平台。
 - **必要验证**：`tests/test_conditions_v10.py` 保留第二小项的抽取→会话→推荐与保真测试，按本次真实缺陷新增两项断言组：摄氏单位/裸度语境及局部否定、温度 list/tuple payload 等价；在既有场景补充同情境 `consistent` 判断、85℃问“T-205怎么用”附不适用说明、轨迹温度排除项。多阶段回归先填入75℃，再输入“先60℃再75℃”及“先60℃保温再升到75℃”，断言整句保留为 `unknown`、已知温度清空、候选为 `possible`；随后否定旧温度仍不残留已知值。单值、闭区间、局部否定及显式更正保持 `filled`。修复多阶段回归后运行全套 `uv run --no-sync pytest -q`，45项通过（23.25秒）；此前 `npm --prefix web run build` 已通过，仅有既有打包体积提示，本次仅文档同步不重复构建。没有新增横切防御测试。
-- **真实样例与模型边界**：既有 `data/knowledge_v10/checks/temperature-session-first-report.json` 记录以报告已有132℃为开发者合成对话输入，规则抽取得到 `[132,132]`，后续“谢谢”保留事实，“温度其实不清楚”转 `unknown`。本次修复后只读重核：132℃仍正确抽取，真实 `ku:claim:1` 仍为 `candidate`，15条依据指纹一致；未写正式状态或替 JianMing Xi 签字。这不是实际客户发言或实际模型抽取成绩。无生成模型、视觉模型或远端 Jev 调用，离线推荐用明确标注的 mock System1。
+- **真实样例与模型边界**：既有 `data/knowledge_v10/checks/temperature-session-first-report.json` 记录以报告已有132℃为开发者合成对话输入，规则抽取得到 `[132,132]`，后续“谢谢”保留事实，“温度其实不清楚”转 `unknown`。本次修复后只读重核：132℃仍正确抽取，真实 `ku:claim:1` 仍为 `candidate`，15条依据指纹一致；未写正式状态或替 JianChao Xi 签字。这不是实际客户发言或实际模型抽取成绩。无生成模型、视觉模型或远端 Jev 调用，离线推荐用明确标注的 mock System1。
 - **交接**：本小项完成，未提交或推送；停下等待用户评审。模型路径已接好但实调未验，真实专业范围及授予、范围批准和下一单真实复用仍待 V10.7/V10.9 后续完成，V10.6 整包不能记为通过。
 
 ### 2026-10-30｜修复用户指出的 P1：明确未知温度被前文数字覆盖
 
 - **范围与实现**：当前 `v10 @ a7b6a68`，按用户审查修补既有 `_temperature`，不改匹配器或契约字段。已重读 AGENTS、总计划、相关契约/QI 和本包，按 G2 与禁止过度防御要求自查。首版按数字与未知词的位置比较仍遗漏反序资料引用和省略主语的不确定表述，用户复审暂未通过；本次移除该比较，先排除局部前缀明确为说明书/资料/报告引用的数字，再识别涉及温度或独立“不确定”等分句。实际温度未知不能由后面的资料或裸数字解除，只有后续带“问过/实测/确认”等明确补充信息的实际读数才能恢复 filled；不能确认时沿原路径保留整句 `unknown`、`celsius=None`。裸度语境、局部否定和多阶段保真逻辑继续复用，没有新增语义处理平台。
 - **验证**：`test_conditions_v10.py` 现有会话测试先填75℃形成 confirmed，再覆盖原两条失败输入以及本轮“实际温度不知道，说明书写75℃”“温度75℃，不确定”，均断言旧值清空、原话完整保留、候选为 possible 且 `unknown_slots=["temperature_c"]`。同一断言组补充裸数字/资料确认不能解除实际未知；正例保留问过或实测后明确补出温度、说明书与实际值区分、水硬度不清楚不覆盖已知温度。单值、闭区间、多阶段、否定更正等既有断言继续通过。本包6项通过（1.42秒），全量 `uv run --no-sync pytest -q` 46项通过（23.25秒）。本次未改前端，不重复构建。
-- **真实材料边界与交接**：本次只读核对首份报告15条依据指纹和 candidate 状态，以报告132℃作明确标注的合成输入，“实际温度不知道，说明书写132℃”与“温度132℃，不确定”均转 unknown 并保留整句。未写正式状态、未调用模型、未替 JianMing Xi 签字。用户已通过候选列表归属修复，温度 P1 的补充修复待再次复审；不声明整包或全仓库审查通过，未提交或推送。
+- **真实材料边界与交接**：本次只读核对首份报告15条依据指纹和 candidate 状态，以报告132℃作明确标注的合成输入，“实际温度不知道，说明书写132℃”与“温度132℃，不确定”均转 unknown 并保留整句。未写正式状态、未调用模型、未替 JianChao Xi 签字。用户已通过候选列表归属修复，温度 P1 的补充修复待再次复审；不声明整包或全仓库审查通过，未提交或推送。
 
 ### 2026-10-30｜C2 从编译提议传入原有授予与批准链
 
@@ -72,7 +72,7 @@ pH/用量/时间等多字段、开区间、单位换算平台，以及数值条�
 - **实现**：读取侧内部 `compile.Proposal` 增加 `temperature_c: tuple[float, float] | None = None`，有值时由 `admit` 原样写入既有适用 payload，现有 `limits` 仍完整保留。编译提示明确区分原文适用范围与单次试验/多阶段温度；旧提议缺字段保持兼容。`app.questions` 的人类材料增加温度展示，正式授予继续复制原 payload。未改冻结模型字段、觉特征、目录或权限机制。
 - **纵向验证**：新增一项基于 `tests/fixtures/reader/synthetic-temperature.txt` 的合成集成测试，经现有门面完成候选导入→固定证据确认→同层适用批准→既有 qi_grant 研发授予→客户范围批准→下一单匹配。全程保持70—80℃；待批准能力不进入客户视图，批准后75℃为 confirmed、未知为 possible、85℃不命中。签字均为测试临时实例中的模拟，不计作真人专业确认。全量 `uv run --no-sync pytest -q` 47项通过（23.09秒），前端构建通过（仅既有体积提示），差异格式检查通过。
 - **真实报告**：使用既有 `scripts/compile_qi.py --config data/knowledge_v10/instance-first-report/app.yaml --ir data/knowledge_v10/compiler/SRC-3a2130604c/operation-ir.json --evidence data/knowledge_v10/evidence/SRC-3a2130604c/evidence.json --out data/knowledge_v10/checks/temperature-proposal-first-report/compile-report.md` 进行内存预览。候选1、引文丢弃0、未对齐0、能力提议0；原 IR 仍为 observation、form=null、temperature_c=None。实际 `ku:claim:1` 仍 candidate，TF-213HE 无适用能力，不从报告132℃推断授权范围。摘要在同目录 `summary.json`，未写正式状态、未调用模型或替真人签字。
-- **交接**：本小项完成，签字材料展示详见 V10.7 同日记录。实际模型抽取、JianMing Xi 的专业判断、真实用途授予、必要批准及下一单真实复用仍待后续。未提交或推送，停下等待用户评审。
+- **交接**：本小项完成，签字材料展示详见 V10.7 同日记录。实际模型抽取、JianChao Xi 的专业判断、真实用途授予、必要批准及下一单真实复用仍待后续。未提交或推送，停下等待用户评审。
 
 
 ### 2026-10-31｜智谱LLMExtractor在线温度主线

@@ -1812,6 +1812,11 @@ class HuayanApp:
 
     def scan(self, at=None):
         at = at or get_clock().now()
+        for q in self.bus.list(family="scope_update"):
+            pm = self._line_pm(q.refs["phenomenon"])
+            if pm and q.signer_id != pm:
+                q.signer_id = pm
+                self.bus._snapshot(q)
         state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"],
                                         self.kb.capabilities(), self.kb._units)
         for oid, obj in state.objects.items():      # v8：机会汇聚、适用范围扩展派给分管该现象的产品经理
