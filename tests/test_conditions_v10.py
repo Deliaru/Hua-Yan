@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from huayan.app import HuayanApp
@@ -88,6 +89,22 @@ def test_compiled_temperature_survives_confirmation_grant_and_scope_approval(tmp
     granted = app.sign_qi_grant(question.id, "rd:R01")
     assert granted.audience == 0 and granted.status == "proposed" and granted.payload["temperature_c"] == [70, 80]
     assert not any(s.capability_id == granted.id for p in app.kb.view(app.actors["customer:C01"]).products for s in p.situations)
+    # 真实回归：已授予、待PM批准时反复扫描不能再次催签或新增能力。
+    count = len(app.kb.capabilities())
+    for _ in range(2):
+        app.scan()
+        assert not any(q.object_id == question.object_id for q in app.bus.list(family="qi_grant"))
+        assert len(app.kb.capabilities()) == count
+    with pytest.raises(ValueError, match="已准备的授予问题"):
+        app.sign_qi_grant(question.id, "rd:R01")
+    # 修复前已经留下的旧待签卡，同样复用当前待批准项，不再次写授予事件。
+    legacy = app.bus.publish(question.model_copy(update={"id": "", "status": "open", "resolution": None,
+                                                        "resolved_at": None, "prepared_at": None}))
+    app.mark_prepared(legacy.id, "rd:R01")
+    event_count = len(app.events.query(["capability_granted"]))
+    assert app.sign_qi_grant(legacy.id, "rd:R01").id == granted.id
+    assert len(app.kb.capabilities()) == count
+    assert len(app.events.query(["capability_granted"])) == event_count
     approved = approve(granted.id)
     assert approved.status == "active"
     for text, expected in (("75℃", "confirmed"), ("温度不知道", "possible"), ("85℃", None)):

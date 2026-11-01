@@ -492,7 +492,8 @@ def _qi(events, at, caps, units):
         back_level = min([1 if e.session_id in accompanied else 0 for e in evs] + missed, default=0)
         misses = {level: [e for ku_id in cap.based_on for e in unanswerable[(ku_id, level)]] for level in range(3)}
         for level in sorted({back_level} | {k for k, v in misses.items() if v}):
-            granted = any(c.form == cap.form and c.payload == cap.payload and c.status == "active"
+            # 已授予、待产品经理批准也不再催研发签字；可用性仍由 active 视图决定。
+            granted = any(c.form == cap.form and c.payload == cap.payload and c.status in {"active", "proposed"}
                           and c.audience in range(level + 1) for c in caps)
             asked = evs if level == back_level else []
             yield JueObject(object_id=f"knowledge:grant:{cap.id}|L{level}", object_type="knowledge", attrs={

@@ -940,8 +940,8 @@ function GrantedCapabilities() {
   const caps = useData(() => api.capabilities(me), [me]) ?? [];
   const status = { proposed: "待批准", active: "生效", suspended: "已挂起", revoked: "已撤销" };
   const forms: Record<string, string> = { ask: "追问", applicable: "适用情境", statement: "可说的话", decrypt: "解密", share: "查看原文" };
-  return <Group title="我授予的能力">
-    {caps.map((c) => <div key={c.id} className="row !items-start">
+  const revoked = caps.filter((c) => c.status === "revoked");
+  const card = (c: (typeof caps)[number]) => <div key={c.id} className="row !items-start">
       <div className="min-w-0 flex-1 text-[13px] leading-5">
         <p><span className="tag mr-2">{status[c.status]}</span>{forms[c.form] ?? c.form} · 给{typeof c.audience === "number" ? ["客户", "业务员", "产品经理", "研发"][c.audience] : L.name(c.audience)}</p>
         <p>{c.payload.product_id && L.product(c.payload.product_id)} {c.payload.phenomenon && L.phen(c.payload.phenomenon)} {c.payload.slot && L.slot(c.payload.slot)}{c.payload.text}{c.payload.ku_id}</p>
@@ -951,7 +951,13 @@ function GrantedCapabilities() {
         <p className="text-ink-3">依据：{c.based_on.join("、")}</p>
       </div>
       {c.status !== "revoked" && <Act kind="quiet" label="撤销" run={() => api.revokeCapability(c.id, me)} />}
-    </div>)}
+    </div>;
+  return <Group title="我授予的能力">
+    {caps.filter((c) => c.status !== "revoked").map(card)}
+    {revoked.length > 0 && <details className="border-t border-line">
+      <summary className="cursor-pointer px-4 py-3 text-[13px] text-ink-2">查看已撤销记录（{revoked.length} 项）</summary>
+      {revoked.map(card)}
+    </details>}
     {!caps.length && <div className="row text-[13px] text-ink-2">还没有授予的能力</div>}
   </Group>;
 }

@@ -1630,9 +1630,14 @@ class HuayanApp:
             if not set(claim_ids) <= set(source.based_on):
                 raise ValueError("只能确认此项能力依据的结论")
             self.kb.confirm(claim_ids, by, reviewed_evidence=reviewed_evidence)
-        cap = self.kb.grant(source.model_copy(update={"id": self.kb.next_cap_id(),
-            "audience": int(q.refs["audience"]), "granted_by": by, "approved_by": None,
-            "status": "active", "at": get_clock().now()}))
+        audience = int(q.refs["audience"])
+        cap = next((c for c in self.kb.capabilities() if c.form == source.form and c.payload == source.payload
+                    and c.based_on == source.based_on and c.granted_by == by and c.audience == audience
+                    and c.status in {"active", "proposed"}), None)
+        if cap is None:
+            cap = self.kb.grant(source.model_copy(update={"id": self.kb.next_cap_id(),
+                "audience": audience, "granted_by": by, "approved_by": None,
+                "status": "active", "at": get_clock().now()}))
         self._settle(q.id, Resolution(action="sign", by=by, note=note))
         self.scan()
         return cap
@@ -1664,6 +1669,9 @@ class HuayanApp:
     def revoke_capability(self, cap_id, by):
         self._actor(by, {"rd"})
         self.kb.revoke(cap_id, by)
+        for q in self.bus.list(family="scope_update"):
+            if q.refs["capability_id"] == cap_id:
+                self._settle(q.id, Resolution(action="answered", by=by, note="能力已撤销，无需批准"))
         self._settle_stale(cap_id, by, "撤销")
         self._invalidate_capabilities(by)
         self.scan()
