@@ -44,12 +44,14 @@ def main():
         source = EvidenceReportSource(args.evidence)
         if ir.source_id != source.name or ir.file_sha256 != source.file_sha256:
             raise ValueError("IR 与读取记录来源不一致")
-        for citation in ir.evidence:
-            f = source.fetch(ir.source_id, citation.span)
-            if citation.fragment != f"{f.doc_id}#{f.span}@{f.fingerprint}":
-                raise ValueError(f"IR 引用指纹已变化：{citation.span}")
         if not any(source.name in s.list_docs() for s in kb.sources):
             kb.sources.append(source)
+        for citation in ir.evidence:
+            doc_id = citation.fragment.split("#", 1)[0]
+            cited_source = next(s for s in kb.sources if doc_id in s.list_docs())
+            f = cited_source.fetch(doc_id, citation.span)
+            if citation.fragment != f"{f.doc_id}#{f.span}@{f.fingerprint}" or citation.quote not in f.text:
+                raise ValueError(f"IR 引文或指纹已变化：{citation.span}")
     fragments = [f for s in kb.sources for doc_id in s.list_docs() for f in s.fetch(doc_id)]
     if args.ir:
         proposals = [ir.proposal]

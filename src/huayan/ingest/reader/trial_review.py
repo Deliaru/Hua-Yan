@@ -8,15 +8,17 @@ from .trials import cite, formula_amount
 from .report import render_block_images
 
 
-def write_trial_review(record, blocks, report, evidence_dir, output_dir):
+def write_trial_review(record, blocks, report, evidence_dir, output_dir, *, source_reviews=None):
     output = Path(output_dir).resolve()
     output.mkdir(parents=True, exist_ok=True)
     evidence_review = Path(os.path.relpath(Path(evidence_dir).resolve() / "review.html", output)).as_posix()
+    source_reviews = source_reviews or {}
     by_span = {b.span: b for b in blocks}
 
     def links(refs):
-        return "<br>".join(f'<a href="{escape(evidence_review)}#{escape(r.span)}">'
-                           f'{escape(r.span)} · 页{escape(str(r.pages))}'
+        return "<br>".join(f'<a href="{escape(source_reviews.get(r.fragment.split("#", 1)[0], evidence_review))}#{escape(r.span)}">'
+                           f'{escape(r.fragment.split("#", 1)[0])} · {escape(r.span)}'
+                           f'{" · 页" + escape(str(r.pages)) if r.pages else ""}'
                            f'{escape(str(r.cell)) if r.cell else ""}</a>' for r in refs)
 
     def texts(items):
@@ -57,11 +59,12 @@ td,th{{border:1px solid #d8e0e5;padding:8px;text-align:left;overflow-wrap:anywhe
 .notice{{padding:16px;background:#fff3d4}}figure{{max-width:1050px;margin:24px auto}}img{{width:100%}}
 @media(max-width:1000px){{.pair{{grid-template-columns:1fr}}}}</style>
 <h1>A/B 成对试样记录</h1><p>{escape(record.source_id)} · L{record.level} · {escape(record.source)}</p>
-<p class="notice">原生解析／规则整理的草稿；尚未专业确认。图片模型辅助稿按实际模型标注、待人工审阅；无读稿时为待补读。Jev 尚未核对。
+<p class="notice">原生解析／规则整理的草稿；尚未提交系统专业确认或授予。如有书面核对意见或补充值，请查看审阅提示中的具体内容与出处。图片模型辅助稿按实际模型标注、待人工审阅；无读稿时为待补读。Jev 尚未核对。
 资料观察不等于适用范围或获授予能力。配方与内部原文仅供本地研发审阅。</p>
 <p><a href="trial-record.json">结构化记录</a> · <a href="{escape(evidence_review)}">原文证据审阅包</a></p>
 <h2>报告信息</h2>{texts(record.metadata)}<h2>试样目的</h2>{texts(record.purpose)}
-<h2>共同条件（仅此报告）</h2>{texts(record.common_conditions)}<div class="pair">{"".join(group_html)}</div>
+<h2>共同条件（仅此报告）</h2>{texts(record.common_conditions)}
+<h2>审阅提示／书面补充</h2>{texts(record.review_notes)}<div class="pair">{"".join(group_html)}</div>
 <h2>A/B 已读变化</h2><p>“未列出”只表示这一组的原表未列出，不按零用量或未执行处理。</p>{changes}
 <h2>时间结果</h2><p>{escape(time.basis)}</p><p>{escape(arithmetic)}；报告所写节省：{escape(stated)}；{match}。</p>
 <p>{links(time.evidence)}</p><h2>报告结果原文（保留各条件与口径）</h2>{texts(record.reported_results)}
@@ -69,6 +72,6 @@ td,th{{border:1px solid #d8e0e5;padding:8px;text-align:left;overflow-wrap:anywhe
 <h2>成本结果原文</h2>{texts(record.cost)}<p>仅保留报告表述，本小项未推算金额或节约比例。</p>
 <h2>后续计划</h2>{texts(record.follow_up)}<h2>待补读／运行状态</h2><ul>
 {"".join(f'<li>{escape(note)}</li>' for note in record.pending)}</ul>
-<h2>审阅提示</h2>{texts(record.review_notes)}<h2>原生页面</h2>{pages}</html>'''
+<h2>原生页面</h2>{pages}</html>'''
     (output / "trial-record.json").write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
     (output / "review.html").write_text(document, encoding="utf-8")

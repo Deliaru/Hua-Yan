@@ -93,6 +93,7 @@ export function SourceImageCard({ docId, span, page, label, initialImage }: {
         <span>🔍 点击图片全屏放大核对细节</span>
         <span>第{image.page}页 · L{image.level}</span>
       </div>
+      <ImageDetails image={image} />
       {enlarged && <SourceImage docId={docId} span={span} page={page} initialImage={image} onClose={() => setEnlarged(false)} />}
     </>}
   </figure>;

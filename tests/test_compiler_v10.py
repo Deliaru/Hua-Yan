@@ -8,7 +8,7 @@ from huayan.events import EventLog
 from huayan.ingest.compile import EvidenceRef, Proposal, admit
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource, prepare_negative
-from huayan.ingest.reader.trials import build_trial_record
+from huayan.ingest.reader.trials import Citation, build_trial_record
 from huayan.ingest.reader.word import read_docx, read_native_labels
 from huayan.knowledge import AuditLog, KnowledgeBase, PermissionDenied
 
@@ -20,6 +20,9 @@ def test_negative_ir_keeps_both_specimens_both_curves_and_original_limits():
     blocks = read_docx(path, source, {f"paragraph-{n}": [1] for n in range(1, 9)} | {"table-1": [1]}, ["synthetic.png"])
     readings, pending = read_native_labels(blocks)
     record = build_trial_record(blocks, readings, pending)
+    expert = Citation(fragment="SYNTH-EXPERT#q8@synthetic-review", span="q8", pages=[],
+                      quote="合成专家补充：该观察保留原对象和限制。")
+    record.quality[0].evidence.append(expert)
     ir = prepare_negative(record, load_seeds("tests/fixtures/mini_seeds"), "SYNTH-PRODUCT（试样版）")
     assert ir.group is None and ir.nature == "observation"
     assert "合成甲布面合格" in ir.observation and "合成乙布面出现色花，不合格" in ir.observation
@@ -29,6 +32,9 @@ def test_negative_ir_keeps_both_specimens_both_curves_and_original_limits():
     assert "0.5℃/min" in ir.proposal.limits and "0.8℃/min" in ir.proposal.limits
     assert "操作警告" in ir.proposal.limits and "已取合成乙" in ir.proposal.limits
     assert record.quality[0].evidence[0] in ir.evidence
+    assert expert in ir.evidence
+    assert EvidenceRef(doc_id="SYNTH-EXPERT", span="q8", quote=expert.quote) in ir.proposal.evidence
+    assert not any(e.doc_id == source["source_id"] and e.span == "q8" for e in ir.proposal.evidence)
     assert ir.proposal.form is None and ir.proposal.temperature_c is None and ir.proposal.author is None
     assert ir.product_raw == ir.proposal.product == "SYNTH-PRODUCT（试样版）"
     assert any("总时长" in note for note in ir.pending) and any("成本变化" in note for note in ir.pending)

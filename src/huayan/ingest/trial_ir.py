@@ -151,28 +151,30 @@ def _prepare_observation(record, seeds, group, product, operation, conditions, i
     proposal = Proposal(title=title, text=operation.text,
         product=product, phenomenon=phenomenon[0] if phenomenon else "", form=None,
         conditions=[c.text for c in conditions], limits=limits,
-        evidence=[EvidenceRef(doc_id=record.source_id, span=c.span, quote=c.quote) for c in evidence])
+        evidence=[EvidenceRef(doc_id=c.fragment.split("#", 1)[0], span=c.span, quote=c.quote) for c in evidence])
     return OperationIR(id=ir_id, source_id=record.source_id,
         file_sha256=record.file_sha256, level=record.level, product_raw=product, group=group,
         observation=operation.text, conditions=conditions, evidence=evidence, pending=pending, proposal=proposal)
 
 
-def write_operation_review(ir, output, evidence_review, *, candidate_id=None, report=None):
+def write_operation_review(ir, output, evidence_review, *, candidate_id=None, report=None, source_reviews=None):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     (output / "operation-ir.json").write_text(ir.model_dump_json(indent=2) + "\n", encoding="utf-8")
     (output / "proposals.json").write_text(json.dumps({"items": [ir.proposal.model_dump(mode="json")]},
         ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     esc = html.escape
+    source_reviews = source_reviews or {}
     def citations(items):
-        return "<br>".join(f'<a href="{esc(evidence_review)}#{esc(c.span)}">'
-            f'{esc(c.span)} · 第{esc(str(c.pages))}页</a><pre>{esc(c.quote)}</pre>' for c in items)
+        return "<br>".join(f'<a href="{esc(source_reviews.get(c.fragment.split("#", 1)[0], evidence_review))}#{esc(c.span)}">'
+            f'{esc(c.fragment.split("#", 1)[0])} · {esc(c.span)}'
+            f'{" · 页" + esc(str(c.pages)) if c.pages else ""}</a><pre>{esc(c.quote)}</pre>' for c in items)
     rows = "".join(f'<tr><td>{c.group or ("原文范围" if c.stage else "共同")} · {esc(c.stage or "共同条件")}</td>'
         f'<td>{render_block_images(report, [e.span for e in c.evidence], output) if report is not None and c.stage == "工艺曲线" else ""}'
         f'<pre>{esc(c.text)}</pre></td><td>{esc(str(c.structured)) if c.structured else "保留原文待判断"}</td>'
         f'<td>{citations(c.evidence)}</td></tr>' for c in ir.conditions)
     pending = "".join(f"<li>{esc(note)}</li>" for note in ir.pending)
-    assignee = (f"候选研发归属：{esc(ir.assigned_rd.name)}（{esc(ir.assigned_rd.id)}）；专业确认待本人签字。"
+    assignee = (f"候选研发归属：{esc(ir.assigned_rd.name)}（{esc(ir.assigned_rd.id)}）；本稿的系统专业确认待本人办理。"
                 if ir.assigned_rd is not None else "候选研发归属待指定。")
     admission = (f"已导入候选 {esc(candidate_id)}（candidate）" if candidate_id else "候选入库状态参见编译/导入报告")
     product = "<p>产品身份依据待补。</p>"
@@ -191,11 +193,11 @@ def write_operation_review(ir, output, evidence_review, *, candidate_id=None, re
 table{{width:100%;border-collapse:collapse}}td,th{{border:1px solid #ccd6df;padding:10px;text-align:left}}
 pre{{white-space:pre-wrap;overflow-wrap:anywhere}}img{{max-width:100%}}figure{{margin:12px 0}}.notice{{background:#fff3d4;padding:16px}}</style>
 <h1>现场观察 IR · {esc(ir.id)}</h1><p class="notice">L{ir.level} 内部资料；规则整理的单次观察草稿，
-{admission}；未专业确认，未授予能力。产品原词与未结构化限制交人判断；配方保持原密级。</p>
+{admission}；尚未提交本稿的系统确认，未授予能力。产品原词与未结构化限制交人判断；配方保持原密级。</p>
 <p>{assignee}</p>
 <h2>观察及拟用方式</h2><pre>{esc(ir.observation)}</pre><p>拟作为同类现场情况的审阅材料；
 复用范围待研发确定，当前不提议 applicable 或 ask。</p>{citations(ir.evidence[:1])}
-<h2>产品身份与说明书原文（目录登记待归属）</h2>{product}
+<h2>产品身份与说明书原文</h2>{product}
 <h2>完整条件与原文</h2><table><tr><th>组别／阶段</th><th>条件</th><th>对齐状态</th><th>出处</th></tr>{rows}</table>
 <h2>保留到 limits 的原文</h2><pre>{esc(ir.proposal.limits)}</pre><h2>待处理</h2><ul>{pending}</ul>
 <p><a href="operation-ir.json">IR</a> · <a href="proposals.json">现有 Proposal 格式</a> ·

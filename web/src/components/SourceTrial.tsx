@@ -18,12 +18,20 @@ function CompactList({ title, items }: { title: string; items: SourceTrialText[]
   </section>;
 }
 
-function cleanPending(items: string[]) {
-  const real = items
-    .filter((p) => !/^(图片辅助读取|原生图与模型稿核对|读图运行说明)/.test(p))
-    .map((p) => p.replace(/^table-\d+[^：]*：/, "").trim())
-    .filter(Boolean);
-  return [...new Set(real)];
+function splitPending(items: string[]) {
+  const shownIdx = new Set<number>();
+  items.forEach((p, i) => {
+    if (shownIdx.size < 3 && !/^(图片辅助读取|原生图与模型稿核对|读图运行说明)/.test(p)) shownIdx.add(i);
+  });
+  const hallu = items.findIndex((p) => p.startsWith("原生图与模型稿核对"));
+  const scope = items.findIndex((p) => p.startsWith("读图运行说明"));
+  if (hallu >= 0) shownIdx.add(hallu);
+  if (scope >= 0) shownIdx.add(scope);
+  if (!shownIdx.size) items.slice(0, 4).forEach((_, i) => shownIdx.add(i));
+  return {
+    shown: items.filter((_, i) => shownIdx.has(i)),
+    rest: items.filter((_, i) => !shownIdx.has(i)),
+  };
 }
 
 function buildTargets(record: SourceTrialRecord, preferredSpans: string[]) {
@@ -60,8 +68,9 @@ function buildTargets(record: SourceTrialRecord, preferredSpans: string[]) {
   return { regions, options };
 }
 
-function TrialComparison({ record, preferredSpans, firstImage, children }: {
-  record: SourceTrialRecord; preferredSpans: string[]; firstImage?: ImageResult | null; children?: React.ReactNode;
+function TrialComparison({ record, preferredSpans, firstImage, rawEvidence, children }: {
+  record: SourceTrialRecord; preferredSpans: string[]; firstImage?: ImageResult | null;
+  rawEvidence?: React.ReactNode; children?: React.ReactNode;
 }) {
   const { me } = useApp();
   const [chosen, setChosen] = useState<ImageTarget | null>(null);
@@ -71,77 +80,113 @@ function TrialComparison({ record, preferredSpans, firstImage, children }: {
   const active = group ?? regions[0]?.group ?? record.groups[0]?.group;
   const g = record.groups.find((item) => item.group === active);
   const timeLines = [record.time.a, record.time.b, record.time.reported_saving].filter(Boolean);
-  const notices = cleanPending(record.pending);
+  const pending = splitPending(record.pending);
+  const extraSections = [
+    { title: "报告头信息", items: record.metadata },
+    { title: "试样目的", items: record.purpose },
+    { title: "成本比较", items: record.cost },
+    { title: "报告原文结论", items: record.reported_results },
+    { title: "后续跟进", items: record.follow_up },
+    { title: "审阅附注", items: record.review_notes },
+  ].filter((s) => s.items.length);
+  const hasGroupExtras = record.groups.some((x) => x.formula_notes.length || x.curve_labels.length);
 
-  return <div className="mt-3 grid items-start gap-5 lg:grid-cols-2">
-    <div className="min-w-0 space-y-3">
-      {children}
-      <CompactList title="共同条件（面料 · 浴比 · 设备 · 流程）" items={record.common_conditions} />
+  return <div className="mt-3 space-y-3">
+    <div className="grid items-start gap-5 lg:grid-cols-2">
+      <div className="min-w-0 space-y-3">
+        {children}
+        <CompactList title="共同条件（面料 · 浴比 · 设备 · 流程）" items={record.common_conditions} />
 
-      {!!record.groups.length && <section className="rounded-xl border border-line bg-white p-3.5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="试样组别">
-            {record.groups.map((item) => <button key={item.group} type="button" aria-pressed={active === item.group}
-              className={`rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold transition ${active === item.group ? "border-accent bg-accent text-white" : "border-line bg-slate-50 text-ink-2 hover:bg-slate-100"}`}
-              onClick={() => { setGroup(item.group); setChosen(regions.find((r) => r.group === item.group) ?? null); }}>
-              {item.group}组 · {item.group === "A" ? "原工艺对照" : "试样工艺"}
-            </button>)}
+        {!!record.groups.length && <section className="rounded-xl border border-line bg-white p-3.5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="试样组别">
+              {record.groups.map((item) => <button key={item.group} type="button" aria-pressed={active === item.group}
+                className={`rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold transition ${active === item.group ? "border-accent bg-accent text-white" : "border-line bg-slate-50 text-ink-2 hover:bg-slate-100"}`}
+                onClick={() => { setGroup(item.group); setChosen(regions.find((r) => r.group === item.group) ?? null); }}>
+                {item.group}组 · {item.group === "A" ? "原工艺对照" : "试样工艺"}
+              </button>)}
+            </div>
+            <span className="text-[11.5px] text-ink-3">切换组别同步切换右侧原图</span>
           </div>
-          <span className="text-[11.5px] text-ink-3">切换组别同步切换右侧原图</span>
+
+          {g && <div className="space-y-3">
+            {!!g.formula.length && <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="w-full border-collapse text-left text-[12.5px]">
+                <thead className="bg-slate-50 text-ink-2">
+                  <tr>{["配方原名", "数值", "原单位", "基准"].map((h) => <th key={h} className="border-b border-line px-3 py-1.5 font-semibold">{h}</th>)}</tr>
+                </thead>
+                <tbody>{g.formula.map((x, i) => <tr key={i} className="border-b border-line last:border-0">
+                  <td className="px-3 py-1.5 font-medium">{x.name}</td>
+                  <td className="px-3 py-1.5 tabular-nums font-semibold">{x.value}</td>
+                  <td className="px-3 py-1.5">{x.unit ?? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11.5px] font-medium text-amber-800">未记载</span>}</td>
+                  <td className="px-3 py-1.5 text-ink-2">{x.basis ?? "未注明"}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>}
+
+            {!!g.operations.length && <div className="rounded-lg border-l-4 border-accent bg-accent/5 px-3 py-2 text-[13px] leading-5">
+              <p className="mb-0.5 text-[11.5px] font-semibold text-accent">现场操作与结果原文</p>
+              {g.operations.map((op, i) => <p key={i} className="whitespace-pre-wrap">{op.text}</p>)}
+            </div>}
+          </div>}
+        </section>}
+
+        {(!!timeLines.length || !!record.time.basis || !!record.quality.length) && <section className="rounded-xl border border-line bg-white px-3.5 py-2.5 text-[12.5px] leading-5">
+          <h4 className="mb-1 font-semibold text-ink">时间与品质记录</h4>
+          {timeLines.map((r, i) => r && <p key={i} className="text-ink-2">{r.group ? `${r.group}组` : "报告结果"}：{r.quote}</p>)}
+          {record.time.calculated_saving !== null
+            ? <p className="font-medium">标注时间差值：{record.time.formula} = {record.time.calculated_saving}{record.time.unit}</p>
+            : record.time.basis && <p className="text-ink-2">未记载可比较的完整A/B总时长。</p>}
+          {record.time.basis && <p className="mt-0.5 text-[12px] text-ink-2">统计口径：{record.time.basis}</p>}
+          {record.quality.map((q, i) => <p key={`q-${i}`} className="mt-1 whitespace-pre-wrap">{q.text}</p>)}
+        </section>}
+
+        {!!record.pending.length && <section className="rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-[12.5px] leading-5 text-amber-900">
+          <h4 className="font-semibold">待补与核对提示 · 共 {record.pending.length} 条</h4>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">{pending.shown.map((p, i) => <li key={i}>{p}</li>)}</ul>
+          {!!pending.rest.length && <details className="mt-1.5">
+            <summary className="cursor-pointer font-medium">展开其余 {pending.rest.length} 条待补与模型辅助读取记录</summary>
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4">{pending.rest.map((p, i) => <li key={i}>{p}</li>)}</ul>
+          </details>}
+        </section>}
+      </div>
+
+      <aside className="order-first min-w-0 space-y-2.5 lg:order-last">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-[13.5px] font-semibold">原件图表对照</h4>
+          <span className="text-[11.5px] text-ink-3">共 {options.length} 视图</span>
         </div>
-
-        {g && <div className="space-y-3">
-          {!!g.formula.length && <div className="overflow-x-auto rounded-lg border border-line">
-            <table className="w-full border-collapse text-left text-[12.5px]">
-              <thead className="bg-slate-50 text-ink-2">
-                <tr>{["配方原名", "数值", "原单位", "基准"].map((h) => <th key={h} className="border-b border-line px-3 py-1.5 font-semibold">{h}</th>)}</tr>
-              </thead>
-              <tbody>{g.formula.map((x, i) => <tr key={i} className="border-b border-line last:border-0">
-                <td className="px-3 py-1.5 font-medium">{x.name}</td>
-                <td className="px-3 py-1.5 tabular-nums font-semibold">{x.value}</td>
-                <td className="px-3 py-1.5">{x.unit ?? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11.5px] font-medium text-amber-800">未记载</span>}</td>
-                <td className="px-3 py-1.5 text-ink-2">{x.basis ?? "未注明"}</td>
-              </tr>)}</tbody>
-            </table>
-          </div>}
-
-          {!!g.operations.length && <div className="rounded-lg border-l-4 border-accent bg-accent/5 px-3 py-2 text-[13px] leading-5">
-            <p className="mb-0.5 text-[11.5px] font-semibold text-accent">现场操作与结果原文</p>
-            {g.operations.map((op, i) => <p key={i} className="whitespace-pre-wrap">{op.text}</p>)}
-          </div>}
-        </div>}
-      </section>}
-
-      {(!!timeLines.length || !!record.quality.length) && <section className="rounded-xl border border-line bg-white px-3.5 py-2.5 text-[12.5px] leading-5">
-        <h4 className="mb-1 font-semibold text-ink">时间与品质记录</h4>
-        {timeLines.map((r, i) => r && <p key={i} className="text-ink-2">{r.group ? `${r.group}组` : "报告结果"}：{r.quote}</p>)}
-        {record.time.calculated_saving !== null && <p className="font-medium">标注时间差值：{record.time.formula} = {record.time.calculated_saving}{record.time.unit}</p>}
-        {record.quality.map((q, i) => <p key={`q-${i}`} className="mt-1 whitespace-pre-wrap">{q.text}</p>)}
-      </section>}
-
-      {!!notices.length && <section className="rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-[12.5px] leading-5 text-amber-900">
-        <h4 className="font-semibold">原件留意提示</h4>
-        <ul className="mt-1 list-disc space-y-0.5 pl-4">{notices.map((p, i) => <li key={i}>{p}</li>)}</ul>
-      </section>}
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="依据图像切换">
+          {options.map((option) => {
+            const on = image?.span === option.span && image?.page === option.page;
+            return <button key={`${option.span ?? "page"}:${option.page}`} type="button" aria-pressed={on}
+              className={`rounded-lg border px-2.5 py-1 text-[12px] font-medium transition ${on ? "border-accent bg-accent/10 text-accent" : "border-line bg-white text-ink-2 hover:bg-slate-50"}`}
+              onClick={() => { setChosen(option); if (option.group) setGroup(option.group); }}>{option.label}</button>;
+          })}
+        </div>
+        {image ? <SourceImageCard key={`${me}:${record.source_id}:${image.span}:${image.page}`} docId={record.source_id} {...image}
+          initialImage={firstImage && firstImage.page === image.page && (firstImage.span ?? undefined) === image.span ? firstImage : undefined} />
+          : <p className="rounded-lg bg-slate-50 p-4 text-ink-2">这份记录没有已登记的页码，无法定位原图。</p>}
+      </aside>
     </div>
 
-    <aside className="order-first min-w-0 space-y-2.5 lg:order-last">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-[13.5px] font-semibold">原件图表对照</h4>
-        <span className="text-[11.5px] text-ink-3">共 {options.length} 视图</span>
+    {(hasGroupExtras || !!extraSections.length || !!rawEvidence) && <details className="rounded-lg border border-line bg-slate-50/60 px-3.5 py-2 text-[12.5px] text-ink-2">
+      <summary className="cursor-pointer font-medium">查看完整曲线读数、报告附注与签字绑定原文依据</summary>
+      <div className="mt-3 space-y-3 text-ink">
+        {hasGroupExtras && record.groups.map((grp) => (grp.formula_notes.length || grp.curve_labels.length) ? <section key={grp.group} className="rounded-xl border border-line bg-white px-3.5 py-2.5">
+          <h4 className="mb-1.5 text-[12.5px] font-semibold text-ink-2">{grp.group}组 · 配方表头与机器解析曲线读数</h4>
+          {grp.formula_notes.map((n, i) => <p key={i} className="mb-1 text-[12.5px] text-ink-2">{n.text}</p>)}
+          {!!grp.curve_labels.length && <div className="flex flex-wrap gap-1.5">
+            {grp.curve_labels.map((r, i) => <span key={i} className="rounded border border-line bg-slate-50 px-2 py-0.5 text-[12px]">
+              {r.stage ? `${r.stage}：` : ""}{r.value}{r.unit}{r.conditions.length ? `（${r.conditions.join("、")}）` : ""}
+              {r.status === "needs_reading" && <span className="ml-1 text-amber-800">· 待补读</span>}
+            </span>)}
+          </div>}
+        </section> : null)}
+        {extraSections.map((s) => <CompactList key={s.title} title={s.title} items={s.items} />)}
+        {rawEvidence}
       </div>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="依据图像切换">
-        {options.map((option) => {
-          const on = image?.span === option.span && image?.page === option.page;
-          return <button key={`${option.span ?? "page"}:${option.page}`} type="button" aria-pressed={on}
-            className={`rounded-lg border px-2.5 py-1 text-[12px] font-medium transition ${on ? "border-accent bg-accent/10 text-accent" : "border-line bg-white text-ink-2 hover:bg-slate-50"}`}
-            onClick={() => { setChosen(option); if (option.group) setGroup(option.group); }}>{option.label}</button>;
-        })}
-      </div>
-      {image ? <SourceImageCard key={`${me}:${record.source_id}:${image.span}:${image.page}`} docId={record.source_id} {...image}
-        initialImage={firstImage && firstImage.page === image.page && (firstImage.span ?? undefined) === image.span ? firstImage : undefined} />
-        : <p className="rounded-lg bg-slate-50 p-4 text-ink-2">这份记录没有已登记的页码，无法定位原图。</p>}
-    </aside>
+    </details>}
   </div>;
 }
 
@@ -173,8 +218,10 @@ export function SourceTrial({ docId, autoLoad = false, preferredSpans = [], chil
         {opened && !autoLoad && <button type="button" className="btn btn-quiet" onClick={() => setOpened(false)}>收起</button>}
       </div>
     </div>
-    {opened && !record && !error && <div className="mt-3">{children}<p role="status" className="mt-2 text-ink-2">正在读取结构化条件与原图……</p></div>}
+    {!opened && rawEvidence && <details className="mt-2 text-[12px] text-ink-2"><summary className="cursor-pointer">查看签字绑定原文依据</summary>{rawEvidence}</details>}
+    {opened && !record && !error && <div className="mt-3">{children}<p role="status" className="mt-2 text-ink-2">正在读取结构化条件与原图……</p>
+      {rawEvidence && <details className="mt-2 text-[12px] text-ink-2"><summary className="cursor-pointer">查看签字绑定原文依据</summary>{rawEvidence}</details>}</div>}
     {error && <div className="mt-3">{children}<p role="alert" className="mt-2 rounded-lg bg-amber-50 p-3 text-amber-800">{error}</p>{rawEvidence}</div>}
-    {record && <TrialComparison key={`${me}:${docId}:${reload}`} record={record} preferredSpans={preferredSpans} firstImage={firstImage}>{children}</TrialComparison>}
+    {record && <TrialComparison key={`${me}:${docId}:${reload}`} record={record} preferredSpans={preferredSpans} firstImage={firstImage} rawEvidence={rawEvidence}>{children}</TrialComparison>}
   </section>;
 }
