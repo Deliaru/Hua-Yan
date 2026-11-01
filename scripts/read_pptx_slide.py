@@ -1,4 +1,4 @@
-"""读取已选定课件的一页；--vision 使用PowerPoint COM原生导出和统一智谱网关。
+"""读取已选定课件的一页；--vision 使用PowerPoint COM原生导出和统一模型网关。
 
 uv run --env-file .env python scripts/read_pptx_slide.py --source SRC-18358d2dd7 --page 15 --vision
 原生导出来自V10.0清单；本入口先交付文字/表格页，其他形状保留待补。

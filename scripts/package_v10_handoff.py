@@ -42,8 +42,11 @@ def main():
     report = read(root / "evidence/SRC-3a2130604c/evidence.json")
     word = read(vision / "report-summary.json")
     ppt = read(vision / "ppt-summary.json")
-    temperature = read(root / "checks/qwen-temperature-p1-20261101/summary.json")
-    online = read(root / "checks/qwen-business-20261101/summary.json")
+    upgrade_root = root / "checks/model-upgrade-20261101"
+    upgrade = read(upgrade_root / "summary.json")
+    online = upgrade["online"]
+    configured_models = {name: yaml.safe_load(record(Path(name)).read_text(encoding="utf-8"))["tiers"]
+                         for name in ("config/models.yaml", "config/models.agent.yaml")}
     software = read(simulation / "summary.json")
     roles = read(simulation / "shared-readback.json")
     revision = read(root / "validation/revision-chain-94ec6cfd/summary.json")
@@ -71,8 +74,10 @@ def main():
             link("三份试样受控汇总", expert / "trial-summary/review.html", "读取侧汇总"),
             link("选定PPT第15页", root / "evidence/SRC-18358d2dd7/review.html", "真实资料与模型")]),
         ("真实模型运行 · 需求为开发者合成", [
-            link("温度P1修复：原5轮实调与严格回放", root / "checks/qwen-temperature-p1-20261101/review.html", "真实模型"),
-            link("角色Agent准备：PM与研发工具轨迹", root / "checks/qwen-business-20261101/review.html", "真实模型及模拟接单")]),
+            link("当前模型：工具准备、温度及双列表格复核", upgrade_root / "review.html", "真实模型及模拟接单"),
+            link("当前模型：单题A/C与Jev严格回放", upgrade_root / "table-35b-replay/review.html", "已知开发题"),
+            link("8B历史：温度P1修复与回放", root / "checks/qwen-temperature-p1-20261101/review.html", "历史模型"),
+            link("8B历史：角色准备工具轨迹", root / "checks/qwen-business-20261101/review.html", "历史模型及模拟接单")]),
         ("软件流程演练 · 签字明确模拟", [
             link("原单回流与下一单受限使用", simulation / "review.html", "开发者模拟"),
             link("四角色共享读取记录", simulation / "shared-readback.json", "开发者模拟"),
@@ -82,14 +87,16 @@ def main():
             link("四岗位操作与记录要求", Path("docs/trial/first-report-v10.md"), "操作指南"),
             link("试用记录模板", Path("docs/trial/v10-session-template.md"), "未开始")])]
     metrics = [
-        ["首份读图", word["model"], f'{len(report["image_readouts"])}份辅助稿；原生{len(report["blocks"])}块/{len(report["readings"])}条标签',
+        ["首份读图（历史）", word["model"], f'{len(report["image_readouts"])}份辅助稿；原生{len(report["blocks"])}块/{len(report["readings"])}条标签',
          f'回放{word["replay_cached_responses"]}命中/{word["replay_network_requests"]}网络', "有漏读及速率位置错误，未专业确认"],
-        ["选定PPT", ppt["model"], f'{ppt["native_numeric_cells"]}个原生数值；网络尝试{ppt["network_attempts"]}次',
+        ["选定PPT（历史）", ppt["model"], f'{ppt["native_numeric_cells"]}个原生数值；网络尝试{ppt["network_attempts"]}次',
          f'回放{ppt["replay_cached_responses"]}命中/{ppt["replay_network_requests"]}网络', "数值集合一致不证明行列条件正确，单位待核对"],
-        ["温度多轮", ", ".join(temperature["model_counts"]), f'{temperature["live_network_requests"]}次新请求，原5轮回归通过',
-         f'严格回放{temperature["strict_replay_cached_responses"]}命中/{temperature["strict_replay_network_requests"]}网络', "70—80℃仅合成检查，非产品授权"],
-        ["角色在线准备", ", ".join(online["actual_models"]), f'{online["network_requests"]}次新请求；{online["product_item_count"]}条产品稿/{online["chemical_item_count"]}条转译',
-         f'缓存{online["cached_responses"]}；缺口均为空', "资料按编号主动委托；接单由开发者模拟，旧温度失败见新修复记录"],
+        ["温度多轮", upgrade["model"], f'{upgrade["temperature_meter"]["network_requests"]}次新请求，原5轮回归通过',
+         f'严格回放{upgrade["temperature_replay_meter"]["cache_hits"]}命中/{upgrade["temperature_replay_meter"]["network_requests"]}网络', "70—80℃仅合成检查，非产品授权"],
+        ["角色在线准备", upgrade["model"], f'{upgrade["online_meter"]["network_requests"]}次新请求；{online["product_item_count"]}条产品稿/{online["chemical_item_count"]}条转译',
+         f'缓存{upgrade["online_meter"]["cache_hits"]}；项目方重试{len(online["operator_retries"])}次', "准备缺口清零；资料按编号主动委托，接单由开发者模拟"],
+        ["单题检索与双列复核", upgrade["model"], f'{len(upgrade["column_checks"])}组列条件；A及C+Jev通过，C选错页',
+         f'严格回放Qwen {upgrade["table_replay"]["llm_cache_hits"]} / Clef {upgrade["table_replay"]["s1_cache_hits"]}命中', "原生表格优先，非纯视觉或全库成绩"],
         ["真实资料的软件链", "mock/规则", f'{software["simulated_event_counts"]["claim_confirmed"]}项模拟确认；{software["simulated_event_counts"]["scope_extended"]}次模拟批准；{software["simulated_event_counts"]["capability_used"]}次使用',
          f'{len(roles["roles"])}类工作面HTTP读取成功', "带limits的128℃/未知为possible，132℃不命中；没有自动确认适用"]]
     remaining = ["研发核对曲线走线/速率、A组未知单位及负例条件，决定候选表述、用途与限制。",
@@ -97,14 +104,14 @@ def main():
                  "业务员与真实客户办理原单及下一单，保留满足/未知/超范围原话、事件与人工帮助。",
                  "研发负责人查看及反馈；记录实际参与人、耗时与有用/多余/遗漏事项。"]
     summary = {"at": get_clock().now().isoformat(), "kind": "local_internal_handoff_not_business_acceptance",
-        "links": links, "metrics": metrics, "source_id": report["source_id"],
+        "links": links, "metrics": metrics, "source_id": report["source_id"], "configured_models": configured_models,
         "human_instance": {"run_id": ready["run_id"], "candidates": pending,
             "applicable_status": caps[ready["capability_id"]]["status"], "completed_sign_events": dict(signs),
             "review_config": str(human / "app.yaml"), "online_config": str(output / "app.human-online.yaml"),
             "online_profile_started_by_packager": False},
         "real_participants": [], "real_professional_signatures": 0,
         "revision_demo": revision["result"], "remaining_human_work": remaining,
-        "paused_optional": "35题扩写及检索两组完整对照继续暂停，不阻塞主线。",
+        "paused_optional": "35题扩写继续暂停；已选单题的A/C及Jev对照已完成，不扩展为全库成绩。",
         "new_model_calls": 0, "new_business_writes": 0, "input_sha256": inputs}
     section_html = "".join(f'<h2>{escape(title)}</h2><ul>' + "".join(f'<li>{item}</li>' for item in items) + '</ul>' for title, items in sections)
     table = "".join('<tr>' + "".join(f'<td>{escape(cell)}</td>' for cell in row) + '</tr>' for row in metrics)
@@ -117,8 +124,8 @@ def main():
 {section_html}<h2>下一次真人试用</h2><p>待审实例：{escape(ready['run_id'])}；{len(pending)}项候选，适用提议当前{escape(caps[ready['capability_id']]['status'])}。先登记实际岗位与账号，再重新读取当前指纹；不要照抄其他实例的q/cap/claim编号。</p>
 <pre>$env:HUAYAN_PORT="8769"
 uv run --env-file .env --locked --no-sync python -m huayan.ui.server --trial {escape(ready['run_id'])} --config {escape(Path(os.path.relpath(output / 'app.human-online.yaml', Path.cwd())).as_posix())}</pre>
-<p>在线配置已生成，打包时未启动；使用Qwen、Clef和object对话。人工审阅mock配置见summary.json。同一运行只启动一种配置，界面状态条为实际模式依据。</p>
-<ul>{''.join(f'<li>{escape(item)}</li>' for item in remaining)}</ul><p>35题扩写与检索展示对照继续暂停。真人反馈后如暴露问题，再按所属包修复。</p>
+<p>在线配置已生成，打包时未启动；当前配置见summary.json，已核验模型为{escape(upgrade['model'])}，使用Clef和object对话。首份报告及PPT整页辅助稿仍是8B历史记录，未全量重读；已有服务未重启，不代表老进程已切换。人工审阅mock配置见summary.json。同一运行只启动一种配置，界面状态条为实际模式依据。</p>
+<ul>{''.join(f'<li>{escape(item)}</li>' for item in remaining)}</ul><p>35题扩写继续暂停，已选单题检索对照已完成。真人反馈后如暴露问题，再按所属包修复。</p>
 <p><a href="summary.json">输入指纹、当前状态与完整索引</a></p></html>'''
     (output / "review.html").write_text(document, encoding="utf-8")
     assert all(sha256(Path(path).read_bytes()).hexdigest() == digest for path, digest in inputs.items())

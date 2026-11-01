@@ -3,7 +3,5 @@ embedding:
   model_id: google/embeddinggemma-2
   cache_dir: D:/hf_cache/hub
 
-# 用户部署的 Worker；响应保留 Clef 的 model/answers/usage。
-jev:
-  worker_url: https://jev-proxy.xi1092183542.workers.dev
-  timeout_s: 120
+# Jev统一走既有System1配置及CLOUDFLARE_WORKER_URL，不另存端点。
+system1_config: config/system1.cloudflare-worker.yaml

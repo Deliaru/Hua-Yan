@@ -39,6 +39,12 @@ v3 第 10、10B 节；[总计划](REPLAN-v10.md)；现有 `System1Client`、网�
 
 ## 完成记录
 
+### 2026-11-01｜检索入口与旧视觉配置卫生
+
+- **发现与最小处理**：用户要求随模型升级核查工程卫生。config/reader.yaml原先另存个人Worker地址，旧search_report.py直接构造ClefWorkerClient，未跟随既有System1环境配置；现将该配置改为system1_config，脚本复用build_system1和CLOUDFLARE_WORKER_URL。删除已无调用方的config/models.vision.cloudflare.yaml，旧Worker部署和失败记录仍在Git及明确标为历史的说明中，不修改服务端。read_pptx_slide.py的帮助文字去掉过时“智谱”供应商名，不改读取逻辑。
+- **核对与回归**：不引入新的配置解析器、模型适配器或重试。实际装载System1端点与环境变量相同、模型仍Clef、网络0；旧检索CLI用当前reader配置完成关键词实跑。35B单题严格回放Qwen3/Clef3命中、0新网络，A通过/C失败/C+Jev通过，与原记录一致；原来源和正式/待审状态指纹未变。全量62项通过（31.55秒），此前8B标准化缓存仍可读取。核心35B升级和8B协议删除另见99a857e，本项配置卫生与交接同步单独提交，不回写历史模型名。
+
+
 ### 2026-11-01｜35B升级、原始模型选列与同条件回放
 
 - **范围与自查**：用户允许使用SiliconFlow代金券升级30B以上型号；已重新完整阅读AGENTS，再读总计划、相关CONTRACTS/QI及本包。承接已提交的单题首版（f31fa17），保留现有工作区，不改冻结契约、正式知识状态、觉或权限机制。base_url仍为https://api.siliconflow.cn/v1、密钥变量仍BACKUP_API_KEY，通过`uv run --env-file .env`注入，未读取或输出密钥。

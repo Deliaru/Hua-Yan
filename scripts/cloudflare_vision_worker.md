@@ -1,6 +1,6 @@
 # Cloudflare Worker：Clef在用，视觉适配为历史记录
 
-> 当前策略（2026-10-31）：Cloudflare仅用于Clef；视觉读取走config/models.yaml的智谱网关。本轮不需要更新或部署Worker，下述视觉部署内容仅保留历史说明。
+> 当前策略（2026-11-01）：Cloudflare仅用于Clef，端点统一由system1.cloudflare-worker.yaml读取CLOUDFLARE_WORKER_URL；视觉读取走config/models.yaml的SiliconFlow Qwen3.6-35B。旧Cloudflare视觉配置已从当前配置目录移除，可从Git历史回查。本轮不需要更新或部署Worker，下述视觉部署内容仅保留历史说明。
 
 代码：[`cloudflare_vision_worker.mjs`](cloudflare_vision_worker.mjs)。**用文件全文整体替换现有 Jev Worker 的代码**，保留 `export default`、现有域名及名为 `AI` 的绑定，然后部署。无需新建 Worker，也无需添加第二个 AI 绑定。一个绑定通过 `env.AI.run` 的第一个参数选择调用哪个模型，见[官方绑定说明](https://developers.cloudflare.com/workers-ai/configuration/bindings/)。
 
@@ -19,7 +19,7 @@
 Cloudflare 要求先接受 Meta 的 License 和 Acceptable Use Policy；条款入口见[模型页面](https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/)。如果尚未接受，请先阅读条款，再由你在部署合并代码后主动执行下面的 PowerShell 命令，地址沿用现有 Worker：
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri 'https://jev-proxy.xi1092183542.workers.dev/license' -ContentType 'application/json' -Body '{"prompt":"agree"}'
+Invoke-RestMethod -Method Post -Uri ($env:CLOUDFLARE_WORKER_URL.TrimEnd('/') + '/license') -ContentType 'application/json' -Body '{"prompt":"agree"}'
 ```
 
 该接口只转交这次明确的接受请求；普通读图请求不会替你接受协议。查看返回结果确认是否成功；账号已接受则不用重复执行。
@@ -37,19 +37,19 @@ Invoke-RestMethod -Method Post -Uri 'https://jev-proxy.xi1092183542.workers.dev/
 部署后的本地连接参数为：
 
 ```text
-base_url = https://jev-proxy.xi1092183542.workers.dev/v1
+base_url = <CLOUDFLARE_WORKER_URL>/v1
 model    = @cf/meta/llama-3.2-11b-vision-instruct
 ```
 
 本版 Worker 无密钥校验，OpenAI SDK 所需的非空 `api_key` 可使用占位字符串 `unused`，不需要传旧的外部供应商密钥。正式接入仍通过 `OpenAICompatGateway`，沿用 `caller="ingest:extract"`、结构校验、计量与本地图片指纹缓存。
 
-项目读图脚本当前默认使用 `config/models.yaml`（智谱主模型与备用），不再默认使用旧Cloudflare视觉配置。运行方式：
+项目读图脚本当前默认使用 `config/models.yaml`（SiliconFlow 35B，无自动换型），不再使用旧Cloudflare视觉配置。运行方式：
 
 ```powershell
 uv run --env-file .env python scripts/read_report.py --source SRC-3a2130604c --vision
 ```
 
-Clef通过 `config/system1.cloudflare-worker.yaml` 的 `base_url_env: CLOUDFLARE_WORKER_URL` 使用既有Worker根路径。将实际根地址写入本机未入库的 `.env`（`CLOUDFLARE_WORKER_URL=https://your-worker.example.workers.dev`），运行时用 `uv run --env-file .env ...` 注入，或在 PowerShell 中设置同名环境变量；该值不是密钥，缺少时直接报告配置错误。不发送视觉请求到旧 `/v1/chat/completions`，无需设置Cloudflare视觉占位密钥或重新接受协议。旧 `config/models.vision.cloudflare.yaml` 及本文件下方验证记录仅供回查。
+Clef通过 `config/system1.cloudflare-worker.yaml` 的 `base_url_env: CLOUDFLARE_WORKER_URL` 使用既有Worker根路径。将实际根地址写入本机未入库的 `.env`（`CLOUDFLARE_WORKER_URL=https://your-worker.example.workers.dev`），运行时用 `uv run --env-file .env ...` 注入，或在 PowerShell 中设置同名环境变量；该值不是密钥，缺少时直接报告配置错误。不发送视觉请求到旧 `/v1/chat/completions`，无需设置Cloudflare视觉占位密钥或重新接受协议。旧视觉配置及本文件下方验证记录仅供Git历史回查。
 
 读取结果及实际调用记录在 `data/knowledge_v10/evidence/SRC-3a2130604c/`，缓存沿用 `data/knowledge_v10/cache/image-readings/`；模型结果保留为待人工审阅的辅助读稿。
 

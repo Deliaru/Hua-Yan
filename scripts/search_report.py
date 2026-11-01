@@ -1,6 +1,7 @@
 """对一份已读取报告按页检索，默认本地 Gemma 图文；--keywords 对照，--jev 附辅助核对。
 
 读取开发者本地 evidence.json，不是面向角色的公共资料读取入口；不写正式知识状态。
+--jev 复用reader.yaml的system1_config，运行时用uv run --env-file .env注入Worker地址。
 """
 import argparse
 import json
@@ -11,7 +12,8 @@ import yaml
 
 from huayan.ingest.reader.evidence import EvidenceBlock
 from huayan.ingest.reader.retrieval import LocalGemmaRetriever, keyword_search
-from huayan.ingest.reader.verify import ClefWorkerClient, JevVerifier
+from huayan.ingest.reader.verify import JevVerifier
+from huayan.jev.system1 import build_system1
 from huayan.meter import FileMeter
 
 
@@ -58,7 +60,7 @@ def main():
     path = output / "retrieval.json"
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if args.jev:
-        client = ClefWorkerClient(meter=FileMeter(output, "reader_search"), **config["jev"])
+        client = build_system1("onejev", config["system1_config"], None, FileMeter(output, "reader_search"))
         try:
             verifier = JevVerifier(client)
             for hit in hits:
