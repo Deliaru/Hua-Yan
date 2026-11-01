@@ -86,7 +86,8 @@ def render_block_images(report, spans, output):
         for item in report["image_readouts"]:
             if item["page"] == region["page"] and item.get("span") in (None, region["span"]):
                 scope = "区域" if item.get("span") else "整页"
-                drafts += f'<details><summary>{esc(item["response"]["model"])} · {scope}辅助稿 · 待人工审阅</summary>'
+                model = esc(item["response"]["model"]) + ("（降级）" if item["response"]["fallback_used"] else "")
+                drafts += f'<details><summary>{model} · {scope}辅助稿 · 待人工审阅</summary>'
                 drafts += f'<pre>{esc(json.dumps(item["readout"], ensure_ascii=False, indent=2))}</pre></details>'
         figures.append(f'<figure class="native-region"><img src="{esc(image)}" alt="Office原生区域">'
                        f'<figcaption>{esc(region["span"])} · 第{region["page"]}页 · Office原生裁图</figcaption>{drafts}</figure>')

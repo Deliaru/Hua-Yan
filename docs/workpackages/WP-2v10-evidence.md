@@ -151,3 +151,10 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 - **A/B核对结果与限制**：原生图保留两组各自的升降温走线、保温点、原单位、终点操作和红字时间口径，具体值与核对说明仅保存在被忽略的native-curve-check.json。模型尚不能视作准确的完整工艺：table-2第1页标题区域输出了区域不可见的数值，部分阶段/单位拆分不全；原始模型稿保留并在三类审阅页明确待审，没有并入正式判断或覆盖原生读数。
 - **PPT真实读取**：`uv run --env-file .env python scripts/read_pptx_slide.py --source SRC-18358d2dd7 --page 15 --vision`由PowerPoint16.0 COM后台SaveAs原生PNG/PDF，python-pptx同步读取原生表格；该页原生chart数0，不将表格冒称系列图。5次网络尝试（主模型4次429后备用成功），glm-4.1v-thinking-flash返回24条数值辅助稿，24条缺单位待补；原生24个数值单元格继续可回查，不将模型稿当真值。
 - **产物与交接**：evidence/SRC-3a2130604c/review.html、trials/SRC-3a2130604c/review.html、professional-review/glm-first-report/review.html及evidence/SRC-18358d2dd7/review.html均在data/knowledge_v10下。专业审阅包是新读取侧副本，原正式IR/知识状态不由本轮读取改写。在线读取通道已通，读数专业审阅仍未完成；真实签字、授予与范围批准继续等待人，不以模型输出替代。
+
+### 2026-11-01｜P2修正：内联辅助稿补齐降级标识
+
+- 按用户评审重读AGENTS全文、总计划、相关CONTRACTS/QI及本包，并按铁律4.9、极简与禁止过度防御要求自查。仅在report.py::render_block_images沿用整页辅助稿的既有格式：fallback_used为true时在实际模型名后追加“（降级）”，保留区域／整页范围及“待人工审阅”。未改契约、读数、签字逻辑或网关调用。
+- 离线使用首份报告table-2第2页已有备用响应核对标识，并用同一响应副本验证fallback_used=false时不标降级；刷新首份原文、试样、专业审阅副本及选定PPT页的既有HTML标签，不重读模型、不重渲染Office、不改读取JSON或正式状态。已有三个前端文件改动原样保留。
+- 验证：`uv run --env-file .env --locked --no-sync pytest -q`全量57项通过（33.19秒），`git diff --check`通过；未新增测试文件或线上模型请求。本修复未修改前端，不重复构建。
+- 本小项只修正降级披露，不据此认定专业确认、用途授予、完整在线派单或四岗位真人试用完成；停止在本修复项交用户评审。
