@@ -36,6 +36,8 @@ uv run --env-file .env python data/knowledge_v10/professional-review/expert-feed
 
 ## 下一小项
 
+> 当前交接已改用独立 `human-review-ready` 实例，其中五项候选为ku:claim:1—5、范围提议为cap:1/proposed，未继承旧测试签字。以下formal-import及8767的编号、状态只记当时导入历史；请按[四岗位当前交接](first-report-v10.md)操作。用户后续已澄清此前账号操作为测试，本材料的书面内容也不等于真人已在系统完成专业签字。
+
 2026-11-01已完成来源接入：首份本地实例及在线配置已登记专家、负例及两份新记录，按每份依据的权限和当前指纹回取。HTTP结果在 `data/knowledge_v10/checks/expert-source-entry-20261101/summary.json`。前述准备阶段summary中的配置与清单SHA是历史快照，此次登记明确修改了它们；原报告读取文件与正式知识状态不变。
 
 新候选已通过 `HuayanApp` 导入：`ku:claim:2`—`ku:claim:6`均为L3 candidate，`cap:1`为L3 proposed适用提议。实际编号、IR映射与当前入口见 `formal-import/import-report.json`、`formal-import/review.html`；旧预览编号不作为正式编号。当前共享工作台地址为 http://127.0.0.1:8767/（8766保留旧预览），以 `rd:JianChaoXi`（JianChao Xi）查看“本人资料候选”；本次范围批准人已指定为 `pm:HongZongLi`（HongZong Li）。

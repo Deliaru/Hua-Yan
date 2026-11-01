@@ -1,5 +1,13 @@
 # V10 开发者走链
 
+## 当前主线证据交接（2026-11-01）
+
+运行 `uv run --locked --no-sync python scripts/package_v10_handoff.py`，生成[本地总入口](../../data/knowledge_v10/validation/finals-handoff/review.html)及summary.json。入口仅汇集已有首份/负例原图与记录、Qwen读图及温度实调/回放、在线角色准备、开发者模拟复用、合成来源复核、待真人实例和记录模板；不调用模型、不写业务、不读评测金标。输入文件不存在时直接报错，不生成虚假通过项；summary保存输入指纹和逐项边界。
+
+在线角色准备是独立合成需求；开发者模拟链的确认/授予是另一个实例，两者不拼成一次真人全链成绩。当前固定模型为SiliconFlow Qwen/Qwen3-VL-8B-Instruct，温度原五轮回归已通过，先前429及温度失败页作为历史保留。35题扩写与检索支线仍暂停，下文旧题证据只供回查。
+
+打包会生成app.human-online.yaml，沿独立human-review-ready运行接现有Qwen/Clef及object对话，打包时不启动。原人工审阅配置保留mock/规则。真实试用启动、账号映射与集中待审内容见[当前四岗位交接](first-report-v10.md)。此前旧first-report实例不作为下一轮真人起点，已经授权开发者模拟无需重复审批。
+
 ## 首份报告授权说明
 
 这条入口用首份真实报告的读取记录与操作观察 IR 验证软件流程。需求、确认、授予措辞及撤回均由脚本模拟；没有真人参与，不构成企业专业判断或产品适用结论。
