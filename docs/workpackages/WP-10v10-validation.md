@@ -1,6 +1,6 @@
 # WP-10v10｜走通业务、真人试用与两组小对照
 
-> 决赛必需｜状态：开发者模拟链、真实模型准备及温度回归已通过，主线证据总入口、当前四岗位交接和独立待真人在线配置已完成；隔离装载保持5项candidate/1项proposed，未改待真人原实例。无需真人参与的当前首版必需工作已收口；专业核对及四岗位真人试用尚未验收，整包/M3不记全部通过。已选单题检索对照已交付，35题扩写继续暂停。
+> 决赛必需｜状态：开发者模拟链、真实模型准备及温度回归已通过；2026-11-02已启动8769共享待审实例，当前Kimi/Clef及object对话、四岗位HTTP入口和原生区域回取已核验，5项candidate/1项proposed保持。主线总入口纳入当前122B完整单题对照与服务核验快照。无需真人参与的当前首版必需工作已收口；专业核对及四岗位真人试用未验收，整包/M3不记全部通过。35题扩写继续暂停。
 
 ## 目标
 
@@ -40,6 +40,14 @@ V10.4/V10.5/V10.7/V10.9 主链，温度场景接 V10.6。V10.3/V10.8 完成后�
 分块/前缀等额外消融、显著性结论、大样本校准平台和长期收益测算。20 份及更大报告集按试用后需要扩展。
 
 ## 完成记录
+
+### 2026-11-02｜共享待审实例实际上线与四岗位入口核验
+
+- **范围与自查**：按用户“推进”指示完成无需真人参与的启动收尾，重新完整阅读AGENTS、总计划、相关CONTRACTS/QI、FINALS-SCOPE及本包与角色指南。起点v10@8306fe0，保留已有V10.3三份文档未提交修改。遵守冻结契约、统一网关/caller、觉零生成调用、极简和禁止过度防御；只改本包打包脚本与交接记录，没有修改业务/网关/权限/前端或增加测试样板。
+- **实际启动**：生成当前app.human-online.yaml，用`uv run --env-file .env --locked --no-sync python -m huayan.ui.server --trial human-review-ready --config data/knowledge_v10/validation/finals-handoff/app.human-online.yaml`（HUAYAN_PORT=8769）后台隐藏启动。初始Get-NetTCPConnection漏报旧监听，HTTP返回recording/旧8B；通过netstat及只读进程参数核实旧recording PID27492与新待审PID35800重复监听。PowerShell Stop-Process内部错误未停止后，仅taskkill已核实旧PID；原recording磁盘历史保留，当前8769只由human-review-ready提供，绑定127.0.0.1。未部署Worker、打印密钥或停止无关进程。
+- **HTTP与实际模型**：四次独立开发者会话按现有trial/role绑定sales:S01、pm:HongZongLi、rd:JianChaoXi、supervisor:M01，读取各自工作面、待办和失败列表成功；业务员按UI读取sessions，初次错误访问研发requirements返回403原样保留，未放宽权限。研发候选5项、固定依据83条，试样结构与table-3第2页kind=region PNG回取成功；主页及JS资源200。研发助手经HTTP实际调用一次read_source再回复，未执行draft/effect；后台PM初始scope_update准备8条响应，研发查证2条，实际均Kimi-K2.6，Clef在线配置、LLM抽取、object对话保持。10条为模型响应计量，不与旧缓存或历史试跑混报；后台PM两次误把知识对象编号当需求单的工具拒绝保留在日志，未批准或改变专业结论。图像接口仅回取既有原图/记录，没有实调122B；读取配置与既有122B辅助稿分开说明。
+- **状态与记录口径**：候选仍candidate、cap:1仍proposed，客户会话/需求单0，专业确认/批准/接单/复用事件0。启动from_seeds沿原_save将qi_state.version从7增至8，初次字节不变断言因此失败；重建version=7的旧字节SHA与事前记录完全一致，除version外JSON相同，保留前后副本与证据，不做回滚或改原机制。旧first-report及canonical Word证据SHA未变。后台只将scope_update标准备好、仍待真人；本次开发者角色和聊天明确不是这些真人参与，检查角色已退出。
+- **交付与验证**：服务核验在data/knowledge_v10/checks/shared-online-20261102/review.html、summary.json、原图回取/审阅结果、真实助手响应及服务器日志。scripts/package_v10_handoff.py补当前122B完整A/C/Jev对照链接与同条件边界，并支持`--service-check <实际摘要>`只读纳入服务快照；默认打包仍不探测/启动服务。执行`uv run --locked --no-sync python scripts/package_v10_handoff.py --service-check data/knowledge_v10/checks/shared-online-20261102/summary.json`刷新总入口，更新first-report-v10.md与developer-v10.md，提醒服务已开不要重复启动。全量离线pytest62项通过（27.89秒），未改web不重复构建；输入SHA及本地链接另核对，产物仅留data，不入库。真实专业审阅、确认授予/按需批准及四岗位真实业务仍待用户集中安排，不能以本次接口/模型连通认定M3完成。未提交或推送。
 
 ### 2026-11-01｜费用内容清理后的交接同步
 

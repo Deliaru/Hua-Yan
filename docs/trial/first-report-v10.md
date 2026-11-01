@@ -1,6 +1,6 @@
 # V10 首份报告四岗位试用交接
 
-> 2026-11-01当前交接。此前账号操作及开发者代办均为模拟，不能计作真人专业确认。下一轮使用独立的 `human-review-ready` 待审实例；旧 `first-report` 和 `developer-authorized` 实例保留为测试历史，不复用其中的模拟签字。
+> 2026-11-02当前交接。`human-review-ready`已在[本机8769](http://127.0.0.1:8769/)启动，业务Kimi-K2.6、读取侧122B、Clef与object对话；四岗位入口由开发者验证，真实岗位参与尚未开始。此前账号操作及开发者代办均为模拟，不能计作真人专业确认。旧 `first-report`、`recording` 和 `developer-authorized` 运行记录保留，不复用其中的模拟签字。
 
 本轮先由专业人员核对一份报告，再按真实需要确认、授予与批准，最后由业务员验证下一单实际使用。资料和模型通路已跑通，真实岗位参与仍未开始；不以模型稿或预填账号代替人的判断。
 
@@ -21,15 +21,17 @@
 
 ## 共享实例与运行方式
 
+本次启动与实际核验见[共享服务核验页](../../data/knowledge_v10/checks/shared-online-20261102/review.html)。当前已有服务时直接访问，先选实际身份；不要重复运行下方启动命令。核验时五候选仍candidate、cap:1仍proposed，无客户会话或需求单。研发助手只读委托及后台PM准备是开发者启动检查记录，不算本人专业操作。启动保存只将知识库version从7增至8，专业内容及状态保持。
+
 先在项目根目录生成当前交接：
 
 ```powershell
 uv run --locked --no-sync python scripts/package_v10_handoff.py
 ```
 
-脚本只读取已有证据并生成本地索引、输入指纹及在线配置，不启动服务、不调用模型、不改业务状态。默认输出 `data/knowledge_v10/validation/finals-handoff/`。
+脚本只读取已有证据并生成本地索引、输入指纹及在线配置，不启动服务、不调用模型、不改业务状态。默认输出 `data/knowledge_v10/validation/finals-handoff/`。附本次服务核验快照时，加`--service-check data/knowledge_v10/checks/shared-online-20261102/summary.json`；快照不保证之后服务持续在线。
 
-待开始试用时，项目方启动同一个共享运行：
+服务未运行时，项目方在确认8769端口没有其他化言进程后，启动同一个共享运行：
 
 ```powershell
 $env:HUAYAN_PORT="8769"
