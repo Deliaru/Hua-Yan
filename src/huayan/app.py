@@ -92,6 +92,11 @@ class HuayanApp:
         app.audit = AuditLog(app.run_dir / "audit.jsonl")
         app.ledger = Ledger(app.run_dir / "ledger.jsonl", points=app.config["points"])
         app.bus = QuestionBus(app.events, app.run_dir / "questions.jsonl")
+        for q in app.bus.list(family="scope_update"):   # 续跑时产品线编制若已改，待批准范围交现任产品经理签字
+            pm = app._line_pm(q.refs["phenomenon"])
+            if pm and q.signer_id != pm:
+                q.signer_id = pm
+                app.bus.publish(q)                      # 同 dedup_key 的开放问题：只追加快照落盘
         app.kb = KnowledgeBase.from_seeds(app.seeds, app.events, app.audit,
             state_path=app.config.get("qi_state") or app.run_dir / "qi_state.json")
         app._load_public(Path(app.config["seeds_dir"]) / "public.yaml")
@@ -1820,11 +1825,6 @@ class HuayanApp:
 
     def scan(self, at=None):
         at = at or get_clock().now()
-        for q in self.bus.list(family="scope_update"):
-            pm = self._line_pm(q.refs["phenomenon"])
-            if pm and q.signer_id != pm:
-                q.signer_id = pm
-                self.bus._snapshot(q)
         state, refs = collect_scheduled(self.events, at, self.seeds, self.kb.products(), self.config["windows"],
                                         self.kb.capabilities(), self.kb._units)
         for oid, obj in state.objects.items():      # v8：机会汇聚、适用范围扩展派给分管该现象的产品经理

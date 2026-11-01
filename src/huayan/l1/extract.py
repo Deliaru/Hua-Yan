@@ -141,17 +141,14 @@ class LLMExtractor:
                 "phenomena": [{"id": p.id, "label": p.label, "phrases": p.customer_phrases}
                               for p in self.seeds.phenomena],
                 "previous": prev.model_dump(mode="json"),
-                "turns": [{"n": t.n, "speaker": t.speaker, "text": t.text} for t in turns],
+                "history": [{"n": t.n, "speaker": t.speaker, "text": t.text} for t in turns[:-1]],
+                "current_turn": {"n": turns[-1].n, "speaker": turns[-1].speaker, "text": turns[-1].text},
                 # V9.3：研发的回问显示在客户自助页上，不在对话里；客户这句可能就是在答它
                 "asking": [{"slot": s, "label": slots[s].label, "ask_text": slots[s].ask_text} for s in asking]}
         output, _ = self.gateway.structured(LLMRequest(tier=Tier.FAST, caller="agent:extract",
             temperature=0, max_tokens=4096, timeout_s=180,
             messages=[Message(role="system", content=self.prompt),
-                Message(role="user", content=json.dumps(data, ensure_ascii=False) +
-                    "\n请现在分析以上真实输入，返回 ExtractionResult 的 JSON 数据实例，不是 JSON Schema。"
-                    "slots 仅填上方 slots 定义的枚举项（字段只有 slot、value、status、confidence、quote、turn_n），禁止把 temperature 或 celsius 放进 slots。"
-                    "temperature 只能放在顶层字段（本轮新增或改口后的一个对象或 null，不是历轮列表）。"
-                    "quote 必须逐字存在于所引客户发言，不得增添标点。只输出 JSON，不输出分析。")]), ExtractionResult)
+                Message(role="user", content=json.dumps(data, ensure_ascii=False))]), ExtractionResult)
         return output
 
 

@@ -14,7 +14,7 @@ from huayan.events import EventLog
 from huayan.ingest.compile import EvidenceRef, Proposal, _key
 from huayan.ingest.folder import FolderSource
 from huayan.knowledge import AuditLog, KnowledgeBase
-from huayan.l1.extract import RuleExtractor, apply_extraction, validate_extraction
+from huayan.l1.extract import LLMExtractor, RuleExtractor, apply_extraction, validate_extraction
 
 
 def test_temperature_range_survives_capability_view_and_matches(mini_seeds):
@@ -238,3 +238,33 @@ def test_structured_temperature_uses_customer_quote_and_missing_keeps_previous(m
         output = result.model_copy(update={"temperature": temperature})
         validated = validate_extraction(output, mini_seeds, [turn], set())
         assert apply_extraction(known, validated, [turn]).temperature == known.temperature
+
+
+def test_llm_current_turn_is_separate_from_temperature_history(mini_seeds):
+    """合成边界回归；真实模型语义另由run_online_temperature实调验证。"""
+    class Gateway:
+        def structured(self, request, schema):
+            self.input = json.loads(request.messages[-1].content)
+            return self.output, None
+
+    gateway = Gateway()
+    extractor = LLMExtractor(mini_seeds, gateway)
+    need = NeedState(session_id="sess:1", customer_id="customer:C01", sales_id=None)
+    turns = []
+    for text, value in (("温度75℃", (75, 75)), ("温度72—78℃", (72, 78)),
+                        ("不对，改成85℃", (85, 85)), ("实际温度不清楚", None),
+                        ("温度75—85℃", (75, 85))):
+        turn = Turn(id=f"turn:sess:1:{len(turns)+1}", session_id=need.session_id, n=len(turns)+1,
+                    speaker="customer", text=text, ts=get_clock().now())
+        turns.append(turn)
+        gateway.output = ExtractionResult(intent="need", phenomenon=None, profile=CustomerProfile(),
+            temperature=ExtractedTemperature(celsius=value, status="filled" if value else "unknown",
+                                             quote=text, turn_n=turn.n))
+        output = extractor.extract(turns, need)
+        assert gateway.input["current_turn"] == {"n":turn.n,"speaker":"customer","text":text}
+        assert gateway.input["history"] == [{"n":t.n,"speaker":t.speaker,"text":t.text} for t in turns[:-1]]
+        assert gateway.input["previous"] == need.model_dump(mode="json")
+        assert "turns" not in gateway.input
+        need = apply_extraction(need, validate_extraction(output, mini_seeds, turns, []), turns)
+        assert need.known_temperature() == value and need.temperature.turn_id == turn.id
+        assert need.temperature.status == ("filled" if value else "unknown")

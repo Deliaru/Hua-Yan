@@ -1,6 +1,6 @@
 # WP-9v10｜一条定向准备与原需求回流链
 
-> 决赛必需，一条业务｜状态：真实资料的开发者模拟签字、原单回流与下一单说明复用已通过；此前账号授权按用户澄清均属测试。完整在线Agent准备仍受429阻断，正在接续；真人业务验收未完成。
+> 决赛必需，一条业务｜状态：真实资料的开发者模拟原单回流及下一单说明复用已通过；Qwen在线PM/研发准备、固定指纹资料回原单、模拟接单后的研发转译已跑通，准备缺口为空。多轮温度P1已在V10.6修复并实调/回放通过，本轮评审通过；四岗位真人验收未完成，不以准备通过宣称M3完成。
 
 ## 目标
 
@@ -38,6 +38,12 @@
 新调度平台、所有家族一起改造、新概念自动扩目录与 Jue-K 重训；按这次试用出现的问题继续补。
 
 ## 完成记录
+
+### 2026-11-01｜复审通过后独立提交Qwen业务主线
+
+- **独立提交原因**：原GLM队列持续过载阻断在线准备，本批改动固定Qwen业务模型、适配实际工具协议并将模型行为提示归位。此前因Qwen多轮温度旧值残留P1暂停提交；V10.6现已将当前发言与历史分开，原五轮真实响应及当前代码严格回放均通过，因此按用户要求把这批Qwen业务改动与温度修复一起独立提交，Worker地址清理另交后续配置卫生提交。对应源码、模型配置、角色/抽取提示和回归均在该提交中，未混入资料、缓存或密钥。
+- **复审与边界**：已按AGENTS及项目总愿景、架构、冻结契约、V10.6/V10.9范围核对；原五轮严格回放5命中、0网络，与实调记录逐项一致，明确未知为possible并列入temperature_c。全量离线60项通过（33.29秒）。本轮没有新增防御代码或测试；不把五轮回归扩写为任意表达可靠，专业确认与四岗位真人验收仍未完成。
+
 
 ### 2026-10-30｜Agent 按来源编号读取并回到当前需求对话
 
@@ -173,3 +179,14 @@
 - **定向委托**：进一步用AgentHub.chat明确给出前次真实空检索结果及需保存的原子工具，directed.py未调用脚本代填草稿；该入口仍5次网络尝试均429、响应0。未进入后续研发在线准备，也未伪造source_preparation或prepared状态。两种入口严格串行，沿统一网关既有退避，无新重试、并发或模型替换。
 - **本轮计量**：合计10次网络尝试、10次失败，另有3次缓存成功回放；真实模型均为glm-4.6v-flash、caller为agent:pm，觉生成模型调用0。resume-authorized-summary.json、directed-summary.json和对应gateway-trace保留增量，不能把缓存回放计为本轮网络成功。
 - **结论**：离线/脚本驱动的原单回流与说明复用已完成；完整在线准备的preparation_gap仍非空，不能将整包在线验收改成通过。当前阻断是外部模型过载，不是缺研发授权、密钥或Worker。停止本轮重复请求，保留原需求及既有Hub重跑入口；不改冻结契约和专业条件。
+
+### 2026-11-01｜在线准备跑通，收口网关与模型行为提示
+
+- **规则与已有修改**：已完整重读AGENTS并按铁律2/3/4/10/11自查，读取总计划、相关CONTRACTS/QI及本包；保留用户正在进行的清理。冻结契约、权限、reviewed_evidence签字传参均未改。修复清理中残留的未定义_condition_scope调用，恢复原有三类条件范围展示，不新增辅助结构。
+- **模型固定与网关**：本轮主线固定SiliconFlow Qwen/Qwen3-VL-8B-Instruct（视觉仍用models.yaml、业务用models.agent.yaml），无自动换型及GLM回退，Cloudflare只Clef。早期最小探针对文本Qwen3-8B、视觉32B做过协议诊断，没有把它们设为默认或宣称业务通过。客户端及BYOK删除GLM思考参数硬编码，专有请求参数仅从配置extra_body透传；既有think尾标识处理保留在网关边界，不追加业务补丁。
+- **真实接口适配**：SiliconFlow的指定8B Instruct实调把完整工具协议放入reasoning_content、content为空。仅对这一确切型号、无标准tool_calls且无正文的响应识别完整独立tool_call协议；解释文字中的示例不会转成执行。正规工具仍由既有Hub/Pydantic/权限及签字机制处理，不从自由文字猜动作，不在Hub另建适配。合成离线回归覆盖完整协议和解释示例不执行。
+- **提示词归位**：用户已将“先读get_requirement”“实际调用工具而非文字说明”移入assistant_pm/rd/sales.md，将JSON实例、温度顶层字段及逐字引文要求移入extract.md。Python仅装配对象、结构化输入与工具结果，不重复拼接这些行为提示；本次在extract.md明确最新轮次与旧状态区别，未写规则兜底。scope_update签字人更新已从scan移至启动续跑，复用_line_pm及公开bus.publish；新问题原本就从refs.pm解析签字人，不再每次扫描调用bus._snapshot。
+- **在线主线结果**：`uv run --env-file .env --locked --no-sync python scripts/run_online_preparation.py --run-id preparation-qwen-clean-20261101`使用新提示文件，真实LLM抽取合成需求后，AgentHub.dispatch的PM保存复用查证与3条产品需求；研发按明确来源主动委托实际调用get_requirement/get_session/read_source/read_trial_record/read_source_image/save_source_preparation，原单保存A/B固定指纹及待核对项。开发者按用户授权在独立演练实例模拟接单，再dispatch研发实际调用draft_chem_need，生成3条转译；reuse_product/accept_requirement/confirm_translation的preparation_gap均为空，转译仍待签。没有由脚本代填模型未执行的草稿。
+- **计量与人工帮助**：清理后这条完整运行合计20次真实请求及20响应，缓存0、失败0，caller为agent:extract 1次、agent:pm 9次、agent:rd 10次；实际模型均指定8B，无降级，觉生成模型调用0。早期清理前另一运行14次请求另存，探针与温度验收不混入上述20次。角色曾给出错误会话编号及检索参数，由原工具拒绝后模型自行更正。需求、升级说明、研发来源编号委托及一次接单由开发者提供/模拟；真实参与人和专业签字0。旧测试实例与human-review-ready的qi_state指纹不变。
+- **尚未通过的温度验收**：同一固定配置执行`run_online_temperature.py --run-id temperature-qwen-current-20261101`，5次网络响应均合格JSON，但模型在闭区间和明确未知轮次返回了历史温度，既有末尾业务断言失败。未继续换型号、未把离线59项通过写成该实调通过。该缺陷归V10.6，修复后才能称在线完整条件验收通过；不把单次成功的75℃抽取扩写成多轮可靠。
+- **产物与回归**：data/knowledge_v10/checks/qwen-business-20261101/review.html与summary.json汇总真实请求、工具轨迹、准备缺口及温度失败；online/runs/preparation-qwen-clean-20261101保存正式原单草稿，均不入库。最终全量离线pytest59项通过（28.41秒），含启动续跑签字人归属和编译完整条件回归；git diff --check通过。未改web，不重复构建。专业曲线核对、真实确认/授予/范围批准及四岗位试用仍待用户之后组织，不由模拟接单替代。

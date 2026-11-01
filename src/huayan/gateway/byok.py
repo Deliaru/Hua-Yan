@@ -64,11 +64,10 @@ class Byok:
     def check(self):
         """填完先体检：对话不通当场报错；JSON 输出、工具调用不支持时照常接入，但逐项告诉试用者会影响哪一环。"""
         client = openai.OpenAI(base_url=self.llm_base_url, api_key=self.llm_key, max_retries=0)
-        extra = {"extra_body": {"thinking": {"type": "disabled"}}} if self.llm_model.startswith("glm-4.6v") else {}
 
         def ask(text, **kw):
             return client.chat.completions.create(model=self.llm_model, messages=[{"role": "user", "content": text}],
-                                                  max_tokens=1024, timeout=60, **extra, **kw).choices[0].message
+                                                  max_tokens=1024, timeout=60, **kw).choices[0].message
 
         try:
             ask("ping")

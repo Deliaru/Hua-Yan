@@ -7,10 +7,13 @@ from pathlib import Path
 
 import pytest
 import yaml
+import httpx
+import openai
 
 from huayan.app import HuayanApp
 from huayan.clock import get_clock
-from huayan.contracts import LLMResponse, LLMToolCall, PendingAction, ReqItem, Tier, Usage
+from huayan.contracts import LLMRequest, LLMResponse, LLMToolCall, Message, PendingAction, ReqItem, Tier, Usage
+from huayan.gateway.client import OpenAICompatGateway
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.compile import EvidenceRef, Proposal
 from huayan.ingest.trial_ir import EvidenceReportSource, prepare_negative
@@ -26,6 +29,29 @@ def _app(tmp_path):
     path = tmp_path / "app.yaml"
     path.write_text(yaml.safe_dump(config), encoding="utf-8")
     return HuayanApp.build(str(path), run_id="v94")
+
+
+def test_qwen_vl_tool_protocol_in_misplaced_response_channel():
+    # 合成复现SiliconFlow实调的非思考模型响应；完整协议可适配，解释中的示例不能执行。
+    protocol = '<tool_call>\n{"name":"get_requirement","arguments":{"req_id":"req:1"}}\n</tool_call>'
+    responses = iter([protocol, "可以这样调用：" + protocol])
+    def handle(request):
+        return httpx.Response(200, json={"id":"synthetic-qwen", "object":"chat.completion", "created":0,
+            "model":"Qwen/Qwen3-VL-8B-Instruct", "choices":[{"index":0,"finish_reason":"stop",
+                "message":{"role":"assistant","content":"","reasoning_content":next(responses)}}],
+            "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}})
+    client = openai.OpenAI(api_key="synthetic", base_url="https://synthetic.invalid/v1", max_retries=0,
+        http_client=httpx.Client(transport=httpx.MockTransport(handle)))
+    gateway = OpenAICompatGateway({"tiers":{"fast":{"model":"Qwen/Qwen3-VL-8B-Instruct",
+        "fallbacks":[],"price_per_1k":{"input":None,"output":None}}}}, clients={"fast":client})
+    request = LLMRequest(tier=Tier.FAST, caller="agent:pm", messages=[Message(role="user",content="合成协议检查")],
+        tools=[{"type":"function","function":{"name":"get_requirement","parameters":{"type":"object"}}}])
+    actual = gateway.complete(request)
+    assert [(c.name,c.arguments) for c in actual.tool_calls] == [("get_requirement",{"req_id":"req:1"})]
+    assert actual.content == ""
+    explanation = gateway.complete(request)
+    assert explanation.tool_calls == [] and explanation.content == "可以这样调用：" + protocol
+    client.close()
 
 
 class _Recorder:

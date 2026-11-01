@@ -23,7 +23,6 @@ def system_prompt(ctx: ToolContext, pending: list) -> str:
         lines.append(f"当前绑定的客户会话：{ctx.session_id}。")
     lines.append(f"当前工作面对象（focus）：{ctx.focus or '未指定'}。"
                  "理解本轮指代时以当前对象为准，历史消息的工作对象仅用于回看；对象不明确时先澄清。")
-    lines.append("需要读取或保存时，必须返回真实的function tool_calls；文字描述、代码示例或假设执行不算调用。")
     if pending:
         lines.append("委托人尚未确认的动作：" + "；".join(f"{a.id} {a.summary}" for a in pending))
     if ctx.app.config["agent_memory"]:

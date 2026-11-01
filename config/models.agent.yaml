@@ -1,9 +1,9 @@
-# 业务Agent使用同一智谱网关；实调4.1V只描述工具、不返回tool_calls，不能当工具调用备用。
-# 读图仍使用models.yaml及其4.1V备用，不受此配置影响。
+# 业务Agent沿SiliconFlow Qwen视觉网关；工具协议适配仅在gateway边界，角色/签字规则不变。
+# 2026-11-01固定本次在线主线型号；不自动换型或回退旧GLM队列。
 concurrency: 1
-retry_waits: [5, 15, 30, 60]
+retry_waits: [5, 15, 30]
 tiers:
-  fast: {base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash", api_key_env: BACKUP_API_KEY,
-         extra_body: {thinking: {type: disabled}}, price_per_1k: {input: null, output: null}, fallbacks: []}
-  strong: {base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash", api_key_env: BACKUP_API_KEY,
-           extra_body: {thinking: {type: disabled}}, price_per_1k: {input: null, output: null}, fallbacks: []}
+  fast: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3-VL-8B-Instruct", api_key_env: BACKUP_API_KEY,
+         price_per_1k: {input: null, output: null}, fallbacks: []}
+  strong: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3-VL-8B-Instruct", api_key_env: BACKUP_API_KEY,
+           price_per_1k: {input: null, output: null}, fallbacks: []}

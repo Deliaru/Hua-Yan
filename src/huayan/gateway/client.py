@@ -4,6 +4,7 @@
 import hashlib
 import json
 import os
+import re
 import time
 from contextlib import nullcontext
 from pathlib import Path
@@ -27,11 +28,7 @@ class OpenAICompatGateway:
     _serial = Lock()  # 免费层单并发；同一进程的网关实例共用，不在读取器/脚本另建锁。
 
     def __init__(self, config, meter=None, *, clients=None, cache_dir=None, trace=None, sleep=time.sleep):
-        self.tiers = {
-            k: ({**v, "extra_body": {"thinking": {"type": "disabled"}, **v.get("extra_body", {})}}
-                if v["model"].startswith("glm-4.6v") else v)
-            for k, v in config["tiers"].items()
-        }
+        self.tiers = config["tiers"]
         self.serial = config.get("concurrency") == 1
         # 每档失败后的等待秒数，次数即重试次数。默认 5、20、80、80、80 秒：试用接口过载时要求至少退避 60 秒，
         # 整月录制里遇到过几分钟的超时；有人在界面前等的试用实例配得短，失败早点报出来、由人重跑（V9.2）
@@ -116,10 +113,8 @@ class OpenAICompatGateway:
                         kwargs["tools"] = req.tools
                     if schema is not None:
                         kwargs["response_format"] = {"type": "json_object"}
-                    extra_body = ({"thinking": {"type": "disabled"}} if cfg["model"].startswith("glm-4.6v") else {}) | (
-                        cfg.get("extra_body") or {})
-                    if extra_body:
-                        kwargs["extra_body"] = extra_body
+                    if cfg.get("extra_body"):    # 服务商专有请求参数只从模型配置透传
+                        kwargs["extra_body"] = cfg["extra_body"]
                     if self.trace is not None:
                         self.trace("llm_request", caller=req.caller, model=cfg["model"], attempt=attempt)
                     raw = self._client(tier).chat.completions.create(**kwargs)
@@ -130,9 +125,18 @@ class OpenAICompatGateway:
                     cost = None if raw.usage is None or None in (prices["input"], prices["output"]) else (
                         usage.input_tokens * prices["input"] + usage.output_tokens * prices["output"]) / 1000
                     message = raw.choices[0].message
-                    response = LLMResponse(content=message.content,
-                        tool_calls=[LLMToolCall(call_id=call.id, name=call.function.name,
-                                               arguments=json.loads(call.function.arguments)) for call in (message.tool_calls or [])],
+                    content = message.content
+                    calls = [LLMToolCall(call_id=call.id, name=call.function.name,
+                             arguments=json.loads(call.function.arguments)) for call in (message.tool_calls or [])]
+                    # SiliconFlow实调：Qwen3-VL Instruct把非思考回答及完整工具协议放在reasoning_content。
+                    # 只接完整独立的Qwen工具协议，不从说明文字中截取调用；工具仍经Hub校验及签字。
+                    if cfg["model"] == "Qwen/Qwen3-VL-8B-Instruct" and not content and not calls:
+                        content = message.model_extra.get("reasoning_content") or content
+                        if req.tools and content and re.fullmatch(r"(?:\s*<tool_call>\s*\{[\s\S]*?\}\s*</tool_call>\s*)+", content):
+                            calls = [LLMToolCall.model_validate({**json.loads(block), "call_id": f"{raw.id}:{i}"})
+                                     for i, block in enumerate(re.findall(r"<tool_call>([\s\S]*?)</tool_call>", content))]
+                            content = ""
+                    response = LLMResponse(content=content, tool_calls=calls,
                         usage=usage, latency_ms=latency, model=raw.model, tier=Tier(tier), cost=cost,
                         fallback_used=tier != req.tier.value)
                     self._record(req, response)
