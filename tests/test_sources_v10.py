@@ -16,6 +16,7 @@ from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource
 from huayan.ingest.reader.trials import Citation, TrialText, build_trial_record
 from huayan.ingest.reader.word import read_docx, read_native_labels
+from huayan.ingest.reader.retrieval import source_pages
 from huayan.knowledge import PermissionDenied
 from huayan.ui import server
 
@@ -64,6 +65,12 @@ def test_trial_record_readback_preserves_groups_and_rejects_changed_evidence(tmp
     app = HuayanApp.build(str(config_path))
     params = {"doc_id": doc_id, "viewer": "rd:R01"}
     before = app.kb.state_path.read_bytes()
+    pages_read = source_pages(app.kb, app.actors["rd:R01"], app.source_owners, [doc_id])
+    assert [p["page"] for p in pages_read] == [1]
+    assert {f["span"] for f in pages_read[0]["fragments"]} == {b.span for b in blocks}
+    assert all(f["level"] == 3 for f in pages_read[0]["fragments"])
+    with pytest.raises(PermissionDenied):
+        source_pages(app.kb, app.actors["sales:S01"], app.source_owners, [doc_id])
     page = server.GET["/api/sources/image"](app, params | {"page": "1"})
     assert page["kind"] == "page" and page["bbox"] is None and page["level"] == 3
     assert b64decode(page["image_url"].split(",", 1)[1]) == image_path.read_bytes()

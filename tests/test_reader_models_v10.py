@@ -6,6 +6,8 @@ import pytest
 
 from huayan.ingest.reader.verify import ClefWorkerClient, JevVerifier
 from huayan.meter import FileMeter
+from huayan.gateway.mock import MockGateway
+from huayan.ingest.reader.chart_qa import answer_chart, table_context
 
 
 def test_worker_uses_clef_probabilities_and_meter(tmp_path):
@@ -49,3 +51,59 @@ def test_worker_failure_is_not_negative_evidence(tmp_path, status, body, error):
         assert not meter["ok"]
     finally:
         client.close()
+
+
+def test_chart_answer_uses_native_cells_and_marks_unlocatable_model_values():
+    page = {"source_id": "SYNTH-CHART", "page": 2, "table_layout": {},
+        "blocks": [{"span": "table-1", "text": "合成表：润湿\t4.2\tS", "cells": [
+            {"row": 1, "column": 1, "text": "润湿（S）"}, {"row": 1, "column": 2, "text": "SYNTH-X"},
+            {"row": 2, "column": 1, "text": "0.3%"}, {"row": 2, "column": 2, "text": "NaOH20g/L"},
+            {"row": 3, "column": 1, "text": "润湿"}, {"row": 3, "column": 2, "text": "4.2"}]}],
+        "fragments": [{"span": "table-1", "text": "合成表：润湿\t4.2\tS"}]}
+    raw = {"values": [{"span": "table-1", "object": "SYNTH-X", "metric": "润湿时间", "value": "4.2",
+        "conditions": ["0.3%", "NaOH20g/L"]}], "pending": []}
+    requests = []
+
+    def respond(schema, request):
+        requests.append(request)
+        return raw
+
+    gateway = MockGateway(canned={"ingest:extract": respond})
+    answer, _ = answer_chart("合成图表问题", page, "data:image/png;base64,synthetic", gateway)
+    assert answer.values[0].value == "4.2" and answer.values[0].unit == "S"
+    assert answer.values[0].conditions == ["0.3%", "NaOH20g/L"] and not answer.pending
+    assert answer.values[0].metric == "润湿" and answer.values[0].cell == (3, 2)
+    assert answer.values[0].quote == "4.2"
+    assert requests[0].messages[-1].content[-1].text == "合成图表问题"
+    raw["values"][0]["value"] = "9.99"
+    changed, _ = answer_chart("合成图表问题", page, "data:image/png;base64,synthetic", gateway)
+    assert not changed.values and any("没有唯一" in note for note in changed.pending)
+
+
+def test_chart_context_keeps_merged_product_dosage_and_row_headers():
+    cells = [(1, 1, "指标（S）", 2, 2), (1, 3, "SYNTH-X", 1, 2),
+             (2, 3, "0.2%", 1, 1), (2, 4, "0.4%", 1, 1),
+             (3, 1, "合成条件A", 2, 1), (3, 2, "润湿", 1, 1),
+             (3, 3, "3.1", 1, 1), (3, 4, "4.2", 1, 1),
+             (4, 2, "沉降", 1, 1), (4, 3, "5.3", 1, 1), (4, 4, "6.4", 1, 1)]
+    block = {"span": "synthetic-table", "text": "合成表格", "cells": [
+        {"row": r, "column": c, "text": t} for r, c, t, _, _ in cells]}
+    layout = [{"row": r, "column": c, "row_span": rs, "column_span": cs} for r, c, _, rs, cs in cells]
+    result = table_context(block, layout)
+    selected = next(row for row in result["native_records"] if row["cell"] == [4, 4])
+    assert selected == {"cell": [4, 4], "value": "6.4", "column_headers": ["SYNTH-X", "0.4%"],
+                        "row_headers": ["合成条件A", "沉降"]}
+    assert result["unit_header_raw"] == "指标（S）"
+    raw = {"values": [{"span": block["span"], "object": "模型把标题当作对象", "metric": "沉降时间",
+                       "value": "6.4", "conditions": []}], "pending": []}
+    requests = []
+
+    def respond(schema, request):
+        requests.append(request)
+        return raw
+
+    page = {"source_id": "SYNTH-MERGED", "page": 1, "blocks": [block], "table_layout": {block["span"]: layout}}
+    answer, _ = answer_chart("合成查证", page, "unused-image", MockGateway(canned={"ingest:extract": respond}))
+    assert answer.method == "native_table_selection" and answer.values[0].object == "SYNTH-X"
+    assert answer.values[0].conditions == ["SYNTH-X", "0.4%", "合成条件A", "沉降"]
+    assert all(part.type == "text" for part in requests[0].messages[-1].content)

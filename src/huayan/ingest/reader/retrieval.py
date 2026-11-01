@@ -1,5 +1,6 @@
 """读取侧本地 EmbeddingGemma 2 图文检索；关键词沿用知识库的分词规则。"""
 from pathlib import Path
+import json
 
 import numpy as np
 
@@ -7,6 +8,29 @@ from huayan.knowledge.store import _grams
 
 
 MODEL_ID = "google/embeddinggemma-2"
+
+
+def source_pages(kb, actor, owners, doc_ids):
+    """仅索引已通过统一入口的指定来源；一页一块，保留原生表头和出处。"""
+    from .source import read_source
+    from .evidence import EvidenceBlock
+
+    chunks = []
+    for doc_id in doc_ids:
+        fragments = {f.span: f.model_dump(mode="json") for f in read_source(kb, doc_id, actor, owners)}
+        source = next(s for s in kb.sources if doc_id in s.list_docs())
+        report = json.loads(source.path.read_text(encoding="utf-8"))
+        blocks = [EvidenceBlock.model_validate(b) for b in report["blocks"]]
+        for page in sorted({loc.page for b in blocks for loc in b.locations}):
+            selected = [b for b in blocks if any(loc.page == page for loc in b.locations)]
+            image = Path(report["images"][page - 1])
+            chunks.append({"source_id": doc_id, "chunk_id": f"{doc_id}#page-{page}", "page": page,
+                "file_sha256": report["file_sha256"], "image_path": str(image if image.is_absolute() else source.path.parent / image),
+                "text": "\n\n".join(b.text for b in selected),
+                "table_layout": {b.span: report.get("table_layout", {}).get(b.span, []) for b in selected if b.cells},
+                "fragments": [fragments[b.span] for b in selected],
+                "blocks": [b.model_dump(mode="json") for b in selected]})
+    return chunks
 
 
 def keyword_search(query, chunks, top_k=3):
