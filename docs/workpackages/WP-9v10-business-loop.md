@@ -39,19 +39,26 @@
 
 ## 完成记录
 
-### 2026-11-01｜Kimi/122B配置复审与估算口径核对
+### 2026-11-01｜移除模型费用功能与当前说明
 
-- 已按AGENTS、项目总愿景与架构、CONTRACTS/QI及V10.2/V10.3/V10.6/V10.9范围复审。两份配置只改变实际型号和人民币标价，均走统一网关、原地址/密钥变量、单并发、标准工具及空fallback；没有新增旧模型兼容分支或影响签字规则。
+- **范围与自查**：按用户要求删除费用相关内容；重新完整阅读AGENTS、总计划、相关CONTRACTS/QI并按总愿景与既有架构自查。归口为本包模型配置与网关配套清理，交接材料同步V10.10；未新增抽象、兼容分支或防御性测试。
+- **实现**：删除两份模型配置的价格表、System1小时价格、网关及OneJev费用计算、BYOK与配置生成脚本中的价格残留；CLI仅汇总调用次数及输入/输出token。两项现有测试只删除价格夹具。同步README、当前计划/工作包/阶段证据和本地选型报告中的预算及金额表述。
+- **边界**：冻结LLMResponse.cost与MeterRecord.cost字段保持，新响应及新增计量金额为空；不修改历史原始日志或缓存，不删除真实试样报告中的业务成本原文。调用型号、caller、权限、真人签字及专业判断边界保持。
+- **验证与交接**：全量离线62项通过（32.90秒），未新增测试；本地选型报告与交接入口重新生成，无新模型请求。原正式/待审状态及canonical Word证据3份SHA不变。删除配置项改变网关缓存指纹，历史11次严格命中属于清理前配置；当前配置不能据此宣称命中旧缓存。本轮不迁移或清空缓存、不重启服务。V10.3并行新增的验收记录保留，不混入本次清理提交。
+
+### 2026-11-01｜Kimi/122B配置复审
+
+- 已按AGENTS、项目总愿景与架构、CONTRACTS/QI及V10.2/V10.3/V10.6/V10.9范围复审。两份配置指定实际型号，均走统一网关、原地址/密钥变量、单并发、标准工具及空fallback；没有新增旧模型兼容分支或影响签字规则。
 - 本轮重新运行现有62项离线回归，全部通过（32.53秒）；以当前配置严格回放122B首份4稿与2列、Kimi原五轮，11次缓存命中/0模型网络请求。只读核对原Kimi完整业务记录为3项准备缺口为空、产品/研发稿各3条、0操作方重试，仍是一次已知场景配模拟接单。
-- 核对[官方价格](https://www.siliconflow.cn/pricing)与配置的人民币/千token单位；逐项重算13个运行阶段的50次新增请求及13个本地缓存响应，非缓存估算合计1.2995287元。未把缓存旧cost累加为新支出，也未把估算当账单/余额。原正式/待审状态与canonical Word证据3份SHA未变。交接脚本仍称35B为当前型号的卫生问题另归V10.10同期修复；不重启原服务、不覆盖专业候选或扩题。审查产物在data/knowledge_v10/checks/review-model-choice-20261101，不入库。
+- 核对13个运行阶段的50次新增请求及13个本地缓存响应。原正式/待审状态与canonical Word证据3份SHA未变。交接脚本仍称35B为当前型号的卫生问题另归V10.10同期修复；不重启原服务、不覆盖专业候选或扩题。审查产物在data/knowledge_v10/checks/review-model-choice-20261101，不入库。
 
 
-### 2026-11-01｜预算授权后固定Kimi并真实执行整条准备链
+### 2026-11-01｜选型后固定Kimi并真实执行整条准备链
 
-- **范围与实现**：按AGENTS自查并重读总计划、相关契约/QI、本包与愿景，承接5f80ad0的35B基线。用户允许15元内自由选型。实际账号可用且Kimi探针返回标准get_requirement(req:1)，随后完整Loop使用现有注册工具；config/models.agent.yaml的fast/strong固定Pro/moonshotai/Kimi-K2.6，地址、密钥变量、关闭思考、串行及无fallback保持。仅修改两份模型配置及完成记录，未改共享网关、Hub/Loop、提示、工具、权限、签字或契约；价格按官方人民币/千token配置以便既有meter估算。
-- **完整在线运行**：`uv run --env-file .env --locked --no-sync python scripts/run_online_preparation.py --config data/knowledge_v10/checks/model-choice-20261101/app.kimi.yaml --run-id preparation-kimi`，配置为当前业务配置的同等隔离副本，gateway_mock=false、agent_threads=object。使用同一真实报告/合成需求，经实际get_requirement/get_session、read_source、read_trial_record、read_source_image、save_source_preparation保存固定依据及待补差异；模拟接单后实际draft_chem_need，产品稿3条、研发转译3条，三项preparation_gap为空，failures为空，人工重试0。没有直接代填草稿。Kimi此次27次新增网络请求、缓存0、估算0.931240元；前次35B完整运行需1次整项重试，两次均为已知开发场景，不能推断泛化成功率或必然更优。
+- **范围与实现**：按AGENTS自查并重读总计划、相关契约/QI、本包与愿景，承接5f80ad0的35B基线。用户允许自由选型。实际账号可用且Kimi探针返回标准get_requirement(req:1)，随后完整Loop使用现有注册工具；config/models.agent.yaml的fast/strong固定Pro/moonshotai/Kimi-K2.6，地址、密钥变量、关闭思考、串行及无fallback保持。仅修改两份模型配置及完成记录，未改共享网关、Hub/Loop、提示、工具、权限、签字或契约。
+- **完整在线运行**：`uv run --env-file .env --locked --no-sync python scripts/run_online_preparation.py --config data/knowledge_v10/checks/model-choice-20261101/app.kimi.yaml --run-id preparation-kimi`，配置为当前业务配置的同等隔离副本，gateway_mock=false、agent_threads=object。使用同一真实报告/合成需求，经实际get_requirement/get_session、read_source、read_trial_record、read_source_image、save_source_preparation保存固定依据及待补差异；模拟接单后实际draft_chem_need，产品稿3条、研发转译3条，三项preparation_gap为空，failures为空，人工重试0。没有直接代填草稿。Kimi此次27次新增网络请求、缓存0；前次35B完整运行需1次整项重试，两次均为已知开发场景，不能推断泛化成功率或必然更优。
 - **状态与待办**：模拟接单1、专业确认0、授予0、真人签字0、觉生成模型调用0。资料草稿仍是模型辅助，其中对曲线的自报核对不能替代专业审阅；条件差异、未读清和原生异常写法保留。原正式与真人待审状态未动，8769旧服务未重启。本轮没有做真实专业授权或四岗位业务验收。
-- **验证与交接**：Kimi原五轮温度及五条既有失败边界通过，详见V10.6；视觉/表格另固定122B，见V10.2/V10.3。全量离线62项通过（43.21秒），未新增测试样板或构建前端。全部候选总费用估算1.299529元，按实际非缓存usage核对，不将回放原cost算作新支出；[总报告](../../data/knowledge_v10/checks/model-choice-20261101/review.html)及summary.json保留模型、meter、工具轨迹和局限。后续按这两份固定配置推进，不增加模型专用兼容补丁；真人专业判断与四岗位验收继续待办。
+- **验证与交接**：Kimi原五轮温度及五条既有失败边界通过，详见V10.6；视觉/表格另固定122B，见V10.2/V10.3。全量离线62项通过（43.21秒），未新增测试样板或构建前端。[总报告](../../data/knowledge_v10/checks/model-choice-20261101/review.html)及summary.json保留模型、meter、工具轨迹和局限。后续按这两份固定配置推进，不增加模型专用兼容补丁；真人专业判断与四岗位验收继续待办。
 
 ### 2026-11-01｜35B升级复审及旧工具协议清理
 

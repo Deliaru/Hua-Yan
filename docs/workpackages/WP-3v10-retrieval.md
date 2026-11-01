@@ -39,11 +39,11 @@ v3 第 10、10B 节；[总计划](REPLAN-v10.md)；现有 `System1Client`、网�
 
 ## 完成记录
 
-### 2026-11-01｜固定付费型号后的原生两列回归
+### 2026-11-01｜固定型号后的原生两列回归
 
-- 用户允许15元内自主选型，已按AGENTS及本包边界自查；不扩题、不改Gemma、Clef、检索排序或权限。图像/表格配置现固定Qwen/Qwen3.5-122B-A10B，业务固定Kimi；模型选择及全部费用见V10.2/V10.9同期记录。本轮只做同一第15页两列读数诊断，没有重跑25页A/C/Jev对照，旧35B对照和C错页失败继续保留，不宣称换生成模型改善了检索。
+- 用户允许自主选型，已按AGENTS及本包边界自查；不扩题、不改Gemma、Clef、检索排序或权限。图像/表格配置现固定Qwen/Qwen3.5-122B-A10B，业务固定Kimi；模型选择及运行记录见V10.2/V10.9同期记录。本轮只做同一第15页两列读数诊断，没有重跑25页A/C/Jev对照，旧35B对照和C错页失败继续保留，不宣称换生成模型改善了检索。
 - 同根column-alignment.py复用原生合并表与answer_chart，预测先落盘再对照原生记录。Kimi与122B各两次新增请求均正确返回TF-1871/0.4%润湿7.21S/沉降9.22S、TF-1871Y/0.25%为9.92S/13.56S，NaOH 30g/L及原生位置保留，原始模型对象、span和数值亦正确。122B以当前config/models.yaml严格回放2命中/0网络，未把定页诊断增加到检索题分母。
-- 运行入口`uv run --env-file .env --locked --no-sync python data/knowledge_v10/checks/model-choice-20261101/column-alignment.py --models config/models.yaml --name columns-qwen122`，改name为columns-qwen122-replay并加`--replay`回放。初次复制旧脚本遇到已有run目录，模型请求尚未发出；随后用新独立run_id完成，未删除旧目录或改原业务状态。全量离线62项通过（43.21秒），本包无源码变动。[总报告](../../data/knowledge_v10/checks/model-choice-20261101/review.html)提供原始响应、坐标、缓存和费用分项；原生表格优先，不宣称纯视觉读表准确率。
+- 运行入口`uv run --env-file .env --locked --no-sync python data/knowledge_v10/checks/model-choice-20261101/column-alignment.py --models config/models.yaml --name columns-qwen122`，改name为columns-qwen122-replay并加`--replay`回放。初次复制旧脚本遇到已有run目录，模型请求尚未发出；随后用新独立run_id完成，未删除旧目录或改原业务状态。全量离线62项通过（43.21秒），本包无源码变动。[总报告](../../data/knowledge_v10/checks/model-choice-20261101/review.html)提供原始响应、坐标、缓存和调用计量；原生表格优先，不宣称纯视觉读表准确率。
 
 ### 2026-11-01｜检索入口与旧视觉配置卫生
 
@@ -53,7 +53,7 @@ v3 第 10、10B 节；[总计划](REPLAN-v10.md)；现有 `System1Client`、网�
 
 ### 2026-11-01｜35B升级、原始模型选列与同条件回放
 
-- **范围与自查**：用户允许使用SiliconFlow代金券升级30B以上型号；已重新完整阅读AGENTS，再读总计划、相关CONTRACTS/QI及本包。承接已提交的单题首版（f31fa17），保留现有工作区，不改冻结契约、正式知识状态、觉或权限机制。base_url仍为https://api.siliconflow.cn/v1、密钥变量仍BACKUP_API_KEY，通过`uv run --env-file .env`注入，未读取或输出密钥。
+- **范围与自查**：用户允许使用SiliconFlow升级30B以上型号；已重新完整阅读AGENTS，再读总计划、相关CONTRACTS/QI及本包。承接已提交的单题首版（f31fa17），保留现有工作区，不改冻结契约、正式知识状态、觉或权限机制。base_url仍为https://api.siliconflow.cn/v1、密钥变量仍BACKUP_API_KEY，通过`uv run --env-file .env`注入，未读取或输出密钥。
 - **账号与标准协议实测**：当前账号模型列表确认Qwen3-32B、Qwen3.6-35B-A3B、Qwen3.8-27B、Qwen3-VL-30B-A3B-Instruct等实际可用。先试30B-VL，返回空内容且无标准tool_calls，未采用；35B返回标准get_requirement调用，合成图片+工具请求也返回正确req:1参数，无旧8B文本适配。config/models.yaml与models.agent.yaml的fast/strong固定Qwen/Qwen3.6-35B-A3B、enable_thinking=false、无fallback，保留单并发、60秒读图与原缓存。不新增供应商分支、正则或重试框架。
 - **只修真实接口问题**：首次35B结构化请求因Schema指令与原system分成两条而HTTP400；gateway/client.py仅把Schema合并到已有首条system，保留原提示及合法str/list图片联合类型。随后模型选对数字却引用标题span，chart_qa.py将可选blocks限定为原生表格，标题/方法移到不可选的page_context，prompts/chart_qa.md同步说明；没有按答案补写引用。对应失败目录保留，现有两项测试增加单system及表格/页面说明分离断言。
 - **双列精读实调**：固定第15页核对相邻合并表头，TF-1871/0.4%在NaOH 30g/L下为润湿7.21S、沉降9.22S（r5c6/r6c6）；TF-1871Y/0.25%为9.92S、13.56S（r5c7/r6c7）。两次原始模型响应的产品、span及数值均与原生记录一致，未靠后处理掩盖错列；原方法25℃、100ml、标准棉帆布留在页面上下文。使用既有完整原生合并表，不宣称纯视觉识图；该定页诊断也不新增检索题分母。诊断1次新增网络、1次缓存。

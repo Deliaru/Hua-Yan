@@ -56,16 +56,14 @@ def show_new(hub: AgentHub, app: HuayanApp, before: dict[str, int], current: str
 
 def metering(app: HuayanApp) -> None:
     path = app.run_dir / "metering.jsonl"
-    totals = defaultdict(lambda: [0, 0, 0, 0.0])
+    totals = defaultdict(lambda: [0, 0, 0])
     for line in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
         r = json.loads(line)
         if r["caller"].startswith("agent:"):
             t = totals[r["caller"]]
             t[0] += 1; t[1] += r["input_tokens"]; t[2] += r["output_tokens"]
-            t[3] = None if t[3] is None or r.get("cost") is None else t[3] + r["cost"]
-    for caller, (n, i, o, cost) in sorted(totals.items()):
-        price = "未知（未配置单价）" if cost is None else f"{cost:.4f}"
-        print(f"{caller}: {n} 次调用，输入 {i} / 输出 {o} tokens，费用 {price}")
+    for caller, (n, i, o) in sorted(totals.items()):
+        print(f"{caller}: {n} 次调用，输入 {i} / 输出 {o} tokens")
     print(f"运行目录 {app.run_dir}")
 
 

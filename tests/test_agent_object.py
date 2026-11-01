@@ -45,7 +45,7 @@ def test_standard_tool_calls_do_not_execute_text_protocol():
     client = openai.OpenAI(api_key="synthetic", base_url="https://synthetic.invalid/v1", max_retries=0,
         http_client=httpx.Client(transport=httpx.MockTransport(handle)))
     gateway = OpenAICompatGateway({"tiers":{"fast":{"model":"synthetic-tool-model",
-        "fallbacks":[],"price_per_1k":{"input":None,"output":None}}}}, clients={"fast":client})
+        "fallbacks":[]}}}, clients={"fast":client})
     request = LLMRequest(tier=Tier.FAST, caller="agent:pm", messages=[Message(role="user",content="合成协议检查")],
         tools=[{"type":"function","function":{"name":"get_requirement","parameters":{"type":"object"}}}])
     actual = gateway.complete(request)

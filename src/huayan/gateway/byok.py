@@ -43,7 +43,7 @@ class Byok:
 
     def gateway(self, meter):
         tier = {"base_url": self.llm_base_url, "model": self.llm_model, "api_key_env": None,
-                "price_per_1k": {"input": None, "output": None}, "fallbacks": []}
+                "fallbacks": []}
         client = openai.OpenAI(base_url=self.llm_base_url, api_key=self.llm_key, max_retries=0)
         names = ("fast", "strong", "backup")
         return OpenAICompatGateway({"tiers": {n: tier for n in names}}, meter=meter, clients={n: client for n in names})

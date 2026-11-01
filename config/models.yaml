@@ -1,9 +1,8 @@
 # SiliconFlow图文/表格固定122B；2026-11-01实调首份曲线及两列原生表。
-# price_per_1k为人民币/千token，按官方<=128k档标价估算，账单以平台为准。
 concurrency: 1
 retry_waits: [5, 15, 30]
 tiers:
   fast:   {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3.5-122B-A10B", api_key_env: BACKUP_API_KEY, extra_body: {enable_thinking: false},
-           price_per_1k: {input: 0.0008, output: 0.0064}, fallbacks: []}
+           fallbacks: []}
   strong: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3.5-122B-A10B", api_key_env: BACKUP_API_KEY, extra_body: {enable_thinking: false},
-           price_per_1k: {input: 0.0008, output: 0.0064}, fallbacks: []}
+           fallbacks: []}

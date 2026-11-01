@@ -58,7 +58,7 @@ class OpenAICompatGateway:
         if self.meter is not None:
             self.meter.record(caller=req.caller, kind="llm", model=response.model,
                               input_tokens=response.usage.input_tokens, output_tokens=response.usage.output_tokens,
-                              latency_ms=response.latency_ms, cost=response.cost,
+                              latency_ms=response.latency_ms,
                               fallback_used=response.fallback_used, degraded=response.fallback_used)
         if self.trace is not None:   # model 用请求的模型名（中转服务返回的名字可能不同）；回放时 latency 是录制时的耗时
             self.trace("llm", caller=req.caller, tier=response.tier.value, model=self.tiers[response.tier.value]["model"],
@@ -125,15 +125,12 @@ class OpenAICompatGateway:
                     latency = (time.perf_counter() - started) * 1000
                     usage = Usage(input_tokens=raw.usage.prompt_tokens if raw.usage else 0,
                                   output_tokens=raw.usage.completion_tokens if raw.usage else 0)
-                    prices = cfg["price_per_1k"]
-                    cost = None if raw.usage is None or None in (prices["input"], prices["output"]) else (
-                        usage.input_tokens * prices["input"] + usage.output_tokens * prices["output"]) / 1000
                     message = raw.choices[0].message
                     content = message.content
                     calls = [LLMToolCall(call_id=call.id, name=call.function.name,
                              arguments=json.loads(call.function.arguments)) for call in (message.tool_calls or [])]
                     response = LLMResponse(content=content, tool_calls=calls,
-                        usage=usage, latency_ms=latency, model=raw.model, tier=Tier(tier), cost=cost,
+                        usage=usage, latency_ms=latency, model=raw.model, tier=Tier(tier), cost=None,
                         fallback_used=tier != req.tier.value)
                     self._record(req, response)
                     if path:

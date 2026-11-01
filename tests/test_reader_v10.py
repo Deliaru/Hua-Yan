@@ -155,8 +155,7 @@ def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
 
     client = openai.OpenAI(api_key="synthetic-key", base_url="https://gateway.invalid/v1", max_retries=0,
                           http_client=httpx.Client(transport=httpx.MockTransport(handle)))
-    gateway = OpenAICompatGateway({"concurrency": 1, "retry_waits": [7], "tiers": {"strong": {"model": "synthetic-vision", "fallbacks": [],
-        "price_per_1k": {"input": None, "output": None}}}}, clients={"strong": client},
+    gateway = OpenAICompatGateway({"concurrency": 1, "retry_waits": [7], "tiers": {"strong": {"model": "synthetic-vision", "fallbacks": []}}}, clients={"strong": client},
         cache_dir=tmp_path / "cache", meter=FileMeter(tmp_path, "synthetic-reader"), sleep=waits.append,
         trace=lambda event, **fields: traces.append({"event": event, **fields}))
     image = tmp_path / "input.png"

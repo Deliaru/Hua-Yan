@@ -39,9 +39,9 @@ class OneJevClient:
 
     path = "/v1/systemone"
 
-    def __init__(self, base_url, model, meter, timeout_s=120, gpu_price_per_hour=None, evidence_dir=None, media_root=None, deadline=None):
+    def __init__(self, base_url, model, meter, timeout_s=120, evidence_dir=None, media_root=None, deadline=None):
         self.http = httpx.Client(base_url=base_url, timeout=timeout_s, trust_env=False)
-        self.model, self.meter, self.price = model, meter, gpu_price_per_hour
+        self.model, self.meter = model, meter
         self.evidence_dir = Path(evidence_dir) if evidence_dir else None
         self.media_root = Path(media_root).resolve() if media_root else None
         self.deadline = deadline
@@ -89,7 +89,7 @@ class OneJevClient:
             if self.trace:
                 self.trace("s1", caller=caller, model=self.model, cached=True, ok=True, latency_ms=result.latency_ms)
             self.meter.record(caller=caller, kind="s1", model=self.model, impl="onejev", degraded=False,
-                              n_questions=len(questions), latency_ms=0, cost=0)
+                              n_questions=len(questions), latency_ms=0)
             return result
         if self.replay:
             raise ReplayMiss(f"onejev 回放缓存未命中：caller={caller} key={cache_key}")
@@ -137,8 +137,7 @@ class OneJevClient:
                 self.trace("s1", caller=caller, model=self.model, cached=False, ok=ok, latency_ms=elapsed)
             usage = (self.last_response or {}).get("usage", {}) if ok else {}
             self.meter.record(caller=caller, kind="s1", model=self.model, impl="onejev", degraded=False, n_questions=len(questions),
-                              input_tokens=usage.get("input_tokens", 0), latency_ms=elapsed, ok=ok,
-                              cost=None if self.price is None else self.price * elapsed / 3_600_000)
+                              input_tokens=usage.get("input_tokens", 0), latency_ms=elapsed, ok=ok)
             if self.evidence_dir:
                 self.evidence_dir.mkdir(parents=True, exist_ok=True)
                 with (self.evidence_dir / "requests.jsonl").open("a", encoding="utf-8") as stream:
@@ -247,7 +246,7 @@ def build_system1(impl, config_path, gateway, meter):
         client = ClefClient(os.environ[cfg["account_id_env"]], os.environ[cfg["api_key_env"]], cfg["model"], meter,
                             cfg["timeout_s"], media_root=cfg.get("media_root"))
     else:
-        client = OneJevClient(cfg["base_url"], cfg["model"], meter, cfg["timeout_s"], cfg.get("gpu_price_per_hour"), media_root=cfg.get("media_root"))
+        client = OneJevClient(cfg["base_url"], cfg["model"], meter, cfg["timeout_s"], media_root=cfg.get("media_root"))
     # 独立探测脚本传 gateway=None；离线网关也没有录制缓存。
     client.replay = getattr(gateway, "replay", False)
     cache = getattr(gateway, "cache_dir", None)

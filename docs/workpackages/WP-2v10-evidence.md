@@ -39,13 +39,13 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 
 ## 完成记录
 
-### 2026-11-01｜15元预算内比较视觉候选并固定122B
+### 2026-11-01｜比较视觉候选并固定122B
 
-- **范围与自查**：用户授权在SiliconFlow账号内自行选型，总预算15元。已完整重读AGENTS，再读总计划、相关CONTRACTS/QI、本包及V10.9；分支v10、起点5f80ad0，工作区开始干净。原base_url、BACKUP_API_KEY和Cloudflare仅Clef保持。所有生成走既有网关、合法caller且串行，没有适配分支、额外重试、锁、冻结契约或核心代码改动；未读取或输出.env密钥明文。
-- **选型与配置**：重新读取账号models列表，核对官方价格。业务选择Pro/moonshotai/Kimi-K2.6（见V10.9）；视觉比较同一图片/提示下的Kimi与Qwen/Qwen3.5-122B-A10B，最终config/models.yaml的fast/strong固定122B、enable_thinking=false、fallbacks=[]，沿用concurrency=1和retry_waits。price_per_1k填人民币标价估算：122B当前小于128k档0.0008/0.0064，Kimi在业务配置中为0.0065/0.027；不添加自动换型或按块选模型机制。
+- **范围与自查**：用户授权在SiliconFlow账号内自行选型。已完整重读AGENTS，再读总计划、相关CONTRACTS/QI、本包及V10.9；分支v10、起点5f80ad0，工作区开始干净。原base_url、BACKUP_API_KEY和Cloudflare仅Clef保持。所有生成走既有网关、合法caller且串行，没有适配分支、额外重试、锁、冻结契约或核心代码改动；未读取或输出.env密钥明文。
+- **选型与配置**：重新读取账号models列表。业务选择Pro/moonshotai/Kimi-K2.6（见V10.9）；视觉比较同一图片/提示下的Kimi与Qwen/Qwen3.5-122B-A10B，最终config/models.yaml的fast/strong固定122B、enable_thinking=false、fallbacks=[]，沿用concurrency=1和retry_waits。不添加自动换型或按块选模型机制。
 - **真实输入与结果**：读取侧隔离复制既有Office COM原生PDF/3张PNG及登记bbox，直接复用read_report_images/read_image、1536px压缩、60秒超时与图片缓存，原件和canonical文件不写。Kimi4次实读后，B组仍将保温时间混入unit；122B先实读同B裁图，再完整读取4份（新增3请求、B命中前一响应）。B组温度90/110/132℃与时间5/5/30min独立保存，三段升温速率、降温/出缸及红字时间可对照原图；A组跨页标题没有编造数字，A曲线的10min/40min仍只在quote、原生标签而非独立reading中，不能算完整结构化读取。模型text还转录了非请求配方摘要，保留原稿并提示不采纳；原生0..8与图像0.8差异保留待审，不覆盖原文。
 - **缓存与产物**：`uv run --env-file .env --locked --no-sync python data/knowledge_v10/checks/model-choice-20261101/read_curves.py --models config/models.yaml --name qwen122`为同等配置的重跑入口；原实调models.122b.yaml与当前配置语义完全一致。改name为qwen122-replay并加`--replay`，4份严格命中、网络0。两候选完整辅助稿与开发者核对提示位于该根vision/kimi及vision/qwen122/review.html，原模型reading/response未被改写；只在隔离report.pending补实际遗漏提示，没有回填正式TrialRecord/IR或确认。
-- **费用与验证**：本轮全部候选、探针、在线业务、温度及表格共50次新增网络请求，按非缓存成功响应usage和[官方标价](https://www.siliconflow.cn/pricing)估算1.299529元；本地缓存13次不重复累计原response.cost，服务端缓存优惠未扣，实际账单可能较低。user/info返回410，未取得真实余额/扣款，不把估算当账单。本轮明确低于15元预算，不为用完额度扩测。统一[实跑及费用报告](../../data/knowledge_v10/checks/model-choice-20261101/review.html)保留逐运行meter/trace。全量离线pytest62项通过（43.21秒）；未改web、不重复构建。两份正式/待审qi_state及canonical Word证据SHA保持，所有产物在data忽略目录；本轮未重启8769旧服务。读图辅助仍待专业确认，未宣称M1专业质量或M3真人验收完成。
+- **计量与验证**：本轮全部候选、探针、在线业务、温度及表格共50次新增网络请求，本地缓存13次。统一[实跑报告](../../data/knowledge_v10/checks/model-choice-20261101/review.html)保留逐运行meter/trace。全量离线pytest62项通过（43.21秒）；未改web、不重复构建。两份正式/待审qi_state及canonical Word证据SHA保持，所有产物在data忽略目录；本轮未重启8769旧服务。读图辅助仍待专业确认，未宣称M1专业质量或M3真人验收完成。
 
 ### 2026-10-29｜首份报告读取与 C1 落实
 

@@ -18,7 +18,7 @@ PM_LINES = {"pm:P01": ["color_unlevel", "shade_variation", "color_spots"],
             "pm:P02": ["poor_fastness", "bleeding_staining"],
             "pm:P03": ["harsh_hand", "crease_marks", "low_whiteness", "strength_loss", "yellowing"]}
 MODEL = {"base_url": "https://tntapi.com/v1", "model": "deepseek-v4.1-flash", "api_key_env": "TRIAL_API_KEY",
-         "price_per_1k": {"input": None, "output": None}, "fallbacks": []}
+         "fallbacks": []}
 
 
 def load(path: Path) -> dict:

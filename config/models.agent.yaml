@@ -1,9 +1,8 @@
 # 业务Agent固定Kimi-K2.6；2026-11-01真实工具准备及五轮温抽通过。
-# price_per_1k为人民币/千token标价估算，角色/签字规则不变，不自动换型。
 concurrency: 1
 retry_waits: [5, 15, 30]
 tiers:
   fast: {base_url: "https://api.siliconflow.cn/v1", model: "Pro/moonshotai/Kimi-K2.6", api_key_env: BACKUP_API_KEY, extra_body: {enable_thinking: false},
-         price_per_1k: {input: 0.0065, output: 0.027}, fallbacks: []}
+         fallbacks: []}
   strong: {base_url: "https://api.siliconflow.cn/v1", model: "Pro/moonshotai/Kimi-K2.6", api_key_env: BACKUP_API_KEY, extra_body: {enable_thinking: false},
-           price_per_1k: {input: 0.0065, output: 0.027}, fallbacks: []}
+           fallbacks: []}
