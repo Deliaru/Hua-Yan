@@ -1,10 +1,12 @@
 import base64
 import hashlib
 import json
+from io import BytesIO
 from pathlib import Path
 
 import httpx
 import openai
+from PIL import Image
 
 from huayan.gateway.client import OpenAICompatGateway
 from huayan.ingest.reader.image import read_image
@@ -132,7 +134,7 @@ def test_trial_summary_deduplicates_preserves_mixed_results_and_time_denominator
 
 
 def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
-    sent, waits, traces = [], [], []
+    sent, waits, traces, timeouts = [], [], [], []
     readout = {"text": "合成图片读稿", "readings": [
         {"object": "合成布样", "group": "A", "stage": "保温", "value": "12", "unit": "min",
          "conditions": ["85℃"], "position": "上部原工艺横线", "quote": "85℃*12min"},
@@ -143,6 +145,7 @@ def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
 
     def handle(request):
         sent.append(json.loads(request.content))
+        timeouts.append(request.extensions["timeout"])
         if len(sent) == 1:
             return httpx.Response(429, headers={"Retry-After": "2"}, json={"error": {"message": "synthetic rate limit"}})
         return httpx.Response(200, json={"id": "synthetic-response", "object": "chat.completion", "created": 0,
@@ -157,11 +160,12 @@ def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
         cache_dir=tmp_path / "cache", meter=FileMeter(tmp_path, "synthetic-reader"), sleep=waits.append,
         trace=lambda event, **fields: traces.append({"event": event, **fields}))
     image = tmp_path / "input.png"
-    # 合成传输字节：HTTP 替身不做图片解码，此测试只检验请求序列化与缓存隔离。
-    image.write_bytes(b"synthetic-image-A")
+    Image.new("RGB", (3072, 768), "white").save(image)
+    original = image.read_bytes()
     first, response = read_image(image, "合成上下文", gateway)
     repeated, _ = read_image(image, "合成上下文", gateway)
-    image.write_bytes(b"synthetic-image-B")
+    assert image.read_bytes() == original
+    Image.new("RGB", (64, 32), "blue").save(image)
     read_image(image, "合成上下文", gateway)
     assert first.text == repeated.text == "合成图片读稿" and response.model == "synthetic-vision"
     assert len(sent) == 3 and waits == [2]
@@ -175,7 +179,12 @@ def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
     assert sent[-1]["thinking"] == {"type": "disabled"}
     content = sent[0]["messages"][-1]["content"]
     assert content[0] == {"type": "text", "text": "合成上下文"}
-    assert base64.b64decode(content[1]["image_url"]["url"].split(",", 1)[1]) == b"synthetic-image-A"
+    uploaded = base64.b64decode(content[1]["image_url"]["url"].split(",", 1)[1])
+    with Image.open(BytesIO(uploaded)) as resized:
+        assert resized.size == (1536, 384)
+    small = sent[2]["messages"][-1]["content"][1]["image_url"]["url"]
+    assert base64.b64decode(small.split(",", 1)[1]) == image.read_bytes()
+    assert all(t["read"] == 60 for t in timeouts)
     assert sent[0]["response_format"] == {"type": "json_object"}
     records = [json.loads(line) for line in (tmp_path / "metering.jsonl").read_text(encoding="utf-8").splitlines()]
     assert all(row["caller"] == "ingest:extract" for row in records)

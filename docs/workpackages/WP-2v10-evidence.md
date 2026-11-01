@@ -1,6 +1,6 @@
 # WP-2v10｜选定资料的解析与证据读取
 
-> 决赛必需，按样例交付｜状态：首份Word原生读取及4处表格页区域已登记，选定课件第15页原生文字/表格与区域回取已验证；首份及选定PPT页已完成智谱在线结构化读取与原生图内联，模型稿仍有阶段/单位及跨页问题待人工审阅；35题离线扩写按用户要求停止｜先处理实际选定材料。
+> 决赛必需，按样例交付｜状态：首份Word已切换SiliconFlow Qwen3-VL-8B，3个曲线区域及第3页真实读取成功，第二遍4份辅助稿全缓存、0新增网络请求；选定PPT第15页同模型实调及缓存回放也已完成。模型稿仍有漏读、单位拆分及速率位置问题待人工审阅；35题离线扩写继续停止。
 
 ## 目标
 
@@ -158,3 +158,14 @@ v3 第 05 节；[总计划](REPLAN-v10.md) G2/G5；`ingest/folder.py`、`gateway
 - 离线使用首份报告table-2第2页已有备用响应核对标识，并用同一响应副本验证fallback_used=false时不标降级；刷新首份原文、试样、专业审阅副本及选定PPT页的既有HTML标签，不重读模型、不重渲染Office、不改读取JSON或正式状态。已有三个前端文件改动原样保留。
 - 验证：`uv run --env-file .env --locked --no-sync pytest -q`全量57项通过（33.19秒），`git diff --check`通过；未新增测试文件或线上模型请求。本修复未修改前端，不重复构建。
 - 本小项只修正降级披露，不据此认定专业确认、用途授予、完整在线派单或四岗位真人试用完成；停止在本修复项交用户评审。
+
+### 2026-11-01｜SiliconFlow Qwen3视觉实调与缓存回放
+
+- **自查与配置**：已按AGENTS及本包自查，契约冻结、统一网关与caller、觉零大模型、极简及禁止过度防御要求保持。按用户最新指定，config/models.yaml的fast/strong改为https://api.siliconflow.cn/v1、Qwen/Qwen3-VL-8B-Instruct、BACKUP_API_KEY；concurrency=1，沿用网关retry_waits及429退避，不设失效的GLM备用。Cloudflare仍仅Clef，不需用户重新部署Worker。没有读取或打印.env密钥。
+- **图片与超时**：reader/image.py在Base64编码前用Pillow等比例缩小长边超过1536px的图片；小图字节不变，磁盘原图不改。单次请求timeout_s=60，复用data/knowledge_v10/cache/image-readings中的现有请求哈希缓存。Pillow由可选依赖移入实际读取必需依赖；锁文件未改变既有包版本。
+- **真实超时后的最小调整**：整页长输出复现60秒超时，report.py改为先补读已登记的原生曲线区域；这些页的文字、表格继续保留完整原生解析，其余选定页再读整页。不向曲线提示重复塞整份报告，不另造裁图坐标、重试器、锁或缓存。区域原图仍由已登记Location.bbox裁自Office原生PNG。
+- **首份实调**：先对B组原生裁图完成1次真实请求及1次缓存回放；随后首份报告当前请求得到4份合格结构辅助稿（A跨页区域2份、B区域1份、第3页1份），实际模型均Qwen/Qwen3-VL-8B-Instruct，无降级，caller=ingest:extract。4份响应分别约2.22/16.16/50.27/10.01秒，共23条辅助reading，另有原生33条标签。首份来源trace中本次累计9次Qwen3网络尝试，包含前期整页失败与中止，不能只以成功4份报告总调用次数。
+- **回放与保真**：紧接着以相同命令重跑，4份全部缓存命中，新增网络请求0；原生30块、Fragment、33条原生读数和3张完整PNG不变，3份业务qi_state指纹不变。刷新原文、canonical TrialRecord及专家反馈副本的试样/IR审阅HTML；TrialRecord与IR结构内容语义不变，没有把模型读数写成正式结论或签字。核对及计量见data/knowledge_v10/checks/siliconflow-vision-20261101/qwen3-vl-8b/report-summary.json、来源目录gateway-trace.jsonl与metering.jsonl。
+- **A/B核对局限**：模型保留两组各自高温保温及红字升温时间口径；开发者对照原图发现A漏一个保温点，B漏加料时间、重复速率标签且有速率位置错配，部分value混入单位或定性词。问题已列原文审阅pending，原图及原生标签优先供人核对；不以辅助稿冒充准确完整工艺，不将B数据补给A，不扩大产品适用范围。具体原文只留data，不入库。
+- **选定PPT实调**：继续以同一入口读取SRC-18358d2dd7的既定第15页，复用PowerPoint COM原生PNG/PDF及python-pptx原生表格。首次请求60秒超时，既有网关退避后第二次约52.47秒成功，无降级；42条辅助reading中24条小数数值集合与24个原生数值单元格一致，但unit全部为空，42条待补读保留，集合一致不代表行列条件关联已正确。紧接着同参数回放1份响应命中缓存、新增网络请求0，记录同目录ppt-summary.json。没有扩展选题或宣称题目正确率。
+- **命令与检查**：`uv run --env-file .env --locked --no-sync python scripts/read_report.py --source SRC-3a2130604c --vision`执行两遍；读取离线测试扩展已有图片通路，覆盖3072×768缩至1536×384、小图字节不变、timeout=60与缓存；全量`uv run --locked --no-sync pytest -q`为58项通过（34.02秒）。本轮未改web或冻结契约，未提交data/runs/.env，未新增专业签字。业务Agent在线模型配置没有随视觉配置静默切换，V10.9在线准备未据此宣布完成。

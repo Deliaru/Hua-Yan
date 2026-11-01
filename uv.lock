@@ -807,6 +807,7 @@ dependencies = [
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "openai" },
     { name = "pandas" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "pypdfium2" },
     { name = "python-docx" },
@@ -820,7 +821,6 @@ dependencies = [
 
 [package.optional-dependencies]
 reader-embedding = [
-    { name = "pillow" },
     { name = "torch" },
     { name = "transformers" },
 ]
@@ -837,7 +837,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "openai" },
     { name = "pandas" },
-    { name = "pillow", marker = "extra == 'reader-embedding'" },
+    { name = "pillow" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pypdfium2" },
     { name = "python-docx", specifier = ">=1.1.2" },

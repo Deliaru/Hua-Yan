@@ -2,7 +2,7 @@
 
 uv run --env-file .env python scripts/read_report.py --source SRC-3a2130604c
 uv run --env-file .env python scripts/read_report.py --source SRC-3a2130604c --vision
-默认读图配置为 config/models.yaml（智谱）；Cloudflare仅用于Clef。
+默认读图配置为 config/models.yaml（SiliconFlow Qwen视觉模型）；Cloudflare仅用于Clef。
 使用项目根目录 .env 中的环境变量时，uv run 后加 --env-file .env。不加 --vision 时仅完成原生解析。
 """
 import argparse

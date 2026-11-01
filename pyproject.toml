@@ -5,12 +5,12 @@ description = "化言 HuaYan：市场—产品—研发需求协同的多层 Age
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2,<3", "openai", "httpx", "numpy", "pandas", "scikit-learn",
-  "matplotlib", "pyyaml", "streamlit", "tzdata",
+  "matplotlib", "pyyaml", "streamlit", "tzdata", "pillow",
   "python-docx>=1.1.2", "python-pptx>=1.0.2", "pypdfium2", "pywin32; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
-reader-embedding = ["torch>=2.6", "transformers>=5.21", "pillow"]
+reader-embedding = ["torch>=2.6", "transformers>=5.21"]
 
 [dependency-groups]
 dev = ["pytest"]

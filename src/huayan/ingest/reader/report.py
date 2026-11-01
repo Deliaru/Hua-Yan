@@ -32,26 +32,28 @@ def read_report(source, output_dir):
 
 
 def read_report_images(report, gateway):
-    """试样报告逐页完整读取；查询不进入读图提示，审阅与编译共用保存的读数。"""
-    context = "\n\n".join(f'{b["span"]}（{b["group"] or b["section"]}）\n{b["text"]}' for b in report["blocks"])
+    """优先补读已登记的曲线区域，其他选定页读整页；原生文字和表格保持完整。"""
     results = []
     regions = native_regions(report, Path(report["preview_pdf"]).parent.parent)
     report["image_regions"] = regions
-    for page, image in enumerate(report["images"], 1):
-        if page not in report.get("selected_pages", range(1, len(report["images"]) + 1)):
-            continue
-        readout, response = read_image(image, context, gateway)
-        results.append({"page": page, "method": "vision", "readout": readout.model_dump(mode="json"),
-                        "response": response.model_dump(mode="json")})
     by_span = {b["span"]: b for b in report["blocks"]}
-    for region in regions:
+    pages = set(report.get("selected_pages", range(1, len(report["images"]) + 1)))
+    curves = [r for r in regions if r["page"] in pages and "曲线" in by_span[r["span"]]["text"]]
+    for region in curves:
         block = by_span[region["span"]]
-        if "曲线" not in block["text"]:  # 普通表格已由整页读取；曲线另送原生区域保留完整走线。
-            continue
         readout, response = read_image(region["image_path"],
             f'当前区域：{block["span"]}，第{region["page"]}页，组别{block["group"] or "未指定"}。'
-            f'只读取区域内可见内容，跨页缺失部分列入pending。原生文字供核对：\n{block["text"]}', gateway)
+            '只补读工艺曲线、加料位置和曲线旁注；配方表已原生读取，不重复转录。'
+            '跨页缺失或读不清的内容列入pending，不据上下文补全。', gateway)
         results.append({**region, "method": "vision", "readout": readout.model_dump(mode="json"),
+                        "response": response.model_dump(mode="json")})
+    for page, image in enumerate(report["images"], 1):
+        if page not in pages or page in {r["page"] for r in curves}:
+            continue
+        context = "\n\n".join(f'{b["span"]}（{b["group"] or b["section"]}）\n{b["text"]}'
+            for b in report["blocks"] if page in [loc["page"] for loc in b["locations"]])
+        readout, response = read_image(image, context, gateway)
+        results.append({"page": page, "method": "vision", "readout": readout.model_dump(mode="json"),
                         "response": response.model_dump(mode="json")})
     return results
 
