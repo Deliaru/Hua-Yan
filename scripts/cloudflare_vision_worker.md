@@ -1,6 +1,6 @@
 # Cloudflare Worker：Clef在用，视觉适配为历史记录
 
-> 当前策略（2026-11-01）：Cloudflare仅用于Clef，端点统一由system1.cloudflare-worker.yaml读取CLOUDFLARE_WORKER_URL；视觉读取走config/models.yaml的SiliconFlow Qwen3.6-35B。旧Cloudflare视觉配置已从当前配置目录移除，可从Git历史回查。本轮不需要更新或部署Worker，下述视觉部署内容仅保留历史说明。
+> 当前策略（2026-11-01）：Cloudflare仅用于Clef，端点统一由system1.cloudflare-worker.yaml读取CLOUDFLARE_WORKER_URL；视觉读取走config/models.yaml的SiliconFlow图文网关，实际型号以配置及运行记录为准。旧Cloudflare视觉配置已从当前配置目录移除，可从Git历史回查。本轮不需要更新或部署Worker，下述视觉部署内容仅保留历史说明。
 
 代码：[`cloudflare_vision_worker.mjs`](cloudflare_vision_worker.mjs)。**用文件全文整体替换现有 Jev Worker 的代码**，保留 `export default`、现有域名及名为 `AI` 的绑定，然后部署。无需新建 Worker，也无需添加第二个 AI 绑定。一个绑定通过 `env.AI.run` 的第一个参数选择调用哪个模型，见[官方绑定说明](https://developers.cloudflare.com/workers-ai/configuration/bindings/)。
 
@@ -43,7 +43,7 @@ model    = @cf/meta/llama-3.2-11b-vision-instruct
 
 本版 Worker 无密钥校验，OpenAI SDK 所需的非空 `api_key` 可使用占位字符串 `unused`，不需要传旧的外部供应商密钥。正式接入仍通过 `OpenAICompatGateway`，沿用 `caller="ingest:extract"`、结构校验、计量与本地图片指纹缓存。
 
-项目读图脚本当前默认使用 `config/models.yaml`（SiliconFlow 35B，无自动换型），不再使用旧Cloudflare视觉配置。运行方式：
+项目读图脚本当前默认使用 `config/models.yaml`（SiliconFlow图文网关，无自动换型），不再使用旧Cloudflare视觉配置。运行方式：
 
 ```powershell
 uv run --env-file .env python scripts/read_report.py --source SRC-3a2130604c --vision

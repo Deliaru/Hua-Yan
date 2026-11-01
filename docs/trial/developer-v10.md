@@ -4,9 +4,9 @@
 
 运行 `uv run --locked --no-sync python scripts/package_v10_handoff.py`，生成[本地总入口](../../data/knowledge_v10/validation/finals-handoff/review.html)及summary.json。入口仅汇集已有首份/负例原图与记录、Qwen读图及温度实调/回放、在线角色准备、开发者模拟复用、合成来源复核、待真人实例和记录模板；不调用模型、不写业务、不读评测金标。输入文件不存在时直接报错，不生成虚假通过项；summary保存输入指纹和逐项边界。
 
-在线角色准备是独立合成需求；开发者模拟链的确认/授予是另一个实例，两者不拼成一次真人全链成绩。当前配置固定SiliconFlow Qwen/Qwen3.6-35B-A3B，温度原五轮回归及单题A/C、Jev对照已在35B上复核，见总入口中的升级记录。首份报告8B辅助稿、先前429及温度失败页仍按实际旧模型保存；35题扩写继续暂停，下文旧题证据只供回查。
+在线角色准备是独立合成需求；开发者模拟链的确认/授予是另一个实例，两者不拼成一次真人全链成绩。业务模型以config/models.agent.yaml、读取模型以config/models.yaml为准；总入口分别列出本轮模型验证和历史运行，不用旧记录代表当前型号。原生辅助稿、先前429及温度失败页按实际模型保存；35B的25页检索对照属于历史，本轮只做定页双列复核，35题扩写继续暂停，下文旧题证据只供回查。
 
-打包会生成app.human-online.yaml，沿独立human-review-ready运行接现有Qwen/Clef及object对话，打包时不启动。原人工审阅配置保留mock/规则。真实试用启动、账号映射与集中待审内容见[当前四岗位交接](first-report-v10.md)。此前旧first-report实例不作为下一轮真人起点，已经授权开发者模拟无需重复审批。
+打包会生成app.human-online.yaml，沿独立human-review-ready运行接当前业务模型、Clef及object对话，打包时不启动。原人工审阅配置保留mock/规则。真实试用启动、账号映射与集中待审内容见[当前四岗位交接](first-report-v10.md)。此前旧first-report实例不作为下一轮真人起点，已经授权开发者模拟无需重复审批。
 
 ## 首份报告授权说明
 

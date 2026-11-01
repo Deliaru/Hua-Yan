@@ -36,7 +36,7 @@ $env:HUAYAN_PORT="8769"
 uv run --env-file .env --locked --no-sync python -m huayan.ui.server --trial human-review-ready --config data/knowledge_v10/validation/finals-handoff/app.human-online.yaml
 ```
 
-该配置使用固定Qwen模型、Cloudflare Clef、LLM抽取和object对话；环境变量从本地 `.env` 注入。只做人工审阅时，可改用原 `data/knowledge_v10/validation/human-ready-20261101/app.yaml`，此模式是mock/规则，不能记为在线Agent表现。同一运行只启动一个服务实例；需要换配置时先停掉该运行原服务。
+该配置使用config/models.agent.yaml指定的业务模型、Cloudflare Clef、LLM抽取和object对话；读取模型另由config/models.yaml指定；环境变量从本地 `.env` 注入。只做人工审阅时，可改用原 `data/knowledge_v10/validation/human-ready-20261101/app.yaml`，此模式是mock/规则，不能记为在线Agent表现。同一运行只启动一个服务实例；需要换配置时先停掉该运行原服务。
 
 试用前查看实际状态条，登记真实模型、mock或回放状态，保留出现的错误与项目方帮助。在线准备及温度实调已有独立记录，不等于待审实例已完成真人业务。
 
