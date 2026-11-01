@@ -241,7 +241,8 @@ def build_system1(impl, config_path, gateway, meter):
         raise ValueError(f"Unknown System 1 implementation: {impl}")
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     if cfg.get("kind") == "cloudflare_worker":
-        client = ClefWorkerClient(cfg["base_url"], meter, cfg["timeout_s"])
+        base_url = os.environ[cfg["base_url_env"]] if "base_url_env" in cfg else cfg["base_url"]
+        client = ClefWorkerClient(base_url, meter, cfg["timeout_s"])
     elif cfg.get("kind") == "cloudflare":
         client = ClefClient(os.environ[cfg["account_id_env"]], os.environ[cfg["api_key_env"]], cfg["model"], meter,
                             cfg["timeout_s"], media_root=cfg.get("media_root"))

@@ -49,7 +49,7 @@ model    = @cf/meta/llama-3.2-11b-vision-instruct
 uv run --env-file .env python scripts/read_report.py --source SRC-3a2130604c --vision
 ```
 
-Clef通过 `config/system1.cloudflare-worker.yaml` 使用既有Worker根路径；不发送视觉请求到旧 `/v1/chat/completions`，无需设置Cloudflare视觉占位密钥或重新接受协议。旧 `config/models.vision.cloudflare.yaml` 及本文件下方验证记录仅供回查。
+Clef通过 `config/system1.cloudflare-worker.yaml` 的 `base_url_env: CLOUDFLARE_WORKER_URL` 使用既有Worker根路径。将实际根地址写入本机未入库的 `.env`（`CLOUDFLARE_WORKER_URL=https://your-worker.example.workers.dev`），运行时用 `uv run --env-file .env ...` 注入，或在 PowerShell 中设置同名环境变量；该值不是密钥，缺少时直接报告配置错误。不发送视觉请求到旧 `/v1/chat/completions`，无需设置Cloudflare视觉占位密钥或重新接受协议。旧 `config/models.vision.cloudflare.yaml` 及本文件下方验证记录仅供回查。
 
 读取结果及实际调用记录在 `data/knowledge_v10/evidence/SRC-3a2130604c/`，缓存沿用 `data/knowledge_v10/cache/image-readings/`；模型结果保留为待人工审阅的辅助读稿。
 

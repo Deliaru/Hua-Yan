@@ -1,4 +1,5 @@
 kind: cloudflare_worker
-base_url: https://jev-proxy.xi1092183542.workers.dev
+# 本机地址放在未入库的 .env，通过 uv run --env-file .env 注入。
+base_url_env: CLOUDFLARE_WORKER_URL
 model: clef
 timeout_s: 120
