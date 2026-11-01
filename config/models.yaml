@@ -1,8 +1,8 @@
-# SiliconFlow视觉网关。通过 uv run --env-file .env 注入密钥，所有请求串行。
+# SiliconFlow 35B图文/表格网关；已实测标准tool_calls，所有请求串行。
 concurrency: 1
 retry_waits: [5, 15, 30]
 tiers:
-  fast:   {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3-VL-8B-Instruct", api_key_env: BACKUP_API_KEY,
+  fast:   {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3.6-35B-A3B", api_key_env: BACKUP_API_KEY, extra_body: {enable_thinking: false},
            price_per_1k: {input: null, output: null}, fallbacks: []}
-  strong: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3-VL-8B-Instruct", api_key_env: BACKUP_API_KEY,
+  strong: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3.6-35B-A3B", api_key_env: BACKUP_API_KEY, extra_body: {enable_thinking: false},
            price_per_1k: {input: null, output: null}, fallbacks: []}

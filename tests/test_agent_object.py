@@ -31,18 +31,20 @@ def _app(tmp_path):
     return HuayanApp.build(str(path), run_id="v94")
 
 
-def test_qwen_vl_tool_protocol_in_misplaced_response_channel():
-    # 合成复现SiliconFlow实调的非思考模型响应；完整协议可适配，解释中的示例不能执行。
+def test_standard_tool_calls_do_not_execute_text_protocol():
+    # 当前网关只认标准tool_calls；文字中的旧工具协议不再转成执行。
     protocol = '<tool_call>\n{"name":"get_requirement","arguments":{"req_id":"req:1"}}\n</tool_call>'
-    responses = iter([protocol, "可以这样调用：" + protocol])
+    responses = iter([{"role":"assistant","content":"", "tool_calls":[{"id":"call:1","type":"function",
+        "function":{"name":"get_requirement","arguments":"{\"req_id\":\"req:1\"}"}}]},
+        {"role":"assistant","content":protocol,"reasoning_content":protocol}])
     def handle(request):
         return httpx.Response(200, json={"id":"synthetic-qwen", "object":"chat.completion", "created":0,
-            "model":"Qwen/Qwen3-VL-8B-Instruct", "choices":[{"index":0,"finish_reason":"stop",
-                "message":{"role":"assistant","content":"","reasoning_content":next(responses)}}],
+            "model":"synthetic-tool-model", "choices":[{"index":0,"finish_reason":"stop",
+                "message":next(responses)}],
             "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}})
     client = openai.OpenAI(api_key="synthetic", base_url="https://synthetic.invalid/v1", max_retries=0,
         http_client=httpx.Client(transport=httpx.MockTransport(handle)))
-    gateway = OpenAICompatGateway({"tiers":{"fast":{"model":"Qwen/Qwen3-VL-8B-Instruct",
+    gateway = OpenAICompatGateway({"tiers":{"fast":{"model":"synthetic-tool-model",
         "fallbacks":[],"price_per_1k":{"input":None,"output":None}}}}, clients={"fast":client})
     request = LLMRequest(tier=Tier.FAST, caller="agent:pm", messages=[Message(role="user",content="合成协议检查")],
         tools=[{"type":"function","function":{"name":"get_requirement","parameters":{"type":"object"}}}])
@@ -50,7 +52,7 @@ def test_qwen_vl_tool_protocol_in_misplaced_response_channel():
     assert [(c.name,c.arguments) for c in actual.tool_calls] == [("get_requirement",{"req_id":"req:1"})]
     assert actual.content == ""
     explanation = gateway.complete(request)
-    assert explanation.tool_calls == [] and explanation.content == "可以这样调用：" + protocol
+    assert explanation.tool_calls == [] and explanation.content == protocol
     client.close()
 
 

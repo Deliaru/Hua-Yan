@@ -1,6 +1,7 @@
 """真实模型准备真实报告；需求为隔离开发者演练，不代表JianChao Xi本人操作。
 
-不确认结论、不授予、不批准范围、不发布。所有业务写入均经HuayanApp。
+接单明确为开发者模拟，随后实调研发转译；不确认专业结论、不授予、不批准范围、不发布。
+所有业务写入均经HuayanApp。
 uv run --env-file .env python scripts/run_online_preparation.py
 """
 import argparse
@@ -28,6 +29,11 @@ def main():
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
         doc["items"] = [p for p in doc["items"] if p["id"] == "TF-213HE"] if name == "products" else []
         path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    actors_path = setup / "seeds" / "actors.yaml"
+    actors_data = yaml.safe_load(actors_path.read_text(encoding="utf-8"))
+    for actor in actors_data["items"]:
+        actor["name"] += "（开发者模拟）"
+    actors_path.write_text(yaml.safe_dump(actors_data, allow_unicode=True), encoding="utf-8")
     config["seeds_dir"] = str(setup / "seeds")
     config_path = setup / "app.yaml"
     config_path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
@@ -52,6 +58,7 @@ def main():
     req = app.escalate(session.id, "sales:S01")
     app.actors = actors
     prepared = []
+    retries = []
     for family in ("reuse_product", "accept_requirement"):
         questions = [q for q in app.bus.list(family=family) if q.refs.get("requirement_id") == req.id]
         if not questions:
@@ -70,18 +77,39 @@ def main():
         "用save_source_preparation保存回原单，claim_ids=[]，pending保留组别、阶段、单位、"
         "未读清和条件差异。只保存准备草稿，不编译、不确认、不授予，不推定适用范围。", focus=req.id)
     preparation = app.source_preparation(req.id, rd)
+    # 仅此隔离演练的接单由开发者模拟；专业确认、授予与范围批准仍不执行。
+    app.accept_requirement(req.id, rd)
+    questions = [q for q in app.bus.list(family="confirm_translation") if q.refs.get("requirement_id") == req.id]
+    if not questions:
+        raise ValueError("模拟接单后未提出研发转译核对事项")
+    app.agents.dispatch(only={q.id for q in questions})
+    for q in questions:
+        gap = app.preparation_gap(q.id)
+        if gap:
+            # 演示项目方对已复现的缺草稿失败触发一次既有整项重试，不代填模型草稿。
+            app.agents.retry(q.id, rd)
+            retries.append({"question_id": q.id, "reason": gap, "initiated_by": "developer_demo_operator"})
+            app.agents.dispatch(only={q.id})
+            gap = app.preparation_gap(q.id)
+        prepared.append({"question_id": q.id, "family": q.family, "gap": gap})
+        if gap:
+            raise ValueError(gap)
+    current = app.requirement_view(req.id, rd).requirement
     steps = [s.model_dump(mode="json") for s in app.agents._steps]
     metering = [json.loads(line) for line in app.meter.path.read_text(encoding="utf-8").splitlines()]
-    summary = {"data_kind": "real_models_and_report_with_synthetic_request_no_signature",
+    summary = {"data_kind": "real_models_real_report_synthetic_request_developer_simulated_acceptance_only",
         "run_dir": str(app.run_dir), "requirement_id": req.id,
         "professional_confirmations": len(app.events.query(["claim_confirmed"])),
         "grants": len(app.events.query(["capability_granted"])),
         "acceptances": len(app.events.query(["requirement_accepted"])), "real_human_signatures": 0,
+        "simulated_acceptances": len(app.events.query(["requirement_accepted"])),
+        "product_item_count": len(current.product_lang), "chemical_item_count": len(current.chem_lang),
+        "operator_retries": retries,
         "prepared": prepared,
         "preparation": preparation, "steps": steps, "failures": app.agents.failures,
         "jue_llm_calls": sum(r["kind"] == "llm" and r["caller"].startswith("jue:") for r in metering)}
     (app.run_dir / "online-preparation.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    assert all(not q["gap"] for q in prepared) and preparation is not None and preparation["evidence"]
+    assert all(not q["gap"] for q in prepared) and preparation is not None and preparation["evidence"] and current.chem_lang
     used = {s["tool"] for s in steps}
     assert {"read_source", "read_trial_record", "read_source_image", "save_source_preparation"} <= used
     assert not summary["jue_llm_calls"]

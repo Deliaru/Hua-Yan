@@ -4,7 +4,6 @@
 import hashlib
 import json
 import os
-import re
 import time
 from contextlib import nullcontext
 from pathlib import Path
@@ -100,7 +99,12 @@ class OpenAICompatGateway:
                     for call in message.tool_calls]
             messages.append(item)
         if schema is not None:
-            messages.insert(0, {"role": "system", "content": "Return a JSON object matching this schema: " + json.dumps(schema.model_json_schema(), ensure_ascii=False)})
+            instruction = "Return a JSON object matching this schema: " + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+            if messages and messages[0]["role"] == "system":
+                content = messages[0]["content"]
+                messages[0]["content"] = instruction + "\n\n" + content if isinstance(content, str) else [{"type": "text", "text": instruction}, *content]
+            else:
+                messages.insert(0, {"role": "system", "content": instruction})
         last_error = None
         for tier in self._order(req.tier.value):
             cfg = self.tiers[tier]
@@ -128,14 +132,6 @@ class OpenAICompatGateway:
                     content = message.content
                     calls = [LLMToolCall(call_id=call.id, name=call.function.name,
                              arguments=json.loads(call.function.arguments)) for call in (message.tool_calls or [])]
-                    # SiliconFlow实调：Qwen3-VL Instruct把非思考回答及完整工具协议放在reasoning_content。
-                    # 只接完整独立的Qwen工具协议，不从说明文字中截取调用；工具仍经Hub校验及签字。
-                    if cfg["model"] == "Qwen/Qwen3-VL-8B-Instruct" and not content and not calls:
-                        content = message.model_extra.get("reasoning_content") or content
-                        if req.tools and content and re.fullmatch(r"(?:\s*<tool_call>\s*\{[\s\S]*?\}\s*</tool_call>\s*)+", content):
-                            calls = [LLMToolCall.model_validate({**json.loads(block), "call_id": f"{raw.id}:{i}"})
-                                     for i, block in enumerate(re.findall(r"<tool_call>([\s\S]*?)</tool_call>", content))]
-                            content = ""
                     response = LLMResponse(content=content, tool_calls=calls,
                         usage=usage, latency_ms=latency, model=raw.model, tier=Tier(tier), cost=cost,
                         fallback_used=tier != req.tier.value)

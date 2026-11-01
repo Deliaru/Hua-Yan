@@ -1,6 +1,6 @@
 # WP-3v10｜一道图表题的检索与查证
 
-> 可演示即可｜状态：单题首版演示交付完成。25页同源对照中，关键词A及图文C+Jev均正确选页并取回7.21S/9.22S；C单独使用选错页。原生表格优先、固定Qwen选择、原图审阅及严格回放已通；仅一个已知开发题，不代表全库成绩，不恢复35题扩写。
+> 可演示即可｜状态：单题首版演示交付完成；按用户要求升级为Qwen/Qwen3.6-35B-A3B后，25页同源对照与第15页两列复核通过，严格回放6命中/0网络。关键词A及C+Jev取回7.21S/9.22S，C单独使用仍选错页。原生表格优先，不代表纯视觉、全库或盲测成绩，不恢复35题扩写。
 
 ## 目标
 
@@ -38,6 +38,16 @@ v3 第 10、10B 节；[总计划](REPLAN-v10.md)；现有 `System1Client`、网�
 独立文本向量 B 组、分块/前缀消融、大样本概率校准、全库索引优化；这些留给决赛后按失败问题开展。
 
 ## 完成记录
+
+### 2026-11-01｜35B升级、原始模型选列与同条件回放
+
+- **范围与自查**：用户允许使用SiliconFlow代金券升级30B以上型号；已重新完整阅读AGENTS，再读总计划、相关CONTRACTS/QI及本包。承接已提交的单题首版（f31fa17），保留现有工作区，不改冻结契约、正式知识状态、觉或权限机制。base_url仍为https://api.siliconflow.cn/v1、密钥变量仍BACKUP_API_KEY，通过`uv run --env-file .env`注入，未读取或输出密钥。
+- **账号与标准协议实测**：当前账号模型列表确认Qwen3-32B、Qwen3.6-35B-A3B、Qwen3.8-27B、Qwen3-VL-30B-A3B-Instruct等实际可用。先试30B-VL，返回空内容且无标准tool_calls，未采用；35B返回标准get_requirement调用，合成图片+工具请求也返回正确req:1参数，无旧8B文本适配。config/models.yaml与models.agent.yaml的fast/strong固定Qwen/Qwen3.6-35B-A3B、enable_thinking=false、无fallback，保留单并发、60秒读图与原缓存。不新增供应商分支、正则或重试框架。
+- **只修真实接口问题**：首次35B结构化请求因Schema指令与原system分成两条而HTTP400；gateway/client.py仅把Schema合并到已有首条system，保留原提示及合法str/list图片联合类型。随后模型选对数字却引用标题span，chart_qa.py将可选blocks限定为原生表格，标题/方法移到不可选的page_context，prompts/chart_qa.md同步说明；没有按答案补写引用。对应失败目录保留，现有两项测试增加单system及表格/页面说明分离断言。
+- **双列精读实调**：固定第15页核对相邻合并表头，TF-1871/0.4%在NaOH 30g/L下为润湿7.21S、沉降9.22S（r5c6/r6c6）；TF-1871Y/0.25%为9.92S、13.56S（r5c7/r6c7）。两次原始模型响应的产品、span及数值均与原生记录一致，未靠后处理掩盖错列；原方法25℃、100ml、标准棉帆布留在页面上下文。使用既有完整原生合并表，不宣称纯视觉识图；该定页诊断也不新增检索题分母。诊断1次新增网络、1次缓存。
+- **同条件对照与计量**：同25页、Gemma原模型/本地快照、3页候选池及1页作答预算，35B最终A/C/C+Jev分别选15/14/15页，整体验收通过/失败/通过。C错页保留待补，默认仍建议本题关键词A。table-35b-delivery新增Qwen网络2次、缓存1次；Clef复用先前3份真实响应缓存。紧接严格回放Qwen3命中、Clef3命中，网络0；输入与隔离知识状态各次运行内SHA不变。无专业确认、授予或觉生成调用。
+- **运行入口与材料**：`uv run --env-file .env --locked --no-sync gemma_env/Scripts/python.exe -m huayan.eval.retrieval_v10 --config data/knowledge_v10/retrieval/v10.3-20261101/app.yaml --actor rd:JianChaoXi --out data/knowledge_v10/checks/model-upgrade-20261101/table-35b-delivery`；改out为table-35b-replay并加`--replay`。定页诊断为同根column-alignment.py，先存预测再与原生记录比较。汇总[review.html](../../data/knowledge_v10/checks/model-upgrade-20261101/review.html)、summary.json、columns和逐配置报告均在忽略的data下，账号列表、原始响应及meter保留。
+- **验收边界**：全量`uv run --locked --no-sync pytest -q` 62项通过（33.26秒），未改web不重复构建；原首份业务状态、真人待审状态与两份canonical读取记录SHA不变。V10.9实际工具准备及一次人工重试见该包同期记录；专业确认和四岗位真人业务未完成。本轮不提交、不推送，也不重写旧8B辅助稿的模型名或历史成绩。
 
 ### 2026-11-01｜单题25页真实对照与失败归因
 

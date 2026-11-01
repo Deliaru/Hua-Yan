@@ -374,7 +374,7 @@ def edit_reuse_note(ctx: ToolContext, args: DirectionArgs) -> ToolResult:
     return ToolResult(data=_req(ctx.app.update_reuse_note(args.req_id, args.text, ctx.principal.id)))
 
 
-@tool("draft_chem_need", "draft", ["rd"], "为产品经理已确认的需求单起草 L3 化学语言条目与研发方向假设（规则骨架）", ReqId)
+@tool("draft_chem_need", "draft", ["rd"], "为研发已接单的需求单起草 L3 化学语言条目与研发方向假设（规则骨架）", ReqId)
 def draft_chem_need(ctx: ToolContext, args: ReqId) -> ToolResult:
     return ToolResult(data=_req(ctx.app.translate_requirement(args.req_id, ctx.principal.id)))
 

@@ -55,7 +55,8 @@ def test_worker_failure_is_not_negative_evidence(tmp_path, status, body, error):
 
 def test_chart_answer_uses_native_cells_and_marks_unlocatable_model_values():
     page = {"source_id": "SYNTH-CHART", "page": 2, "table_layout": {},
-        "blocks": [{"span": "table-1", "text": "合成表：润湿\t4.2\tS", "cells": [
+        "blocks": [{"span": "synthetic-title", "text": "合成标题不是表格定位", "cells": []},
+            {"span": "table-1", "text": "合成表：润湿\t4.2\tS", "cells": [
             {"row": 1, "column": 1, "text": "润湿（S）"}, {"row": 1, "column": 2, "text": "SYNTH-X"},
             {"row": 2, "column": 1, "text": "0.3%"}, {"row": 2, "column": 2, "text": "NaOH20g/L"},
             {"row": 3, "column": 1, "text": "润湿"}, {"row": 3, "column": 2, "text": "4.2"}]}],
@@ -75,6 +76,9 @@ def test_chart_answer_uses_native_cells_and_marks_unlocatable_model_values():
     assert answer.values[0].metric == "润湿" and answer.values[0].cell == (3, 2)
     assert answer.values[0].quote == "4.2"
     assert requests[0].messages[-1].content[-1].text == "合成图表问题"
+    context = json.loads(requests[0].messages[-1].content[0].text)
+    assert [b["span"] for b in context["blocks"]] == ["table-1"]
+    assert context["page_context"] == ["合成标题不是表格定位"]
     raw["values"][0]["value"] = "9.99"
     changed, _ = answer_chart("合成图表问题", page, "data:image/png;base64,synthetic", gateway)
     assert not changed.values and any("没有唯一" in note for note in changed.pending)

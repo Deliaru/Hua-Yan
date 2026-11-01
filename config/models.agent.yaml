@@ -1,9 +1,9 @@
-# 业务Agent沿SiliconFlow Qwen视觉网关；工具协议适配仅在gateway边界，角色/签字规则不变。
-# 2026-11-01固定本次在线主线型号；不自动换型或回退旧GLM队列。
+# 业务Agent使用已实测标准tool_calls及图片输入的SiliconFlow Qwen3.6 35B。
+# 角色/签字规则不变；不自动换型或回退8B、GLM。
 concurrency: 1
 retry_waits: [5, 15, 30]
 tiers:
-  fast: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3-VL-8B-Instruct", api_key_env: BACKUP_API_KEY,
+  fast: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3.6-35B-A3B", api_key_env: BACKUP_API_KEY, extra_body: {enable_thinking: false},
          price_per_1k: {input: null, output: null}, fallbacks: []}
-  strong: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3-VL-8B-Instruct", api_key_env: BACKUP_API_KEY,
+  strong: {base_url: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen3.6-35B-A3B", api_key_env: BACKUP_API_KEY, extra_body: {enable_thinking: false},
            price_per_1k: {input: null, output: null}, fallbacks: []}

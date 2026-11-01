@@ -1,6 +1,6 @@
 # WP-9v10｜一条定向准备与原需求回流链
 
-> 决赛必需，一条业务｜状态：真实资料的开发者模拟原单回流及下一单说明复用已通过；Qwen在线PM/研发准备、固定指纹资料回原单、模拟接单后的研发转译已跑通，准备缺口为空。多轮温度P1已在V10.6修复并实调/回放通过，本轮评审通过；四岗位真人验收未完成，不以准备通过宣称M3完成。
+> 决赛必需，一条业务｜状态：真实资料的开发者模拟原单回流及下一单说明复用已通过；最新35B在线PM/研发准备、固定指纹资料回原单、模拟接单后的研发转译已跑通，3项准备缺口为空，含1次项目方触发的整项重试。35B温度5轮实调及回放通过；四岗位真人验收未完成，不以准备通过宣称M3完成。
 
 ## 目标
 
@@ -38,6 +38,21 @@
 新调度平台、所有家族一起改造、新概念自动扩目录与 Jue-K 重训；按这次试用出现的问题继续补。
 
 ## 完成记录
+
+### 2026-11-01｜35B升级复审及旧工具协议清理
+
+- **复审与实现**：按用户要求重读AGENTS，并以项目总愿景、架构、CONTRACTS/QI及V10.3/V10.6/V10.9边界核对全部升级差异。发现统一网关仍含只服务旧8B的reasoning_content/文本tool_call转换，现已删除该型号硬编码及re依赖，只认标准tool_calls。现有协议测试改为标准调用与文本不执行的同一边界回归，未新增模型专用测试或兼容分支。保留通用think结束前缀处理，因为部分旧录制缓存仍保存此前的推理前缀；旧规范化工具缓存无需旧适配即可读取，未删除或重写历史记录。
+- **验证与边界**：全量离线62项通过（31.55秒）。当前35B温度严格回放5命中；同一25页图表回放Qwen3/Clef3命中，结果仍A通过、C失败、C+Jev通过，合计11命中/0新网络。回读原始业务产物，3项准备缺口为空、3条产品稿和3条研发转译、1次已明确记录的模拟操作方重试；未把旧业务缓存计为新请求。4份正式/待审状态与canonical证据指纹未变。工程卫生中的旧配置、检索入口及交接材料随后按所属包独立收口；本轮不重启现有服务，不代真人确认或授予。核对产物留data/knowledge_v10/checks/review-model-hygiene-20261101，不入库。
+
+
+### 2026-11-01｜35B标准工具调用与实际草稿闭环
+
+- **范围与自查**：用户要求表格与角色Agent升级30B以上并实跑；已按AGENTS重读总计划、相关CONTRACTS/QI、本包及愿景。模型选择与网关真实接口修复归V10.3同期记录。两份models配置均固定Qwen/Qwen3.6-35B-A3B，保留原SiliconFlow地址及BACKUP_API_KEY；关闭思考、原生tool_calls，不借8B正则适配。角色提示仍在prompts，未改Hub/Loop、觉、冻结契约或正式权限。
+- **真实失败与最小修改**：研发在confirm_translation中口头声称已调用draft_chem_need却没有实际草稿，preparation_gap按既有规则拒绝通过，失败日志保留。prompts/assistant_rd.md的原确认转译条目明确本轮实际读需求并调用起草工具，以返回条目数量/依据汇报；agent/tools.py仅修正该工具过时描述为“研发已接单”，与现行接单状态一致，不变更工具权限和业务函数。
+- **演练入口**：扩充既有scripts/run_online_preparation.py，隔离种子角色名标“开发者模拟”；真实资料准备后通过HuayanApp模拟接单，再dispatch确认转译并检查实际chem_lang。缺草稿时项目方仅触发一次既有Hub.retry+dispatch，记录原缺口和触发者，不代填、不另建重试器。未执行专业confirm、grant、approve或publish。实际命令为`uv run --env-file .env --locked --no-sync python scripts/run_online_preparation.py --config data/knowledge_v10/checks/model-upgrade-20261101/app.online.yaml --run-id preparation-qwen35-delivery`，仍gateway_mock=false、agent_threads=object。
+- **在线产物**：真实模型经get_requirement/get_session、read_source、read_trial_record、read_source_image取得TF-213HE/SRC-3a2130604c资料与table-3第2页区域图，再save_source_preparation保存固定指纹及待补项到原req:1。产品稿3条、模拟接单后研发转译3条；reuse_product、accept_requirement、confirm_translation三项preparation_gap最终均为空，failures为空。研发转译在本次完整运行中需要1次项目方触发整项重试，不能称无帮助首轮通过；草稿全部来自真实工具调用，不是聊天自报成功。
+- **计量**：最终运行11次新增网络请求（均agent:rd）、12次同型号真实历史响应缓存（agent:extract 1、agent:l1_answer 1、agent:pm 10）；所有模型均Qwen/Qwen3.6-35B-A3B，无mock或生成fallback。原始工具轨迹、metering与gateway-trace在online-runs/preparation-qwen35-delivery，初次缺草稿记录未删。专业确认0、用途授予0、真人签字0；接单1次明确为开发者模拟，觉生成模型调用0。温度新模型另做5次真实请求及5缓存回放，详见V10.6。
+- **验收与交接**：全量离线pytest62项通过（33.26秒），测试不依赖外网；不改web、不重复构建。汇总[实跑报告](../../data/knowledge_v10/checks/model-upgrade-20261101/review.html)及summary.json，保护文件SHA相同，真实待审状态未动。本轮完成模型升级后的技术准备验证；既有模拟回流证据保留，真实专业判断、用途授予/批准及四岗位真人原单回流仍按V10.7/V10.10办理，不宣称整包真人验收通过。已有8769进程未重启；35B配置在本轮新建隔离运行生效，不声称老进程热切换。
 
 ### 2026-11-01｜提交追溯与Clef Worker配置卫生
 

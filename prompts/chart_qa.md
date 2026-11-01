@@ -7,7 +7,7 @@
 如果提供 native_records，每条记录已经按原生合并关系携带 column_headers（产品和用量）、row_headers（行条件和指标）以及原值。必须同时符合 query 的所有表头和行条件，不能只按页面标题或一个关键词选值。
 
 values 中每个指标一条：
-- span：提供的表格块编号。
+- span：必须使用 blocks 中相应表格的 span；page_context 只是标题和测试方法，不能代替表格的定位。
 - object：实际选中的产品列名，不能用页标题替代。
 - metric：原表指标名。
 - value：逐字复制所取数值单元格的完整文本，不带单位、不改写数字精度。

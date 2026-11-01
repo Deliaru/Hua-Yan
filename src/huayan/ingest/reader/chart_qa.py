@@ -58,8 +58,8 @@ def table_context(block, layout):
 
 def answer_chart(query, page, image_url, gateway):
     context = {"source_id": page["source_id"], "page": page["page"],
-               "blocks": [table_context(b, page["table_layout"].get(b["span"], [])) if b["cells"] else
-                          {"span": b["span"], "text": b["text"]} for b in page["blocks"]]}
+               "blocks": [table_context(b, page["table_layout"].get(b["span"], [])) for b in page["blocks"] if b["cells"]],
+               "page_context": [b["text"] for b in page["blocks"] if not b["cells"]]}
     content = [TextContent(text=json.dumps(context, ensure_ascii=False))]
     native_records = {(block["span"], tuple(record["cell"])): record for block in context["blocks"]
                       if "native_records" in block for record in block["native_records"]}

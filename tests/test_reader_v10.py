@@ -186,6 +186,9 @@ def test_image_gateway_keeps_readings_and_caches_by_image_and_model(tmp_path):
     assert base64.b64decode(small.split(",", 1)[1]) == image.read_bytes()
     assert all(t["read"] == 60 for t in timeouts)
     assert sent[0]["response_format"] == {"type": "json_object"}
+    assert sum(m["role"] == "system" for m in sent[0]["messages"]) == 1
+    assert "Return a JSON object matching this schema" in sent[0]["messages"][0]["content"]
+    assert "A为原工艺，B为试样工艺" in sent[0]["messages"][0]["content"]
     records = [json.loads(line) for line in (tmp_path / "metering.jsonl").read_text(encoding="utf-8").splitlines()]
     assert all(row["caller"] == "ingest:extract" for row in records)
     assert sum(not row["ok"] for row in records) == 1

@@ -39,6 +39,12 @@ pH/用量/时间等多字段、开区间、单位换算平台，以及数值条�
 
 ## 完成记录
 
+### 2026-11-01｜35B升级后重跑多轮温度保真
+
+- **范围与自查**：用户要求升级角色模型并验证主线，按AGENTS及本包G2/G3复用原5轮失败回归。只使用既有LLMExtractor→validate_extraction→apply_extraction→match_candidates；本包没有新增代码、规则、契约或测试样板，当前轮/历史分离保持。实际模型为Qwen/Qwen3.6-35B-A3B，仍SiliconFlow同地址、BACKUP_API_KEY、统一网关caller=agent:extract，无降级。
+- **真实结果**：`uv run --env-file .env --locked --no-sync python scripts/run_online_temperature.py --config data/knowledge_v10/checks/model-upgrade-20261101/app.online.yaml --run-id temperature-qwen35`，5次新增网络请求、0缓存。75℃、72—78℃、改口85℃、实际温度不清楚、75—85℃依次为[75,75]、[72,78]、[85,85]、unknown/null、[75,85]；当前quote与轮次对应，明确未知没有继承旧85℃。合成70—80℃范围上依次confirmed、confirmed、不命中、possible、不命中，未知列入temperature_c；该范围不是TF-213HE专业授权。
+- **严格回放与边界**：同入口改用app.replay.yaml、run-id=temperature-qwen35-replay，5缓存命中、网络0，逐轮输出及匹配与实调一致。原始结果、meter和trace留在上述检查根的online-runs；[汇总](../../data/knowledge_v10/checks/model-upgrade-20261101/review.html)明确区分真实模型/合成情境。全量离线pytest62项通过（33.26秒）；原正式状态、真人待审状态和canonical读取文件指纹未变。只报告原五轮回归，不推断任意表达可靠或专业复用完成。
+
 ### 2026-11-01｜P1：分开当前发言与历史，修复Qwen多轮温度旧值残留
 
 - **范围与自查**：按用户最新要求暂停提交及配置卫生，只修温度P1。已重新完整阅读AGENTS，再读总计划、相关CONTRACTS/QI及本包，遵守G2、统一网关与caller、极简及禁止过度防御要求；保留已有工作区改动，没有提交或推送、改Worker配置、切换型号或扩展冻结契约。
