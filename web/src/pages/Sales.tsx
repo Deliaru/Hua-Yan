@@ -12,6 +12,7 @@ import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, La
 import { RouteStrip, WorkloadCard } from "../components/Route";
 import { AuthorizedReplies } from "../components/AuthorizedReplies";
 import { Backstory } from "../components/Backstory";
+import { Narration, TimeBar } from "../components/Narration";
 
 // V11.3 收件箱：有待你处理的决策的会话排在「轮到你」，其余在「全部会话」
 function SalesSidebar({ mine, current, guided, choose, todo }: {
@@ -120,6 +121,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
               客户在自助对话里提出了商务诉求，觉把这件事交给你。下面是客户的完整原话、已明确的条件和已推荐的产品，不需要你重新询问、重新记录。</p>
           )}
           <Backstory id={v.session_id} />
+          <Narration id={v.session_id} />
           {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的上层知识检索已被主管冻结：检索不再显示上层知识的归属、读不到研发授予的结论，推荐只披露到用法，暂不能申请解密；日常跟单不受影响。</p>}
           <PendingActions />
           <AuthorizedReplies sessionId={v.session_id} />
@@ -134,6 +136,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
         {v.card || v.reuse || questions.length
           ? <Decisions v={v} questions={questions} fill={setReply} replyEmpty={!reply.trim()} escalateNotes={notesFor(conv?.messages, `${v.session_id}/escalate`)} />
           : <p className="text-[13px] leading-5 text-ink-3">此刻没有需要你签字的决策。觉每听一句都会再看一遍：该推荐、该升级、该回问时出现在这里。</p>}
+        <TimeBar />
         <WorkloadCard />
       </AgentPanel>
     </>

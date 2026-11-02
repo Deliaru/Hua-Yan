@@ -9,6 +9,7 @@ import { useGlow } from "../components/Guide";
 import { AuthorizedReplies } from "../components/AuthorizedReplies";
 import { EmptyState, Group, PageHead, SideHead, TemperatureCondition } from "../components/ui";
 import { Backstory } from "../components/Backstory";
+import { Narration } from "../components/Narration";
 
 // V11.3 客户看到的状态：说清现在轮到谁
 const MY_STATUS: Record<string, string> = { open: "等你补充情况", recommended: "已有推荐", escalated: "已转研发", closed: "已记录" };
@@ -60,6 +61,7 @@ function Desk({ sid }: { sid: string }) {
             <span className="tag mr-2">L0 · 客户</span>你只看得到说明书、用法和公开案例；化言只问会改变推荐或研发判断的条件。</p>}
           <RouteStrip objectId={sid} />
           {notes && <Backstory id={sid} title="化言在背后做了什么" />}
+          <Narration id={sid} />
           {notes && route?.why && <WhyRd r={route} sid={sid} />}
           <div className={notes ? "grid grid-cols-[minmax(320px,6fr)_minmax(280px,5fr)] items-start gap-5" : ""}>
             <Chat v={v} route={route} />

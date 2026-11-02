@@ -12,6 +12,7 @@ import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, 
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 import { SourceTrial } from "../components/SourceTrial";
 import { Backstory } from "../components/Backstory";
+import { Narration, TimeBar } from "../components/Narration";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
 const reqsOf = (q: Question) => q.refs.requirement_id ? [q.refs.requirement_id] : (q.refs.requirement_ids ?? "").split(",").filter(Boolean);
@@ -78,6 +79,7 @@ function RdDesk({ question, reqId, panel }: { question: Question | null; reqId: 
             : view ? (
             <>
               <Backstory id={view.requirement.id} />
+              <Narration id={view.requirement.id} />
               <RouteStrip objectId={view.requirement.id} />
               <ReqHead view={view} />
               <CandidateClaims key={reqId ?? ""} reqId={reqId} />
@@ -96,6 +98,7 @@ function RdDesk({ question, reqId, panel }: { question: Question | null; reqId: 
           <button className="ml-2 text-accent" onClick={() => setItemIndex(null)}>返回整张单</button>
         </div>}
         {view && <ReqContext view={view} />}
+        <TimeBar />
         <WorkloadCard />
       </AgentPanel>
     </>

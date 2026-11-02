@@ -134,6 +134,20 @@ export type StorySubject = "human" | "agent" | "jue" | "jev" | "qi" | "system";
 export interface StoryLine { ts: string; kind: string; subject: StorySubject; role: Role | null; who: string; text: string }
 export interface StoryWaiting { question_id: string; family: string; decision: string; owner_id: string | null; signer_id: string | null; prepared: boolean }
 export interface CaseStory { session_id: string; requirement_id: string | null; story: StoryLine[]; waiting: StoryWaiting[] }
+// V11.2 / V11.4 旧流程推算（eval/old_flow.py）：now_times 是这次实际还发生的次数（交叉工位按前情数，本职工位照常保留）
+export interface OldFlowStation { station: string; role: "sales" | "pm" | "rd"; times: number; minutes: number; now_times?: number; now_minutes?: number }
+export interface OldFlow {
+  path: string; cases: number; source: string; assumed: string[]; params_source: string;
+  old: { stations: OldFlowStation[]; roles: string[]; handoffs: number; lost: string[] | null; backs: number; reworks: number;
+         by_role_minutes: Record<string, number>; work_hours: number; wait_hours: number };
+  now: { roles: string[]; human_steps: number };
+}
+// V11.4 个人时间构成：现状比例（假设）按这批事的交叉工位缩短
+export interface TimeSegment {
+  whose: string; before: number; after: number; worse: boolean; old_minutes: number; saved_minutes: number;
+  steps: { station: string; times: number; now_times: number; minutes_each: number }[];
+}
+export interface TimeBar { role: string; cases: number; own_before: number; own_after: number; segments: TimeSegment[]; source: string; split_source: string }
 // 为什么直达研发：升级时查过的现有产品、按客户条件被排除的原因、Jev 判「都不合适」的概率
 export interface RouteWhy {
   by: string; phenomenon: string; p_none: number; scored_by: string;

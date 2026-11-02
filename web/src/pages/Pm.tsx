@@ -7,6 +7,7 @@ import { REQ_STATUS, Side, useApp, useData, useLabels } from "../ctx";
 import type { Question, RequirementView } from "../types";
 import { RouteStrip, WorkloadCard } from "../components/Route";
 import { Backstory } from "../components/Backstory";
+import { Narration, TimeBar } from "../components/Narration";
 import { useGuideArg } from "../components/Guide";
 import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote } from "../components/ui";
 
@@ -68,6 +69,7 @@ export function Pm() {
         </div>
       </div>
       <aside className="inspector fixed bottom-0 right-0 top-[52px] z-10 flex w-[372px] flex-col gap-5 overflow-y-auto border-l border-sep px-5 py-5">
+        <TimeBar />
         <WorkloadCard title="你的判断产生了什么" />
         {!notes && <p className="text-[12.5px] leading-5 text-ink-3">你的判断让多少需求不再进研发，可以在工具栏打开「演示说明」查看。</p>}
       </aside>
@@ -96,6 +98,7 @@ function Pane({ q, onDone }: { q: Question; onDone: (text: string) => void }) {
       <LayerNote layer={2}>你在 L2：看得到产品需求与归属，研发的化学要点与封存项只显示「谁懂」、不显示原文。</LayerNote>
       {rid && <RouteStrip objectId={rid} />}
       {rid && <Backstory id={rid} />}
+      {rid && <Narration id={rid} />}
       {q.family === "scope_update" && <Scope q={q} onDone={onDone} />}
       {q.family === "opportunity" && <Opportunity q={q} onDone={onDone} />}
       {q.family === "accept_requirement" && view && <Correct q={q} view={view} onDone={onDone} />}

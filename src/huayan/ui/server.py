@@ -214,7 +214,19 @@ def old_flow_of(app, p):
     route = app.route_of(p["id"], p["viewer"])
     rid = route["requirement_id"]
     cases = len(app._requirements[rid].session_ids) if rid else 1
-    return old_flow.estimate(route, old_flow.load_params(), cases)
+    return old_flow.estimate(route, old_flow.load_params(), cases, story=app.case_story(p["id"], p["viewer"])["story"])
+
+
+def time_bar_of(app, p):
+    """V11.4：我的时间构成从现状到这一局（推算）。业务员算自己客户的会话，研发算指派给自己的单，产品经理算全部会话；
+    每段会话按一件事推算（合并成课题的各自算一次）。"""
+    viewer, role = p["viewer"], p["viewer"].split(":")[0]
+    mine = {"sales": lambda s: s.sales_id == viewer, "pm": lambda s: True,
+            "rd": lambda s: any(s.id in r.session_ids and r.assigned_rd == viewer for r in app._requirements.values())}[role]
+    params = old_flow.load_params()
+    estimates = [old_flow.estimate(app.route_of(s.id, viewer), params, story=app.case_story(s.id, viewer)["story"])
+                 for s in app.sessions() if mine(s)]
+    return old_flow.time_bar(estimates, params, role)
 
 
 def demo_ledger(app, p):
@@ -265,6 +277,7 @@ GET = {
     "/api/route": lambda app, p: app.route_of(p["id"], p["viewer"]),   # v6：需求轨迹条
     "/api/case-story": lambda app, p: app.case_story(p["id"], p["viewer"]),   # V11.1：一件事的前情
     "/api/old-flow": old_flow_of,   # V11.2：同一件事按旧流程走的推算
+    "/api/time-bar": time_bar_of,   # V11.4：我的时间构成从现状到这一局
     "/api/readiness": lambda app, p: app.readiness(p["id"], p["viewer"]),   # v6.1：开工门槛
     "/api/session-readiness": lambda app, p: app.session_readiness(p["id"], p["viewer"]),   # v6.1 E1
     "/api/workload": lambda app, p: app.workload(p["viewer"]),   # v6.1 E6

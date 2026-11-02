@@ -23,6 +23,10 @@ STATION = {
     "产品经理转述": ("pm", "pm_relay"), "研发看单判断": ("rd", "rd_review"), "补问一轮": ("rd", "back_round"),
     "试样返工一轮": ("rd", "rework"), "产品经理评价": ("pm", "pm_eval"), "业务员开单": ("sales", "sales_order"),
 }
+# V11.4 交叉占用：(岗位, 被谁的事占用) → 哪些工位（CEO-VIEW 3.0）。补问一轮同时占用研发和产品经理。其余工位是本职，照常保留
+SEGMENT = {("sales", "pm"): ("业务员答技术问题", "业务员记录需求"), ("pm", "sales"): ("产品经理查资料答复", "产品经理转述"),
+           ("pm", "rd"): ("补问一轮",), ("rd", "pm"): ("补问一轮",)}
+CROSS = {name for names in SEGMENT.values() for name in names}
 
 
 def load_params(default: Path = DEFAULT, override: Path = OVERRIDE) -> dict:
@@ -43,9 +47,19 @@ def card_loss(card: NeedCard, seeds: Seeds, relay: dict, seed: int) -> dict:
     return _gaps(card, seeds, phenomenon, told)
 
 
-def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None, labels: dict | None = None) -> dict:
+def now_times(story: list[dict]) -> dict:
+    """这次实际还发生了几次交叉工位（从门面 case_story 的前情数）：业务员亲自答过客户算一次答技术问题，研发每次退回或回问算一轮补问；
+    记录、转述、查资料答复已由觉和产品经理 Agent 接走，不再由人做。"""
+    return {"业务员答技术问题": int(any(x["kind"] == "turn" and x["role"] == "sales" for x in story)),
+            "补问一轮": sum(x["kind"] == "requirement_returned" for x in story),
+            "业务员记录需求": 0, "产品经理查资料答复": 0, "产品经理转述": 0}
+
+
+def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None, labels: dict | None = None,
+             story: list[dict] | None = None) -> dict:
     """route = HuayanApp.route_of 的结果；cases = 合并成一个课题的需求件数（旧流程里各走一遍）；
-    loss = card_loss 的结果（没有需求卡时为 None）；labels = 槽位名称，用来写丢掉的条件。"""
+    loss = card_loss 的结果（没有需求卡时为 None）；labels = 槽位名称，用来写丢掉的条件；
+    story = case_story 的前情，有时给交叉工位写上这次实际的次数 now_times（本职工位照常保留，等于旧流程次数）。"""
     path, p = route["path"], params
     rate = (1.0 if loss["returned"] else 0.0) if loss else p["return_rate"]
     if path in ("追问中", "自助解决"):
@@ -62,6 +76,11 @@ def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None
     stations = [(name, n * cases) for name, n in stations if n]
     rows = [{"station": name, "role": STATION[name][0], "times": round(n, 3),
              "minutes": round(n * p["minutes"][STATION[name][1]], 1)} for name, n in stations]
+    if story is not None:
+        now = now_times(story)
+        for r in rows:
+            r["now_times"] = now[r["station"]] if r["station"] in CROSS else r["times"]
+            r["now_minutes"] = round(r["now_times"] * p["minutes"][STATION[r["station"]][1]], 1)
     roles = list(dict.fromkeys(r["role"] for r in rows))
     times = lambda name: sum(r["times"] for r in rows if r["station"] == name)
     backs, reworks = times("补问一轮"), times("试样返工一轮")
@@ -82,3 +101,25 @@ def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None
                 "wait_hours": round(handoffs * p["wait_hours"] + reworks * p["trial_wait_hours"], 1)},
         "now": {"roles": [ROLE_NAME[r] for r in now], "human_steps": route["n_human_steps"]},
     }
+
+
+def time_bar(estimates: list[dict], params: dict, role: str) -> dict:
+    """V11.4 个人时间构成：现状比例（time_split，假设）按这批事的交叉工位「这次实际次数 / 旧流程次数」缩短，本职补足 100。
+    即「如果你的交叉工作都像这几件事」，算式逐工位给出：旧流程几次、这次几次、每次几分钟。"""
+    rows = [r for e in estimates for r in e["old"]["stations"]]
+    split, segments = params["time_split"][role], []
+    for whose, before in split.items():
+        if whose == "own":
+            continue
+        names = SEGMENT[role, whose]
+        hit = [r for r in rows if r["station"] in names]
+        old, now = sum(r["minutes"] for r in hit), sum(r["now_minutes"] for r in hit)
+        steps = [{"station": name, "times": round(sum(r["times"] for r in hit if r["station"] == name), 2),
+                  "now_times": sum(r["now_times"] for r in hit if r["station"] == name),
+                  "minutes_each": params["minutes"][STATION[name][1]]} for name in names]
+        # 这批事里实际补问比旧流程的期望还多时，这一段不缩短（worse 标出），色条不画得比现状更长
+        segments.append({"whose": whose, "before": before, "after": round(before * min(now / old, 1), 1) if old else before,
+                         "worse": now > old, "old_minutes": round(old, 1), "saved_minutes": round(old - now, 1), "steps": steps})
+    return {"role": role, "cases": len(estimates), "own_before": split["own"],
+            "own_after": round(100 - sum(x["after"] for x in segments), 1), "segments": segments,
+            "source": "推算", "split_source": "假设" if "time_split" in params["assumed"] else params["source"]}

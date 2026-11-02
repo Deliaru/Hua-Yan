@@ -7,7 +7,7 @@ import yaml
 
 from huayan.app import HuayanApp
 from huayan.domain import load_seeds
-from huayan.eval.old_flow import card_loss, estimate, load_params
+from huayan.eval.old_flow import card_loss, estimate, load_params, time_bar
 from huayan.sim.cards import make_cards
 
 
@@ -56,3 +56,24 @@ def test_given_params_override_assumptions(tmp_path):
     assert params["minutes"]["pm_relay"] == 90 and params["source"] == "传化研发估计"
     assert "minutes.pm_relay" not in params["assumed"] and "wait_hours" not in params["assumed"]
     assert "minutes.rd_review" in params["assumed"]
+
+
+def test_time_bar_shrinks_only_what_did_not_happen(tmp_path):
+    """V11.4：交叉占用按「这次实际次数 / 旧流程次数」缩短；研发退回一次，补问那一段就不再全部省掉。"""
+    app, params = _app(tmp_path), load_params(override=tmp_path / "none.yaml")
+    sid = app.start_session("customer:C01", "sales:S01").id
+    app.add_turn(sid, "customer", "深一块浅一块，锦氨的，溢流缸")
+    sid2 = app.start_session("customer:C02", "sales:S01").id
+    app.add_turn(sid2, "customer", "深一块浅一块，锦氨的，气流缸")
+    app.tick()
+    req = app.escalate(sid2, "sales:S01")
+    of = lambda s, v: estimate(app.route_of(s, v), params, story=app.case_story(s, v)["story"])
+    sales = time_bar([of(sid, "sales:S01"), of(sid2, "sales:S01")], params, "sales")
+    assert sales["own_before"] == 72 and sales["segments"][0]["after"] == 0 and sales["own_after"] == 100
+
+    rd = req.assigned_rd
+    clean = time_bar([of(sid2, rd)], params, "rd")["segments"][0]
+    app.return_requirement(req.id, "请写清染色温度", rd)
+    back = time_bar([of(sid2, rd)], params, "rd")["segments"][0]
+    assert clean["after"] == 0 and back["steps"][0]["now_times"] == 1
+    assert back["after"] == back["before"] and back["worse"]      # 旧流程期望补问 0.25 轮，这次实际 1 轮
