@@ -2025,9 +2025,8 @@ class HuayanApp:
             "p_need": q.p_need, "scored_by": q.scored_by}, session_id=session.id)
         return self.bus.get(q.id).model_copy(deep=True)
 
-    def route_of(self, object_id, viewer_id):
-        """v6：一份需求当前走哪条路、经过了谁、绕过了谁。全部由事件与状态推出，不另存。
-        四格状态：human = 该角色的人真实处理过；auto = 由 Agent / 觉代办；pending = 已到该角色、待处理；none = 未经过。"""
+    def _case(self, object_id, viewer_id):
+        """一件事：一段会话和由它生成的需求单，以及与它们相关的事件和挂在知识对象上的决策。route_of 与 case_story 共用。"""
         viewer = self._actor(viewer_id)
         if object_id in self._requirements:
             object_id = self._requirements[object_id].session_ids[0]
@@ -2035,13 +2034,20 @@ class HuayanApp:
         if level_of(viewer) <= 1 and viewer_id not in (session.customer_id, session.sales_id):
             raise PermissionDenied("只能查看自己参与的会话")
         reqs = [r for r in self._requirements.values() if session.id in r.session_ids]
-        main = next((r for r in reversed(reqs) if r.status != "merged"), None)
         rids = {r.id for r in reqs}
         events = [e for e in self.events.query() if e.session_id == session.id
                   or e.payload.get("requirement_id") in rids or e.payload.get("target") in rids
                   or rids & set(e.payload.get("requirement_ids", []))]
         linked = [q for q in self.bus.list(status=None)        # 挂在知识对象上、由这张单引出的决策（扩适用范围）
                   if rids & set(q.refs.get("requirement_ids", "").split(","))]
+        return viewer, session, reqs, events, linked
+
+    def route_of(self, object_id, viewer_id):
+        """v6：一份需求当前走哪条路、经过了谁、绕过了谁。全部由事件与状态推出，不另存。
+        四格状态：human = 该角色的人真实处理过；auto = 由 Agent / 觉代办；pending = 已到该角色、待处理；none = 未经过。"""
+        viewer, session, reqs, events, linked = self._case(object_id, viewer_id)
+        main = next((r for r in reversed(reqs) if r.status != "merged"), None)
+        rids = {r.id for r in reqs}
         steps = _human_events(events)
         humans = lambda role: sorted({e.actor for e in steps if e.actor.startswith(f"{role}:")})
         sales, pm, rd = humans("sales"), humans("pm"), humans("rd")
@@ -2098,6 +2104,115 @@ class HuayanApp:
                 "path": path, "roles": roles, "basis": basis, "why": why,
                 "quote": next((t.text for t in session.turns if t.speaker == "customer"), ""),
                 "n_human_steps": len(steps)}
+
+    def case_story(self, object_id, viewer_id):
+        """V11.1：一件事到现在的前情，按时间排列。每行写谁做的（主体：human 人 / agent Agent / jue 觉 / jev Jev / qi 契 /
+        system 系统）、属于哪个角色、做了什么；waiting 是这件事上还开着的决策。全部由事件与问题总线推出，不另存。
+        L0/L1 只看会话上的经过；需求单内部的起草、退回、决策与研发备注只给 L2 以上和决策的主人、签字人。"""
+        viewer, session, reqs, events, linked = self._case(object_id, viewer_id)
+        inner = level_of(viewer) >= 2
+        rids = {r.id for r in reqs}
+        slot = {s.id: s.label for s in self.seeds.slots}
+        slots = lambda ids: "、".join(slot.get(s, s) for s in ids)
+        phen = {p.id: p.label for p in self.seeds.phenomena}
+        name = lambda a: self.actors[a].name.replace("（模拟）", "") if a in self.actors else a
+        named = lambda a: name(a) + (" " if name(a)[-1:].isascii() else "")    # 「产品经理 Agent 准备」
+        product = lambda pid: next((p.name.replace("（模拟）", "") for p in self.kb.products() if p.id == pid), pid)
+        decision = {t.family: t.decision_label for t in self.templates.values()}
+        questions = {q.id: q for q in self.bus.list(status=None)}
+        mine = lambda q: inner or viewer_id in (q.owner_id, q.signer_id)
+
+        def line(e):
+            """(主体, 角色, 谁, 说明)；None = 不进前情（抽取、检索等过程记录，或与另一行说的是同一件事）。"""
+            p, who = e.payload, e.actor
+            act = lambda text: ("human", who.split(":")[0], who, text)
+            if e.kind == "turn":
+                if p["speaker"] == "customer":
+                    return "human", "customer", session.customer_id, f"说：「{p['text']}」"
+                return "human", "sales", session.sales_id, f"对客户说：「{p['text']}」"
+            if e.kind == "ask_hint" and p["slots"]:
+                return "jue", None, "jue", f"判断还缺{slots(p['slots'])}，需要向客户问清"
+            if e.kind == "match":
+                n = len(p["candidate_ids"])
+                return "jev", None, "jev", f"按已知条件查现有产品，{f'找到 {n} 个候选' if n else '没有合适的'}"
+            if e.kind == "recommend":
+                return "jev", None, "jev", f"推荐{product(p['product_id'])}"
+            if e.kind == "escalate":
+                if who == "jue:auto":
+                    return "jue", None, who, "判断现有产品解决不了，把需求连同客户原话直接交给研发"
+                return act("签字升级，需求交给研发")
+            if e.kind == "requirement_created":
+                what = phen.get(p["phenomenon"], "未识别现象")
+                return "system", None, who, f"生成需求单（{what}），指派研发{name(p['assigned_rd'])}"
+            if e.kind == "sales_assigned":
+                return "jue", None, who, f"判断这是商务诉求，交给业务员{name(p['sales_id'])}"
+            if e.kind == "reuse_proposed" and inner:
+                return "agent", "pm", who, (f"查了现成产品，建议复用{product(p['product_id'])}" if p["product_id"]
+                                            else "查了现成产品，没有可以直接复用的")
+            if e.kind == "reuse_adopted":
+                return act(f"采用现成产品{product(p['product_id'])}")
+            if e.kind == "reuse_declined" and inner:
+                return act("不采用复用建议")
+            if e.kind == "question_published":
+                q = questions[p["question_id"]]
+                if not mine(q) or (q.resolution and q.resolution.by == "jue:auto"):
+                    return None       # 觉自动执行的，由执行结果那一行说
+                to = f"由{named(q.owner_id)}准备、{named(q.signer_id)}签字" if q.signer_id else f"交给{name(q.owner_id)}"
+                return "jue", None, "jue", f"提出决策「{decision[q.family]}」，{to}"
+            if e.kind == "question_prepared" and mine(questions[p["question_id"]]):
+                q = questions[p["question_id"]]
+                agent = "产品经理 Agent " if p["by"] == "pm:agent" else f"{name(p['by'])}的 Agent "
+                return "agent", q.owner_role, p["by"], f"{agent}准备好了「{decision[q.family]}」"
+            if e.kind == "question_resolved" and p.get("action") == "dismiss" and mine(questions[p["question_id"]]):
+                return act(f"判断「{decision[p['family']]}」现在不需要")
+            if e.kind == "requirement_accepted":
+                return act("接单立项")
+            if e.kind == "requirement_returned" and inner:
+                return act(f"先回问客户：{slots(p['slots'])}" if p.get("slots") else f"退回需求：{p['reason']}")
+            if e.kind == "requirement_edited" and inner:
+                what = "化学要点" if p["layer"] == 3 else "产品需求"
+                return ("agent", "pm", who, f"起草{what}条目") if who == "pm:agent" else act(f"修改{what}条目")
+            if e.kind == "requirement_translated":
+                return act("确认化学要点")
+            if e.kind == "project_declined":
+                return act(f"判断不立项，已有产品{product(p['product_id'])}适用" + (f"：{p['reason']}" if inner else ""))
+            if e.kind == "trial":
+                ok = p["result"] == "pass"
+                cause = {"product": "产品本身", "equipment": "设备", "operation": "操作", "requirement": "需求条件缺失"}
+                return act(f"录入试样结果：{'通过' if ok else '未通过'}" + ("" if ok or not inner else f"（{cause[p['cause']]}）"))
+            if e.kind == "market_eval":
+                return act(f"录入客户评价：{'满意' if p['result'] == 'pass' else '不满意'}")
+            if e.kind == "requirements_merged":
+                return act(f"签产品机会，把 {len(p['members']) + 1} 张同类需求合成一个课题")
+            if e.kind == "scope_extended":
+                return act(f"扩展{product(p['product_id'])}的适用范围")
+            if e.kind == "product_released":
+                return act(f"发布新品{product(p['product_id'])}")
+            if e.kind == "capability_used":
+                by = p["granted_by"]
+                src = "产品资料" if by == "seed" else f"{name(by)}签过的判断"
+                return "qi", None, by, f"按{src}确定要问哪些条件" if p["form"] == "ask" else f"按{src}确认产品适用"
+            if e.kind == "recommendation_withdrawn":
+                return "qi", None, who, f"依据变了，{product(p['product_id'])}的推荐先停下，等研发复核"
+            return None
+
+        story = []
+        for e in events:
+            got = line(e)
+            if got is None:
+                continue
+            subject, role, who, text = got
+            if story and (story[-1]["who"], story[-1]["text"]) == (who, text):
+                continue          # 同一人连着起草多条，只记一行
+            if e.kind == "question_resolved" and story and story[-1]["who"] == who and story[-1]["ts"][:19] == e.ts.isoformat()[:19]:
+                continue          # 不立项等动作同一刻顺带关掉的决策，由动作那一行说
+            story.append({"ts": e.ts.isoformat(), "kind": e.kind, "subject": subject, "role": role, "who": who, "text": text})
+        waiting = [{"question_id": q.id, "family": q.family, "decision": decision[q.family], "owner_id": q.owner_id,
+                    "signer_id": q.signer_id, "prepared": q.prepared_at is not None}
+                   for q in self.bus.list(status="open") if mine(q) and (
+                       q.refs.get("session_id") == session.id or q.refs.get("requirement_id") in rids or q in linked)]
+        main = next((r for r in reversed(reqs) if r.status != "merged"), None)
+        return {"session_id": session.id, "requirement_id": main.id if main else None, "story": story, "waiting": waiting}
 
     def workload(self, viewer_id):
         """v6.1 E6：本人的工作分两组——被系统拿掉的无效工作（因信息缺失、转述、重复而被迫发生的）与保留的专业判断。
