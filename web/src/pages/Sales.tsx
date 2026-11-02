@@ -83,7 +83,7 @@ export function Sales() {
     <>
       <Side><SalesSidebar mine={mine} current={sid} guided={guided} choose={choose} /></Side>
       {current && view ? <SessionDesk key={sid} summary={current} v={view} questions={mineQs} />
-        : <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始。演示者扮客户，直接在工作面上录入客户的话。" />}
+        : <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始，把客户的原话录进来。" />}
     </>
   );
 }
@@ -173,7 +173,7 @@ function Timeline({ v, lit }: { v: SessionView; lit: string | null }) {
         <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="flex items-center gap-2 border-t border-sep bg-[#fafafb] py-2 pl-4 pr-2.5">
           <span className="w-9 shrink-0 text-[11px] font-semibold text-ink-2">客户</span>
           <input value={said} onChange={(e) => setSaid(e.target.value)} aria-label="客户说" disabled={busy}
-                 placeholder="客户说……（演示者录入）" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-3" />
+                 placeholder="客户说……（照原话录入）" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-3" />
           {line && <button type="button" className={`chip ${glow && !said.trim() ? "glow" : ""}`} disabled={busy}
                            onClick={() => setSaid(line)}>演示自动填入</button>}
           <button className={`btn btn-plain !h-[26px] !px-2.5 ${glow && said.trim() ? "glow" : ""}`} disabled={busy || !said.trim()}>录入</button>

@@ -29,11 +29,11 @@ export function Side({ children }: { children: React.ReactNode }) {
 
 // ── 显示用标签：界面上不出现内部 id 与枚举 ─────────────────
 export const FAMILY: Record<string, string> = {
-  qi_grant: "授予能力", qi_review: "依据复核", trial_rework: "退回重新转译", trial_risk: "试样风险", stale_capability: "判断过时",
-  ask_slot: "追问", escalate_need: "推荐还是升级", reuse_product: "现成产品审定", opportunity: "机会汇聚",
-  accept_requirement: "接单", ask_back: "回问", distortion: "转译失真", confirm_translation: "确认化学要点",
-  contribution: "沉淀", market_eval: "客户评价", seal_points: "封存 / 放出", seal_leak: "说明书泄密",
-  release: "发布审定", knowledge_conflict: "知识冲突", leak_risk: "泄露风险", mechanism_followup: "追问产品内部", decrypt_request: "解密申请",
+  qi_grant: "授予能力", qi_review: "资料变了，复核判断", trial_rework: "试样失败，重新梳理需求", trial_risk: "试样风险", stale_capability: "判断可能过时",
+  ask_slot: "追问", escalate_need: "要不要转研发", reuse_product: "现成产品能不能用", opportunity: "合并成产品机会",
+  accept_requirement: "接单", ask_back: "回问客户", distortion: "需求转述走样", confirm_translation: "确认化学要点",
+  contribution: "沉淀经验", market_eval: "客户评价", seal_points: "决定哪些对外", seal_leak: "说明书可能泄密",
+  release: "发布审定", knowledge_conflict: "知识冲突", leak_risk: "泄露风险", mechanism_followup: "追问产品内部", decrypt_request: "申请查看保密内容",
   route_rd: "直达研发", handoff_sales: "交业务员", scope_update: "扩展适用范围", contribution_pm: "沉淀产品需求",
 };
 // 准备中的问题只显示主人在做什么

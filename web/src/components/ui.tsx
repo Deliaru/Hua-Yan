@@ -106,7 +106,7 @@ export function AgentMark({ who = "Agent 起草" }: { who?: string }) {
   return <span className="tag tag-agent" title={meta.status.replay ? "录制回放：这段是录制时 Agent 的真实输出" : undefined}>{who}</span>;
 }
 
-// 觉的打分：模型打分显示概率与细条，规则打分显示「到点」（不冒充概率）
+// 觉的打分：模型打分显示概率与细条，规则打分写成岗位能懂的话（不冒充概率）；打分来源留在悬停说明里
 // 异常类决策（决策目录 kind: anomaly）：规则打分命中阈值才提出；其余推进类到点即提出
 export const ANOMALY = new Set(["distortion", "seal_leak", "knowledge_conflict", "leak_risk", "qi_review"]);
 
@@ -114,15 +114,15 @@ export function Score({ q }: { q: Pick<Question, "p_need" | "scored_by" | "famil
   const L = useLabels();
   if (q.scored_by === "human") return <span className="tag" title="由人发起，不经觉打分">人工提出</span>;
   if (!isModel(q.scored_by) || q.p_need == null) return ANOMALY.has(q.family)
-    ? <span className="tag" title="规则打分超过阈值">规则 · 命中</span>
-    : <span className="tag" title="上一步已签字，规则到点即提出">规则 · 到点</span>;
+    ? <span className="tag" title="觉按规则打分，超过阈值提出">觉发现</span>
+    : <span className="tag" title="上一步已签字，觉按规则提出下一步">轮到这一步</span>;
   return (
     <span className="flex shrink-0 items-center gap-1.5" title={`${L.scorer(q.scored_by)} 打分`}>
       <span className="h-[3px] w-8 overflow-hidden rounded-full bg-fill">
         <span className="block h-full rounded-full bg-attn" style={{ width: scoreText(q) }} />
       </span>
       <span className="num text-[12px] font-semibold text-attn-ink">{scoreText(q)}</span>
-      <span className="text-[11px] text-ink-3">{L.scorer(q.scored_by)}</span>
+      <span className="text-[11px] text-ink-3">觉判断需要处理</span>
     </span>
   );
 }

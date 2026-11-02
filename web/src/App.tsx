@@ -47,6 +47,7 @@ const PAGES = [
 ] as const;
 type Page = (typeof PAGES)[number][0];
 const HIDDEN: Page[] = ["story", "desk"];   // 不在侧栏出现的旧页面
+const TRIAL_PAGES: Page[] = ["jue", "ledger"];   // V11.0 试用实例：除自己的工作面，只留觉视图与知识账本；架构总览、模拟月、三层对照、评测是演示页
 const HUMANS: Role[] = ["sales", "pm", "rd", "supervisor"];   // 觉视图、三层对照、知识与积分、旧沉浸工作面可选的身份（产品经理为真人 P01，不含 Agent）
 const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd", supervisor: "supervisor" };
 const ROLE_NAME: Record<string, string> = { customer: "客户", sales: "业务员", pm: "产品经理", rd: "研发", supervisor: "研发负责人" };
@@ -83,7 +84,7 @@ export default function App() {
     if (!trialOn) return;
     let last = "";
     const timer = setInterval(() => api.trialStamp().then((s) => {
-      const now = `${s.events}:${s.failures}`;
+      const now = `${s.events}:${s.failures}:${s.sessions}`;
       if (last && now !== last) setVersion((v) => v + 1);
       last = now;
     }, () => {}), 4000);
@@ -100,8 +101,8 @@ export default function App() {
     if (own) setPage(own);
   }, fail);
   if (trial && !trialActor) return <RolePicker meta={meta} onPick={enter} error={error} />;
-  // 试用实例里别的身份的工作面不出现；地址栏指过去时回到自己的工作面
-  const visible = (k: Page) => !trialActor || !ROLE_PAGES[k] || ROLE_PAGES[k] === trialActor.role;
+  // 试用实例里只出现自己的工作面、觉视图与知识账本；地址栏指到别处时回到自己的工作面
+  const visible = (k: Page) => !trialActor || ROLE_PAGES[k] === trialActor.role || TRIAL_PAGES.includes(k);
   const page: Page = visible(rawPage) ? rawPage : PAGES.find(([k]) => ROLE_PAGES[k] === trialActor!.role)?.[0] ?? "jue";
   const inDemo = demo && !trial;
 
@@ -146,7 +147,7 @@ export default function App() {
         {/* 导览占中间的剩余空间居中：两侧再宽也不会叠上 */}
         <div className="flex min-w-0 flex-1 justify-center">{page === "desk" && <Guide />}</div>
         <div className="flex items-center gap-1.5">
-          <StatusMenu s={meta.status} m={meta.mode} onMode={() => setModeOpen(true)} />
+          <StatusMenu s={meta.status} m={meta.mode} trial={!!trial} onMode={() => setModeOpen(true)} />
           <CheckpointMenu onLoad={(name) => restart(`正在载入检查点「${name}」……`, api.loadCheckpoint(name))} />
           <Popover align="right" trigger={(toggle) => (
             <button onClick={toggle} className={`flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill ${
@@ -187,7 +188,7 @@ export default function App() {
         </button>}
         {PAGES.filter(([k]) => !HIDDEN.includes(k) && visible(k)).map(([k, label, Icon, group], i, shown) => (
           <div key={k}>
-            {group && shown[i - 1][3] !== group && <p className="side-head !pb-1 !pt-3">{group}</p>}
+            {group && shown[i - 1]?.[3] !== group && <p className="side-head !pb-1 !pt-3">{group}</p>}
             <button onClick={() => { setFocus(null); setPage(k); }} className={`side-row nav-row ${page === k ? "on" : ""} ${group ? "!pl-[30px]" : ""}`}>
               <Icon /><span className="text-[13px] font-semibold">{label}</span>
             </button>
@@ -195,10 +196,10 @@ export default function App() {
         ))}
         <div ref={setSide} className="flex-1" />
         </>}
-        <p className="mx-[18px] mt-4 flex items-center gap-1.5 text-[11px] leading-4 text-ink-3"
+        {!trial && <p className="mx-[18px] mt-4 flex items-center gap-1.5 text-[11px] leading-4 text-ink-3"
            title="占位种子与程序生成的对话，不含任何真实客户、企业与配方">
           <i className="h-1.5 w-1.5 rounded-full bg-ink-3" />全部为模拟数据
-        </p>
+        </p>}
       </aside>
 
       <main style={{ marginLeft: sideW, ["--side-w" as string]: `${sideW}px` }} className="pt-[52px]">
@@ -264,7 +265,7 @@ function Name({ id }: { id: string }) {
 // 回放时大模型与 OneJev 的输出来自录制缓存，逐项写「录制回放」，不写「在线」；觉（Jue-K）是本地推理，回放时也在实时运行
 // 自带密钥（BYOK）时写试用者填的模型名；没接 OneJev 时 Jev 是大模型降级，标黄
 
-function StatusMenu({ s, m, onMode }: { s: RunStatus; m: RunMode; onMode: () => void }) {
+function StatusMenu({ s, m, trial, onMode }: { s: RunStatus; m: RunMode; trial: boolean; onMode: () => void }) {
   const R = "录制回放";
   const byok = m.kind === "byok";
   const jev: Record<string, string> = { onejev: "OneJev", mock: "桩", llm_fallback: "大模型降级" };
@@ -275,7 +276,7 @@ function StatusMenu({ s, m, onMode }: { s: RunStatus; m: RunMode; onMode: () => 
   const llm = (): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${m.llm_model} · ${R}`, "replay"]
     : [`${m.llm_model} · ${byok ? "自带密钥" : "在线"}`, "ok"];
   const items: [string, string, Kind][] = [
-    ["数据", "模拟", "ok"],
+    ["数据", trial ? "共享试用" : "模拟", "ok"],
     ...(s.seeds_placeholder ? [["种子", "占位", "warn"] as [string, string, Kind]] : []),
     ["Agent", ...llm()],
     ["抽取", ...(s.extractor === "llm" ? llm() : ["规则", "warn"] as [string, Kind])],
@@ -285,7 +286,7 @@ function StatusMenu({ s, m, onMode }: { s: RunStatus; m: RunMode; onMode: () => 
     ["觉", jue[s.realtime_model] ?? s.realtime_model, s.realtime_model === "jue_proto" ? "warn" : "ok"],
   ];
   const degraded = items.filter(([, , k]) => k === "warn").length;
-  const mode = s.replay ? "录制回放" : byok ? "自带密钥" : s.gateway_mock ? "离线演示" : "现场运行";
+  const mode = s.replay ? "录制回放" : byok ? "自带密钥" : s.gateway_mock ? (trial ? "离线运行" : "离线演示") : "现场运行";
   const sub = s.replay ? "非在线运行" : degraded ? `${degraded} 项降级` : byok ? "真实运行" : "全部正常";
   const TAG: Record<Kind, string> = { ok: "text-ink", warn: "tag tag-warn", replay: "tag" };
   return (

@@ -244,7 +244,7 @@ function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode })
             <div className="row">
               <span className="h-[18px] w-[18px] shrink-0 rounded-full shadow-[inset_0_0_0_1.5px_rgba(60,60,67,.25)]" />
               <span className="w-[92px] shrink-0 text-[14px] font-semibold">试样</span>
-              <span className="min-w-0 flex-1 text-[12.5px] text-ink-2">不经过觉：研发在实验室做试样，演示里用按钮模拟实验室系统回传结果</span>
+              <span className="min-w-0 flex-1 text-[12.5px] text-ink-2">不经过觉：研发在实验室做试样，在这里录入结果（实验室系统尚未接入）</span>
               <Act kind="plain" label="试样通过" glow={glowTrial} run={() => api.trial(req.id, "pass", me)} />
             </div>
           )}

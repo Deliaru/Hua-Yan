@@ -266,7 +266,8 @@ GET = {
     "/api/agents/trace": lambda app, p: own_trace(app, p["conversation_id"], p.get("viewer")),
     "/api/agents/pending": lambda app, p: app.agents.pending(p["actor"]),
     "/api/agents/failures": lambda app, p: app.agents.failures_for(p["viewer"]),     # V9.2：因模型接口失败没准备成的问题
-    "/api/trial/stamp": lambda app, p: {"events": len(app.events.events), "failures": len(app.agents.failures)},
+    "/api/trial/stamp": lambda app, p: {"events": len(app.events.events), "failures": len(app.agents.failures),
+                                       "sessions": len(app._sessions)},   # 开新会话不记事件，单独数
 }
 POST = {
     "/api/source-preparation/compile": lambda app, p: app.compile_source_preparation(p["req_id"], p["doc_id"], p["by"]),
@@ -991,6 +992,10 @@ if __name__ == "__main__":
     CONFIG = args.config or CONFIG
     RESUME, TRIAL = args.run, args.trial
     session_api("default")   # 先构建一次：Jue-K 模型等首次加载较慢
+    # V11.0：试用机拉了新代码却没重新构建前端时，浏览器里还是旧界面；启动时提醒一次
+    built = (DIST / "index.html").stat().st_mtime if (DIST / "index.html").exists() else 0
+    if built < max(f.stat().st_mtime for f in [*Path("web/src").rglob("*"), Path("web/index.html")] if f.is_file()):
+        print("注意：web/dist 不存在或比 web/src 旧，浏览器看到的不是当前界面；先运行 npm --prefix web run build")
     if TRIAL:
         load_trial_roles()
         Thread(target=trial_ticker, daemon=True).start()
