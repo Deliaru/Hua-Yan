@@ -1,0 +1,76 @@
+# 全部为开发者编写的合成材料；heldout仅演练分区，不能当成真实未见集。
+cases:
+  - &base
+    id: SYN-E1-001
+    source: 合成基础案例一
+    source_group: synthetic-basic
+    kind: 合成
+    labeled_by: 开发者（合成夹具，非专业人员标注）
+    labeled_at: '2026-11-03T09:00:00+08:00'
+    basis: 合成设定：保留已有面料；明确不知道温度；设备尚待补问，不代表真实返工。
+    split: dev
+    phenomenon: color_unlevel
+    first_words: 锦氨的，深一块浅一块，温度75℃。
+    turns: [温度我说错了，实际温度不清楚。]
+    final_conditions: {fiber: 锦纶氨纶}
+    unknown: [temperature_c]
+    late_conditions: []
+    tags: [纠正]
+  - <<: *base
+    id: SYN-E1-002
+    source: 合成首轮设备缺失案例
+    basis: 合成设定：首轮未问设备，后因缺设备条件补样时才补问，得知为溢流缸；设备是晚到条件。温度区间仅为客户条件，不代表专业适用范围。
+    phenomenon: color_unlevel
+    first_words: 纯棉的，颜色不匀，温度72—78℃。
+    turns: [设备是溢流缸。]
+    final_conditions: {fiber: 棉, equipment: 溢流染色机}
+    unknown: []
+    late_conditions: [equipment]
+    temperature_c: [72, 78]
+    temperature_quote: 温度72—78℃
+    tags: []
+  - <<: *base
+    id: SYN-E1-003
+    source: 合成纠正案例一
+    source_group: synthetic-correction
+    basis: 合成设定：首句已提供气流缸，后纠正为溢流缸；这是已提供条件的纠正，不属于当时没问到的晚到条件。
+    first_words: 锦氨的，色花，气流缸。
+    turns: [不是气流缸，是溢流缸。]
+    final_conditions: {fiber: 锦纶氨纶, equipment: 溢流染色机}
+    unknown: []
+    late_conditions: []
+    tags: [否定, 纠正]
+  - <<: *base
+    id: SYN-E1-004
+    source: 合成词表缺口案例
+    source_group: synthetic-correction
+    basis: 故意使用未入词表的设备名，验证只记录缺口、不映射到已有设备。
+    first_words: 锦氨的，色花，用合成专用设备X。
+    turns: []
+    final_conditions: {fiber: 锦纶氨纶, equipment: 合成专用设备X}
+    unknown: []
+    tags: []
+  - <<: *base
+    id: SYN-E1-005
+    source: 合成预留案例一
+    source_group: synthetic-reserved
+    split: heldout
+    basis: 仅用于演练来源分组隔离，非未见样本证据。
+    first_words: 涤纶布，颜色不匀，溢流缸。
+    turns: []
+    final_conditions: {fiber: 涤纶, equipment: 溢流染色机}
+    unknown: []
+    tags: []
+  - <<: *base
+    id: SYN-E1-006
+    source: 合成预留案例二
+    source_group: synthetic-reserved
+    split: heldout
+    basis: 仅用于演练来源分组隔离，非未见样本证据。
+    first_words: 纯棉的，颜色不匀，温度85℃。
+    turns: []
+    final_conditions: {fiber: 棉}
+    unknown: []
+    temperature_c: [85, 85]
+    temperature_quote: 温度85℃
+    tags: []

@@ -9,6 +9,7 @@
   uv run python scripts/backtest_cases.py --cases data/backtest/cases.yaml [--qa data/backtest/qa.yaml]
       [--evolved data/jue_evolution/seed0/models/evolving/W4] [--live]
 --live：一次性翻译组走真实强模型（config/models.yaml）；默认离线，该组为桩，报告标注。
+--prepare：只检查新E1标注格式与词表缺口，不运行模型或旧回测。示例见docs/trial/e1-preparation.md。
 """
 import argparse
 import json
@@ -44,7 +45,20 @@ def main():
     ap.add_argument("--frozen", default="models/jue_k")
     ap.add_argument("--evolved", default="data/jue_evolution/seed0/models/evolving/W4")
     ap.add_argument("--live", action="store_true")
+    ap.add_argument("--prepare", action="store_true", help="E1队友准备检查，不运行模型或业务评测")
+    ap.add_argument("--seeds", default="seeds", help="准备检查所对照的词表目录")
+    ap.add_argument("--split", choices=("dev", "heldout"), default="dev")
+    ap.add_argument("--out", help="准备报告输出目录")
     args = ap.parse_args()
+    if args.prepare:
+        if args.live:
+            ap.error("--prepare不调用模型，不能与--live同时使用")
+        from huayan.eval.e1 import prepare
+        from huayan.clock import get_clock
+        output = args.out or f"data/knowledge_v10/validation/E1-{get_clock().now():%Y%m%d-%H%M%S}"
+        summary = prepare(args.cases, args.seeds, output, args.split)
+        print(f"E1准备检查：{summary['selected']}条，词表缺口{summary['vocabulary_gap_count']}项；报告：{output}")
+        return
     set_clock(SimClock(T0))
     frozen = build(args.live, "frozen", args.frozen)
     evolved = build(args.live, "evolved", args.evolved)
