@@ -34,6 +34,7 @@ from huayan.gateway.client import ReplayMiss, StructuredOutputError
 from huayan.jev.system1 import OneJevClient
 from huayan.agent.hub import MODEL_ERRORS
 from huayan.sim.schedule import Gate
+from huayan.eval import old_flow
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
 PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
@@ -208,6 +209,14 @@ def demo_story():
     return yaml.safe_load(STORY.read_text(encoding="utf-8"))
 
 
+def old_flow_of(app, p):
+    """V11.2：这件事按旧流程走会怎样（推算）。界面只拿实际路径去推算，不读需求卡；参数每次重读，改了即生效。"""
+    route = app.route_of(p["id"], p["viewer"])
+    rid = route["requirement_id"]
+    cases = len(app._requirements[rid].session_ids) if rid else 1
+    return old_flow.estimate(route, old_flow.load_params(), cases)
+
+
 def demo_ledger(app, p):
     """V6-5.5 生产力账本：按本会话此刻的事件日志计数，口径同 scripts/demo_routes.py 的 v6 列；传统按黑线流程定义（每个需求 5 个人工节点、一张研发单），不是测量。"""
     sessions = app.sessions()
@@ -255,6 +264,7 @@ GET = {
     "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),
     "/api/route": lambda app, p: app.route_of(p["id"], p["viewer"]),   # v6：需求轨迹条
     "/api/case-story": lambda app, p: app.case_story(p["id"], p["viewer"]),   # V11.1：一件事的前情
+    "/api/old-flow": old_flow_of,   # V11.2：同一件事按旧流程走的推算
     "/api/readiness": lambda app, p: app.readiness(p["id"], p["viewer"]),   # v6.1：开工门槛
     "/api/session-readiness": lambda app, p: app.session_readiness(p["id"], p["viewer"]),   # v6.1 E1
     "/api/workload": lambda app, p: app.workload(p["viewer"]),   # v6.1 E6

@@ -77,6 +77,24 @@ def _gaps(card: NeedCard, seeds: Seeds, phenomenon: str | None, slots: dict[str,
     return {"missing": missing, "wrong": wrong, "returned": bool(missing or wrong), "return_reason": reason}
 
 
+def relay_g1(card: NeedCard, seeds: Seeds, relay: dict, seed: int, extractor: RuleExtractor):
+    """G1 业务员转述：按习惯问，再按假设的噪声模型写给研发。返回 (研发收到的现象, 研发收到的条件)。
+    V11.2 旧流程推算在同一张卡上复用。"""
+    slot_defs = {s.id: s for s in seeds.slots}
+    d = _Dialog(card, seeds, random.Random(seed), extractor)
+    for slot in relay["habit_slots"]:
+        d.ask(slot_defs[slot])
+    noise = random.Random(seed + 1)
+    phenomenon = None if noise.random() < relay["vague_prob"] else d.need.phenomenon
+    told = {}
+    for slot, value in d.need.known().items():
+        r = noise.random()
+        if r >= relay["drop_prob"]:
+            told[slot] = (noise.choice([v for v in slot_defs[slot].values if v != value])
+                          if r < relay["drop_prob"] + relay["swap_prob"] else value)
+    return phenomenon, told
+
+
 def _items(items: list[ReqItem], turns: list[Turn], owners: dict[str, str] | None = None) -> list[dict]:
     """需求单条目 → 展示：原话取第一条 quote_ref 的发言；owners 给出所引转化知识的归属人。"""
     text = {t.id: t.text for t in turns}
@@ -114,17 +132,7 @@ def run_distortion(cards: list[NeedCard], seeds: Seeds, cfg: dict, rng: random.R
         score = lambda *a, **k: rows.append(_score(card, seeds, trans, *a, **k))
 
         # G1 业务员转述：按习惯问，再按假设的噪声模型写给研发；没有原话、没有依据
-        d = _Dialog(card, seeds, random.Random(seed), extractor)
-        for slot in relay["habit_slots"]:
-            d.ask(slot_defs[slot])
-        noise = random.Random(seed + 1)
-        phenomenon = None if noise.random() < relay["vague_prob"] else d.need.phenomenon
-        told = {}
-        for slot, value in d.need.known().items():
-            r = noise.random()
-            if r >= relay["drop_prob"]:
-                told[slot] = (noise.choice([v for v in slot_defs[slot].values if v != value])
-                              if r < relay["drop_prob"] + relay["swap_prob"] else value)
+        phenomenon, told = relay_g1(card, seeds, relay, seed, extractor)
         items = [ReqItem(text=f"现象：{phenomenon or '染色有问题'}")] + [ReqItem(text=f"条件：{v}", slot=s)
                                                                        for s, v in told.items()]
         score(GROUPS[0], phenomenon, told, items, len(relay["habit_slots"]))
