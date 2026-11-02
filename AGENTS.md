@@ -1,8 +1,8 @@
 # AGENTS.md
 
 > 给 coding agent 的项目宪法与 V10 冻结契约。
-> **强制要求：每次开始编程、修改任何代码或切换工作包前，都必须重新完整阅读本文件（`AGENTS.md`）**，再读 `docs/workpackages/REPLAN-v10.md`（或合并稿 `docs/workpackages/V10-REVIEW.md`）、`docs/CONTRACTS.md`、`docs/QI.md`，最后读分配给你的工作包 `docs/workpackages/WP-*v10*.md`。严禁不读本文件直接凭工程惯性写代码。
-> 当前分支基线：`v10 @ 840bd46`（业务代码基线 `319a2e7` / V9.6a）。愿景与架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`，展示见 `docs/workpackages/FINALS-SCOPE.md`，V9 已完成实现与试用记录见 `docs/workpackages/REPLAN-v9.md`；方向与范围取舍以 `docs/VISION.md` 和 `docs/workpackages/REPLAN-v10.md` 为准。
+> **强制要求：每次开始编程、修改任何代码或切换工作包前，都必须重新完整阅读本文件（`AGENTS.md`）**，再读 `docs/workpackages/REPLAN-v10.md`（当前计划；`V10-REVIEW.md` 是 10-28 的规划快照，不反映实现现状）、`docs/CONTRACTS.md`、`docs/QI.md`，最后读分配给你的工作包 `docs/workpackages/WP-*v10*.md`。严禁不读本文件直接凭工程惯性写代码。
+> 当前分支：`v10`（规划基线 `840bd46`，业务代码起点 `319a2e7` / V9.6a）。V10.0–V10.10 首版已交付，当前状态、剩余工作与真人验收进度见 `docs/reports/v10-evidence.md` 和各包最新完成记录。愿景与架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`，展示见 `docs/workpackages/FINALS-SCOPE.md`，V9 的历史计划与试用记录见 `docs/workpackages/REPLAN-v9.md`；方向与范围取舍以 `docs/VISION.md` 和 `docs/workpackages/REPLAN-v10.md` 为准。
 
 ## 1. 项目是什么
 
@@ -33,7 +33,7 @@ Python 3.11+、`uv`、`pydantic` v2、`openai` SDK（所有生成模型走 OpenA
 
 资料读取与解析按选定代表文件的实际需要选用轻量组件（置于 `src/huayan/ingest/reader/`），图文检索嵌入按配置使用本地 `EmbeddingGemma 2`（不可用时退回关键词并明确标注）。不引入 LangChain/LangGraph 等重型框架、独立向量数据库服务、图数据库或分布式调度器；原件、页面、裁图、读数、`TrialRecord` 与检索索引全部留在读取工具侧（可被企业 RAG 替换），不塞进契的正式状态文件 `qi_state.json`。
 
-## 3. 目录结构（与 `v10 @ 840bd46` 严格一致）
+## 3. 目录结构（顶层布局，以 `v10` 当前树为准）
 
 ```text
 AGENTS.md  README.md
@@ -135,7 +135,7 @@ data/  models/  runs/      本地资料与运行产物（data/knowledge_v10/、d
 
 ## 7. Git
 
-- 本轮基线分支为 `v10`（`840bd46`），之后按用户指定分支工作。
+- 当前工作分支为 `v10`（规划基线 `840bd46`），之后按用户指定分支工作。
 - 开始前先确认当前分支与工作区已有改动；根目录 `2-主办方资料目录.md` 以及 `data/`、`runs/` 下的原始资料、金标、模型缓存与运行产物均不入库、不随工作包提交。
 - 每个提交围绕当前工作包的明确交付，不混入无关重构；推送前核对分支状态，合并主分支与部署由人决定。
 

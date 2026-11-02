@@ -1,5 +1,7 @@
 # 演示脚本
 
+> **历史演示脚本**：本文最后更新于 2026-10-12，[WP-D2](workpackages/WP-D2-demo.md) 已声明旧版产品经理页、离线主线和 `config/app.replay.yaml` 作废（回放配置现为 `config/app.demo.replay.yaml`），不要再按本文操作。当前展示见 [FINALS-SCOPE](workpackages/FINALS-SCOPE.md)，试用操作见 [`docs/trial/`](trial/) 下的各岗位说明与 [developer-v10.md](trial/developer-v10.md)。
+
 > 人物、客户、产品、知识全部为模拟数据。台词与 `demo/mainline.yaml` 一致，按原句发送才能命中录制缓存；现场改了台词就是真实调用。
 > 主线：一段需求从客户的场景语言，经 L1 → L2 → L3 逐层转成化学语言，再回流到 L1。由角色助手驱动，人只说话和点确认卡。
 
