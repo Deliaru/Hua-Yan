@@ -1,0 +1,18 @@
+# 全部为未选择路径的合成草稿；不代表专业标注、实际知识状态或模型结果。
+cases_fingerprint: b9604c76d2ab5edc
+split: dev
+labels:
+  - id: SYN-E2-before
+    case_id: SYN-E1-001
+    expected_path: null
+    knowledge_state: 合成占位：判断授予前（尚无qi_state快照）
+    viewer: customer:C01
+  - id: SYN-E2-after
+    case_id: SYN-E1-001
+    expected_path: null
+    knowledge_state: 合成占位：判断授予后（尚无qi_state快照）
+    viewer: customer:C01
+  - id: SYN-E2-reserved
+    case_id: SYN-E1-005
+    expected_path: null
+    knowledge_state: 合成预留分区草稿，本轮不解析

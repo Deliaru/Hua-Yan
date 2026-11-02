@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E2 分流判断标注表</title>
+<style>
+body{font:15px/1.6 system-ui,sans-serif;color:#202b36;background:#f5f7fa;margin:24px}h1{font-size:24px;margin-bottom:6px}
+.note{background:#fff4dc;padding:12px 16px;border-radius:8px}button{padding:9px 18px;background:#164c74;color:white;border:0;border-radius:6px;cursor:pointer}
+.scroll{overflow:auto;margin:20px 0}table{border-collapse:collapse;background:white;min-width:1500px;width:100%}th,td{border:1px solid #d9e0e6;padding:12px;vertical-align:top;text-align:left}
+th{background:#eaf0f5}td:first-child{min-width:320px}input,select,textarea{display:block;width:100%;min-width:160px;box-sizing:border-box;padding:7px;border:1px solid #9aaab9;border-radius:4px;font:inherit}
+textarea{min-height:120px}pre{white-space:pre-wrap;max-width:450px;font:inherit;margin:4px 0}.muted{color:#526375}label{display:block;margin-bottom:10px}label span{display:block;font-size:13px}
+</style>
+<h1>E2 分流判断标注表</h1>
+<p class="note">仅供本地专业标注；没有自动选出的正确路径。填写和导出均不产生业务签字或生效授权。请导出保存，关闭页面会丢失未导出修改。</p>
+<p id="context" class="muted"></p>
+<button id="download" type="button">导出草稿／标注 JSON</button> <span id="status"></span>
+<div class="scroll"><table><thead><tr><th>需求与来源</th><th>本该怎么处理</th><th>依据的知识状态与主体</th><th>判断理由</th><th>实际标注人和时间</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p>路径六选一：自助解决、交业务员、复用、研发不立项、入研、产品机会。仍在追问、知识状态不明或专业判断未定时，请保留“未标注”，不要为凑六类而猜。</p>
+<p>模型与业务链未运行；表格中的合成示例不是专业金标。仅有状态文件名不足以固定判断依据，应保留当时的 qi_state 副本及完整 SHA-256。</p>
+<script id="payload" type="application/json">__E2_DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById('payload').textContent);
+document.getElementById('context').textContent = `分区 ${data.split}；E1指纹 ${data.cases_fingerprint}；${data.rows.length}条标注行。仅包含本次所选分区。`;
+function input(cell, name, title, value, type='input') {
+  const label = document.createElement('label'), caption = document.createElement('span'), control = document.createElement(type);
+  caption.textContent = title; control.dataset.field = name; control.value = value ?? ''; control.setAttribute('aria-label', title);
+  label.append(caption, control); cell.append(label); return control;
+}
+data.rows.forEach(row => {
+  const tr = document.createElement('tr'); tr.dataset.id = row.label.id;
+  const cells = Array.from({length:5}, () => tr.appendChild(document.createElement('td')));
+  const text = document.createElement('pre');
+  text.textContent = `${row.label.id}\n样本：${row.case.id}；${row.case.kind} / ${row.case.split}\n来源：${row.case.source}\n首句：${row.case.first_words}\n后续：${row.case.turns.join('\n') || '无'}\n最终已知：${JSON.stringify(row.case.final_conditions)}\n温度：${JSON.stringify(row.case.temperature_c)}；引文：${row.case.temperature_quote || '无'}\n明确未知：${row.case.unknown.join('、') || '无'}\n词表缺口：${row.vocabulary_gaps.join('；') || '无'}`;
+  cells[0].append(text);
+  const select = input(cells[1], 'expected_path', '预期路径', null, 'select');
+  ['', ...data.paths].forEach(path => select.add(new Option(path || '未标注（不要猜）', path)));
+  select.value = row.label.expected_path ?? '';
+  input(cells[2], 'knowledge_state', '当时的qi_state副本路径／编号', row.label.knowledge_state);
+  input(cells[2], 'knowledge_state_sha256', '副本SHA-256（64位小写）', row.label.knowledge_state_sha256);
+  input(cells[2], 'viewer', '判断主体（如customer:C01）', row.label.viewer);
+  input(cells[3], 'basis', '这条需求为何应走该路径', row.label.basis, 'textarea');
+  input(cells[4], 'labeled_by', '实际标注人及岗位', row.label.labeled_by);
+  input(cells[4], 'labeled_at', '实际标注时间（带时区）', row.label.labeled_at).placeholder = '例如 2026-11-03T10:00:00+08:00';
+  document.getElementById('rows').append(tr);
+});
+function collectLabels() {
+  const labels = [...document.querySelectorAll('#rows tr')].map((tr, index) => {
+    const label = {...data.rows[index].label};
+    tr.querySelectorAll('[data-field]').forEach(control => label[control.dataset.field] = control.value.trim());
+    label.expected_path ||= null; label.labeled_at ||= null; return label;
+  });
+  return {cases_fingerprint:data.cases_fingerprint, split:data.split, labels};
+}
+document.getElementById('download').addEventListener('click', () => {
+  const text = JSON.stringify(collectLabels(), null, 2), link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([text], {type:'application/json;charset=utf-8'}));
+  link.download = 'e2-annotations.json'; link.click(); URL.revokeObjectURL(link.href);
+  document.getElementById('status').textContent = '已触发下载；请保留导出文件，并通过CLI检查填写完整性。';
+});
+</script>
+</html>
