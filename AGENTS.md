@@ -1,8 +1,8 @@
 # AGENTS.md
 
 > 给 coding agent 的项目宪法与 V10 冻结契约。
-> **强制要求：每次开始编程、修改任何代码或切换工作包前，都必须重新完整阅读本文件（`AGENTS.md`）**，再读 `docs/workpackages/REPLAN-v10.md`（当前计划；`V10-REVIEW.md` 是 10-28 的规划快照，不反映实现现状）、`docs/CONTRACTS.md`、`docs/QI.md`，最后读分配给你的工作包 `docs/workpackages/WP-*v10*.md`。严禁不读本文件直接凭工程惯性写代码。
-> 当前分支：`v10`（规划基线 `840bd46`，业务代码起点 `319a2e7` / V9.6a）。V10.0–V10.10 首版已交付，当前状态、剩余工作与真人验收进度见 `docs/reports/v10-evidence.md` 和各包最新完成记录。愿景与架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`，展示见 `docs/workpackages/FINALS-SCOPE.md`，V9 的历史计划与试用记录见 `docs/workpackages/REPLAN-v9.md`；方向与范围取舍以 `docs/VISION.md` 和 `docs/workpackages/REPLAN-v10.md` 为准。
+> **强制要求：每次开始编程、修改任何代码或切换工作包前，都必须重新完整阅读本文件（`AGENTS.md`）**，再读 `docs/workpackages/REPLAN-v11.md`（当前计划）、`docs/CONTRACTS.md`、`docs/QI.md`，涉及 V10 已交付机制时再读 `docs/workpackages/REPLAN-v10.md` 与对应的 `WP-*v10*.md`（`V10-REVIEW.md` 是 10-28 的规划快照，不反映实现现状）。严禁不读本文件直接凭工程惯性写代码。
+> 当前分支：`v11`（自 `v10 @ 6abfaea` 分出）。V10.0–V10.10 首版已交付，专业确认与四岗位真人验收由 V11 承接，V10 状态与证据见 `docs/reports/v10-evidence.md` 和各包最新完成记录。愿景与架构见 `docs/VISION.md`、`docs/ARCHITECTURE.md`，展示见 `docs/workpackages/FINALS-SCOPE.md`，V9 的历史计划与试用记录见 `docs/workpackages/REPLAN-v9.md`；方向与范围取舍以 `docs/VISION.md` 和 `docs/workpackages/REPLAN-v11.md` 为准。
 
 ## 1. 项目是什么
 
@@ -18,7 +18,9 @@ Harness 中的四个核心机制：
 - **契（Qi）**：能力规范与分层组织记忆，把读取工具中的**依据（`Fragment`）**编译为专家确认的**结论（`KnowledgeUnit`）**，再授予为各层可用的**能力（`Capability`）**，管理专业判断的来源、完整条件、授予、复核与撤销；
 - **角色 Agent**：自研 `Agent Loop` + 原子工具。业务员负责客户与商务，真人产品经理负责产品范围与商业判断，研发负责专业判断与成果，研发负责人在授权范围内掌握进展、处理例外；`pm:agent`（L2）承担后台逐单转译与材料准备。人也可以随时主动委托或处理事项。
 
-**当前目标（V10，决赛 2026-11-08）**：在项目方现场陪同下，**业务员、真人产品经理、研发和研发负责人在同一个共享试用实例中，用一份真实报告完成专业判断，并让下一件符合条件的需求直接用上这份判断**。
+**当前目标（V11，决赛 2026-11-08）**：为每个岗位提供以「轮到你的事」为入口的工作面（客户、业务员、产品经理、研发、研发负责人）和 CEO 面；`sim/` 中的导演只扮演外部世界与缺席岗位，按九个关卡送来真实形态的事，每件事带前情与旧流程对照，让参与者一边处理一边看出效率从哪里来。游戏模式用模拟时钟与独立运行目录；真实模式就是下述 V10 目标的真人验收。范围、关卡与工作包见 `docs/workpackages/REPLAN-v11.md`，V11 不改下表的冻结契约。
+
+**承接的 V10 目标**：在项目方现场陪同下，**业务员、真人产品经理、研发和研发负责人在同一个共享试用实例中，用一份真实报告完成专业判断，并让下一件符合条件的需求直接用上这份判断**。
 
 实施里程碑与工作包严格按以下三级边界执行（**工作包是修改归口，不是必须整包做完才能进下一包的阶段门**；禁止跨级扩范围）：
 - **M1 一份报告能读、能审**（`V10.0` 选定原件后，`V10.2` 与 `V10.4` 围绕同一份报告一起推进，CLI/静态审阅包即可交付）→ **M2 一次判断服务下一单**（首份记录交 `V10.5`、`V10.7` 先用现有枚举和限制原文走通候选确认与授予；`V10.6` 补温度单字段后接通同范围/未知/超范围匹配）→ **M3 四类真人完成业务**（`V10.9` 一条定向准备与原单回流链 → `V10.10` 开发者走通后交四类真人试用）；`V10.3` 与 `V10.8` 为展示支线，不阻塞 M1–M3。
@@ -40,7 +42,7 @@ Python 3.11+、`uv`、`pydantic` v2、`openai` SDK（所有生成模型走 OpenA
 ```text
 AGENTS.md  README.md
 docs/        VISION.md  ARCHITECTURE.md  CONTRACTS.md  QI.md  JUE_K_TRAINING.md  DEMO.md
-             workpackages/（REPLAN-v10.md、V10-REVIEW.md、WP-0v10..WP-10v10、REPLAN-v9.md、FINALS-SCOPE.md）
+             workpackages/（REPLAN-v11.md、CEO-VIEW.md、REPLAN-v10.md、V10-REVIEW.md、WP-0v10..WP-10v10、REPLAN-v9.md、FINALS-SCOPE.md）
              trial/  reference/  reports/  assets/
 config/      app*.yaml  models.yaml  system1*.yaml  templates/  baselines/  eval/
 seeds/       slots.yaml  phenomena.yaml  products.yaml  cases.yaml  translations.yaml  actors.yaml  public.yaml  rag/
@@ -129,7 +131,7 @@ data/  models/  runs/      本地资料与运行产物（data/knowledge_v10/、d
 
 ## 6. 工作流程
 
-1. **每次动手写/改代码前，必须先重新阅读本文件（`AGENTS.md`）全文**，再读 `docs/workpackages/REPLAN-v10.md`、涉及的契约与当前工作包 `docs/workpackages/WP-*v10*.md`。
+1. **每次动手写/改代码前，必须先重新阅读本文件（`AGENTS.md`）全文**，再读 `docs/workpackages/REPLAN-v11.md`、涉及的契约与 V10 已交付机制对应的工作包。
 2. **只做当前包范围内的事**：只修改工作包「允许修改的范围」内的路径；工作包「不做」与本文件第 1 节「决赛后」的内容一律不做；不在包内重复写 `G1`–`G6` 已覆盖的横切防御代码。
 3. **契约改动按授权执行**：普通模块实现直接做，一口气做完；确需改动冻结契约时，严格限制在第 4 节铁律 2 的表格范围内，列清最小字段差异与默认值并按会话授权落实。
 4. **先走通单份样例纵向链路**：实现 → 跑受影响的现有测试与本包测试（`uv run pytest`）→ 在选定真实样例上真实跑一次核对产物。
@@ -137,7 +139,7 @@ data/  models/  runs/      本地资料与运行产物（data/knowledge_v10/、d
 
 ## 7. Git
 
-- 当前工作分支为 `v10`（规划基线 `840bd46`），之后按用户指定分支工作。
+- 当前工作分支为 `v11`（自 `v10 @ 6abfaea` 分出），之后按用户指定分支工作。
 - 开始前先确认当前分支与工作区已有改动；根目录 `2-主办方资料目录.md` 以及 `data/`、`runs/` 下的原始资料、金标、模型缓存与运行产物均不入库、不随工作包提交。
 - 每个提交围绕当前工作包的明确交付，不混入无关重构；推送前核对分支状态，合并主分支与部署由人决定。
 
