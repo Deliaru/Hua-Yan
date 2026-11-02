@@ -33,12 +33,12 @@ function Dot({ state }: { state: RouteState }) {
 
 // 一份需求经过了谁、绕过了谁。点格子跳到那个角色的子工作面，打开同一对象（服务端按身份裁剪）
 export function RouteStrip({ objectId }: { objectId: string }) {
-  const { me, go } = useApp();
+  const { me, go, notes } = useApp();
   const L = useLabels();
   const r = useData<Route>(() => api.route(objectId, me), [objectId, me]);
   const [open, setOpen] = useState(false);
   const g = useGuide();   // 演示讲解指向的角色格（route:<角色>），点过即熄
-  if (!r) return null;
+  if (!r || !notes) return null;   // 演示说明
   const focusOf = (role: string) => (role === "rd" || role === "pm") && r.requirement_id ? r.requirement_id : r.session_id;
   const who = (role: string) => r.roles[role as keyof Route["roles"]].by.find((id) => id !== "pm:agent");
   const decisions = r.basis.filter((b) => b.action);
@@ -162,9 +162,9 @@ export function ReadinessCard({ reqId }: { reqId: string }) {
 
 // E6：右栏「被拿掉的无效工作 / 保留的专业判断」
 export function WorkloadCard({ title = "你的时间用在了哪里" }: { title?: string }) {
-  const { me } = useApp();
+  const { me, notes } = useApp();
   const w = useData(() => api.workload(me), [me]);
-  if (!w) return null;
+  if (!w || !notes) return null;   // 演示说明
   return (
     <Group title={title} foot="本轮事件日志计数。必要的协作都保留，拿掉的是因信息缺失、转述、重复才被迫发生的工作。">
       <div className="px-4 pb-1 pt-3"><p className="eyebrow">被拿掉的无效工作</p></div>

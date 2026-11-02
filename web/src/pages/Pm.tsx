@@ -21,7 +21,7 @@ const scopeOf = (q: Question) => ({ product: q.refs.product_id, phenomenon: q.re
   temperature: JSON.parse(q.refs.temperature_c || "null") as [number, number] | null });
 
 export function Pm() {
-  const { me, focus } = useApp();
+  const { me, focus, notes } = useApp();
   const L = useLabels();
   const qs = useData(() => api.questions(me), [me]) ?? [];
   const reqs = (useData(() => api.requirements(me), [me]) ?? []).slice().reverse();
@@ -68,6 +68,7 @@ export function Pm() {
       </div>
       <aside className="inspector fixed bottom-0 right-0 top-[52px] z-10 flex w-[372px] flex-col gap-5 overflow-y-auto border-l border-sep px-5 py-5">
         <WorkloadCard title="你的判断产生了什么" />
+        {!notes && <p className="text-[12.5px] leading-5 text-ink-3">你的判断让多少需求不再进研发，可以在工具栏打开「演示说明」查看。</p>}
       </aside>
     </>
   );

@@ -16,6 +16,7 @@ export interface Ctx {
   side: HTMLElement | null;         // 侧栏下半部分：各页面把自己的 source list 放进来
   startDemo: () => void;            // V6-5.5：进入演示讲解（左侧换成讲解栏）
   openMode: () => void;             // 打开「运行方式」（接入自己的模型）
+  notes: boolean;                   // V11.0：演示说明（层级说明、需求轨迹、时间账等讲给观众听的内容）默认收起；讲解进行中自动打开
 }
 
 export const AppCtx = createContext<Ctx>(null!);

@@ -39,7 +39,7 @@ export function Customer() {
 }
 
 function Desk({ sid }: { sid: string }) {
-  const { me } = useApp();
+  const { me, notes } = useApp();
   const L = useLabels();
   const v = useData(() => api.session(sid, me), [sid, me]);
   const route = useData(() => api.route(sid, me), [sid, me]);
@@ -51,16 +51,17 @@ function Desk({ sid }: { sid: string }) {
         <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pb-28 pt-7">
           <PageHead title={v.turns.length ? "我的问题" : "描述你的问题"}
                     subtitle={`${L.name(me)} · ${SESSION_STATUS[v.status] ?? v.status}`} />
-          <p className="text-[12.5px] leading-5 text-ink-2">
-            <span className="tag mr-2">L0 · 客户</span>你只看得到说明书、用法和公开案例；化言只问会改变推荐或研发判断的条件。</p>
+          {/* 层级说明、需求轨迹、为什么直达研发、条件清单是演示说明：真实客户看不到这些，默认收起 */}
+          {notes && <p className="text-[12.5px] leading-5 text-ink-2">
+            <span className="tag mr-2">L0 · 客户</span>你只看得到说明书、用法和公开案例；化言只问会改变推荐或研发判断的条件。</p>}
           <RouteStrip objectId={sid} />
-          {route?.why && <WhyRd r={route} sid={sid} />}
-          <div className="grid grid-cols-[minmax(320px,6fr)_minmax(280px,5fr)] items-start gap-5">
+          {notes && route?.why && <WhyRd r={route} sid={sid} />}
+          <div className={notes ? "grid grid-cols-[minmax(320px,6fr)_minmax(280px,5fr)] items-start gap-5" : ""}>
             <Chat v={v} route={route} />
-            <div className="flex flex-col gap-5">
+            {notes && <div className="flex flex-col gap-5">
               <Group title="客户提供的工艺条件"><TemperatureCondition value={v.temperature} /></Group>
               <SessionConditions sessionId={sid} />
-            </div>
+            </div>}
           </div>
           {v.card && <Card v={v} />}
           <AuthorizedReplies sessionId={sid} />
@@ -68,7 +69,7 @@ function Desk({ sid }: { sid: string }) {
       </div>
       <aside className="inspector fixed bottom-0 right-0 top-[52px] z-10 flex w-[372px] flex-col gap-5 overflow-y-auto border-l border-sep px-5 py-5">
         {route && <Outcome r={route} />}
-        {hint && (
+        {notes && hint && (
           <Group title={`开场 ${hint.id} · 接下来去哪里看`}>
             <div className="row text-[13px] leading-5">{hint.hint}</div>
           </Group>

@@ -74,6 +74,8 @@ export default function App() {
   const [modeOpen, setModeOpen] = useState(false);
   const [demo, setDemoState] = useState(() => localStorage.getItem("huayan-demo") === "1");   // 讲解模式，刷新不丢
   const setDemo = (on: boolean) => { localStorage.setItem("huayan-demo", on ? "1" : "0"); setDemoState(on); };
+  const [notesOn, setNotesState] = useState(() => localStorage.getItem("huayan-notes") === "1");   // 演示说明，刷新不丢
+  const setNotes = (on: boolean) => { localStorage.setItem("huayan-notes", on ? "1" : "0"); setNotesState(on); };
   const guide = useGuide();
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
@@ -121,6 +123,7 @@ export default function App() {
   const ctx = {
     meta, me: actor.id, role: actor.role, agentOnline: !meta.status.gateway_mock, version, side,
     refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, focus, startDemo: () => setDemo(true), openMode: () => setModeOpen(true),
+    notes: notesOn || inDemo,
     go: (p: string, f?: string | null, id?: string) => {
       const role = ROLE_PAGES[p as Page];
       if (role && id && id.startsWith(`${role}:`)) setWho((w) => ({ ...w, [role]: id }));
@@ -147,6 +150,9 @@ export default function App() {
         {/* 导览占中间的剩余空间居中：两侧再宽也不会叠上 */}
         <div className="flex min-w-0 flex-1 justify-center">{page === "desk" && <Guide />}</div>
         <div className="flex items-center gap-1.5">
+          {!inDemo && <button onClick={() => setNotes(!notesOn)} className={`btn btn-plain ${notesOn ? "!text-accent" : ""}`}
+                              title="化言在背后做了什么：知识层级、需求经过了谁、你的时间用在了哪里。真实用户日常看不到这些，讲解时再打开">
+            {notesOn ? "收起演示说明" : "演示说明"}</button>}
           <StatusMenu s={meta.status} m={meta.mode} trial={!!trial} onMode={() => setModeOpen(true)} />
           <CheckpointMenu onLoad={(name) => restart(`正在载入检查点「${name}」……`, api.loadCheckpoint(name))} />
           <Popover align="right" trigger={(toggle) => (

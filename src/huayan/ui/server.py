@@ -803,6 +803,12 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(DIST), **kwargs)
 
+    def end_headers(self):
+        # V11.0：入口页每次回服务端核对，重新构建后试用者刷新就是新界面（assets 文件名带哈希，照常缓存）
+        if not self.path.startswith(("/assets/", "/api/")):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def _api(self, method, params):
         url = urlparse(self.path)
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}

@@ -78,6 +78,7 @@ export function LayerChip({ layer }: { layer: 1 | 2 | 3 }) {
 }
 
 export function LayerNote({ layer, children }: { layer: 1 | 2 | 3; children: React.ReactNode }) {
+  if (!useApp().notes) return null;   // 演示说明
   return (
     <p className="flex items-start gap-2 text-[12.5px] leading-5 text-ink-2">
       <LayerChip layer={layer} /><span className="min-w-0">{children}</span>
