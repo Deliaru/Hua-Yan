@@ -1,6 +1,16 @@
-# Cloudflare Worker：Clef在用，视觉适配为历史记录
+# Cloudflare Jev：当前账户 REST 接入与历史 Worker
 
-> 当前策略（2026-11-01）：Cloudflare仅用于Clef，端点统一由system1.cloudflare-worker.yaml读取CLOUDFLARE_WORKER_URL；视觉读取走config/models.yaml的SiliconFlow图文网关，实际型号以配置及运行记录为准。旧Cloudflare视觉配置已从当前配置目录移除，可从Git历史回查。本轮不需要更新或部署Worker，下述视觉部署内容仅保留历史说明。
+> 当前策略（2026-11-03）：按用户要求临时直连Cloudflare Workers AI `clef-flash`，统一使用 `config/system1.clef.yaml`，由未入库的 `.env` 注入 `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_AUTH_TOKEN`。视觉读取仍走config/models.yaml的SiliconFlow图文网关。本轮不更新或部署Worker；旧 `system1.cloudflare-worker.yaml` 与下述Worker/视觉部署内容仅保留历史说明。
+
+## 当前接入
+
+在线业务、读取查证与试用交接配置均引用 `config/system1.clef.yaml`，运行时用 `uv run --env-file .env ...` 注入账户与令牌。沿用既有 `build_system1` / `ClefClient`、概率解析、计量和回放缓存；无需部署Worker或执行下方历史视觉模型的协议接受步骤。
+
+本次只验证合成三类题的连通与严格回放，记录见 `data/knowledge_v10/checks/clef-flash-20261103/summary.json`。旧Clef业务及检索结果保持原型号，不作为clef-flash成绩；本次未启动共享服务。
+
+## 历史 Worker 部署与视觉验证（2026-10-30）
+
+以下步骤与结果保留供追溯，不是当前接入操作指南。
 
 代码：[`cloudflare_vision_worker.mjs`](cloudflare_vision_worker.mjs)。**用文件全文整体替换现有 Jev Worker 的代码**，保留 `export default`、现有域名及名为 `AI` 的绑定，然后部署。无需新建 Worker，也无需添加第二个 AI 绑定。一个绑定通过 `env.AI.run` 的第一个参数选择调用哪个模型，见[官方绑定说明](https://developers.cloudflare.com/workers-ai/configuration/bindings/)。
 
@@ -14,7 +24,7 @@
 
 读图使用 `env.AI.run`，无需其他模型供应商的 API Key。图片以 data URL 交给 AI 绑定；当前适配将文字消息、schema 和纠错历史汇成 `prompt`，使用[模型参数页](https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/)列出的 `prompt + image` 输入。早期版本使用教程中的 `messages + image`；用户已于 2026-10-30 更新部署为本版。两版实调均未取得合格结构化读数，最新结果见下方验证记录。
 
-## 首次启用模型
+### 首次启用模型
 
 Cloudflare 要求先接受 Meta 的 License 和 Acceptable Use Policy；条款入口见[模型页面](https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/)。如果尚未接受，请先阅读条款，再由你在部署合并代码后主动执行下面的 PowerShell 命令，地址沿用现有 Worker：
 
@@ -26,7 +36,7 @@ Invoke-RestMethod -Method Post -Uri ($env:CLOUDFLARE_WORKER_URL.TrimEnd('/') + '
 
 本账号已在 2026-10-30 经用户明确授权提交一次接受请求，后续已取得真实模型输出。Cloudflare 将 “Thank you for agreeing … You may now use the model” 确认文本放在异常中，旧版 Worker 因而返回 HTTP 502；原始返回已保存到本地运行记录。本版仅将这条明确的成功确认返回为 `status="accepted"`，无需重新接受协议。
 
-## 接口与后续接入
+### 接口与后续接入
 
 - `POST /v1/chat/completions`：接收项目现有网关使用的 `model`、`messages`、`max_tokens`、`temperature`、`response_format`。
 - `model` 必须为上述完整模型名；一次请求一张 PNG/JPEG 的 base64 data URL，放在 `messages[].content` 的 `image_url.url` 中，符合现有 `reader/image.py` 的逐页调用。
@@ -53,7 +63,7 @@ Clef通过 `config/system1.cloudflare-worker.yaml` 的 `base_url_env: CLOUDFLARE
 
 读取结果及实际调用记录在 `data/knowledge_v10/evidence/SRC-3a2130604c/`，缓存沿用 `data/knowledge_v10/cache/image-readings/`；模型结果保留为待人工审阅的辅助读稿。
 
-## 额度与验证
+### 额度与验证
 
 Workers AI 每日共有 **10,000 Neurons 免费额度**，按账号累计，UTC 00:00 重置；超过额度的行为取决于 Free/Paid 计划。并非不限量免费。详见[官方定价](https://developers.cloudflare.com/workers-ai/platform/pricing/)。
 

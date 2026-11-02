@@ -3,5 +3,5 @@ embedding:
   model_id: google/embeddinggemma-2
   cache_dir: D:/hf_cache/hub
 
-# Jev统一走既有System1配置及CLOUDFLARE_WORKER_URL，不另存端点。
-system1_config: config/system1.cloudflare-worker.yaml
+# Jev临时直连Workers AI clef-flash；账户与令牌由.env注入，不另存端点。
+system1_config: config/system1.clef.yaml

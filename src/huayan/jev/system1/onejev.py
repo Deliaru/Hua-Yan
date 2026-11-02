@@ -157,12 +157,11 @@ class OneJevClient:
 
 
 class ClefClient(OneJevClient):
-    """Cloudflare Workers AI `@cf/cloudflare/clef`: the same state-and-questions protocol behind the account REST API."""
-
-    path = "/ai/run/@cf/cloudflare/clef"
+    """Cloudflare Workers AI Clef models, using the account REST API and the same typed questions."""
 
     def __init__(self, account_id, token, model, meter, timeout_s=120, media_root=None):
         super().__init__(f"https://api.cloudflare.com/client/v4/accounts/{account_id}", model, meter, timeout_s, media_root=media_root)
+        self.path = f"/ai/run/@cf/cloudflare/{model}"
         self.http.headers["Authorization"] = f"Bearer {token}"
 
     def _wire(self, body):
