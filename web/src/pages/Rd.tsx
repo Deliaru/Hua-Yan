@@ -11,6 +11,7 @@ import { useGlow, useGuide, useGuideArg } from "../components/Guide";
 import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip, SlotPicker } from "../components/ui";
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 import { SourceTrial } from "../components/SourceTrial";
+import { Backstory } from "../components/Backstory";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
 const reqsOf = (q: Question) => q.refs.requirement_id ? [q.refs.requirement_id] : (q.refs.requirement_ids ?? "").split(",").filter(Boolean);
@@ -23,7 +24,10 @@ export function Rd() {
   const reqs = (useData(() => api.requirements(me), [me]) ?? []).slice().reverse();
   const [qid, setQid] = useState<string | null>(null);
   const [chosenReq, setChosenReq] = useState<string | null>(focus);   // v6：从轨迹条跳来时打开同一张单
-  const [showCandidates, setShowCandidates] = useState(false);
+  // V11.3 中间一次只放一件事：一张需求单（含它上面的决策），或「本人资料候选」「我授予的能力」
+  const [panel, setPanel] = useState<"req" | "candidates" | "caps">("req");
+  const showCandidates = panel !== "req";
+  const setShowCandidates = (on: boolean) => { if (!on) setPanel("req"); };
   useEffect(() => { if (focus) { setChosenReq(focus); setQid(null); setShowCandidates(false); } }, [focus]);
   // 导览要你签的那项决策：没手动选过就直接打开它；导览换到新的一项时，回到它
   const g = useGuide();
@@ -39,7 +43,8 @@ export function Rd() {
         <InboxSidebar selected={qid || (guided && question?.id === guided.id) ? question?.id ?? null : null} guided={guided && guided.id !== question?.id ? guided.id : null}
                       reqs={reqs} select={(q) => { setQid(q.id); setChosenReq(null); setShowCandidates(false); }} />
         <SideHead>资料审阅</SideHead>
-        <button className={`side-row ${showCandidates ? "on" : ""}`} onClick={() => setShowCandidates(true)}>本人资料候选</button>
+        <button className={`side-row ${panel === "candidates" ? "on" : ""}`} onClick={() => setPanel("candidates")}>本人资料候选</button>
+        <button className={`side-row ${panel === "caps" ? "on" : ""}`} onClick={() => setPanel("caps")}>我授予的能力</button>
         <SideHead>需求单</SideHead>
         {reqs.map((r) => (
           <button key={r.id} onClick={() => { setChosenReq(r.id); setQid(null); setShowCandidates(false); }}
@@ -50,12 +55,12 @@ export function Rd() {
         ))}
         {!reqs.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">暂无需求单</p>}
       </Side>
-      <RdDesk key={`${me}:${reqId}`} question={showCandidates ? null : question} reqId={reqId} />
+      <RdDesk key={`${me}:${reqId}:${panel}`} question={showCandidates ? null : question} reqId={reqId} panel={panel} />
     </>
   );
 }
 
-function RdDesk({ question, reqId }: { question: Question | null; reqId: string | null }) {
+function RdDesk({ question, reqId, panel }: { question: Question | null; reqId: string | null; panel: "req" | "candidates" | "caps" }) {
   const { me } = useApp();
   const view = useData(() => (reqId ? api.requirement(reqId, me) : Promise.resolve(null)), [reqId, me]);
   const conv = useConversation(null, reqId);
@@ -67,19 +72,22 @@ function RdDesk({ question, reqId }: { question: Question | null; reqId: string 
       <div className="mr-[372px]">
         <div className="mx-auto flex max-w-[1080px] flex-col gap-6 px-8 pb-24 pt-7">
           <PendingActions />
-          <GrantedCapabilities />
-          <CandidateClaims key={reqId ?? "my-candidates"} reqId={reqId} />
-          {view ? (
+          {panel === "caps" ? <GrantedCapabilities />
+            : panel === "candidates" ? <CandidateClaims key="my-candidates" reqId={null}
+                empty={<EmptyState title="没有待你确认的资料候选" text="资料编译出的候选结论归属你时，会出现在这里等你确认。" />} />
+            : view ? (
             <>
+              <Backstory id={view.requirement.id} />
               <RouteStrip objectId={view.requirement.id} />
               <ReqHead view={view} />
+              <CandidateClaims key={reqId ?? ""} reqId={reqId} />
               <SourcePreparationCard reqId={view.requirement.id} />
               <ReadinessCard reqId={view.requirement.id} />
               <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
               <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />
             </>
           ) : question ? <SignArea key={question.id} q={question} view={null} />
-            : <EmptyState title="资料审阅与研发决策" text="可在上方审阅本人资料候选，或从左侧选择需求单及待签决策。" />}
+            : <EmptyState title="资料审阅与研发决策" text="从左侧选择待签决策、需求单，或资料审阅。" />}
         </div>
       </div>
       <AgentPanel title={view ? "这张单的来历" : "Agent 协作"} sessionId={null} focus={focus}>
@@ -1065,7 +1073,7 @@ function QiEvidenceReview({ q, dismiss, evidence }: { q: Question; dismiss: Reac
   </div></>;
 }
 
-function CandidateClaims({ reqId }: { reqId: string | null }) {
+function CandidateClaims({ reqId, empty = null }: { reqId: string | null; empty?: React.ReactNode }) {
   const { me } = useApp();
   const L = useLabels();
   const claims = useData(() => api.claims(reqId, me), [reqId, me]) ?? [];
@@ -1073,7 +1081,7 @@ function CandidateClaims({ reqId }: { reqId: string | null }) {
   const [review, setReview] = useState<Awaited<ReturnType<typeof api.reviewClaims>> | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [text, setText] = useState("");
-  if (!claims.length) return null;
+  if (!claims.length) return <>{empty}</>;
   return <Group title={reqId ? "本单候选结论 · 待研发确认" : "本人资料候选 · 待研发确认"}
     foot="归属人是待确认负责人；点击签字才记录专业确认。用途授予与适用范围批准另行办理。">
     {claims.map((c) => <div key={c.id} className="row flex-wrap !items-start text-[13px] leading-5"><label className="flex min-w-0 flex-1 basis-64 items-start gap-2">

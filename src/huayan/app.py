@@ -2161,8 +2161,7 @@ class HuayanApp:
                 return "jue", None, "jue", f"提出决策「{decision[q.family]}」，{to}"
             if e.kind == "question_prepared" and mine(questions[p["question_id"]]):
                 q = questions[p["question_id"]]
-                agent = "产品经理 Agent " if p["by"] == "pm:agent" else f"{name(p['by'])}的 Agent "
-                return "agent", q.owner_role, p["by"], f"{agent}准备好了「{decision[q.family]}」"
+                return "agent", q.owner_role, p["by"], f"准备好了「{decision[q.family]}」"   # 谁的 Agent 由界面按 who 写
             if e.kind == "question_resolved" and p.get("action") == "dismiss" and mine(questions[p["question_id"]]):
                 return act(f"判断「{decision[p['family']]}」现在不需要")
             if e.kind == "requirement_accepted":

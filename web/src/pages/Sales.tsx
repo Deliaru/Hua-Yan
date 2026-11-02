@@ -11,15 +11,29 @@ import { Plus } from "../components/Icons";
 import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote, SlotPicker, TemperatureCondition } from "../components/ui";
 import { RouteStrip, WorkloadCard } from "../components/Route";
 import { AuthorizedReplies } from "../components/AuthorizedReplies";
+import { Backstory } from "../components/Backstory";
 
-function SalesSidebar({ mine, current, guided, choose }: {
-  mine: SessionSummary[]; current: string | null; guided: string | null; choose: (id: string) => void;
+// V11.3 收件箱：有待你处理的决策的会话排在「轮到你」，其余在「全部会话」
+function SalesSidebar({ mine, current, guided, choose, todo }: {
+  mine: SessionSummary[]; current: string | null; guided: string | null; choose: (id: string) => void; todo: Record<string, number>;
 }) {
   const { meta, me, refresh, fail } = useApp();
   const L = useLabels();
   const start = (customer: string) => api.startSession(customer, me).then((s) => { choose(s.id); refresh(); }, fail);
   const glow = useGlow("new-session");
   const pickCustomer = useGuideArg("new-session");
+  const row = (s: SessionSummary) => (
+    <button key={s.id} onClick={() => choose(s.id)}
+            className={`side-row ${s.id === current ? "on" : ""} ${s.id === guided && s.id !== current ? "glow" : ""}`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-[13px] font-semibold">{s.customer_id ? L.name(s.customer_id) : "样例客户"}</span>
+        {todo[s.id] ? <span className="num tag tag-attn shrink-0">待处理 {todo[s.id]}</span>
+          : s.origin === "customer" ? <span className="tag tag-attn shrink-0">商务 · 觉转来</span>
+          : <span className="shrink-0 text-[12px] text-ink-2">{SESSION_STATUS[s.status] ?? s.status}</span>}
+      </div>
+      <p className="truncate text-[12px] text-ink-2">{s.phenomenon ? L.phen(s.phenomenon) : "尚未识别现象"}</p>
+    </button>
+  );
   return (
     <>
       <SideHead aside={
@@ -33,19 +47,12 @@ function SalesSidebar({ mine, current, guided, choose }: {
             </>
           )}
         </Popover>
-      }>客户会话</SideHead>
-      {mine.map((s) => (
-        <button key={s.id} onClick={() => choose(s.id)}
-                className={`side-row ${s.id === current ? "on" : ""} ${s.id === guided && s.id !== current ? "glow" : ""}`}>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-[13px] font-semibold">{s.customer_id ? L.name(s.customer_id) : "样例客户"}</span>
-            {s.origin === "customer" ? <span className="tag tag-attn shrink-0">商务 · 觉转来</span>
-              : <span className="shrink-0 text-[12px] text-ink-2">{SESSION_STATUS[s.status] ?? s.status}</span>}
-          </div>
-          <p className="truncate text-[12px] text-ink-2">{s.phenomenon ? L.phen(s.phenomenon) : "尚未识别现象"}</p>
-        </button>
-      ))}
-      {!mine.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">点 ＋ 新建一个客户会话</p>}
+      }>轮到你</SideHead>
+      {mine.filter((s) => todo[s.id]).map(row)}
+      {!mine.some((s) => todo[s.id]) && <p className="px-[18px] py-1 text-[13px] text-ink-3">没有待你处理的事</p>}
+      <SideHead>全部会话</SideHead>
+      {mine.filter((s) => !todo[s.id]).map(row)}
+      {!mine.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">点上方 ＋ 新建一个客户会话</p>}
     </>
   );
 }
@@ -79,9 +86,11 @@ export function Sales() {
   const sid = current?.id ?? null;
   const view = useData(() => (sid ? api.session(sid, me) : Promise.resolve(null)), [sid, me]);
   const mineQs = (questions ?? []).filter((q) => !q.refs.session_id || q.refs.session_id === sid);
+  const todo: Record<string, number> = {};
+  for (const q of questions ?? []) if (q.refs.session_id) todo[q.refs.session_id] = (todo[q.refs.session_id] ?? 0) + 1;
   return (
     <>
-      <Side><SalesSidebar mine={mine} current={sid} guided={guided} choose={choose} /></Side>
+      <Side><SalesSidebar mine={mine} current={sid} guided={guided} choose={choose} todo={todo} /></Side>
       {current && view ? <SessionDesk key={sid} summary={current} v={view} questions={mineQs} />
         : <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始，把客户的原话录进来。" />}
     </>
@@ -110,6 +119,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
             <p className="rounded-[10px] bg-attn-bg px-3.5 py-2.5 text-[13px] leading-5 text-attn-ink">
               客户在自助对话里提出了商务诉求，觉把这件事交给你。下面是客户的完整原话、已明确的条件和已推荐的产品，不需要你重新询问、重新记录。</p>
           )}
+          <Backstory id={v.session_id} />
           {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的上层知识检索已被主管冻结：检索不再显示上层知识的归属、读不到研发授予的结论，推荐只披露到用法，暂不能申请解密；日常跟单不受影响。</p>}
           <PendingActions />
           <AuthorizedReplies sessionId={v.session_id} />

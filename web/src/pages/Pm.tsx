@@ -6,6 +6,7 @@ import { api } from "../api";
 import { REQ_STATUS, Side, useApp, useData, useLabels } from "../ctx";
 import type { Question, RequirementView } from "../types";
 import { RouteStrip, WorkloadCard } from "../components/Route";
+import { Backstory } from "../components/Backstory";
 import { useGuideArg } from "../components/Guide";
 import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote } from "../components/ui";
 
@@ -94,6 +95,7 @@ function Pane({ q, onDone }: { q: Question; onDone: (text: string) => void }) {
       {head}
       <LayerNote layer={2}>你在 L2：看得到产品需求与归属，研发的化学要点与封存项只显示「谁懂」、不显示原文。</LayerNote>
       {rid && <RouteStrip objectId={rid} />}
+      {rid && <Backstory id={rid} />}
       {q.family === "scope_update" && <Scope q={q} onDone={onDone} />}
       {q.family === "opportunity" && <Opportunity q={q} onDone={onDone} />}
       {q.family === "accept_requirement" && view && <Correct q={q} view={view} onDone={onDone} />}

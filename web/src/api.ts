@@ -3,7 +3,7 @@
 import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus, AuthorizedSourceReply,
-  Route, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage,
+  Route, CaseStory, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -138,6 +138,7 @@ export const api = {
 
   // v6：路由、开工条件、岗位工作、产品经理协作、研发不立项
   route: (id: string, viewer: string) => call<Route>(`route?${q({ id, viewer })}`),
+  caseStory: (id: string, viewer: string) => call<CaseStory>(`case-story?${q({ id, viewer })}`),   // V11.1 前情
   readiness: (id: string, viewer: string) => call<Readiness>(`readiness?${q({ id, viewer })}`),
   sessionReadiness: (id: string, viewer: string) => call<SessionReadiness>(`session-readiness?${q({ id, viewer })}`),
   workload: (viewer: string) => call<Workload>(`workload?${q({ viewer })}`),

@@ -129,6 +129,11 @@ export interface Route {
   roles: Record<"customer" | "sales" | "pm" | "rd", { state: RouteState; by: string[] }>;
   basis: RouteBasis[]; quote: string; n_human_steps: number; why: RouteWhy | null;
 }
+// V11.1 一件事的前情（门面 case_story）：每行的主体与角色；waiting 是这件事上还开着的决策
+export type StorySubject = "human" | "agent" | "jue" | "jev" | "qi" | "system";
+export interface StoryLine { ts: string; kind: string; subject: StorySubject; role: Role | null; who: string; text: string }
+export interface StoryWaiting { question_id: string; family: string; decision: string; owner_id: string | null; signer_id: string | null; prepared: boolean }
+export interface CaseStory { session_id: string; requirement_id: string | null; story: StoryLine[]; waiting: StoryWaiting[] }
 // 为什么直达研发：升级时查过的现有产品、按客户条件被排除的原因、Jev 判「都不合适」的概率
 export interface RouteWhy {
   by: string; phenomenon: string; p_none: number; scored_by: string;
