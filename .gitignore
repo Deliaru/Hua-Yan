@@ -32,3 +32,6 @@ Thumbs.db
 # 本地预览与工具配置
 README.html
 .claude/
+
+# 传化原始资料（内部，不入库）
+OriginalData/
