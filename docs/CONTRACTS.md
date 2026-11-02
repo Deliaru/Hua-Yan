@@ -2,7 +2,7 @@
 
 > 跨模块的数据格式与接口契约。**冻结后只能由人修改**。代码实现在 `src/huayan/contracts/`，必须与本文件一致。
 > 下列代码是规格（Python / pydantic v2 风格），字段名、类型、枚举值必须一致；函数签名必须一致，内部实现自由。
-> 版本：v6｜2026-10-12
+> 版本：v10｜2026-11-02（v6 于 2026-10-12 定型；之后 V9、V10 的增补按授权写入，各处以 `V9.x` / `V10.x` 注明来源包）
 >
 > **v6 追加（让需求直达正确的责任人；依据 `workpackages/REPLAN-v6.md` 第 2 节，人已批准）**：新增 L0（客户自助）：`Level` 增加 0，客户 level 0，`sheet`、`usage` 改为 L0，新增知识种类 `public_case`（L0，脱敏对外案例）与 `report`（L1，业务员可看的内部评价）；客户自助会话 `sales_id` 可为 `None`，`Session.origin` 记录来源（分配业务员后不变）；模板增加 `auto_action`，`signer_role` 为空且带 `auto_action` 的问题由觉自动执行（见 6.1 节），`Resolution.action` 增加 `auto`；事件增加 `auto_executed`、`sales_assigned`、`project_declined`、`l2_contributed`、`scope_extended`；解析表中 `pm` 作主人为 `pm:agent`、作签字人为真人产品经理；`opportunity` 签字人改为产品经理。
 >
