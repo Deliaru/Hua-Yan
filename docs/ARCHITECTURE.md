@@ -12,6 +12,10 @@
 
 ### 组织层：Harness、觉与契
 
+![化言组织智能运行架构](assets/architecture-org.svg)
+
+同一张图的 Mermaid 版本，便于在 GitHub 中直接查看和修改：
+
 ```mermaid
 flowchart TB
   P["人：设定目标与约束 · 专业判断 · 确认与授予"]
