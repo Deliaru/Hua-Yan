@@ -12,3 +12,4 @@ items:
   - {id: "rd:R01", role: rd, name: 染色过程研发陈工（模拟）}
   - {id: "rd:R02", role: rd, name: 弹力面料与整理研发刘工（模拟）}
   - {id: "supervisor:M01", role: supervisor, name: 主管赵总（模拟）}
+  - {id: "supervisor:CEO", role: supervisor, name: CEO（模拟）}   # V11.8 CEO 面：主管身份（L2），研发内容只看计数与存根

@@ -24,6 +24,7 @@ import { Story } from "./pages/Story";
 import { Customer } from "./pages/Customer";
 import { Pm } from "./pages/Pm";
 import { Month } from "./pages/Month";
+import { Ceo } from "./pages/Ceo";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
@@ -38,6 +39,7 @@ const PAGES = [
   ["pm", "产品经理", NavPm, "工作面"],
   ["rd", "研发", NavRd, "工作面"],
   ["supervisor", "研发负责人", NavDesk, "工作面"],
+  ["ceo", "CEO 面", NavEval, null],
   ["jue", "觉视图", NavJue, null],
   ["month", "化言的一个月", NavLedger, null],
   ["layers", "三层对照", NavLayers, null],
@@ -50,7 +52,7 @@ type Page = (typeof PAGES)[number][0];
 const HIDDEN: Page[] = ["story", "desk"];   // 不在侧栏出现的旧页面
 const TRIAL_PAGES: Page[] = ["jue", "ledger"];   // V11.0 试用实例：除自己的工作面，只留觉视图与知识账本；架构总览、模拟月、三层对照、评测是演示页
 const HUMANS: Role[] = ["sales", "pm", "rd", "supervisor"];   // 觉视图、三层对照、知识与积分、旧沉浸工作面可选的身份（产品经理为真人 P01，不含 Agent）
-const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd", supervisor: "supervisor" };
+const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd", supervisor: "supervisor", ceo: "supervisor" };
 const ROLE_NAME: Record<string, string> = { customer: "客户", sales: "业务员", pm: "产品经理", rd: "研发", supervisor: "研发负责人" };
 const TRIAL_ROLES: Role[] = ["sales", "pm", "rd", "supervisor", "customer"];
 const DEFAULT_WHO: Record<Role, string> = { customer: "customer:C03", sales: "sales:S01", pm: "pm:P01", rd: "rd:R01", supervisor: "supervisor:M01" };
@@ -112,7 +114,7 @@ export default function App() {
   const pageRole = ROLE_PAGES[page];
   const human = (r: Role) => meta.actors.filter((a) => a.role === r && a.id !== "pm:agent");
   const people = pageRole ? human(pageRole) : meta.actors.filter((a) => HUMANS.includes(a.role) && a.id !== "pm:agent");
-  const actor = trialActor ?? (pageRole ? people.find((a) => a.id === (who[pageRole] ?? DEFAULT_WHO[pageRole])) ?? people[0]
+  const actor = trialActor ?? (pageRole ? people.find((a) => a.id === (who[pageRole] ?? (page === "ceo" ? "supervisor:CEO" : DEFAULT_WHO[pageRole]))) ?? people[0]
     : people.find((a) => a.id === me) ?? people[0]);
   const pick = (id: string) => (pageRole ? setWho((w) => ({ ...w, [pageRole]: id })) : setMe(id));
   const restart = (label: string, p: Promise<unknown>) => {
@@ -223,6 +225,7 @@ export default function App() {
         {page === "eval" && <Eval />}
         {page === "ledger" && <Ledger key={key} />}
         {page === "month" && <Month />}
+        {page === "ceo" && <Ceo key={key} />}
       </main>
 
       {modeOpen && <ModeDialog mode={meta.mode} onClose={() => setModeOpen(false)}

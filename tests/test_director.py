@@ -2,8 +2,10 @@
 每关一条离线回归：导演跑完本关，检查对象状态与事件（REPLAN-v11 第 6 节）。专业签字、试样结果均为模拟。"""
 from pathlib import Path
 
+import pytest
 import yaml
 
+from huayan.knowledge import PermissionDenied
 from huayan.sim.director import Director, prepare_round
 from huayan.ui import server
 
@@ -105,3 +107,9 @@ def test_levels_four_to_seven_and_nine(tmp_path):
     assert app.kb._caps[cap.id].status == "active"
     assert escalated      # 挂起那一刻用过它的客户改道交研发（撤销后改道），不等复核
     assert {a["path"] for a in s["acted"]} <= set(server.POST)
+    # V11.8 CEO 面：逐件路径只给主管；第 7 关第一次试样未通过记为绕回
+    ceo = api.call("GET", "/api/ceo", {"viewer": "supervisor:CEO"})
+    seven = next(c for c in ceo["cases"] if c["session_id"] == case(7))
+    assert next(x for x in seven["stations"] if x["loop"])["station"] == "试样"
+    with pytest.raises(PermissionDenied):
+        api.call("GET", "/api/ceo", {"viewer": "rd:R01"})

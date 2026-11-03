@@ -25,3 +25,25 @@ time_split:
   sales: {own: 72, pm: 28}
   pm: {own: 32, sales: 40, rd: 28}
   rd: {own: 72, pm: 28}
+# V11.8 CEO 面的规模与单价（CEO-VIEW 4.2 要向传化要的参数），同样全部是假设；界面上可以拖动。
+monthly_inquiries: 300    # 每月客户询问量（件）
+sales_people: 20          # 业务员人数
+pm_people: 4              # 产品经理人数
+rd_people: 8              # 研发人数
+work_hours_month: 168     # 每人每月工时
+sales_hour_cost: 150      # 小时人工成本（元）
+pm_hour_cost: 200
+rd_hour_cost: 250
+trial_cost: 3000          # 一轮试样的物料与机台（元）
+# 「按最保守参数」：差距往小里算——转述少丢条件、研发早发现、工位快、交接等待短、人工与试样便宜
+conservative:
+  minutes: {sales_record: 10, pm_relay: 20, rd_review: 30, back_round: 30, rework: 120, pm_answer: 15}
+  wait_hours: 2
+  trial_wait_hours: 48
+  return_rate: 0.2
+  caught_by_rd: 0.8
+  sales_can_answer: 0.8
+  sales_hour_cost: 80
+  pm_hour_cost: 120
+  rd_hour_cost: 150
+  trial_cost: 1000

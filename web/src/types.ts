@@ -361,3 +361,16 @@ export interface PlayState {
   lines: { customer: string; session_id: string; text: string }[];   // 客户由人扮时，接下来可以说的台词
   notes: { who: string; text: string }[];   // 有人在玩的岗位要用到的外部世界信息（试样结果）
 }
+// V11.8 CEO 面：化言线逐件路径（门面 pipeline）+ 同一件事的旧流程推算（given 按参数文件、safe 按最保守参数）
+export interface CeoStation { station: string; enter: string; leave: string; by: string[]; loop: boolean }
+export interface CeoEstimate extends OldFlow { first_reply_hours: number }
+export interface CeoCase {
+  session_id: string; stations: CeoStation[]; arrived: string; answered: string | null; used: string[];
+  path: string; quote: string; reused: boolean; given: CeoEstimate; safe: CeoEstimate;
+}
+// 参数文件 config/old_flow.default.yaml 的全部字段（规模、单价是数，另有工位分钟数、时间构成与仍用假设值的参数名）
+export type CeoParams = { minutes: Record<string, number>; time_split: Record<string, Record<string, number>>; assumed: string[]; [k: string]: any };
+export interface CeoData {
+  cases: CeoCase[]; caps: { id: string; product: string; phenomenon: string; granted_by: string; new: boolean }[];   // granted_by 是签字人姓名
+  params: Record<"given" | "safe", CeoParams>; names: Record<string, string>; bars: Record<"given" | "safe", Record<"sales" | "pm" | "rd", TimeBar>>;
+}

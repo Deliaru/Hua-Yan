@@ -233,6 +233,34 @@ def time_bar_of(app, p):
     return old_flow.time_bar(estimates, params, role)
 
 
+def ceo_of(app, p):
+    """V11.8 CEO 面（CEO-VIEW C1/C3）：化言线逐件路径（门面 pipeline），配上同一件事的旧流程推算与客户等第一个答复的时间，
+    一份按参数文件、一份按最保守参数；三个岗位的时间构成也是两份。这一局研发新签的适用能力（有授予事件）替研发答了的事，
+    旧流程里这份判断没有沉淀，下一单还要经转述找研发，按「研发不立项」的路径推算。账本、排队与来单量在界面按参数算。"""
+    viewer = p["viewer"]
+    cases = app.pipeline(viewer)
+    granted = {e.payload["id"] for e in app.events.query(["capability_granted"])}
+    params = old_flow.load_params()
+    sets = {"given": params, "safe": old_flow.conservative(params)}
+    for c in cases:
+        route = app.route_of(c["session_id"], viewer)
+        reused = route["path"] == "自助解决" and bool(granted & set(c["used"]))
+        story = app.case_story(c["session_id"], viewer)["story"]
+        c |= {"path": route["path"], "quote": route["quote"], "reused": reused}
+        for k, ps in sets.items():
+            est = old_flow.estimate({**route, "path": "研发不立项"} if reused else route, ps, story=story)
+            c[k] = est | {"first_reply_hours": round(old_flow.first_reply_hours(est, ps), 2)}
+    products = {x.id: x.name for x in app.kb.products()}
+    phenomena = {x.id: x.label for x in app.seeds.phenomena}
+    used = {u for c in cases for u in c["used"]}
+    caps = [{"id": x.id, "product": products[x.payload["product_id"]], "phenomenon": phenomena[x.payload["phenomenon"]],
+             "granted_by": app.actors[x.granted_by].name, "new": x.id in granted}
+            for x in app.kb.capabilities() if x.id in used]
+    return {"cases": cases, "caps": caps, "params": sets, "names": {a.id: a.name for a in app.seeds.actors},
+            "bars": {k: {role: old_flow.time_bar([c[k] for c in cases], ps, role) for role in ("sales", "pm", "rd")}
+                     for k, ps in sets.items()}}
+
+
 def demo_ledger(app, p):
     """V6-5.5 生产力账本：按本会话此刻的事件日志计数，口径同 scripts/demo_routes.py 的 v6 列；传统按黑线流程定义（每个需求 5 个人工节点、一张研发单），不是测量。"""
     sessions = app.sessions()
@@ -282,6 +310,7 @@ GET = {
     "/api/case-story": lambda app, p: app.case_story(p["id"], p["viewer"]),   # V11.1：一件事的前情
     "/api/old-flow": old_flow_of,   # V11.2：同一件事按旧流程走的推算
     "/api/time-bar": time_bar_of,   # V11.4：我的时间构成从现状到这一局
+    "/api/ceo": ceo_of,   # V11.8：CEO 面的两条流水线与账本（主管只读）
     "/api/readiness": lambda app, p: app.readiness(p["id"], p["viewer"]),   # v6.1：开工门槛
     "/api/session-readiness": lambda app, p: app.session_readiness(p["id"], p["viewer"]),   # v6.1 E1
     "/api/workload": lambda app, p: app.workload(p["viewer"]),   # v6.1 E6
@@ -1050,6 +1079,7 @@ MONTH = {
     "/api/month/runs": month_runs,
     "/api/month/progress": lambda p: json.loads((_month_dir(p["run"]) / "progress.json").read_text(encoding="utf-8")),
     "/api/month/timeline": month_timeline,
+    "/api/month/ceo": lambda p: ceo_of(month_app(p["run"]), p),
 }
 
 

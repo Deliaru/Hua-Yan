@@ -3,7 +3,7 @@
 import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus, AuthorizedSourceReply,
-  Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage,
+  Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage, CeoData,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -146,6 +146,8 @@ export const api = {
   caseStory: (id: string, viewer: string) => call<CaseStory>(`case-story?${q({ id, viewer })}`),   // V11.1 前情
   oldFlow: (id: string, viewer: string) => call<OldFlow>(`old-flow?${q({ id, viewer })}`),         // V11.2 旧流程推算
   timeBar: (viewer: string) => call<TimeBar>(`time-bar?${q({ viewer })}`),                         // V11.4 我的时间构成
+  ceo: (viewer: string) => call<CeoData>(`ceo?${q({ viewer })}`),                                     // V11.8 CEO 面（这一局）
+  monthCeo: (run: string, viewer: string) => request<CeoData>(`month/ceo?${q({ run, viewer })}`),     // V11.8 CEO 面（模拟业务月）
   readiness: (id: string, viewer: string) => call<Readiness>(`readiness?${q({ id, viewer })}`),
   sessionReadiness: (id: string, viewer: string) => call<SessionReadiness>(`session-readiness?${q({ id, viewer })}`),
   workload: (viewer: string) => call<Workload>(`workload?${q({ viewer })}`),

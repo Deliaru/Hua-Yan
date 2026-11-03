@@ -93,7 +93,7 @@ class HuayanApp:
         app.ledger = Ledger(app.run_dir / "ledger.jsonl", points=app.config["points"])
         app.bus = QuestionBus(app.events, app.run_dir / "questions.jsonl")
         for q in app.bus.list(family="scope_update"):   # 续跑时产品线编制若已改，待批准范围交现任产品经理签字
-            pm = app._line_pm(q.refs["phenomenon"])
+            pm = app._line_pm(q.refs.get("phenomenon"))   # V8 的旧运行里扩范围决策没有记现象，照原签字人
             if pm and q.signer_id != pm:
                 q.signer_id = pm
                 app.bus.publish(q)                      # 同 dedup_key 的开放问题：只追加快照落盘
@@ -2105,6 +2105,33 @@ class HuayanApp:
                 "quote": next((t.text for t in session.turns if t.speaker == "customer"), ""),
                 "n_human_steps": len(steps)}
 
+    def pipeline(self, by):
+        """V11.8（CEO-VIEW C1）：化言线上每件货（一段会话）按事件依次经过的工位，主管只读。相邻同一工位合并，记进入、离开时刻、
+        经手人、是否绕回（需求单退回、试样未通过、推荐撤回改道）；arrived 是客户第一句，answered 是第一个有效答复（推荐、
+        业务员答复或产品经理、研发本人处理）；used 是这件事用过的适用能力。只有工位与人，没有研发写的话。不另存。"""
+        self._actor(by, {"supervisor"})
+        cases = []
+        for s in self.sessions():
+            _, session, _, events, _ = self._case(s.id, by)
+            human = {id(e) for e in _human_events(events)}
+            stations = []
+            for e in events:
+                name, actor = _station(e), e.actor.removeprefix("agent:")
+                loop = e.kind in ("requirement_returned", "recommendation_withdrawn") or e.kind == "trial" and e.payload["result"] != "pass"
+                if stations and stations[-1]["station"] == name:
+                    last = stations[-1]
+                    last["leave"], last["loop"] = e.ts.isoformat(), last["loop"] or loop
+                    last["by"] += [actor] if actor not in last["by"] else []
+                else:
+                    stations.append({"station": name, "enter": e.ts.isoformat(), "leave": e.ts.isoformat(), "by": [actor], "loop": loop})
+            answered = next((e.ts for e in events if e.kind == "recommend" or id(e) in human
+                             or e.kind == "turn" and e.actor.startswith("sales:")), None)
+            cases.append({"session_id": session.id, "stations": stations, "arrived": events[0].ts.isoformat(),
+                          "answered": answered.isoformat() if answered else None,
+                          "used": sorted({e.payload["capability_id"] for e in events
+                                          if e.kind == "capability_used" and e.payload["form"] == "applicable"})})
+        return cases
+
     def case_story(self, object_id, viewer_id):
         """V11.1：一件事到现在的前情，按时间排列。每行写谁做的（主体：human 人 / agent Agent / jue 觉 / jev Jev / qi 契 /
         system 系统）、属于哪个角色、做了什么；waiting 是这件事上还开着的决策。全部由事件与问题总线推出，不另存。
@@ -2118,7 +2145,7 @@ class HuayanApp:
         name = lambda a: self.actors[a].name.replace("（模拟）", "") if a in self.actors else a
         named = lambda a: name(a) + (" " if name(a)[-1:].isascii() else "")    # 「产品经理 Agent 准备」
         product = lambda pid: next((p.name.replace("（模拟）", "") for p in self.kb.products() if p.id == pid), pid)
-        decision = {t.family: t.decision_label for t in self.templates.values()}
+        decision = {t.family: t.decision_label for t in self.templates.values()} | {"decrypt_request": "客户申请了解产品机理"}   # 解密申请不走模板
         questions = {q.id: q for q in self.bus.list(status=None)}
         mine = lambda q: inner or viewer_id in (q.owner_id, q.signer_id)
 
@@ -2591,6 +2618,21 @@ class HuayanApp:
             found += self.scan(now)
         self.agents.dispatch()
         return [q.model_copy(deep=True) for q in found]
+
+
+def _station(e):
+    """V11.8 化言线的工位：试样；产品经理 Agent；业务员 / 产品经理 / 研发本人；契（匹配、推荐、能力）；客户；其余是觉（抽取、追问、决策、升级）。"""
+    actor = e.actor.removeprefix("agent:")
+    role = actor.split(":")[0]
+    if e.kind == "trial":
+        return "试样"
+    if actor == "pm:agent":
+        return "Agent"
+    if role in ("sales", "pm", "rd"):
+        return {"sales": "业务员", "pm": "产品经理", "rd": "研发"}[role]
+    if e.kind in ("match", "recommend", "recommendation_withdrawn") or e.kind in _QI_KINDS:
+        return "契"
+    return "客户" if e.kind == "turn" and role == "customer" else "觉"
 
 
 # v8 Q9.5 主管时间线 -------------------------------------------------------------------------------

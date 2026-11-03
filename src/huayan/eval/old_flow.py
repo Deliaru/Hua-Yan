@@ -34,11 +34,27 @@ def load_params(default: Path = DEFAULT, override: Path = OVERRIDE) -> dict:
     params = yaml.safe_load(default.read_text(encoding="utf-8"))
     given = yaml.safe_load(override.read_text(encoding="utf-8")) if override.exists() else {}
     flat = lambda d: {f"minutes.{k}": v for k, v in d.get("minutes", {}).items()} | {
-        k: v for k, v in d.items() if k not in ("minutes", "source")}
+        k: v for k, v in d.items() if k not in ("minutes", "source", "conservative")}
     assumed = sorted(set(flat(params)) - set(flat(given)))
     params["minutes"] |= given.get("minutes", {})
     params |= {k: v for k, v in given.items() if k != "minutes"}
     return params | {"assumed": assumed}
+
+
+def conservative(params: dict) -> dict:
+    """V11.8「按最保守参数」：conservative 里的值盖过同名参数（minutes 逐项盖）。"""
+    c = params["conservative"]
+    return params | c | {"minutes": params["minutes"] | c.get("minutes", {})}
+
+
+def first_reply_hours(est: dict, p: dict) -> float:
+    """V11.8 旧流程里客户从提问到拿到第一个有效答复（小时，推算）：业务员能答的当场答，答不了的转产品经理查资料再原路回来；
+    要研发判断的，经业务员记录、产品经理转述到研发看单，再原路回到客户（六次交接），开工前补问的照推算轮数各往返一次。"""
+    m, w = p["minutes"], p["wait_hours"]
+    if est["path"] in ("追问中", "自助解决", "交业务员"):
+        pm = 0 if est["path"] == "交业务员" else 1 - p["sales_can_answer"]
+        return w + m["sales_answer"] / 60 + pm * (2 * w + m["pm_answer"] / 60)
+    return 6 * w + (m["sales_record"] + m["pm_relay"] + m["rd_review"]) / 60 + est["old"]["backs"] * (6 * w + m["back_round"] / 60)
 
 
 def card_loss(card: NeedCard, seeds: Seeds, relay: dict, seed: int) -> dict:
@@ -50,10 +66,12 @@ def card_loss(card: NeedCard, seeds: Seeds, relay: dict, seed: int) -> dict:
 def now_times(story: list[dict]) -> dict:
     """这次实际还发生了几次交叉工位（从门面 case_story 的前情数）：业务员亲自答过客户算一次答技术问题，研发每次退回或回问算一轮补问；
     记录、转述、查资料答复已由觉和产品经理 Agent 接走，不再由人做。V11.7 试样返工也照实数：每录一次未通过的试样算一轮
-    （前情对任何视角都写「录入试样结果：未通过」，原因只给内部视角）。"""
+    （前情对任何视角都写「录入试样结果：未通过」，原因只给内部视角）。V11.8 研发看单也照实数：研发本人没处理过这件事
+    （研发签过的判断由契替他回答）就是 0。"""
     return {"业务员答技术问题": int(any(x["kind"] == "turn" and x["role"] == "sales" for x in story)),
             "补问一轮": sum(x["kind"] == "requirement_returned" for x in story),
             "试样返工一轮": sum(x["kind"] == "trial" and "未通过" in x["text"] for x in story),
+            "研发看单判断": int(any(x["role"] == "rd" and x["subject"] == "human" for x in story)),
             "业务员记录需求": 0, "产品经理查资料答复": 0, "产品经理转述": 0}
 
 
