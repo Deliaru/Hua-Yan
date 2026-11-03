@@ -1922,7 +1922,10 @@ class HuayanApp:
         questions = [q.model_copy(deep=True) for q in self.bus.list()
                      if viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
                          and self._sessions[q.refs["session_id"]].sales_id == viewer_id)]
+        unfinished = {r["question_id"] for r in self.agents.errors() if r["kind"] == "unfinished"}
         for q in questions:
+            if q.prepared_at and q.id in unfinished:
+                q.evidence.append(Evidence(summary="助手步数用完，没有做完；已完成的部分见对话。签字前要有的材料已齐，可以直接判断"))
             if q.family == "qi_grant" and "requester" in q.refs:
                 unit = self.kb._units[q.refs["ku_id"]]
                 q.evidence.append(Evidence(summary=f"{self.actors[q.refs['requester']].name}申请查看：{unit.title}"))

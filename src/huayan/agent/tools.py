@@ -72,7 +72,7 @@ class Text(BaseModel):
 
 
 class ReqId(BaseModel):
-    req_id: str = Field(description="需求单编号req:…，从requirement_id/req_id取；不是question_id或knowledge/theme对象编号")
+    req_id: str = Field(description="需求单编号req:…，从requirement_id/req_id取；不是question_id或knowledge/theme对象编号；问题引用里没有需求单就不要调用，不要拼编号")
 
 
 class QuestionId(BaseModel):
@@ -104,8 +104,11 @@ class KuId(BaseModel):
     ku_id: str
 
 
+DOC_ID = "已登记的资料来源编号（如报告编号P2CQL2024012304），从问题引用或search_knowledge、get_knowledge结果的出处里取；不是业务试样wk:trial:…或需求单编号，不要猜"
+
+
 class SourceArgs(BaseModel):
-    doc_id: str
+    doc_id: str = Field(description=DOC_ID)
     span: str | None = None
 
 
@@ -118,7 +121,7 @@ def read_source(ctx: ToolContext, args: SourceArgs) -> ToolResult:
 
 
 class SourceImageArgs(BaseModel):
-    doc_id: str
+    doc_id: str = Field(description=DOC_ID)
     page: int
     span: str | None = None
 
@@ -131,7 +134,7 @@ def read_source_image(ctx: ToolContext, args: SourceImageArgs) -> ToolResult:
 
 
 class SourceTrialArgs(BaseModel):
-    doc_id: str
+    doc_id: str = Field(description=DOC_ID)
 
 
 @tool("read_trial_record", "read", ["sales", "pm", "rd"],
@@ -164,7 +167,7 @@ def get_source_preparation(ctx: ToolContext, args: ReqId) -> ToolResult:
 
 class CompileSourceArgs(BaseModel):
     req_id: str
-    doc_id: str
+    doc_id: str = Field(description=DOC_ID)
 
 
 @tool("compile_source_preparation", "draft", ["rd"],

@@ -244,6 +244,8 @@ class AgentHub:
                             if out[-1].messages[-1].text == OUT_OF_STEPS and not (q.signer_role and not self.app.preparation_gap(q.id)):
                                 self._give_up(q, rounds, exhausted, "out_of_steps", OUT_OF_STEPS)
                                 continue  # 本轮不重试它，继续派其他问题；下次 dispatch 再试。
+                            if out[-1].messages[-1].text == OUT_OF_STEPS:   # 材料够人判断，但助手没做完：记下，界面照实写
+                                self.error(q.owner_id, "unfinished", question_id=q.id, detail=OUT_OF_STEPS)
                             # v8：准备好没有以对象为准；缺什么就退回给 Agent 再做，Agent 说「已就绪」不算
                             for _ in range(PUSHBACKS):
                                 gap = q.signer_role and self.app.preparation_gap(q.id)
