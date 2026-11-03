@@ -38,6 +38,21 @@ def image_data_url(raw):
     return "data:image/png;base64," + b64encode(raw).decode("ascii")
 
 
+TRANSCRIBE = ("把这页扫描书页/标准转写成 Markdown，只输出转写内容：按阅读顺序逐字转写正文与标题；"
+              "公式写成 LaTeX（$...$ 或 $$...$$）；表格写成 Markdown 表格，保留表头、单位与数值原样；"
+              "图只写图号、图题和图中可见文字标签，不描述图形；化学结构式写不出就写[结构式]；"
+              "读不清的字写[?]，不猜、不补、不纠错；页眉页码照抄；整页没有文字就只输出：（空白页）")
+
+
+def transcribe_page(raw, gateway):
+    """扫描页整页转写（V12.1）；返回模型读稿，调用方标明不是原生文字。"""
+    request = LLMRequest(tier=Tier.STRONG, caller="ingest:extract", temperature=0, max_tokens=8192, timeout_s=180,
+        messages=[Message(role="user", content=[ImageContent(image_url=ImageURL(url=image_data_url(raw))),
+                                                TextContent(text=TRANSCRIBE)])])
+    response = gateway.complete(request)
+    return (response.content or "").strip(), response.model
+
+
 def read_image(image_path, context, gateway):
     url = image_data_url(Path(image_path).read_bytes())
     request = LLMRequest(tier=Tier.STRONG, caller="ingest:extract", temperature=0, max_tokens=4096, timeout_s=60,

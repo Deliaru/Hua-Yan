@@ -4,6 +4,7 @@
 
 uv run python scripts/build_library.py                # 登记与抽页（Word / PowerPoint 转 PDF，需本机 Office）
 uv run python scripts/build_library.py --index        # 建页向量
+uv run --env-file .env python scripts/build_library.py --ocr-pending   # 待补读的扫描页经网关视觉模型转写（V12.1），之后再 --index
 """
 import argparse
 import hashlib
@@ -104,6 +105,59 @@ def register():
     print(f"登记 {len(sources)} 份，{sum(s['pages'] for s in sources)} 页，待补读 {sum(s['pending_pages'] for s in sources)} 页")
 
 
+def ocr_pending(models, workers):
+    """待补读页（扫描件）从 PDF 重渲，经网关视觉模型转写；页文字带「模型转写」标注，失败的页保持待补读，重跑即续跑。"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from io import BytesIO
+    from threading import Lock
+
+    import pypdfium2 as pdfium
+
+    from huayan.gateway import build_gateway
+    from huayan.ingest.reader.image import transcribe_page
+    from huayan.meter import FileMeter
+
+    gateway = build_gateway(models, False, FileMeter(OUT, "ocr-pending"))
+    manifest = OUT / "sources.json"
+    sources = json.loads(manifest.read_text(encoding="utf-8"))["sources"]
+
+    render = Lock()                        # pdfium 不能多线程同时渲染；并发的只是网关调用
+
+    def work(pdf, number):
+        buffer = BytesIO()
+        with render:
+            page = pdf[number - 1]
+            page.render(scale=2000 / page.get_width()).to_pil().convert("RGB").save(buffer, format="PNG")
+        return transcribe_page(buffer.getvalue(), gateway)
+
+    for s in (s for s in sources if s["pending_pages"]):
+        path = OUT / "docs" / f"{s['source_id']}.json"
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        todo = [n for n, t in enumerate(doc["pages"], 1) if t == PENDING]
+        pdf = pdfium.PdfDocument(s["file"] if s["file"].lower().endswith(".pdf") else OUT / "pdf" / f"{s['source_id']}.pdf")
+        print(f"{s['source_id']} {s['title']}：待补读 {len(todo)} 页", flush=True)
+        with ThreadPoolExecutor(workers) as pool:
+            futures = {pool.submit(work, pdf, n): n for n in todo}
+            for done, future in enumerate(as_completed(futures), 1):
+                n = futures[future]
+                try:
+                    text, model = future.result()
+                except Exception as e:      # 网络或接口失败：这一页保持待补读，重跑再试
+                    text, model = "", f"{type(e).__name__}: {e}"
+                if text:
+                    doc["pages"][n - 1] = f"【模型转写（{model}），引用前对照原图】\n{text}"
+                    doc.setdefault("ocr", {})[str(n)] = model
+                else:
+                    print(f"  p{n} 没转写出来，保持待补读：{model}", flush=True)
+                if done % 20 == 0 or done == len(todo):
+                    path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+                    s["pending_pages"] = doc["pages"].count(PENDING)
+                    manifest.write_text(json.dumps({"sources": sources}, ensure_ascii=False, indent=1), encoding="utf-8")
+                    print(f"  {done}/{len(todo)}", flush=True)
+        pdf.close()
+    print(f"待补读剩 {sum(s['pending_pages'] for s in sources)} 页")
+
+
 def index():
     from huayan.ingest.reader.retrieval import LocalGemmaRetriever
     from huayan.ingest.reader.library import page_key
@@ -132,4 +186,8 @@ def index():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--index", action="store_true")
-    index() if parser.parse_args().index else register()
+    parser.add_argument("--ocr-pending", action="store_true")
+    parser.add_argument("--models", default="data/pilot/models.yaml")
+    parser.add_argument("--workers", type=int, default=4)
+    args = parser.parse_args()
+    index() if args.index else ocr_pending(args.models, args.workers) if args.ocr_pending else register()
