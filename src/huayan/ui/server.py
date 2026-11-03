@@ -919,11 +919,25 @@ def play_next(_):
     return DIRECTOR.view()
 
 
+def play_settle(_):
+    """V11.9 结算：九关各送来的事走了哪条路，三个岗位的时间构成与这一局的账本（同 CEO 面的口径，两份参数）。
+    这是游戏世界的总账，由导演以 CEO 身份读汇总，只给各件的路径与旧流程推算，不给原话与经手人，谁都能看。
+    rerouted：推荐后来被撤下、改道交研发（第 9 关来源改版挂起能力时，前几关的事会这样）。"""
+    data = session_api("default").call("GET", "/api/ceo", {"viewer": "supervisor:CEO"})
+    keep = ("session_id", "path", "reused", "arrived", "answered", "given", "safe")
+    return {"params": data["params"], "bars": data["bars"],
+            "cases": [{k: c[k] for k in keep} | {"rerouted": any(x["station"] == "契" and x["loop"] for x in c["stations"])}
+                      for c in data["cases"]],
+            "levels": [{"id": x["id"], "title": x["title"], "point": x["point"], "passed": x["id"] in DIRECTOR.state["passed"],
+                        "cases": DIRECTOR.state["cases"].get(str(x["id"]), [])} for x in DIRECTOR.levels]}
+
+
 PLAY_API = {
     "/api/play/state": lambda p: DIRECTOR.view() | {"now": session_api("default").clock.now().isoformat()},
     "/api/play/control": play_control,
     "/api/play/next": play_next,
     "/api/play/restart": play_restart,
+    "/api/play/settle": play_settle,
 }
 
 

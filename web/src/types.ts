@@ -374,3 +374,9 @@ export interface CeoData {
   cases: CeoCase[]; caps: { id: string; product: string; phenomenon: string; granted_by: string; new: boolean }[];   // granted_by 是签字人姓名
   params: Record<"given" | "safe", CeoParams>; names: Record<string, string>; bars: Record<"given" | "safe", Record<"sales" | "pm" | "rd", TimeBar>>;
 }
+// V11.9 游戏结算：九关各送来的事（会话号）与这一局的账本（各件只给路径与推算，不给原话与经手人）
+export interface PlaySettle {
+  params: CeoData["params"]; bars: CeoData["bars"];
+  cases: (Pick<CeoCase, "session_id" | "path" | "reused" | "arrived" | "answered" | "given" | "safe"> & { rerouted: boolean })[];
+  levels: { id: number; title: string; point: string; passed: boolean; cases: string[] }[];
+}

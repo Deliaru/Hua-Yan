@@ -8,8 +8,10 @@ import { useApp, useData } from "../ctx";
 import type { CeoCase, CeoData, CeoParams, MonthProgress, OldFlowStation } from "../types";
 import { Group, PageHead } from "../components/ui";
 
-type Basis = "given" | "safe";   // 照参数文件 / 按最保守参数
+export type Basis = "given" | "safe";   // 照参数文件 / 按最保守参数
 type Role = "sales" | "pm" | "rd";
+// 时间构成与头条数字只用到各件的旧流程推算与两个时刻；结算页（V11.9）给的就是这么多
+export type Ledger = Pick<CeoData, "bars"> & { cases: Pick<CeoCase, "given" | "safe" | "arrived" | "answered">[] };
 const GAIN = "#248a3d";
 const CROSS = ["#e08a2b", "#c7a25a"];
 const ROLE: Record<Role, string> = { sales: "销售", pm: "产品经理", rd: "研发" };
@@ -25,14 +27,14 @@ const LANE_ROLE: Record<string, Role> = { 销售记录: "sales", 销售开单: "
 const SPEEDS: [number, string][] = [[0.5, "慢"], [2.8, "一分钟一个月"], [8, "快"]];
 const MONTH = 168;   // 一个月按 168 个工作小时排
 
-const Src = ({ s }: { s: string }) => (
+export const Src = ({ s }: { s: string }) => (
   <span className={`tag !h-[18px] !px-1.5 !text-[11px] !font-normal ${s === "假设" ? "tag-warn" : s === "推算" ? "" : "tag-accent"}`}>{s}</span>
 );
-const hours = (h: number) => (h < 1 ? `${Math.max(1, Math.round(h * 60))} 分钟` : h < 48 ? `${+h.toFixed(1)} 小时` : `${+(h / 24).toFixed(1)} 天`);
+export const hours = (h: number) => (h < 1 ? `${Math.max(1, Math.round(h * 60))} 分钟` : h < 48 ? `${+h.toFixed(1)} 小时` : `${+(h / 24).toFixed(1)} 天`);
 const work = (h: number) => (h < 8 ? hours(h) : `${+(h / 8).toFixed(1)} 个工作日`);   // 流水线按工作小时排，每天 8 小时
 const money = (y: number) => (Math.abs(y) >= 1e4 ? `${+(y / 1e4).toFixed(1)} 万元` : `${Math.round(y)} 元`);
 const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
-const perCase = (cases: CeoCase[], set: Basis, f: (r: OldFlowStation) => number) =>
+const perCase = (cases: Ledger["cases"], set: Basis, f: (r: OldFlowStation) => number) =>
   cases.reduce((n, c) => n + c[set].old.stations.reduce((m, r) => m + f(r), 0), 0) / Math.max(cases.length, 1);
 
 // ---------- 排队：每件货依次过工位；人工工位按岗位共用的人手先到先排，交接等待、补问往返、试样周期照参数 ----------
@@ -119,7 +121,7 @@ export function Ceo() {
   const [revoke, setRevoke] = useState<string>("");
   const [pick, setPick] = useState<CeoCase | null>(null);
   if (!data) return <p className="p-10 text-ink-2">正在汇总……</p>;
-  if (!data.cases.length) return <p className="p-10 text-ink-2">这一局还没有客户需求。</p>;
+  if (!data.cases.length) return <p className="p-10 text-ink-2">还没有客户需求。</p>;
   const p = { ...data.params[set], ...edits } as CeoParams;
   const live = source === "this" && !!meta.trial && !meta.play;
   const tag = live ? "实测" : "模拟";
@@ -145,7 +147,7 @@ export function Ceo() {
 }
 
 // ---------- 第一屏：三个岗位的时间构成，现状 → 化言 ----------
-function TimeBars({ data, set }: { data: CeoData; set: Basis }) {
+export function TimeBars({ data, set }: { data: Ledger; set: Basis }) {
   const strip = (own: number, segs: number[]) => (
     <div className="flex h-[20px] overflow-hidden rounded-[5px] bg-fill text-[11px] font-semibold leading-[20px] text-white transition-all">
       <div style={{ width: `${own}%`, background: GAIN, transition: "width .8s" }} className="truncate px-1.5">本职 {Math.round(own)}%</div>
@@ -170,7 +172,7 @@ function TimeBars({ data, set }: { data: CeoData; set: Basis }) {
 }
 
 // ---------- 三个头条数字：每个都能点开看算式与来源 ----------
-function Headline({ data, set, p, volume, tag, assumed }: { data: CeoData; set: Basis; p: CeoParams; volume: number; tag: string; assumed: (k: string) => boolean }) {
+export function Headline({ data, set, p, volume, tag, assumed }: { data: Ledger; set: Basis; p: CeoParams; volume: number; tag: string; assumed: (k: string) => boolean }) {
   const [open, setOpen] = useState<number | null>(null);
   const cs = data.cases;
   const saved = (role: Role) => perCase(cs, set, (r) => (r.role === role ? r.minutes - (r.now_minutes ?? r.minutes) : 0));

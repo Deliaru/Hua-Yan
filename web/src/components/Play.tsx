@@ -24,7 +24,7 @@ export function usePlay(): PlayState | null {
 }
 
 export function PlayBar() {
-  const { fail, refresh, me } = useApp();
+  const { fail, refresh, me, go } = useApp();
   const s = usePlay();
   const [busy, setBusy] = useState<string | null>(null);
   if (!s) return null;
@@ -82,6 +82,7 @@ export function PlayBar() {
             <button className="btn btn-plain" disabled={!!busy}
                     onClick={() => confirm("重开本关：开新的一局，前面几关由导演代办补上，这一关从头来。确定吗？") && run("正在重开本关……", api.playRestart())}>重开本关</button>
             <button className="btn btn-primary" disabled={!s.passed || !!busy} onClick={() => run("…", api.playNext())}>下一关</button>
+            <button className="btn btn-plain ml-auto" onClick={() => go("settle")}>看这一局的结算</button>
           </div>
           <div className="flex flex-col border-t border-sep pt-2">
             {s.levels.map((x, i) => (

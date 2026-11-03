@@ -25,6 +25,7 @@ import { Customer } from "./pages/Customer";
 import { Pm } from "./pages/Pm";
 import { Month } from "./pages/Month";
 import { Ceo } from "./pages/Ceo";
+import { Settle } from "./pages/Settle";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
@@ -40,6 +41,7 @@ const PAGES = [
   ["rd", "研发", NavRd, "工作面"],
   ["supervisor", "研发负责人", NavDesk, "工作面"],
   ["ceo", "CEO 面", NavEval, null],
+  ["settle", "这一局的结算", NavLedger, null],
   ["jue", "觉视图", NavJue, null],
   ["month", "化言的一个月", NavLedger, null],
   ["layers", "三层对照", NavLayers, null],
@@ -107,7 +109,8 @@ export default function App() {
   }, fail);
   if (trial && !trialActor) return <RolePicker meta={meta} onPick={enter} error={error} />;
   // 试用实例里只出现自己的工作面、觉视图与知识账本；地址栏指到别处时回到自己的工作面
-  const visible = (k: Page) => !trialActor || ROLE_PAGES[k] === trialActor.role || TRIAL_PAGES.includes(k);
+  // V11.9 结算页只在游戏模式出现，谁都能看
+  const visible = (k: Page) => k === "settle" ? !!meta.play : !trialActor || ROLE_PAGES[k] === trialActor.role || TRIAL_PAGES.includes(k);
   const page: Page = visible(rawPage) ? rawPage : PAGES.find(([k]) => ROLE_PAGES[k] === trialActor!.role)?.[0] ?? "jue";
   const inDemo = demo && !trial;
 
@@ -226,6 +229,7 @@ export default function App() {
         {page === "ledger" && <Ledger key={key} />}
         {page === "month" && <Month />}
         {page === "ceo" && <Ceo key={key} />}
+        {page === "settle" && <Settle key={key} />}
       </main>
 
       {modeOpen && <ModeDialog mode={meta.mode} onClose={() => setModeOpen(false)}
