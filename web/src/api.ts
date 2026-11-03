@@ -3,7 +3,7 @@
 import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus, AuthorizedSourceReply,
-  Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage, CeoData, PlaySettle,
+  Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage, CeoData, PlaySettle, GrantScope,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -115,7 +115,8 @@ export const api = {
   confirmClaims: (req_id: string | null, ku_ids: string[], by: string, reviewed_evidence?: Record<string, string[]>) =>
     call("qi/confirm", { req_id, ku_ids, by, reviewed_evidence }),
   reviseClaim: (ku_id: string, text: string, by: string) => call<Claim>("qi/revise", { ku_id, text, by }),
-  grantCapability: (question_id: string, by: string, note = "") => call("qi/grant", { question_id, by, note }),
+  grantCapability: (question_id: string, by: string, note = "", scope?: GrantScope) =>
+    call("qi/grant", scope ? { question_id, by, note, scope } : { question_id, by, note }),
   revokeCapability: (cap_id: string, by: string) => call("qi/revoke", { cap_id, by }),
   requestShare: (ku_id: string, by: string) => call("qi/request-share", { ku_id, by }),
   withdrawClaim: (ku_id: string, by: string) => call("qi/withdraw", { ku_id, by }),

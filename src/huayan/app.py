@@ -1607,7 +1607,8 @@ class HuayanApp:
         self.scan()
         return self.requirement_view(req_id, by).requirement if req_id is not None else None
 
-    def sign_qi_grant(self, question_id, by, claim_ids=(), note="", reviewed_evidence=None):
+    def sign_qi_grant(self, question_id, by, claim_ids=(), note="", reviewed_evidence=None, scope=None):
+        """scope：研发授予适用能力时放宽试过的范围（V11.10），{conditions, temperature_c, limits} 由他改定；不给就照原范围。"""
         self._actor(by, {"rd"})
         q = _find(self.bus.questions, question_id, "问题")
         if q.family != "qi_grant" or q.status != "open" or q.prepared_at is None:
@@ -1637,12 +1638,19 @@ class HuayanApp:
             if not set(claim_ids) <= set(source.based_on):
                 raise ValueError("只能确认此项能力依据的结论")
             self.kb.confirm(claim_ids, by, reviewed_evidence=reviewed_evidence)
-        audience = int(q.refs["audience"])
-        cap = next((c for c in self.kb.capabilities() if c.form == source.form and c.payload == source.payload
+        audience, payload = int(q.refs["audience"]), source.payload
+        if scope is not None:
+            values, t = {s.id: s.values for s in self.seeds.slots}, scope.get("temperature_c")
+            if source.form != "applicable" or (t is not None and t[0] > t[1]) or any(
+                    slot not in values or not v or not set(v) <= set(values[slot]) for slot, v in scope["conditions"].items()):
+                raise ValueError("只能改适用能力的范围：条件须是已知槽位的取值，温度下限不高于上限")
+            payload = {k: v for k, v in {**source.payload, "conditions": scope["conditions"], "temperature_c": t,
+                                         "limits": scope.get("limits", "").strip()}.items() if v is not None and v != ""}
+        cap = next((c for c in self.kb.capabilities() if c.form == source.form and c.payload == payload
                     and c.based_on == source.based_on and c.granted_by == by and c.audience == audience
                     and c.status in {"active", "proposed"}), None)
         if cap is None:
-            cap = self.kb.grant(source.model_copy(update={"id": self.kb.next_cap_id(),
+            cap = self.kb.grant(source.model_copy(update={"id": self.kb.next_cap_id(), "payload": payload,
                 "audience": audience, "granted_by": by, "approved_by": None,
                 "status": "active", "at": get_clock().now()}))
         self._settle(q.id, Resolution(action="sign", by=by, note=note))
@@ -1926,6 +1934,8 @@ class HuayanApp:
                         q.evidence.append(Evidence(summary=f"适用温度：{lower:g}—{upper:g}℃"))
                     if cap.payload.get("limits"):
                         q.evidence.append(Evidence(summary=f"限制原文：{cap.payload['limits']}"))
+                    q.refs["scope"] = json.dumps({"conditions": cap.payload["conditions"], "limits": cap.payload.get("limits", ""),
+                        "temperature_c": cap.payload.get("temperature_c")}, ensure_ascii=False)   # 授予时可放宽（V11.10）
                 for uid in cap.based_on:
                     unit = self.kb._units[uid]
                     q.evidence.append(Evidence(summary=f"{unit.title}；依据位置：{'；'.join(unit.evidence) or '研发直接判断'}",

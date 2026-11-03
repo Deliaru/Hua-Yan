@@ -36,7 +36,7 @@ export interface Meta {
   status: RunStatus;
   mode: RunMode;
   actors: Actor[];
-  slots: { id: string; label: string }[];
+  slots: { id: string; label: string; values: string[] }[];
   phenomena: { id: string; label: string }[];
   products: { id: string; name: string }[];
   trial?: { actor: string | null };
@@ -353,6 +353,8 @@ export interface FrozenActor {
   evidence: string[]; n_denied: number; customers: string[];
 }
 
+// V11.10 授予适用能力的范围：默认是试过的条件，研发授予时可以放宽（条件取值、温度、限制原文）
+export interface GrantScope { conditions: Record<string, string[]>; temperature_c: [number, number] | null; limits: string }
 // V11.5 游戏模式：导演的进度（sim/director.py 的 view）
 export interface PlayLevel { id: number; title: string; brief: string; to: string; decide: string; mechanism: string; point: string; ready: boolean }
 export interface PlayState {

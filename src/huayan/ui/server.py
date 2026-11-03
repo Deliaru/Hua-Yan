@@ -133,7 +133,7 @@ def dump(x):
 
 def meta(app, _):
     return {"status": app.status(), "actors": list(app.actors.values()), "mainline_available": False,
-            "slots": [{"id": s.id, "label": s.label} for s in app.seeds.slots],
+            "slots": [{"id": s.id, "label": s.label, "values": s.values} for s in app.seeds.slots],
             "phenomena": [{"id": p.id, "label": p.label} for p in app.seeds.phenomena],
             "products": [{"id": p.id, "name": p.name} for p in app.kb.products()],
             # V9.6：实际加载的觉模型与学习格，其余家族规则打分
@@ -335,7 +335,7 @@ POST = {
     "/api/qi/revise": lambda app, p: app.revise_claim(p["ku_id"], p["text"], p["by"]),
     "/api/qi/confirm": lambda app, p: app.confirm_claims(p.get("req_id"), p["ku_ids"], p["by"], p.get("reviewed_evidence")),
     "/api/qi/grant": lambda app, p: app.sign_qi_grant(p["question_id"], p["by"], p.get("claim_ids", ()), p.get("note", ""),
-                                                  p.get("reviewed_evidence")),
+                                                  p.get("reviewed_evidence"), p.get("scope")),
     "/api/qi/revoke": lambda app, p: app.revoke_capability(p["cap_id"], p["by"]),
     "/api/sources/recheck": lambda app, p: app.recheck_evidence(),   # V11.7：来源改版后重取依据比指纹
     "/api/qi/request-share": lambda app, p: app.request_share(p["ku_id"], p["by"]),

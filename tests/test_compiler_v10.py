@@ -294,3 +294,21 @@ def test_public_scope_approval_checks_evidence(tmp_path, explicit):
     approved = POST["/api/scope/extend"](app, params)
     assert approved.status == "active" and approved.approved_by == "pm:P01"
     assert app.kb._units[ids[0]].status == "active"
+
+
+def test_observation_scope_only_to_tested_conditions_and_only_when_passed():
+    """V11.10：试样观察只在结果通过时提适用，范围只到试过的条件；条件原文对不上的整条交人处理。"""
+    kb = KnowledgeBase.from_seeds(load_seeds("tests/fixtures/mini_seeds"), EventLog(), AuditLog())
+    source = FolderSource("synthetic", "internal", "tests/fixtures/reader")
+    ev = [EvidenceRef(doc_id="synthetic-conditions", span="p1", quote="涤纶在气流染色机上使用")]
+    base = dict(kind="observation", text="合成观察", evidence=ev, phenomenon="color_unlevel", product="T-101",
+                author="rd:R01", process=["升温速率不超过1℃/min"], result_quote="涤纶在气流染色机上使用")
+    report = admit([Proposal(title="通过", conditions=["涤纶"], result="pass", **base),
+                    Proposal(title="失败", conditions=["涤纶", "气流染色机"], result="fail", **base),
+                    Proposal(title="编的条件", conditions=["溢流染色机"], result="pass", **base)], [source], kb)
+    passed, failed = report["admitted"]
+    cap = kb._caps[passed["capability_id"]]
+    assert cap.payload["conditions"] == {"fiber": ["涤纶"]} and "试样没有覆盖" in cap.payload["limits"]
+    assert "1℃/min" not in cap.payload["limits"] and "1℃/min" in kb._units[passed["ku_id"]].text
+    assert failed["capability_id"] is None and "试样结果：失败" in kb._units[failed["ku_id"]].text
+    assert report["unaligned_details"] == [{"title": "编的条件", "reasons": ["原文对不上：溢流染色机"]}]

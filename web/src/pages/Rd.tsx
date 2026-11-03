@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { ACTION, REQ_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
-import type { AgentMessage, CitedKnowledge, LeakHit, Question, ReqItem, RequirementView } from "../types";
+import type { AgentMessage, CitedKnowledge, GrantScope, LeakHit, Question, ReqItem, RequirementView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
 import { ChevronRight } from "../components/Icons";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
@@ -482,6 +482,7 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
     if (q.family === "trial_risk") return <TrialRiskReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "stale_capability") return <StaleReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant" && q.refs.form === "statement") return <StatementGrant q={q} dismiss={dismiss} evidence={evidence} />;
+    if (q.family === "qi_grant" && q.refs.scope) return <ApplicableGrant key={q.id} q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "qi_grant") return <>{evidence}<div className="row gap-2">
       <Act label="签字授予" run={() => api.grantCapability(q.id, me)} />{dismiss}</div></>;
     if (q.family === "qi_review") return <QiEvidenceReview key={q.id} q={q} dismiss={dismiss} evidence={evidence} />;
@@ -911,6 +912,54 @@ function StaleReview({ q, dismiss, evidence }: { q: Question; dismiss: React.Rea
           <div className="flex flex-wrap gap-2">
             <Act label="收窄" run={() => api.narrowCapability(q.refs.capability_id, conditions, me)} />
             <Act kind="plain" label="撤销" run={() => api.revokeCapability(q.refs.capability_id, me)} />{dismiss}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// V11.10 授予适用能力：默认范围只到试过的条件，研发可以放宽取值、温度，删掉不再限制的那行原文
+function ApplicableGrant({ q, dismiss, evidence }: { q: Question; dismiss: React.ReactNode; evidence: React.ReactNode }) {
+  const { me, meta } = useApp();
+  const L = useLabels();
+  const tested: GrantScope = JSON.parse(q.refs.scope);
+  const [conditions, setConditions] = useState(tested.conditions);
+  const [temp, setTemp] = useState(tested.temperature_c ? tested.temperature_c.map(String) : ["", ""]);
+  const [limits, setLimits] = useState(tested.limits);
+  // 试过的条件逐个可改；限制原文里写着「试样没有覆盖」的条件也能在这里补上取值
+  const rows = meta.slots.filter((s) => s.id in tested.conditions || tested.limits.includes(`${s.label}：`));
+  const toggle = (s: string, v: string) => {
+    const vs = conditions[s] ?? [];
+    const next = vs.includes(v) ? vs.filter((x) => x !== v) : [...vs, v];
+    setConditions(Object.fromEntries(Object.entries({ ...conditions, [s]: next }).filter(([k, x]) => x.length || k in tested.conditions)));
+  };
+  const scope: GrantScope = { conditions, temperature_c: temp[0] && temp[1] ? [Number(temp[0]), Number(temp[1])] : null, limits };
+  const changed = JSON.stringify(scope) !== JSON.stringify(tested);
+  return (
+    <>
+      {evidence}
+      <div className="row !items-start">
+        <span className="w-[110px] shrink-0 text-[13px] text-ink-2">授予范围（默认只到试过的条件）</span>
+        <div className="flex flex-1 flex-col gap-2 text-[13px]">
+          {rows.map((s) => (
+            <div key={s.id} className="flex flex-wrap items-center gap-2">
+              <span className="text-ink-2">{L.slot(s.id)}</span>
+              {s.values.map((v) => (
+                <label key={v}><input type="checkbox" checked={(conditions[s.id] ?? []).includes(v)} onChange={() => toggle(s.id, v)} /> {v}</label>
+              ))}
+            </div>
+          ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-ink-2">温度</span>
+            <input className="w-16 rounded border border-line px-1.5 py-0.5" value={temp[0]} onChange={(e) => setTemp([e.target.value, temp[1]])} />—
+            <input className="w-16 rounded border border-line px-1.5 py-0.5" value={temp[1]} onChange={(e) => setTemp([temp[0], e.target.value])} />℃
+            <span className="text-ink-3">两格都空 = 不限温度</span>
+          </div>
+          <span className="text-ink-2">限制原文（删掉一行，这一条就不再限制）</span>
+          <Field value={limits} onChange={setLimits} rows={3} label="限制原文" />
+          <div className="flex flex-wrap gap-2">
+            <Act label={changed ? "按改过的范围签字授予" : "签字授予"} run={() => api.grantCapability(q.id, me, "", changed ? scope : undefined)} />{dismiss}
           </div>
         </div>
       </div>
