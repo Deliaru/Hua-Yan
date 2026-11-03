@@ -216,7 +216,7 @@ class AgentHub:
                 try:
                     session_id = q.refs.get("session_id") if q.owner_role == "sales" else None
                     target = q.refs.get("requirement_id") or q.refs.get("session_id") or q.object_id
-                    text = (f"{target}：{q.title}（觉的问题 {q.id}，{q.family}；调用工具时用 {target}，不要用问题编号）。引用：{q.refs}。"
+                    text = (f"{target}：{q.title}（question_id={q.id}，family={q.family}）。引用：{q.refs}。"
                             f"证据：{'；'.join(e.summary for e in q.evidence) or '无'}。")
                     # 授予现有能力：形式与目标层已由觉算出，Agent 只告知委托人，不起草
                     text += ("请告知委托人待签的授予，不起草，不签字。" if q.family == "qi_grant" and "capability_id" in q.refs

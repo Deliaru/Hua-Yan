@@ -8,6 +8,8 @@
 
 ## 允许修改的范围
 
+2026-11-03接续授权：用户要求完成已暴露的发现/编号/工具问题，随后限定“模型能力导致的则忽略，稍后切换更好模型”。本次仅修复确定的工程接线：hub派单的编号指令矛盾、业务员需求卡缺现象ID、模拟query仍用旧检索路径。允许最小修改`agent/hub.py`、`agent/tools.py`、`app.py`的只读投影和既有`test_agent_object.py`/`test_wp_l.py`回归。模型误判、自由生成错误引用不通过模板、阈值、提示词调优或规则兜底消除；原注入、窗口、旧运行保持。
+
 - `src/huayan/eval/week.py`：为既有运行器增加可选配置路径，保留旧离线调用；真实配置时禁止mock及外部qi_state，运行目录已存在则拒绝覆盖。
 - `src/huayan/eval/discovery_week.py`、`scripts/prepare_discovery_week.py`：复用现有生成器，保存完整周及显式主线子集，真实配置运行与事后核对报告。
 - `tests/test_e7_preparation.py`及复用明确合成的`tests/fixtures/mini_seeds/`：纯输入准备CLI回归，不模拟模型响应。
@@ -27,6 +29,17 @@
 收集真实业务节奏、扩新家族契约、Jue-K重训/进化版、全配置全周大对照、E8及后续工作。默认不传真实配置时仅准备输入，不执行业务模型，不称模型运行通过。
 
 ## 完成记录
+
+### 2026-11-03｜按用户追加授权修复工程接线，模型能力问题保留
+
+- **范围与自查**：起点`v10 @ 3dc874f`，工作区干净。重读AGENTS、当前计划、相关CONTRACTS/QI、本包和V10.9职责；用户明确授权从review接续实现，并要求模型能力问题忽略留待换型。冻结模型、权限、Jue-K特征、发现模板/阈值、提示词、检索排序、原注入/窗口和历史运行均不改。
+- **原因与最小修复**：旧派单把所有工具都要求用工作对象、不要问题编号，与propose_merge(question_id)矛盾。hub现在分别标明question_id/family，refs仍保留需求单、会话、产品等真实编号；ReqId/MergeArgs字段说明区分参数含义，不自动修正模型输入。业务员get_need_card原缺phenomenon，改由HuayanApp.agent_need_card复用原view_session检查和原投影并补既有NeedState.phenomenon，不改冻结SessionView、不在下游重理解原话。模拟周query从旧search改为与助手一致的explore，记录实际上层存根/不可答信号；不更改检索算法或觉计数定义。
+- **回归**：在原测试文件补工程行为：需求卡的结构化现象直接用于产品匹配、派单中的问题/业务对象身份、模拟query的不可答信号。修改前4项均失败，修复后4项通过（1.96s）；全量75项通过（38.37s）。未改web不构建，无新增模型桩作为能力证据。
+- **原输入复跑**：从既有E7主线原样取12个query，以旧离线构建设置实际跑现有读取/事件链；12个retrieve均具有explore的不可答字段。只是确定性工程核对，不是完整周重跑或发现模型成绩。原数据/注入及旧E7摘要/觉记录、共享first-report状态指纹未变。
+- **当前模型定向测试**：`data/knowledge_v10/validation/E7-engineering-online-20261103/run.py`先用mini_seeds、规则抽取及离线组件经门面建立两张合成需求和两次合成失败试样，再切换当前真实模型组件，测试三个助手任务；来源、客户和准备动作均为开发者合成，专业签字0，没有读取企业原件或重启共享服务。业务员实际get_need_card→find_products使用color_unlevel成功；PM实际读取两单/两会话，用`question_id=q:7`调用propose_merge并保存草稿，preparation_gap为空，没有合并签字。
+- **模型局限保留**：研发知识事项q:8没有需求单引用，模型仍调用get_requirement(req:8)，被原门面拒绝，之后读取问题/知识/试样并用满8步；不宣称此任务完整准备成功。原E7知识冲突过早、机会误报和泄密未发现的质量问题本轮未重测；不能把定向测试与原225次完整主线的9条拒绝直接比较为错误率下降。按用户要求不追加规则、重试、模型兼容或提示词优化。
+- **实调计量与产物**：本次14条真实请求计量均为`Pro/moonshotai/Kimi-K2.6`，失败0、降级0，额外tool_rejected 1；Clef组件构建但本定向任务无s1请求，觉生成网关调用0。摘要、会话、事件、工具轨迹及保护指纹在`data/knowledge_v10/validation/E7-engineering-online-20261103/run-112518/`。实跑入口为`.venv/Scripts/uv.exe --no-cache run --env-file .env --no-sync python -B data/knowledge_v10/validation/E7-engineering-online-20261103/run.py`。预先的独立脚本因合成升级未先标准备被门面正确拒绝，失败目录保留；正式定向测试按既有准备门槛完成设置，不放宽生产规则。
+- **完成边界**：三处已确认工程接线修复完成；模型能力不在此次修复验收内，不标全E7发现/工具调用零错误。专业确认、完整评测、真人试用和v11接续范围不扩大。代码与交接待提交，数据/运行产物不入库。
 
 2026-11-03｜`v10 @ a1e0a8a`，开始时工作区干净。完整重读AGENTS、REPLAN、相关CONTRACTS/QI、方案E7/依赖表、V10.9职责与本包，按G1/G4/G5/G6、冻结契约及极简/禁止过度防御自查。
 

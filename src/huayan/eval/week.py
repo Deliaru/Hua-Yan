@@ -60,7 +60,7 @@ def run_week(week_dir: str | Path, policy: str, discoverer: str, run_root: str =
         elif item.kind == "trial":
             app.record_trial(item.trial)
         else:
-            app.kb.search(item.text, app.actors[item.actor])        # 以该业务员身份提问
+            app.kb.explore(item.text, app.actors[item.actor])       # 与助手search_knowledge沿同一分层读取路径
         humans.settle()
     (app.run_dir / "week_log.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in humans.log),
                                                 encoding="utf-8")

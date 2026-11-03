@@ -8,8 +8,9 @@ import pytest
 import yaml
 
 from huayan.contracts import Injection, NeedCard, WeekItem
+from huayan.clock import get_clock
 from huayan.eval.discovery_week import prepare
-from huayan.eval.week import _build
+from huayan.eval.week import _build, run_week
 
 
 def test_e7_existing_generator_preserves_spine_gold_and_end_boundary(tmp_path):
@@ -46,3 +47,16 @@ def test_e7_existing_generator_preserves_spine_gold_and_end_boundary(tmp_path):
     with pytest.raises(ValueError, match="不能写入既有知识状态"):
         _build(str(tmp_path / "runs"), "bad-state", "jue_proto", config)
     assert protected.read_text(encoding="utf-8") == "不得覆盖"
+
+
+def test_week_query_records_the_same_unanswerable_signal_as_agent_search(tmp_path):
+    week = tmp_path / "week"
+    week.mkdir()
+    item = WeekItem(at=get_clock().now(), kind="query", actor="sales:S01", text="T-205 缓染 染座")
+    (week / "script.jsonl").write_text(item.model_dump_json() + "\n", encoding="utf-8")
+    (week / "cards.jsonl").write_text("", encoding="utf-8")
+    run = run_week(week, "ignore", "jue_proto", str(tmp_path / "runs"))
+    events = [json.loads(line) for line in (run / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    retrieval, = [row["payload"] for row in events if row["kind"] == "retrieve"]
+    assert retrieval["n_unanswerable"] > 0
+    assert retrieval["unanswerable_ku_ids"] and retrieval["capability_ids"] == []
