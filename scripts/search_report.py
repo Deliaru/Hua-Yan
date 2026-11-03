@@ -1,7 +1,7 @@
 """对一份已读取报告按页检索，默认本地 Gemma 图文；--keywords 对照，--jev 附辅助核对。
 
 读取开发者本地 evidence.json，不是面向角色的公共资料读取入口；不写正式知识状态。
---jev 复用reader.yaml的system1_config，运行时用uv run --env-file .env注入Worker地址。
+--jev 复用reader.yaml的system1_config，运行时用uv run --env-file .env注入Cloudflare账户与令牌。
 """
 import argparse
 import json

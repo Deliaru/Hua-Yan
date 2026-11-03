@@ -1,0 +1,82 @@
+# E6问题清单：字段取自已只读核对的V11默认参数；不包含企业访谈答案。
+questions:
+  - field: source
+    question: 这批旧流程参数分别来自哪些系统记录、哪位人员的估计或尚未核实的假设？
+    unit: 来源说明
+    respondents: [业务员, 产品经理, 研发]
+    scope: 逐项记录材料位置、观察期间、样本量或估计者；流程图来源不等于耗时已实测。
+  - field: minutes.sales_answer
+    question: 业务员独立回答一件常规技术问题，实际动手平均需要多少分钟？
+    unit: 分钟
+    respondents: [业务员]
+    scope: 计查找、判断和回复的人时，等待别人回复的时间另记。
+  - field: minutes.pm_answer
+    question: 业务员答不了时，产品经理查资料并完成一次答复平均动手多少分钟？
+    unit: 分钟
+    respondents: [产品经理, 业务员]
+    scope: 只计产品经理该工位动手时间，区分交接等待。
+  - field: minutes.sales_record
+    question: 业务员把一件客户需求记录并整理到可交接，平均动手多少分钟？
+    unit: 分钟
+    respondents: [业务员]
+    scope: 不把客户等待或后续来回补问时间混入首次记录。
+  - field: minutes.sales_quote
+    question: 业务员为一件已有技术答案的需求完成报价，平均动手多少分钟？
+    unit: 分钟
+    respondents: [业务员]
+    scope: 报价与开单是不同工位，同一段动手时间不要重复计入。
+  - field: minutes.pm_relay
+    question: 产品经理把一件客户需求转述整理成产品需求，平均动手多少分钟？
+    unit: 分钟
+    respondents: [产品经理]
+    scope: 计转述整理本身，首次转述与补问轮次分别记录。
+  - field: minutes.rd_review
+    question: 研发收到一件单后看单并判断做不做及技术方向，平均动手多少分钟？
+    unit: 分钟
+    respondents: [研发]
+    scope: 不包含后续做样、返工与等结果时间。
+  - field: minutes.back_round
+    question: 一轮从研发经产品经理和业务员问客户再原路回来的补问，各方动手人时合计多少分钟？
+    unit: 分钟
+    respondents: [研发, 产品经理, 业务员]
+    scope: 一轮来回的各方动手分钟之和，不是整轮日历耗时，也不是只算研发一人；等待另记。
+  - field: minutes.rework
+    question: 试样失败后研发重新调整并做一轮试样，实际动手平均多少分钟？
+    unit: 分钟
+    respondents: [研发]
+    scope: 按原参数定义不含等结果；原始试样与失败后返工分开，不能用整轮经过时间代替动手人时。
+  - field: minutes.pm_eval
+    question: 产品经理完成一件试样结果评价，平均动手多少分钟？
+    unit: 分钟
+    respondents: [产品经理]
+    scope: 按旧流程产品经理评价工位问，不用化言当前评价主体替代。
+  - field: minutes.sales_order
+    question: 业务员为一件已确定处理方案的需求完成开单，平均动手多少分钟？
+    unit: 分钟
+    respondents: [业务员]
+    scope: 开单与报价分别计，等待审批另记。
+  - field: wait_hours
+    question: 一次岗位间交接从发出到对方开始接手，平均等待多少小时？
+    unit: 小时
+    respondents: [业务员, 产品经理, 研发]
+    scope: 单次交接等待，不是整条链路合计；注明客户交给业务员是否纳入同一口径，工作日/自然小时和起止点。
+  - field: trial_wait_hours
+    question: 一轮试样从做样到拿到结果，平均经过多少小时？
+    unit: 小时
+    respondents: [研发]
+    scope: 保留原参数的周期定义；注明起止事件、是否含做样动手时间及自然/工作小时，不能与返工人时未经核对直接相加。
+  - field: sales_can_answer
+    question: 同一观察期间的常规技术询问中，业务员不需产品经理或研发参与即可回答的件数占多少？
+    unit: 比例(0–1)
+    respondents: [业务员, 产品经理]
+    scope: 分子为业务员独立回答的件数，分母为全部常规技术询问件数；记录原始件数，60%填写0.6，不用报价单总数作分母。
+  - field: return_rate
+    question: 同一观察期间进入研发的需求中，因条件不全需补问或返工的去重单数占多少？
+    unit: 比例(0–1)
+    respondents: [研发, 产品经理, 业务员]
+    scope: 分子为条件不全导致补问或返工的去重单数，分母为进入研发单数；一单多轮不重复计成多件。
+  - field: caught_by_rd
+    question: 在这些条件不全的单中，研发开工前发现并回头补问的单数占多少？
+    unit: 比例(0–1)
+    respondents: [研发]
+    scope: 分母是条件不全的单，不是全部入研单；分子是开工前发现并回问的单，记录阶段证据，不能凭没有失败记录推定。

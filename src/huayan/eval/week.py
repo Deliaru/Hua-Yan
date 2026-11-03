@@ -1,5 +1,5 @@
 """WP-E / WP-J 业务周运行器：按剧本驱动真实链路（门面），每 2 个业务小时做一次定时发现。
-抽取为规则、Jev 为桩、起草走 hub 离线骨架（零成本）。流程只由觉提出的问题推进：hub 派单准备，
+默认抽取为规则、Jev 为桩；显式config_path时沿所给真实模型配置运行。流程只由觉提出的问题推进：hub 派单准备，
 「模拟人」在问题进入待签后按 C12 签字（模拟退回率 0，不产生 human_decision）。
 运行器扮演客户所以读需求卡；处置分支读注入清单决定定时三类签不签（铁律 5：只有 sim/、eval/ 可读）。"""
 import json
@@ -24,7 +24,8 @@ SCHEDULED = ("opportunity", "knowledge_conflict", "leak_risk")
 TRIAL_DELAY = timedelta(days=1)                            # 确认转译 1 个业务日后模拟 ELN 录入试样通过
 
 
-def run_week(week_dir: str | Path, policy: str, discoverer: str, run_root: str = "runs", seed: int = 0) -> Path:
+def run_week(week_dir: str | Path, policy: str, discoverer: str, run_root: str = "runs", seed: int = 0,
+             *, config_path: str | Path | None = None) -> Path:
     """policy ∈ {handle, ignore}；discoverer ∈ {jue_proto, rule_alert, jue_k}。返回运行目录。
     ignore：定时三类与接单都不签（机会汇聚无人处理）；handle：定时三类按注入清单签，其余 dismiss。"""
     week_dir = Path(week_dir)
@@ -38,7 +39,7 @@ def run_week(week_dir: str | Path, policy: str, discoverer: str, run_root: str =
     start = datetime.combine(items[0].at.date(), time(9), tzinfo=items[0].at.tzinfo)
     clock = SimClock(start)
     set_clock(clock)
-    app = _build(run_root, f"week-{week_dir.name}-{discoverer}-{policy}", discoverer)
+    app = _build(run_root, f"week-{week_dir.name}-{discoverer}-{policy}", discoverer, config_path)
     humans = _Humans(app, policy, positives)
 
     days = (items[-1].at.date() - start.date()).days + 1
@@ -59,7 +60,7 @@ def run_week(week_dir: str | Path, policy: str, discoverer: str, run_root: str =
         elif item.kind == "trial":
             app.record_trial(item.trial)
         else:
-            app.kb.search(item.text, app.actors[item.actor])        # 以该业务员身份提问
+            app.kb.explore(item.text, app.actors[item.actor])       # 与助手search_knowledge沿同一分层读取路径
         humans.settle()
     (app.run_dir / "week_log.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in humans.log),
                                                 encoding="utf-8")
@@ -79,14 +80,22 @@ def chain_events(items: list[WeekItem], cards: list[NeedCard], work_dir: Path, n
     return events
 
 
-def _build(run_root: str, run_id: str, discoverer: str) -> HuayanApp:
-    config = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
-    config.update(extractor="rule", system1_impl="mock", gateway_mock=True, run_root=run_root,
-                  scheduled_model="jue_k" if discoverer == "jue_k" else "jue_proto")
+def _build(run_root: str, run_id: str, discoverer: str, config_path=None) -> HuayanApp:
+    config = yaml.safe_load(Path(config_path or "config/app.yaml").read_text(encoding="utf-8"))
+    config.update(run_root=run_root, scheduled_model="jue_k" if discoverer == "jue_k" else "jue_proto")
+    run_dir = Path(run_root) / run_id
+    if config_path is None:
+        config.update(extractor="rule", system1_impl="mock", gateway_mock=True)
+        shutil.rmtree(run_dir, ignore_errors=True)         # 兼容既有离线评测重跑。
+    else:
+        if config["gateway_mock"] or config["system1_impl"] != "onejev" or config["extractor"] != "llm" or config["replay"]:
+            raise ValueError("显式业务周配置须使用真实抽取/助手及System1，不接受mock、fallback或回放")
+        if config["qi_state"] is not None:
+            raise ValueError("在线模拟周须qi_state=null，不能写入既有知识状态")
+        if run_dir.exists():
+            raise ValueError("在线模拟周运行目录已存在，请另选输出目录保留原记录")
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as stream:
         yaml.safe_dump(config, stream, allow_unicode=True)
-    run_dir = Path(run_root) / run_id
-    shutil.rmtree(run_dir, ignore_errors=True)             # 同名运行目录重跑时覆盖
     app = HuayanApp.build(stream.name, run_id)
     if discoverer == "rule_alert":                         # 常见告警规则：同一主题升级 ≥ 3 次；只替换定时三类的模板
         app.jue_scheduled = JueProto(RULE_ALERT, app.system1, "scheduled", app.meter)

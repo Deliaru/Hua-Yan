@@ -68,7 +68,7 @@ def main():
     signs = Counter(e["kind"] for e in events if e["kind"] in {"claim_confirmed", "scope_extended", "reuse_adopted"})
     online_config = config | {"gateway_mock": False, "extractor": "llm", "agent_threads": "object",
         "models_config": "config/models.agent.yaml", "system1_impl": "onejev",
-        "system1_config": "config/system1.cloudflare-worker.yaml"}
+        "system1_config": "config/system1.clef.yaml"}
     (output / "app.human-online.yaml").write_text(yaml.safe_dump(online_config, allow_unicode=True, sort_keys=False), encoding="utf-8")
     sections = [
         ("资料与原图 · 模型稿待专业核对", [

@@ -72,7 +72,7 @@ class Text(BaseModel):
 
 
 class ReqId(BaseModel):
-    req_id: str
+    req_id: str = Field(description="需求单编号req:…，从requirement_id/req_id取；不是question_id或knowledge/theme对象编号")
 
 
 class QuestionId(BaseModel):
@@ -211,16 +211,7 @@ def save_escalate_note(ctx: ToolContext, args: Text) -> ToolResult:
 
 @tool("get_need_card", "read", ["sales"], "查看当前会话的场景需求卡：槽位与客户原话、追问提示、推荐卡", NoArgs)
 def get_need_card(ctx: ToolContext, args: NoArgs) -> ToolResult:
-    v = ctx.app.view_session(ctx.session_id, ctx.principal.id)
-    return ToolResult(data={"status": v.status, "slots": [{"slot": f.slot, "value": f.value, "quote": f.quote} for f in v.slots],
-                            "temperature": v.temperature.model_dump() if v.temperature is not None else None,
-                            "turns": [{"turn_id": t.id, "speaker": t.speaker, "text": t.text} for t in v.turns],
-                            "ask_hints": [h.ask_text for h in v.hints], "escalation_question_id": v.escalation_question_id,
-                            "reply_draft": v.reply_draft, "escalate_note": v.escalate_note,
-                            "reuse": v.reuse and v.reuse.model_dump(),
-                            "card": v.card and {"product_id": v.card.product_id, "version": v.card.version,
-                                                "note": v.card.note,
-                                                "sections": [f"{s.title}：{s.text}" for s in v.card.sections]}})
+    return ToolResult(data=ctx.app.agent_need_card(ctx.session_id, ctx.principal.id))
 
 
 @tool("request_decrypt", "effect", ["sales"], "客户确有正当需要了解机理时，为当前会话的推荐产品申请解密（产品归属研发审批）",
@@ -258,7 +249,7 @@ def match_translations(ctx: ToolContext, args: MatchArgs) -> ToolResult:
 
 
 class ProductArgs(BaseModel):
-    phenomenon: str
+    phenomenon: str = Field(description="复制get_need_card或get_requirement返回的phenomenon现象ID；不填客户原话或机理描述")
     slots: dict[str, str] = {}
     temperature_c: tuple[float, float] | None = None
 
@@ -316,7 +307,7 @@ def draft_product_need(ctx: ToolContext, args: ReqId) -> ToolResult:
 
 
 class MergeArgs(BaseModel):
-    question_id: str
+    question_id: str = Field(description="当前opportunity问题的question_id（q:…）；不是theme对象编号或需求单编号")
     target_req_id: str
     member_ids: list[str]
     note: str

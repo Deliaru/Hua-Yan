@@ -60,4 +60,4 @@ windows:
   actor_hours: 168
   knowledge_days: 7
   theme_days: 7
-system1_config: config/system1.cloudflare-worker.yaml
+system1_config: config/system1.clef.yaml

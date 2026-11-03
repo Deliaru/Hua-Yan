@@ -87,8 +87,25 @@ def test_dispatch_assembles_context_for_its_object(tmp_path):
     assert f"当前工作面对象（focus）：{req.id}" in system
     assert "别的单的确认卡" not in system
     assert "签字前对象上要有" in notice and req.id in notice
+    assert "调用工具时用" not in notice and "不要用问题编号" not in notice
+    assert "question_id=" in notice and "requirement_id" in notice
     conv = app.agents.conversation("pm:agent", thread=req.id)
     assert conv.id == f"conv:pm:agent:{req.id}" and all(m.target in (None, req.id) for m in conv.messages)
+
+
+def test_scheduled_dispatch_names_question_without_inventing_requirement(tmp_path):
+    app = _app(tmp_path)
+    from huayan.contracts import Trial
+    for n in range(2):
+        app.record_trial(Trial(id=f"trial:conflict:{n}", product_id="T-101", rd="rd:R01",
+                               conditions={"fiber": "涤纶"}, result="fail", cause="product", at=get_clock().now()))
+    app.scan()
+    q = next(q for q in app.bus.list(family="knowledge_conflict") if q.refs["product_id"] == "T-101")
+    app.agents.dispatch(only={q.id})
+    notice = app.agents.conversation(q.owner_id, thread=q.object_id).messages[0].text
+    assert f"question_id={q.id}" in notice and q.object_id in notice
+    assert "调用工具时用" not in notice and "不要用问题编号" not in notice
+    assert "requirement_id" not in q.refs
 
 
 def test_quote_rejection_names_the_bad_ref(tmp_path):

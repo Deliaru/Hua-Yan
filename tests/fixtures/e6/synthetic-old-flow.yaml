@@ -1,0 +1,18 @@
+# 全部合成，仅测试字段对应及假设标记；不是企业参数或访谈答案。
+source: 假设
+minutes:
+  sales_answer: 1
+  pm_answer: 2
+  sales_record: 3
+  sales_quote: 4
+  pm_relay: 5
+  rd_review: 6
+  back_round: 7
+  rework: 8
+  pm_eval: 9
+  sales_order: 10
+wait_hours: 2
+trial_wait_hours: 3
+sales_can_answer: 0.1
+return_rate: 0.2
+caught_by_rd: 0.3

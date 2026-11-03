@@ -30,6 +30,14 @@ def test_pm_assistant_tools_respect_layers_and_confirmation(tmp_path):
 
     # 需求单：pm:agent 看不到假设、封存项、两栏草稿；研发看得到
     session = app.start_session("customer:C01", "sales:S01")
+    app.add_turn(session.id, "customer", "染完布面深一块浅一块，锦纶氨纶的，溢流缸")
+    sales_ctx = hub.context("sales:S01", session.id)
+    need_card = hub.call_tool(sales_ctx, "get_need_card", {})
+    found_products = hub.call_tool(sales_ctx, "find_products", {
+        "phenomenon": need_card.data["phenomenon"],
+        "slots": {row["slot"]: row["value"] for row in need_card.data["slots"] if row["value"] is not None}})
+    assert need_card.data["phenomenon"] == "color_unlevel" and found_products.ok
+    assert any(row["product_id"] == "T-205" for row in found_products.data)
     req = Requirement(id="req:1", question_id="q:1", session_ids=[session.id], phenomenon="color_unlevel",
         known_slots={}, assigned_rd="rd:R01", status="rd_confirmed", created_at=get_clock().now(),
         hypotheses=["（模拟）内部假设甲"], sealed=["（模拟）封存诀窍乙"],

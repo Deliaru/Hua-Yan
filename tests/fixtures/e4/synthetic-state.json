@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "units": [
+    {"id": "ku:claim:SYN-A", "level": 3, "kind": "claim", "title": "合成甲适用边界", "text": "合成材料，非企业判断", "product_id": "SYN-A", "owner": "rd:SYN", "source": "contributed", "created_at": "2026-11-03T10:00:00+08:00", "confirmed_by": null, "status": "candidate"},
+    {"id": "ku:claim:SYN-B", "level": 3, "kind": "claim", "title": "合成乙预留", "text": "合成乙，非企业判断", "product_id": "SYN-B", "owner": "rd:SYN", "source": "contributed", "created_at": "2026-11-03T10:00:00+08:00", "confirmed_by": null, "status": "candidate"}
+  ],
+  "capabilities": [
+    {"id": "cap:SYN-A", "form": "applicable", "audience": 3, "payload": {"product_id": "SYN-A", "phenomenon": "synthetic", "conditions": {"fiber": ["合成甲"]}, "temperature_c": [70, 80], "limits": "合成限制：指定流程须人工核对"}, "based_on": ["ku:claim:SYN-A"], "granted_by": "rd:SYN", "status": "proposed", "at": "2026-11-03T10:00:00+08:00"},
+    {"id": "cap:SYN-B", "form": "applicable", "audience": 3, "payload": {"product_id": "SYN-B", "phenomenon": "synthetic", "conditions": {"fiber": ["合成乙"]}, "limits": "合成乙限制"}, "based_on": ["ku:claim:SYN-B"], "granted_by": "rd:SYN", "status": "proposed", "at": "2026-11-03T10:00:00+08:00"}
+  ],
+  "products": [], "doc_levels": {}, "claim_seq": 2, "cap_seq": 2, "pending_evidence": {}
+}

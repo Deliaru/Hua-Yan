@@ -485,6 +485,19 @@ class HuayanApp:
             escalate_note=session.escalate_note if viewer_id == session.sales_id or level > 1 else ""
             ).model_copy(deep=True)
 
+    def agent_need_card(self, session_id, by):
+        """业务员助手的会话投影；现象直接取抽取结果，复用view_session的归属与披露。"""
+        v = self.view_session(session_id, by)
+        return {"status": v.status, "phenomenon": self._sessions[session_id].need.phenomenon,
+                "slots": [{"slot": f.slot, "value": f.value, "quote": f.quote} for f in v.slots],
+                "temperature": v.temperature.model_dump() if v.temperature is not None else None,
+                "turns": [{"turn_id": t.id, "speaker": t.speaker, "text": t.text} for t in v.turns],
+                "ask_hints": [h.ask_text for h in v.hints], "escalation_question_id": v.escalation_question_id,
+                "reply_draft": v.reply_draft, "escalate_note": v.escalate_note,
+                "reuse": v.reuse and v.reuse.model_dump(),
+                "card": v.card and {"product_id": v.card.product_id, "version": v.card.version,
+                                    "note": v.card.note, "sections": [f"{s.title}：{s.text}" for s in v.card.sections]}}
+
     def sessions(self):
         return [s.model_copy(deep=True) for s in self._sessions.values()]
 

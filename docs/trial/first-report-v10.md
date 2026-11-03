@@ -1,5 +1,7 @@
 # V10 首份报告四岗位试用交接
 
+> 2026-11-03接入更新：Jev临时改为Cloudflare Workers AI `clef-flash`，使用 `config/system1.clef.yaml` 和本机 `.env` 的账户/令牌；在线配置及交接生成器已同步。合成三题实调与严格回放通过，见 `data/knowledge_v10/checks/clef-flash-20261103/summary.json`。下文11月2日的服务核验是历史快照，本次未启动服务；再次启动仍用下述原运行号与 `--env-file .env`，不迁移模拟签字。
+
 > 2026-11-02当前交接。`human-review-ready`已在[本机8769](http://127.0.0.1:8769/)启动，业务Kimi-K2.6、读取侧122B、Clef与object对话；四岗位入口由开发者验证，真实岗位参与尚未开始。此前账号操作及开发者代办均为模拟，不能计作真人专业确认。旧 `first-report`、`recording` 和 `developer-authorized` 运行记录保留，不复用其中的模拟签字。
 
 本轮先由专业人员核对一份报告，再按真实需要确认、授予与批准，最后由业务员验证下一单实际使用。资料和模型通路已跑通，真实岗位参与仍未开始；不以模型稿或预填账号代替人的判断。
@@ -38,7 +40,7 @@ $env:HUAYAN_PORT="8769"
 uv run --env-file .env --locked --no-sync python -m huayan.ui.server --trial human-review-ready --config data/knowledge_v10/validation/finals-handoff/app.human-online.yaml
 ```
 
-该配置使用config/models.agent.yaml指定的业务模型、Cloudflare Clef、LLM抽取和object对话；读取模型另由config/models.yaml指定；环境变量从本地 `.env` 注入。只做人工审阅时，可改用原 `data/knowledge_v10/validation/human-ready-20261101/app.yaml`，此模式是mock/规则，不能记为在线Agent表现。同一运行只启动一个服务实例；需要换配置时先停掉该运行原服务。
+该配置使用config/models.agent.yaml指定的业务模型、Cloudflare clef-flash、LLM抽取和object对话；读取模型另由config/models.yaml指定；环境变量从本地 `.env` 注入。只做人工审阅时，可改用原 `data/knowledge_v10/validation/human-ready-20261101/app.yaml`，此模式是mock/规则，不能记为在线Agent表现。同一运行只启动一个服务实例；需要换配置时先停掉该运行原服务。
 
 试用前查看实际状态条，登记真实模型、mock或回放状态，保留出现的错误与项目方帮助。在线准备及温度实调已有独立记录，不等于待审实例已完成真人业务。
 
