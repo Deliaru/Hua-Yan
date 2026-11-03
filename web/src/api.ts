@@ -3,7 +3,7 @@
 import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus, AuthorizedSourceReply,
-  Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage, CeoData, PlaySettle, GrantScope,
+  Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage, CeoData, PlaySettle, GrantScope, SourceSearch, SourceImageAnswer, AgentStep,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -77,6 +77,10 @@ export const api = {
   sourceTrial: (doc_id: string, viewer: string) => call<SourceTrialRecord>(`sources/trial?${q({ doc_id, viewer })}`),
   sourceImage: (doc_id: string, page: number, viewer: string, span?: string) =>
     call<SourceImage>(`sources/image?${q({ doc_id, page: String(page), viewer, span })}`),
+  sourceSearch: (query: string, viewer: string) => call<SourceSearch>(`sources/search?${q({ query, viewer })}`),
+  sourceAskImage: (doc_id: string, page: number, question: string, by: string) =>
+    call<SourceImageAnswer>("sources/ask-image", { doc_id, page, question, by }),
+  agentTrace: (conversation_id: string, viewer: string) => call<AgentStep[]>(`agents/trace?${q({ conversation_id, viewer })}`),
   authorizedSourceReplies: (session_id: string, viewer: string) => call<AuthorizedSourceReply[]>(`source-preparation/replies?${q({ session_id, viewer })}`),
   leak: (id: string, viewer: string) => call<LeakHit[]>(`leak?${q({ id, viewer })}`),
   timeline: (target: string, viewer: string) => call<JueTimeline>(`timeline?${q({ target_id: target, viewer })}`),

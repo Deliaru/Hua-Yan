@@ -40,7 +40,9 @@ class AgentHub:
         self.app = app
         self._conversations: dict[str, Conversation] = {}
         self._pending: dict[str, PendingAction] = {}
-        self._steps: list[AgentStep] = []
+        trace = app.run_dir / "agent_trace.jsonl"     # V12.3 续跑时读回执行轨迹，需求单上的检索记录重启后还在
+        self._steps: list[AgentStep] = ([AgentStep.model_validate_json(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+                                        if trace.exists() else [])
         self._dispatched: set[tuple[str, int]] = set()
         self._attempts: dict[str, int] = {}
         self.failures: dict[str, dict] = {}     # V9.2：问题 → 最近一次因模型接口失败没准备成的原因；准备成了就清掉

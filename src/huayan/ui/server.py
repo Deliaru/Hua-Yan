@@ -36,6 +36,7 @@ from huayan.agent.hub import MODEL_ERRORS
 from huayan.sim.schedule import Gate
 from huayan.eval import old_flow
 from huayan.sim import director
+from huayan.ingest.reader import library
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
 PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
@@ -288,6 +289,7 @@ GET = {
     "/api/sources/read": lambda app, p: app.read_source(p["doc_id"], p["viewer"], p.get("span")),
     "/api/sources/trial": lambda app, p: app.read_trial_record(p["doc_id"], p["viewer"]),
     "/api/sources/image": lambda app, p: app.read_source_image(p["doc_id"], int(p["page"]), p["viewer"], p.get("span")),
+    "/api/sources/search": lambda app, p: app.search_sources(p["query"], p["viewer"], int(p.get("k", 5))),   # V12.3
     "/api/capabilities": lambda app, p: app.capabilities(p["viewer"]),
     "/api/claims": lambda app, p: app.candidate_claims(p.get("req_id"), p["viewer"]),
     "/api/demo/ledger": demo_ledger,
@@ -327,6 +329,7 @@ GET = {
                                        "sessions": len(app._sessions)},   # 开新会话不记事件，单独数
 }
 POST = {
+    "/api/sources/ask-image": lambda app, p: app.ask_source_image(p["doc_id"], int(p["page"]), p["question"], p["by"]),
     "/api/source-preparation/compile": lambda app, p: app.compile_source_preparation(p["req_id"], p["doc_id"], p["by"]),
     "/api/source-preparation": lambda app, p: app.save_source_preparation(
         p["req_id"], p["evidence"], p.get("claim_ids", []), p.get("pending", ""), p["by"]),
@@ -517,6 +520,7 @@ class Api:
                 self.app, self.writes = HuayanApp.build(self.config_path, run_id=run, resume=(run_root / run).exists()), 0
             if PLAY and self.app.events.events:
                 self.clock.advance_to(self.app.events.events[-1].ts)
+            Thread(target=library.warm, args=(self.app.kb.sources,), daemon=True).start()
         else:
             self.clock = SimClock(T0)
             use_clock(self.clock)
@@ -882,6 +886,7 @@ def play_ticker():
         try:
             with play_lock:
                 play_tick(now - last)
+                DIRECTOR.save()
             DIRECTOR.error = None
         except Exception as e:          # 导演这一拍没做成：记下来给界面看，下一拍再试
             DIRECTOR.error = f"{type(e).__name__}: {e}"
@@ -909,8 +914,7 @@ def play_control(p):
         DIRECTOR.state["paused"] = bool(p["paused"])
     if "speed" in p:
         DIRECTOR.state["speed"] = int(p["speed"])
-    DIRECTOR.save()
-    return DIRECTOR.view()
+    return DIRECTOR.view()        # 进度由导演这一拍落盘（play_ticker），这里不和它抢着写文件
 
 
 def play_settle(_):
@@ -927,12 +931,12 @@ def play_settle(_):
                        for x in DIRECTOR.levels]}
 
 
-PLAY_API = {
+PLAY_NOWAIT = {
     "/api/play/state": lambda p: DIRECTOR.view() | {"now": session_api("default").clock.now().isoformat()},
     "/api/play/control": play_control,
-    "/api/play/restart": play_restart,
     "/api/play/settle": play_settle,
 }
+PLAY_API = {"/api/play/restart": play_restart}
 
 
 def trial_ticker():
@@ -962,7 +966,9 @@ class Handler(SimpleHTTPRequestHandler):
             sid = self.headers.get("X-Huayan-Session", "default")
             if TRIAL and url.path not in MONTH and not url.path.startswith(("/api/trial/", "/api/play/")):
                 params = trial_params(sid, method, url.path, params)
-            if PLAY and url.path in PLAY_API:            # 游戏的进度与控制：谁都能点，和导演这一拍排队
+            if PLAY and url.path in PLAY_NOWAIT:           # V12.3 读进度、暂停与倍速不等导演这一拍：真实模型下一拍要几分钟
+                result = PLAY_NOWAIT[url.path](params)
+            elif PLAY and url.path in PLAY_API:          # 重开这一局：和导演这一拍排队
                 with play_lock:
                     result = PLAY_API[url.path](params)
             elif TRIAL and url.path == "/api/trial/stamp":         # 界面轮询有没有别人的变化，不排会话锁

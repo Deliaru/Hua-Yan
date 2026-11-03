@@ -67,7 +67,7 @@ def propose(fragments, gateway, seeds, batch=10, workers=6) -> list[Proposal]:
                 "fragments": [{"doc_id": f.doc_id, "span": f.span, "text": f.text} for f in fragments
                               if f.doc_id in part]}
         output, _ = gateway.structured(LLMRequest(tier=Tier.FAST, caller="ingest:extract", temperature=0,
-            timeout_s=180, messages=[Message(role="system", content=PROMPT),
+            timeout_s=180, max_tokens=8192, messages=[Message(role="system", content=PROMPT),
                                      Message(role="user", content=json.dumps(data, ensure_ascii=False))]), Proposals)
         return output.items
 
@@ -81,10 +81,10 @@ def _source(sources, doc_id):
 
 
 def _cited(sources, ev):
-    """引文确在原文该段里才返回片段。"""
+    """引文确在原文该段里才返回片段；空白不算差别（PDF 抽出的表格格子、换行之间夹着空白，V12.4）。"""
     source = _source(sources, ev.doc_id)
     fragment = {f.span: f for f in source.fetch(ev.doc_id)}.get(ev.span) if source else None
-    return fragment if fragment and ev.quote in fragment.text else None
+    return fragment if fragment and re.sub(r"\s", "", ev.quote) in re.sub(r"\s", "", fragment.text) else None
 
 
 def _key(payload) -> dict:

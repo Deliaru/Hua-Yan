@@ -388,3 +388,15 @@ export interface PlaySettle {
   cases: (Pick<CeoCase, "session_id" | "path" | "reused" | "arrived" | "answered" | "given" | "safe"> & { rerouted: boolean })[];
   levels: { id: string; kind: "business" | "stage"; title: string; point: string; passed: boolean; cases: string[] }[];
 }
+
+// V12.3 资料库检索：先按统一入口筛到查看者能读的资料，再做关键词与语义检索；两路名次各自给出，按名次融合排序
+export interface SourceHit {
+  pointer: string; doc_id: string; title: string; page: number; excerpt: string; level: number;
+  method: string; semantic: number | null; semantic_rank: number | null; keyword: number | null; keyword_rank: number | null;
+}
+export interface SourceSearch { hits: SourceHit[]; note: string | null }
+export interface SourceImageAnswer { doc_id: string; page: number; question: string; answer: string; read_by: string; image_fingerprint: string }
+export interface AgentStep {
+  conversation_id: string; step: number; principal: string; tool: string | null; args: Record<string, unknown>;
+  result_summary: string; blocked: string[]; pending_action_id: string | null; at: string;
+}

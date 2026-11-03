@@ -11,6 +11,7 @@ import { useGlow, useGuide, useGuideArg } from "../components/Guide";
 import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip, SlotPicker } from "../components/ui";
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 import { SourceTrial } from "../components/SourceTrial";
+import { LibrarySearch } from "../components/LibrarySearch";
 import { Backstory } from "../components/Backstory";
 import { Narration, TimeBar } from "../components/Narration";
 
@@ -84,6 +85,7 @@ function RdDesk({ question, reqId, panel }: { question: Question | null; reqId: 
               <ReqHead view={view} />
               <CandidateClaims key={reqId ?? ""} reqId={reqId} />
               <SourcePreparationCard reqId={view.requirement.id} />
+              <LibrarySearch reqId={view.requirement.id} />
               <ReadinessCard reqId={view.requirement.id} />
               <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
               <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />

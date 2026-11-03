@@ -84,6 +84,15 @@ def _retriever():
     return _model
 
 
+def warm(sources):
+    """V12.3 服务起来时先读页向量、加载模型、给全库分词，免得现场第一次检索等十几秒。"""
+    for source in sources:
+        if isinstance(source, LibrarySource):
+            source.keyword("", 1)
+            if source.vectors():
+                _retriever()
+
+
 def search_library(sources, query, readable, k=5):
     """在 readable（已按统一入口筛过）里检索；关键词与语义各取前 k 名，两种分数不在一个尺度上，按名次做 RRF 融合。
     返回每条命中的指针、页、摘录、两路名次与分数和实际用的方法。"""
