@@ -53,6 +53,16 @@ def transcribe_page(raw, gateway):
     return (response.content or "").strip(), response.model
 
 
+def ask_image(image_url, question, gateway):
+    """单独问原页图（V12.2）：只给原图和问题、不带转写，逐格核对数值；返回模型读稿。"""
+    request = LLMRequest(tier=Tier.STRONG, caller="ingest:extract", temperature=0, max_tokens=1024, timeout_s=120,
+        messages=[Message(role="user", content=[ImageContent(image_url=ImageURL(url=image_url)), TextContent(text=
+            f"只看这张图回答：{question}\n先说明所读的表/行/列或位置，再给值；数值、符号、单位照图中原样写，"
+            "不推算、不换算、不纠错；图里没有或读不清就直说。")])])
+    response = gateway.complete(request)
+    return (response.content or "").strip(), response.model
+
+
 def read_image(image_path, context, gateway):
     url = image_data_url(Path(image_path).read_bytes())
     request = LLMRequest(tier=Tier.STRONG, caller="ingest:extract", temperature=0, max_tokens=4096, timeout_s=60,

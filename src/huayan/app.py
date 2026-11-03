@@ -34,6 +34,7 @@ from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource, OperationIR
 from huayan.ingest.reader.source import read_source, read_trial_record, read_source_image, readable_sources
 from huayan.ingest.reader.library import LibrarySource, search_library
+from huayan.ingest.reader.image import ask_image
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder, can_read
 from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
@@ -1488,6 +1489,14 @@ class HuayanApp:
         """按证据来源键取回页图或已登记区域，不向调用方提供本地路径。"""
         actor = _find(self.actors, by, "主体")
         return read_source_image(self.kb, doc_id, actor, self.source_owners, page, span)
+
+    def ask_source_image(self, doc_id, page, question, by):
+        """V12.2 单独问原页图：同一统一入口取图，只把原图和问题交模型，不带转写；回答是模型读稿，不是原文。"""
+        actor = _find(self.actors, by, "主体")
+        image = read_source_image(self.kb, doc_id, actor, self.source_owners, page)
+        answer, model = ask_image(image["image_url"], question, self.gateway)
+        return {"doc_id": doc_id, "page": page, "question": question, "answer": answer,
+                "read_by": f"模型读图（{model}），不是原文", "image_fingerprint": image["fingerprint"]}
 
     def save_source_preparation(self, req_id, evidence, claim_ids, pending, by):
         """保存本单资料准备草稿；原文仍在读取侧，不确认或授予。"""

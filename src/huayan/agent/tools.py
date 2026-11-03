@@ -114,7 +114,7 @@ class SourceSearchArgs(BaseModel):
 @tool("search_sources", "read", ["sales", "pm", "rd"],
       "在委托人有权读的原始资料（试样报告、实验报告、说明书、MSDS、培训课件、书籍与标准）里找相关的页；不知道来源编号时先用它。"
       "返回来源编号、标题、页、摘录、两种方法（semantic 语义 / keyword 关键词）各自的名次与相关度、融合后的顺序以及依据指针 pointer；"
-      "扫描页的文字是模型转写，摘录开头有标注，引用前用 read_source_image 对照原图；"
+      "扫描页的文字是模型转写，摘录开头有标注，要引用的数值先用 ask_source_image 逐格核对；"
       "命中只是线索，要用 read_source 读原文核对，pointer 可直接存进 save_source_preparation。", SourceSearchArgs)
 def search_sources(ctx: ToolContext, args: SourceSearchArgs) -> ToolResult:
     return ToolResult(data=ctx.app.search_sources(args.query, ctx.principal.id))
@@ -144,6 +144,19 @@ class SourceImageArgs(BaseModel):
       "没有区域坐标时返回整页；不接受文件路径或自由坐标，使用委托人权限，读取不确认或授予。", SourceImageArgs)
 def read_source_image(ctx: ToolContext, args: SourceImageArgs) -> ToolResult:
     return ToolResult(data=ctx.app.read_source_image(args.doc_id, args.page, ctx.principal.id, args.span))
+
+
+class SourceAskImageArgs(BaseModel):
+    doc_id: str = Field(description=DOC_ID)
+    page: int
+    question: str = Field(description="问图中一处具体内容，写明表号、行、列，如「续表3-1 Zn²⁺ 那一行的 pH 和 λmax」")
+
+
+@tool("ask_source_image", "read", ["sales", "pm", "rd"],
+      "把原页图单独交给读图模型问一处具体内容，不带转写文字；用来逐格核对扫描页转写里的数值、公式和表格行列。"
+      "使用委托人权限；回答是模型读图，不是原文，也不确认或授予。", SourceAskImageArgs)
+def ask_source_image(ctx: ToolContext, args: SourceAskImageArgs) -> ToolResult:
+    return ToolResult(data=ctx.app.ask_source_image(args.doc_id, args.page, args.question, ctx.principal.id))
 
 
 class SourceTrialArgs(BaseModel):
