@@ -311,6 +311,7 @@ GET = {
     "/api/timeline": lambda app, p: app.jue_timeline(p["target_id"], p["viewer"]),
     "/api/route": lambda app, p: app.route_of(p["id"], p["viewer"]),   # v6：需求轨迹条
     "/api/case-story": lambda app, p: app.case_story(p["id"], p["viewer"]),   # V11.1：一件事的前情
+    "/api/client/messages": lambda app, p: app.client_messages(p["viewer"]),   # V12.6 Client-View 主动消息
     "/api/old-flow": old_flow_of,   # V11.2：同一件事按旧流程走的推算
     "/api/time-bar": time_bar_of,   # V11.4：我的时间构成从现状到这一局
     "/api/ceo": ceo_of,   # V11.8：CEO 面的两条流水线与账本（主管只读）

@@ -409,6 +409,18 @@ function KnowledgeChip({ c }: { c: CitedKnowledge }) {
   );
 }
 
+// V12.6 客户在 Client-View 上后来说的话（试样反馈、补充）：会话里排在本单已引用原话之后的客户发言
+function LaterTurns({ sid, quoted }: { sid: string; quoted: Record<string, string> }) {
+  const { me } = useApp();
+  const v = useData(() => api.session(sid, me), [sid, me]);
+  const last = Math.max(0, ...(v?.turns ?? []).filter((t) => t.id in quoted).map((t) => t.n));
+  const later = (v?.turns ?? []).filter((t) => t.speaker === "customer" && t.n > last && !(t.id in quoted));
+  if (!last || !later.length) return null;
+  return <Group title="客户后来说的" foot="客户在自己的客户端上说的原话（试用反馈、补充），条件有变化时本单会回到准备中">
+    {later.map((t) => <div key={t.id} className="row !min-h-0 !py-2 text-[13px] leading-5">「{t.text}」<span className="ml-auto pl-2 text-[11.5px] text-ink-3">{hhmm(t.ts)}</span></div>)}
+  </Group>;
+}
+
 // 右侧：这张单的来历——客户原话、业务员的升级说明、现成产品结论、产品需求全文、合并判断、退回记录
 function ReqContext({ view }: { view: RequirementView }) {
   const { me } = useApp();
@@ -428,6 +440,7 @@ function ReqContext({ view }: { view: RequirementView }) {
           </Group>
         );
       })}
+      {req.session_ids.map((sid) => <LaterTurns key={sid} sid={sid} quoted={view.quotes} />)}
       {req.escalate_note && <Group title="业务员的升级说明"><div className="row text-[13px] leading-5">{req.escalate_note}</div></Group>}
       {req.reuse && (
         <Group title="现成产品">

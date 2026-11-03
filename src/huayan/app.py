@@ -1884,9 +1884,10 @@ class HuayanApp:
                 points=self.config["points"]["used"], reason="used", ku_id=capability.based_on[0], ref=session_id))
 
     def request_decrypt(self, session_id, by):
-        actor = self._actor(by, {"sales"})
+        """业务员替客户申请，或客户在 Client-View 上自己申请（V12.6）；都交产品归属研发审批。"""
+        actor = self._actor(by, {"sales", "customer"})
         session = _find(self._sessions, session_id, "会话")
-        if by != session.sales_id or self.kb.is_frozen(by):
+        if by not in (session.sales_id, session.customer_id) or self.kb.is_frozen(by):
             raise PermissionDenied("只能为自己的有效会话申请解密")
         rec, profile = session.recommendation, session.need.profile
         if not rec or not rec.product_id:
@@ -1913,6 +1914,14 @@ class HuayanApp:
         self.events.append("decrypt_request", by, {"question_id": q.id, "customer_id": session.customer_id,
             "product_id": product.id}, session_id=session_id)
         return q.model_copy(deep=True)
+
+    def client_messages(self, by):
+        """V12.6 Client-View 的主动消息：研发批准给这位客户的机理说明（`decrypt` 能力，受众就是这位客户）。"""
+        self._actor(by, {"customer"})
+        names = {p.id: p.name for p in self.kb.products()}
+        return [{"kind": "decrypt", "session_id": c.payload["session_id"], "product": names[c.payload["product_id"]],
+                 "text": c.payload["text"], "by": c.granted_by, "at": c.at.isoformat()}
+                for c in self.kb.capabilities() if c.form == "decrypt" and c.status == "active" and c.audience == by]
 
     def decide_decrypt(self, question_id, by, approve, text=""):
         self._actor(by, {"rd"})
@@ -2347,6 +2356,10 @@ class HuayanApp:
                 by = p["granted_by"]
                 src = "产品资料" if by == "seed" else f"{name(by)}签过的判断"
                 return "qi", None, by, f"按{src}确定要问哪些条件" if p["form"] == "ask" else f"按{src}确认产品适用"
+            if e.kind == "decrypt_request":
+                return act(f"申请了解{product(p['product_id'])}的作用原理，交研发审批")
+            if e.kind == "decrypt_approve":
+                return act(f"批准说明{product(p['product_id'])}的作用原理")
             if e.kind == "recommendation_withdrawn":
                 return "qi", None, who, f"依据变了，{product(p['product_id'])}的推荐先停下，等研发复核"
             return None

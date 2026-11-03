@@ -32,8 +32,12 @@ def test_l1_recommend_and_escalate(tmp_path):
     app.add_turn(session.id, "customer", "这个产品的配方和机理是什么？")
     assert app.view_session(session.id, "sales:S01").replies[-1].blocked
     app.add_turn(session.id, "customer", "我们懂一点，你们这个匀染剂的原理直接讲明白就行")
-    q = app.request_decrypt(session.id, "sales:S01")
-    app.decide_decrypt(q.id, "rd:R01", True)
+    with pytest.raises(PermissionDenied):                  # V12.6 客户只能为自己的会话申请
+        app.request_decrypt(session.id, "customer:C02")
+    q = app.request_decrypt(session.id, "customer:C01")    # V12.6 客户在 Client-View 上自己申请，同样交研发审批
+    app.decide_decrypt(q.id, "rd:R01", True, "按客户层说明的原理")
+    assert [m["text"] for m in app.client_messages("customer:C01")] == ["按客户层说明的原理"]
+    assert app.client_messages("customer:C02") == []
     assert app.view_session(session.id, "sales:S01").card.version == "full_mechanism"
     # 冻结只收回高层访问；已有解密授权的会话仍能查看和重新推荐 L1 卡片。
     app.kb.freeze("sales:S01", "supervisor:M01", get_clock().now())
