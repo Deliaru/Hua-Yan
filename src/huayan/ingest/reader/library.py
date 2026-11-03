@@ -85,13 +85,13 @@ def _retriever():
 
 
 def search_library(sources, query, readable, k=5):
-    """在 readable（已按统一入口筛过）里检索；返回每条命中的指针、页、摘录、相关度与实际用的方法。"""
-    hits, note = {}, None
+    """在 readable（已按统一入口筛过）里检索；关键词与语义各取前 k 名，两种分数不在一个尺度上，按名次做 RRF 融合。
+    返回每条命中的指针、页、摘录、两路名次与分数和实际用的方法。"""
+    found, note = {"keyword": [], "semantic": []}, None
     for source in sources:
         if not isinstance(source, LibrarySource):
             continue
-        for score, doc_id, n in source.keyword(query, k, readable):
-            hits[(doc_id, f"p{n}")] = {"source": source, "keyword": round(score, 3)}
+        found["keyword"] += [(score, doc_id, f"p{n}", source) for score, doc_id, n in source.keyword(query, k, readable)]
         loaded = source.vectors()
         model = _retriever() if loaded else "资料库还没有建页向量"
         if isinstance(model, str):
@@ -104,14 +104,18 @@ def search_library(sources, query, readable, k=5):
         scores = matrix[allowed] @ model.encode_query(query)
         for i in np.argsort(-scores)[:k]:
             doc_id, span = keys[allowed[i]].split("@", 1)[0].split("#", 1)
-            hits.setdefault((doc_id, span), {"source": source})["semantic"] = round(float(scores[i]), 3)
+            found["semantic"].append((float(scores[i]), doc_id, span, source))
+    hits = {}
+    for method, rows in found.items():
+        for rank, (score, doc_id, span, source) in enumerate(sorted(rows, key=lambda x: -x[0])[:k], 1):
+            h = hits.setdefault((doc_id, span), {"source": source, "rrf": 0.0})
+            h[method], h[f"{method}_rank"], h["rrf"] = round(score, 3), rank, h["rrf"] + 1 / (60 + rank)
     out = []
-    for (doc_id, span), h in hits.items():
+    for (doc_id, span), h in sorted(hits.items(), key=lambda x: -x[1]["rrf"]):
         f = h["source"].fetch(doc_id, span)
         out.append({"pointer": f"{doc_id}#{span}@{f.fingerprint}", "doc_id": doc_id, "title": h["source"].docs[doc_id]["title"],
                     "page": int(span[1:]), "excerpt": f.text[:240], "level": f.level,
                     "method": "+".join(m for m in ("semantic", "keyword") if m in h),
-                    "semantic": h.get("semantic"), "keyword": h.get("keyword")})
-    # 语义命中按相似度在前，只有关键词命中的排在后面；两种分数不在一个尺度上，不混排
-    out.sort(key=lambda x: (x["semantic"] is None, -(x["semantic"] or 0), -(x["keyword"] or 0)))
+                    "semantic": h.get("semantic"), "semantic_rank": h.get("semantic_rank"),
+                    "keyword": h.get("keyword"), "keyword_rank": h.get("keyword_rank")})
     return {"hits": out, "note": note}

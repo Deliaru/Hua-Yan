@@ -112,8 +112,9 @@ class SourceSearchArgs(BaseModel):
 
 
 @tool("search_sources", "read", ["sales", "pm", "rd"],
-      "在委托人有权读的原始资料（试样报告、实验报告、说明书、MSDS、培训课件）里找相关的页；不知道来源编号时先用它。"
-      "返回来源编号、标题、页、摘录、相关度和所用方法（semantic 语义 / keyword 关键词）以及依据指针 pointer；"
+      "在委托人有权读的原始资料（试样报告、实验报告、说明书、MSDS、培训课件、书籍与标准）里找相关的页；不知道来源编号时先用它。"
+      "返回来源编号、标题、页、摘录、两种方法（semantic 语义 / keyword 关键词）各自的名次与相关度、融合后的顺序以及依据指针 pointer；"
+      "扫描页的文字是模型转写，摘录开头有标注，引用前用 read_source_image 对照原图；"
       "命中只是线索，要用 read_source 读原文核对，pointer 可直接存进 save_source_preparation。", SourceSearchArgs)
 def search_sources(ctx: ToolContext, args: SourceSearchArgs) -> ToolResult:
     return ToolResult(data=ctx.app.search_sources(args.query, ctx.principal.id))
