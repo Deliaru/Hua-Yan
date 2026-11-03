@@ -564,6 +564,10 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
   const [slots, setSlots] = useState<string[]>([]);
   const [product, setProduct] = useState(meta.products[0]?.id ?? "");
   const [limits, setLimits] = useState("");
+  // V11.7 以本单的资料候选为依据：先读审阅原文，随不立项一起签字确认；依据来源改版时这条适用随之挂起等复核
+  const claims = (useData(() => api.claims(reqId, me), [reqId, me]) ?? []).filter((c) => c.owner === me);
+  const [basis, setBasis] = useState<string[]>([]);
+  const [review, setReview] = useState<ClaimReview | null>(null);
   // 演示讲解：研发判「已有产品适用」要选的产品与依据，由「演示自动填入」填好（录制回放里须与录制一致）
   const scripted = useGuideArg("decline");
   const dec = scripted ? JSON.parse(scripted) as { product: string; reason: string } : null;
@@ -594,8 +598,19 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
             </select>
             <Field value={reason} onChange={setReason} placeholder="判断依据（产品经理可见，提交前做研发术语自查）" />
             <Field value={limits} onChange={setLimits} placeholder="限制条件（可空；原文保留，带限制的适用不在客户自助阶段自动推荐）" />
+            {claims.length > 0 && <div className="flex flex-col gap-1.5 text-[13px]">
+              <p className="text-ink-2">以本单资料候选为依据（可选；勾选后先读审阅原文，随不立项一起签字确认）：</p>
+              {claims.map((c) => <label key={c.id} className="flex items-start gap-2">
+                <input type="checkbox" checked={basis.includes(c.id)} onChange={(e) => {
+                  setReview(null);
+                  setBasis(e.target.checked ? [...basis, c.id] : basis.filter((id) => id !== c.id));
+                }} /><span>{c.title}</span></label>)}
+              {basis.length > 0 && !review && <div><Act kind="plain" label="读取所选结论的审阅依据" run={() => api.reviewClaims(basis, me).then(setReview)} /></div>}
+              {review && <EvidenceReviewPanel review={review} compactSingle />}
+            </div>}
             {dec && !filled && <div><button type="button" className="chip glow" onClick={() => { setProduct(dec.product); setReason(dec.reason); }}>演示自动填入</button></div>}
-            <div><Act label="不立项：已有产品适用" disabled={!reason.trim()} glow={filled} run={() => api.decline(reqId, reason, me, product, limits)} /></div>
+            <div><Act label="不立项：已有产品适用" disabled={!reason.trim() || (basis.length > 0 && !review)} glow={filled}
+                      run={() => api.decline(reqId, reason, me, product, limits, basis, review?.reviewed_evidence)} /></div>
           </>}
           {mode === "other" && <>
             <Field value={reason} onChange={setReason} placeholder="不立项原因（客户会收到「已记录，暂无方案」）" />

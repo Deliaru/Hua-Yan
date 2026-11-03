@@ -49,9 +49,11 @@ def card_loss(card: NeedCard, seeds: Seeds, relay: dict, seed: int) -> dict:
 
 def now_times(story: list[dict]) -> dict:
     """这次实际还发生了几次交叉工位（从门面 case_story 的前情数）：业务员亲自答过客户算一次答技术问题，研发每次退回或回问算一轮补问；
-    记录、转述、查资料答复已由觉和产品经理 Agent 接走，不再由人做。"""
+    记录、转述、查资料答复已由觉和产品经理 Agent 接走，不再由人做。V11.7 试样返工也照实数：每录一次未通过的试样算一轮
+    （前情对任何视角都写「录入试样结果：未通过」，原因只给内部视角）。"""
     return {"业务员答技术问题": int(any(x["kind"] == "turn" and x["role"] == "sales" for x in story)),
             "补问一轮": sum(x["kind"] == "requirement_returned" for x in story),
+            "试样返工一轮": sum(x["kind"] == "trial" and "未通过" in x["text"] for x in story),
             "业务员记录需求": 0, "产品经理查资料答复": 0, "产品经理转述": 0}
 
 
@@ -59,7 +61,7 @@ def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None
              story: list[dict] | None = None) -> dict:
     """route = HuayanApp.route_of 的结果；cases = 合并成一个课题的需求件数（旧流程里各走一遍）；
     loss = card_loss 的结果（没有需求卡时为 None）；labels = 槽位名称，用来写丢掉的条件；
-    story = case_story 的前情，有时给交叉工位写上这次实际的次数 now_times（本职工位照常保留，等于旧流程次数）。"""
+    story = case_story 的前情，有时给交叉工位与试样返工写上这次实际的次数 now_times（本职工位照常保留，等于旧流程次数）。"""
     path, p = route["path"], params
     rate = (1.0 if loss["returned"] else 0.0) if loss else p["return_rate"]
     if path in ("追问中", "自助解决"):
@@ -79,7 +81,7 @@ def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None
     if story is not None:
         now = now_times(story)
         for r in rows:
-            r["now_times"] = now[r["station"]] if r["station"] in CROSS else r["times"]
+            r["now_times"] = now.get(r["station"], r["times"])
             r["now_minutes"] = round(r["now_times"] * p["minutes"][STATION[r["station"]][1]], 1)
     roles = list(dict.fromkeys(r["role"] for r in rows))
     times = lambda name: sum(r["times"] for r in rows if r["station"] == name)

@@ -39,13 +39,14 @@ export function Narration({ id }: { id: string }) {
   const saved = (x: (typeof freed)[number]) => Math.round(x.minutes - (x.now_minutes ?? 0));
   const savedMin = freed.reduce((n, x) => n + saved(x), 0);
   const bypassed = old.roles.filter((r) => !est.now.roles.includes(r));
+  const reworks = old.stations.find((x) => x.station === "试样返工一轮")?.now_times ?? 0;   // 这次实际录了几次未通过的试样
   const reply = story.find((x: StoryLine) => ANSWER.has(x.kind) && !(x.kind === "turn" && x.role === "customer"));
   return (
     <Group title="旁白" foot={assumed ? `旧流程按参数推算；其中 ${est.assumed.length} 项参数传化还没给，用的是假设值。` : "旧流程按传化给的参数推算。"}>
       <div className="flex flex-col gap-3 px-4 py-3.5">
         {!trial && (
           <Part label="发生了什么" src={<Src s="模拟" />}>
-            {est.now.roles.length ? `这次经过${est.now.roles.join("、")}，人亲手做了 ${est.now.human_steps} 步` : "这次没有经过任何岗位的人"}
+            {est.now.roles.length ? `这次经过${est.now.roles.join("、")}，人亲手做了 ${est.now.human_steps} 步${reworks ? `，试样返工 ${reworks} 轮` : ""}` : "这次没有经过任何岗位的人"}
             ，前后 {span(first, last)}{reply && reply.ts > first ? `；客户说完 ${span(first, reply.ts)}就有了回应` : ""}。
           </Part>
         )}

@@ -4,10 +4,16 @@
 #   customer 送来这件事的客户（also 同一时间说同样话的其他客户）；card 这位客户心里的真值（只给模拟客户，phenomenon 与已知槽位，其余槽位按种子先验抽）
 #   lines 模板模式下客户依次说的话：第一句是开场，之后每当化言或业务员说了话、或推荐卡出现，就说下一句；
 #         说完以后只在觉还在追问时由模拟客户按真值回答
-#   do 缺席岗位的模板解法：as 哪个角色（sales 会话的业务员 / rd 需求单的指派研发 / pm 产品经理），
-#      say 业务员对客户说 · merge 产品经理签产品机会（写商业判断） · decline 研发不立项（product 已有产品适用，reason 原因） · accept 研发接单
-#   pass 通关条件：这件事的前情里出现其中任一种事件（kind 或 kind:role）
-# 没有 lines 的关还没接上导演（V11.6、V11.7）。
+#   do 缺席岗位的模板解法：as 哪个角色（sales 会话的业务员 / rd 需求单的指派研发或复核签字人 / pm 产品经理），
+#      say 业务员对客户说 · merge 产品经理签产品机会（写商业判断） · scope 产品经理批准研发判定的适用范围（写依据）
+#      decline 研发不立项（product 已有产品适用，可空；reason 原因；claims 以这份报告编译出的本人候选为依据）
+#      accept 研发接单 · confirm 研发确认化学要点 · trial 研发录入试样（结果按 trial 的世界规律） · rework 研发签退回重新转译
+#      review 研发复核依据已变化的结论并签字保留（写依据）；同一动作做两次就写两遍
+#   trial 世界规律：needs 里的条件不在需求单上，试样就因需求条件缺失失败（第 7 关）
+#   revise 外部世界改版资料：这一局资料副本里 doc 的 old 改成 new，再请系统重取依据（第 9 关）
+#   pass 通关条件，任一条：这件事的前情里出现 kind（或 kind:role；kind~文字 还要求这一行含这段文字）；
+#        settled:<决策> = 送来时开着的这类决策有人处理了
+# 第 4、9 关的报告是 seeds/rag/internal/RPT-044（模拟），候选是 seeds/rag/proposals.yaml 录制的编译提议，每局开局离线导入。
 levels:
   - id: 1
     title: 常规问题客户自助
@@ -56,6 +62,13 @@ levels:
     decide: 确认哪几条、按什么条件授予
     mechanism: 读取、编译、确认、授予
     point: 研发判一次，组织记住，范围和条件都写清
+    customer: customer:C04
+    card: {phenomenon: color_unlevel, slots: {fiber: 锦纶氨纶, equipment: 经轴染色机}}
+    lines: ["深一块浅一块", "锦氨弹力布，经轴缸"]
+    do:
+      - {as: rd, decline: {product: HY-LV205, claims: RPT-044, reason: 已有产品可覆盖：锦氨匀染剂在经轴染色机上三缸试样均无色花}}
+      - {as: pm, scope: 研发按试样报告判定锦氨匀染剂适用于锦氨经轴染色，按他确认的条件扩进适用范围}
+    pass: [scope_extended]
 
   - id: 5
     title: 同条件下一单复用
@@ -64,6 +77,10 @@ levels:
     decide: 无需研发介入
     mechanism: 能力使用
     point: 研发签过的判断替他回答了这一单
+    customer: customer:C02
+    card: {phenomenon: color_unlevel, slots: {fiber: 锦纶氨纶, equipment: 经轴染色机}}
+    lines: ["深一块浅一块，尼龙弹力布，在经轴缸上染的"]
+    pass: [capability_used]
 
   - id: 6
     title: 条件不符回研发
@@ -72,6 +89,12 @@ levels:
     decide: 判断是否扩范围
     mechanism: 条件检查、能力停用、升级
     point: 效率不是靠放松把关换来的
+    customer: customer:C03
+    card: {phenomenon: color_unlevel, slots: {fiber: 锦纶, equipment: 经轴染色机}}
+    lines: ["深一块浅一块，纯尼龙的布，经轴缸"]
+    do:
+      - {as: rd, decline: {reason: 纯锦纶在经轴染色机上还没有试样，报告写明未覆盖；先不扩范围，排上试样再定}}
+    pass: [project_declined, requirement_accepted]
 
   - id: 7
     title: 试样失败回问
@@ -80,6 +103,18 @@ levels:
     decide: 录试样；对照旧流程会返工几轮
     mechanism: 世界规律、试样、回问
     point: 条件问清了，试样不再白做
+    customer: customer:C04
+    card: {phenomenon: shade_variation, slots: {fiber: 粘胶, water: 软水, dye_class: 活性染料, bath_ph: 碱性}}
+    lines: ["每缸颜色对不上", "人棉的，水过了软水器"]
+    trial: {needs: [bath_ph]}
+    do:
+      - {as: rd, accept: true}
+      - {as: rd, confirm: true}
+      - {as: rd, trial: true}
+      - {as: rd, rework: true}
+      - {as: rd, confirm: true}
+      - {as: rd, trial: true}
+    pass: ["trial~结果：通过"]
 
   - id: 8
     title: 产品机会
@@ -103,3 +138,7 @@ levels:
     decide: 复核受影响的结论，保留或撤销
     mechanism: 来源指纹、复核、撤销后改道
     point: 来源变了，用过它的能力立刻停下等人复核
+    revise: {doc: RPT-044, old: 三缸试样均无色花，氨纶沾色低, new: 三缸试样均无色花，氨纶沾色低（改版补记：第三缸浴比 1:5，布面手感略硬，不影响匀染结论）}
+    do:
+      - {as: rd, review: 改版只补记了第三缸的浴比与手感，锦氨经轴的匀染结论不变，保留}
+    pass: ["settled:qi_review"]

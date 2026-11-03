@@ -2159,7 +2159,7 @@ class HuayanApp:
                 q = questions[p["question_id"]]
                 if not mine(q) or (q.resolution and q.resolution.by == "jue:auto"):
                     return None       # 觉自动执行的，由执行结果那一行说
-                to = f"由{named(q.owner_id)}准备、{named(q.signer_id)}签字" if q.signer_id else f"交给{name(q.owner_id)}"
+                to = f"由{named(q.owner_id)}准备、{named(q.signer_id)}签字" if q.signer_id else f"交给{name(q.owner_id)}" if q.owner_id else "请客户在自助页回答"
                 return "jue", None, "jue", f"提出决策「{decision[q.family]}」，{to}"
             if e.kind == "question_prepared" and mine(questions[p["question_id"]]):
                 q = questions[p["question_id"]]

@@ -34,7 +34,8 @@ export function PlayBar() {
     p.then(() => refresh()).catch(fail).finally(() => setBusy(null));
   };
   const mine = s.lines.filter((x) => x.customer === me);       // 我扮的客户接下来可以说的话
-  const myTurn = !s.passed && lv.ready && (mine.length > 0 || lv.to === me.split(":")[0]);
+  const notes = s.notes.filter((x) => x.who === me);           // 外部世界给我的结果（试样）
+  const myTurn = !s.passed && lv.ready && (mine.length > 0 || notes.length > 0 || lv.to === me.split(":")[0]);
   const state = busy ?? (!lv.ready ? "这一关还没接上导演" : s.passed ? "已通关" : s.paused ? "已暂停" : myTurn ? "轮到你" : "进行中");
   return (
     <Popover trigger={(toggle) => (
@@ -59,6 +60,11 @@ export function PlayBar() {
                 <button className="btn btn-plain mt-1" disabled={!!busy}
                         onClick={() => run("…", api.addTurn(x.session_id, "customer", x.text).then(() => s))}>照这句说</button>
                 <span className="ml-2 text-[12px] text-ink-3">也可以在客户面用自己的话说</span>
+              </div>
+            ))}
+            {notes.map((x, i) => (
+              <div key={i} className="mt-2 rounded-[8px] bg-attn-bg px-2.5 py-2">
+                <p className="eyebrow">外部世界（模拟）</p><p>{x.text}</p>
               </div>
             ))}
             <p className="eyebrow mt-2">会用到</p><p className="text-ink-2">{lv.mechanism}</p>

@@ -149,8 +149,9 @@ export const api = {
   readiness: (id: string, viewer: string) => call<Readiness>(`readiness?${q({ id, viewer })}`),
   sessionReadiness: (id: string, viewer: string) => call<SessionReadiness>(`session-readiness?${q({ id, viewer })}`),
   workload: (viewer: string) => call<Workload>(`workload?${q({ viewer })}`),
-  decline: (req_id: string, reason: string, by: string, product_id: string | null, limits = "") =>
-    call("decline", { req_id, reason, by, product_id, limits }),
+  decline: (req_id: string, reason: string, by: string, product_id: string | null, limits = "",
+            claim_ids: string[] = [], reviewed_evidence?: Record<string, string[]>) =>
+    call("decline", { req_id, reason, by, product_id, limits, claim_ids, reviewed_evidence }),
   // V9.5：与本单相符、带研发限制原文的适用
   matchedLimits: (id: string, viewer: string) =>
     call<{ product_id: string; capability_id: string; granted_by: string; conditions: Record<string, string[]>; limits: string }[]>(

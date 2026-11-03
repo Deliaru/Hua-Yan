@@ -359,4 +359,5 @@ export interface PlayState {
   levels: PlayLevel[]; level: number; round: number; speed: number; paused: boolean; passed: boolean; done: number[];
   cases: string[]; acted: { ts: string; actor: string; path: string }[]; error: string | null; now: string;
   lines: { customer: string; session_id: string; text: string }[];   // 客户由人扮时，接下来可以说的台词
+  notes: { who: string; text: string }[];   // 有人在玩的岗位要用到的外部世界信息（试样结果）
 }

@@ -1,10 +1,10 @@
-"""V11.5–V11.6：导演在模板模式下送来关卡、扮演缺席的客户与岗位，只经 Api.call 动作；有人在玩的身份留给人。
-每关一条离线回归：导演跑完本关，检查对象状态与事件（REPLAN-v11 第 6 节）。"""
+"""V11.5–V11.7：导演在模板模式下送来关卡、扮演外部世界与缺席的客户、岗位，只经 Api.call 动作；有人在玩的身份留给人。
+每关一条离线回归：导演跑完本关，检查对象状态与事件（REPLAN-v11 第 6 节）。专业签字、试样结果均为模拟。"""
 from pathlib import Path
 
 import yaml
 
-from huayan.sim.director import Director
+from huayan.sim.director import Director, prepare_round
 from huayan.ui import server
 
 
@@ -13,7 +13,7 @@ def _api(tmp_path):
     config.update(run_root=str(tmp_path / "runs"))
     path = tmp_path / "app.yaml"
     path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
-    api = server.Api(None, str(path))
+    api = server.Api(None, str(prepare_round(str(path), tmp_path / "round")))   # 一局的资料副本与待审候选
     api.build()
     return api
 
@@ -29,9 +29,9 @@ def _route(api, sid):
 def test_levels_one_to_three_and_eight(tmp_path):
     api = _api(tmp_path)
     director = Director(lambda: api, tmp_path / "play.json")
-    director.play_through(8, _tick(api))      # 4–7 关还没接上，跳过
+    director.play_through(8, _tick(api))
     s = director.state
-    assert s["passed"] == [1, 2, 3, 8] and s["level"] == 8
+    assert s["passed"] == [1, 2, 3, 4, 5, 6, 7, 8] and s["level"] == 8
     case = lambda n: s["cases"][str(n)]
     # 第 1 关：客户自助拿到推荐，业务员、产品经理、研发都没经过
     one = _route(api, case(1)[0])
@@ -65,3 +65,43 @@ def test_present_roles_are_left_to_people(tmp_path):
         if not director.step({"customer:C03", "rd:R01", "rd:R02"}):
             _tick(api)()
     assert 3 not in director.state["passed"] and _route(api, sid)["roles"]["rd"]["state"] == "pending"
+
+
+def test_levels_four_to_seven_and_nine(tmp_path):
+    api = _api(tmp_path)
+    director = Director(lambda: api, tmp_path / "play.json")
+    director.play_through(8, _tick(api))
+    for _ in range(30):                       # 第 9 关
+        if 9 in director.state["passed"]:
+            break
+        if not director.step(set()):
+            _tick(api)()
+    s, app = director.state, api.app
+    case = lambda n: s["cases"][str(n)][0]
+    assert 9 in s["passed"]
+    # 第 4 关：研发以报告候选为依据判定已有产品适用，产品经理批准；这条能力给客户层、条件写清、依据是报告结论
+    declined = next(e for e in app.events.query(["project_declined"]) if case(4) in e.payload["session_ids"])
+    cap = next(c for c in app.kb.capabilities() if c.form == "applicable" and c.audience == 0
+               and c.payload["conditions"] == {"fiber": ["锦纶氨纶"], "equipment": ["经轴染色机"]})
+    assert declined.actor == "rd:R02" and cap.approved_by == "pm:P01"
+    assert all(app.kb._units[u].evidence[0].startswith("RPT-044#") for u in cap.based_on)
+    # 第 5 关：同条件的下一单用上这条能力，没有经过研发
+    used = [e for e in app.events.query(["capability_used"]) if e.session_id == case(5)]
+    suspended = next(e for e in app.events.query(["capability_suspended"]) if e.payload["capability_id"] == cap.id)
+    escalated = [e for e in app.events.query(["escalate"]) if e.session_id == case(5)]
+    assert cap.id in {e.payload["capability_id"] for e in used} and all(e.ts >= suspended.ts for e in escalated)
+    # 第 6 关：纯锦纶不在授予条件里，回到研发，研发不扩范围
+    assert _route(api, case(6))["path"] == "研发不立项"
+    # 第 7 关：染浴 pH 没问到，第一次试样失败；研发退回、客户在自助页答了回问，第二次试样通过
+    trials = [e.payload for e in app.events.query(["trial"]) if e.payload["requirement_id"]]
+    assert [(t["result"], t["missing_slots"]) for t in trials] == [("fail", ["bath_ph"]), ("pass", [])]
+    assert trials[1]["conditions"]["bath_ph"] == "碱性"
+    rework = next(r for r in api.call("GET", "/api/old-flow", {"id": case(7), "viewer": "supervisor:M01"})["old"]["stations"]
+                  if r["station"] == "试样返工一轮")
+    assert rework["now_times"] == 1 and rework["times"] < 1      # 这次实测返工一轮，对照旧流程按比例推算的期望
+    # 第 9 关：资料改版，依据变了的结论挂起依赖它的能力，研发复核原文后签字保留，能力恢复
+    review = next(q for q in app.bus.list(status=None, family="qi_review"))
+    assert review.status == "resolved" and review.refs["ku_id"] in cap.based_on
+    assert app.kb._caps[cap.id].status == "active"
+    assert escalated      # 挂起那一刻用过它的客户改道交研发（撤销后改道），不等复核
+    assert {a["path"] for a in s["acted"]} <= set(server.POST)
