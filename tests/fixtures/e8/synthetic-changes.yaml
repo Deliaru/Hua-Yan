@@ -1,0 +1,62 @@
+# 合成变更金标由开发者按确定性条件编写，非真实专业判断。
+changes:
+  - id: SYN-E8-condition
+    source: tests/fixtures/e8/synthetic-source.txt
+    source_group: E8/synthetic-temperature
+    kind: 合成
+    split: dev
+    type: referenced_condition
+    before: 70—80℃
+    after: 70—74℃
+    review_action: replace
+    new_temperature_c: [70, 74]
+    expected_affected: [temperature_claim]
+    expected_review: 要改或撤销
+    basis: 引用p1的适用闭区间被收窄，原75℃不再属于新范围；旧判断须撤回，重新建立。
+    labeled_by: 开发者合成变更设计（非研发核验）
+    labeled_at: 2026-11-03T11:00:00+08:00
+  - id: SYN-E8-unrelated
+    source: tests/fixtures/e8/synthetic-source.txt
+    source_group: E8/synthetic-temperature
+    kind: 合成
+    split: dev
+    type: unrelated_paragraph
+    before: 归档备注为甲
+    after: 归档备注为乙
+    review_action: none
+    new_temperature_c: null
+    expected_affected: []
+    expected_review: 不受影响
+    basis: 只修改未被任一演示判断引用的p2，p1文字和段号不变。
+    labeled_by: 开发者合成变更设计（非研发核验）
+    labeled_at: 2026-11-03T11:00:00+08:00
+  - id: SYN-E8-whitespace
+    source: tests/fixtures/e8/synthetic-source.txt
+    source_group: E8/synthetic-temperature
+    kind: 合成
+    split: dev
+    type: whitespace_format
+    before: 合成测试资料，非企业报告：锦纶氨纶在溢流染色机上，适用温度70—80℃。
+    after: '  合成测试资料，非企业报告：锦纶氨纶在溢流染色机上，适用温度70—80℃。  '
+    review_action: none
+    new_temperature_c: null
+    expected_affected: []
+    expected_review: 不受影响
+    basis: FolderSource对段落首尾strip，文件字节虽变，引用片段正文/段号/指纹不变；不代表任意格式变化都等价。
+    labeled_by: 开发者合成变更设计（非研发核验）
+    labeled_at: 2026-11-03T11:00:00+08:00
+  - id: SYN-E8-typography
+    source: tests/fixtures/e8/synthetic-source.txt
+    source_group: E8/synthetic-temperature
+    kind: 合成
+    split: dev
+    type: equivalent_typography
+    before: 70—80℃
+    after: 70～80℃
+    review_action: restore
+    new_temperature_c: null
+    expected_affected: [temperature_claim]
+    expected_review: 仍然成立
+    basis: 连接符改变会改片段指纹，须先挂起；开发者合成复核认为数值闭区间含义不变，显式审阅新指纹恢复。
+    labeled_by: 开发者合成变更设计（非研发核验）
+    labeled_at: 2026-11-03T11:00:00+08:00
