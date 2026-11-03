@@ -1,0 +1,33 @@
+# 全部为合成草稿；候选/拟用能力不是已授予判断，不代表模型或专业结果。
+knowledge_state: tests/fixtures/e4/synthetic-state.json
+knowledge_state_sha256: cd4a6e8adc9dd82a9328e4fa4adb82749973652a14bfe40e495d813d19f83268
+signature_nature: synthetic_fixture（没有专业签字）
+pairs:
+  - &draft
+    id: SYN-E4-A1
+    source: 合成甲来源，非客户记录
+    source_group: SYN-A
+    kind: 合成
+    split: dev
+    prepared_by: 合成测试准备者
+    prepared_at: 2026-11-03T10:00:00+08:00
+    judgment_kind: 合成
+    judgment_id: ku:claim:SYN-A
+    capability_id: cap:SYN-A
+    viewer_id: rd:SYN
+    design: 合成端点与原文限制
+    first_words: 合成甲在70℃有合成问题，指定流程不清楚。
+    expected: null
+  - <<: *draft
+    id: SYN-E4-A2
+    design: 合成温度不清楚
+    first_words: 合成甲有合成问题，实际温度不清楚。
+  - <<: *draft
+    id: SYN-E4-B1
+    source: 合成乙预留来源
+    source_group: SYN-B
+    split: heldout
+    judgment_id: ku:claim:SYN-B
+    capability_id: cap:SYN-B
+    design: 合成预留，不是未见样本成绩
+    first_words: 合成乙有合成问题。
