@@ -436,6 +436,75 @@
 - 答辩备用页：Jue-K 学习曲线（`docs/reports/jue_k`、`jue_evolution`）、跨文档覆盖图、动态别名、部署图（读取工具可整体换成企业 RAG、本地部署）。
 - **研发负责人一站**（V11.12 时研发负责人还没有业务）：路演局给研发负责人送一件自己的业务；工作面加两块——风险与例外面板（泄露风险、对外说明去密、冻结与解冻、超期事项，沿用 `leak_risk` / `seal_leak` / `seal_points` 与现有冻结机制）和能力谱系的管理视图（V12.9 谱系按全部能力汇总：每条能力的依据、授予人、用过几次、哪些在挂起复核，改版时看影响面）。
 
+**完成记录（2026-11-04）**
+
+- 活的架构图（`web/src/components/Harness.tsx`，新）：
+  - 服务端 `app.harness_counts`（任何身份可读，只有计数）每 3 秒拉一次，数字变了闪一下；
+  - 方框按 `ARCHITECTURE.md` 第 0 节排：人 → 业务信息 → 状态 → 觉 → 问题总线，下行是角色 Agent → 专业判断 → 行动，旁边是契，底部是网关条。网关条单列「觉 0 次大模型调用」；
+  - 各格的数：
+    - 觉：评估几次、提出几件；
+    - Jev：s1 计量次数、匹配、推荐；
+    - Agent：工具调用、被拒、被拦（取自 `agents._steps`）；
+    - 人：签字、处置、确认、授予；
+    - 契：结论与能力条数；
+    - 网关：按 caller 计调用次数；
+  - 放在实况页的新标签「活的架构图」和概览页的「三根支柱」之后。
+- 岗位开场卡（`web/src/components/Opener.tsx`，新）：
+  - 客户、业务员、产品经理、研发、研发负责人各有「化言给你的三样新东西」；
+  - 业务员、产品经理、研发三张带 `timeBar` 时间色条；
+  - 每个会话每个岗位只弹一次（`sessionStorage`），右下角留「再看一遍」；
+  - 只在开着演示说明、且不是真实试用时出现。真实试用（`--trial` 且非游戏）不弹。
+- 原话直达与失真对照：
+  - 字段点回客户原话在 V12.6 以前已有（业务员需求单的槽位原话、产品经理单子的条目原话），这次没有重做；
+  - 新增 `RelayLoss.tsx`：读 `distortion_300` 中应升级卡的 G1/G2/G3 条件完整率与研发退回率，画成条形，放在业务员、产品经理两页时间色条之后，受演示说明开关控制。
+- 研发负责人一站：
+  - 门面新增 `exceptions_board(by)`，只限 supervisor。分五栏：
+    - 风险：`leak_risk` / `seal_leak` / `seal_points` / `trial_risk` / `stale_capability` / `qi_review` / `knowledge_conflict`；
+    - 超期：配置项 `overdue_hours`，默认 24；
+    - Agent 失败：`agents.failures`；
+    - 挂起的能力；
+    - 冻结。
+  - 门面新增 `capability_lineage(by)`：每条能力的形式、层级、状态、授予人、批准人、依据（确认人、层级）、文档，用过几次，其中几次是替研发答的（会话里早于升级时间的使用），以及改版记录：挂起、撤销、依据变了、撤下改道。`payload` 只在能力层级不高于研发负责人层级时才给；
+  - `Supervisor.tsx` 在「冻结」之后加「风险与例外」和「能力谱系」两块；
+  - 修了一个 V11.8 引入的问题：CEO 也是 supervisor，`jue/publish.py` 按 `min(id)` 选负责人时，`supervisor:CEO` 排在 `supervisor:M01` 之前，泄露风险等事派给了只读的 CEO 面。现在选负责人时排除 CEO。
+- 路演局给研发负责人一件业务，同时演示人主动委托 Agent：
+  - 导演新增两个动作：
+    - `delegate`：会话的业务员一句一句委托自己的 Agent（`/api/agents/chat`）；
+    - `freeze`：研发负责人处置 `leak_risk`，可冻结或驳回，带备注；
+  - 关卡项新增 `sales`，指定哪位业务员；
+  - 真实报告关卡（`data/play_real/levels.yaml`）加「业务员反复打听同一产品的配方」：S02 让自己的 Agent 连问三次 HY-LV206 的配方 → 读取入口三次拦下 → 觉提出 `leak_risk` → 研发负责人处置；
+  - 真实模型下核对：三次委托都留下检索记录，配方片段被拦，`leak_risk` 提出，p = 1.0，派给 `supervisor:M01`；
+  - 离线回放时 Agent 不调工具，这件事过不了，所以没有写进模板 `demo/levels.yaml`。
+- 一镜到底导演（`sim/director.py`、`Play.tsx`、`Live.tsx`）：
+  - `new_round(..., oneshot=True)` 开一种新局；
+  - 关卡带 `act`（第一幕：过去没解决的客户、产品机会；第二幕：阶段 1–4；第三幕：阶段 5–6），导演按幕号依次送出第一件未过的事；
+  - 一镜到底时不按「有人在场」判断，缺席岗位全由导演扮演，每个 tick 只推一步；
+  - 实况页顶部显示「一镜到底 · 第 N 幕」和当前这件事，最新一步所在格子闪烁高亮；
+  - 原有路演局不动，岗位巡游与现场试玩照旧。
+- 答辩备用页（`web/src/pages/Backup.tsx`，新）：
+  - 内容：
+    - Jue-K 学习曲线与可靠性图（`docs/reports/jue_k`）；
+    - 跨文档覆盖图：门面新增 `coverage_map(by)`，只限研发，只给统一入口判为可读的行。按产品列出「条件 × 温度」的试过与没试过，以及研究假设；
+    - 动态别名入口说明（指向契画布 ③）；
+    - 部署五框图：企业内网应用、可整体替换的读取工具、本地模型、模型网关、Jev；
+  - 只在演示或游戏模式出现。
+- 改动文件：
+  - `src/huayan/app.py`、`src/huayan/ui/server.py`（四个 GET 接口 `/api/supervisor/exceptions`、`/api/supervisor/lineage`、`/api/harness`、`/api/qi/coverage-map`；`play_restart` 支持 `oneshot`）；
+  - `src/huayan/jue/publish.py`、`src/huayan/sim/director.py`、`demo/levels.yaml`（加 `act`，说明 `delegate` / `freeze` / `sales`）；
+  - `web/src/components/{Harness,Opener,RelayLoss,Play}.tsx`、`web/src/pages/{Live,Overview,Supervisor,Sales,Pm,Backup}.tsx`、`web/src/App.tsx`、`web/src/api.ts`、`web/src/types.ts`。
+- 验证：
+  - 离线一镜到底整局：第一幕的业务员业务 2 件、产品经理业务 1 件，第二幕阶段 1–4，第三幕阶段 5–6，按幕依次全部过关；
+  - 截图核对（`data/scratch/pw/shots/v1211-*.png`）：
+    - 活的架构图：签字 14 次、觉评估 179 次、提出 51 件、觉 0 次大模型调用；
+    - 研发负责人开场卡；
+    - 研发负责人页风险与例外（一条 `qi_review`）和能力谱系：TF-213HE 的 L0 能力用过 2 次，其中替研发答 1 次，改版记录「挂起 → 撤下改道 → 依据变了」标红；
+    - 答辩备用页：TF-213Q 72 条观察、TF-213HE 56 条，研究假设 14 条；
+  - 离线 87 项通过，前端类型检查与构建通过。
+- 遗留：
+  - 研发负责人那件业务依赖真实模型（Agent 要真的调检索工具），只在真实报告关卡里有，模板关卡没有；
+  - 覆盖图要用研发身份读；演示模式默认身份不是研发时，页面写明「以研发身份打开」；
+  - 觉雷达到 Jue-K 学习曲线（V12.8 遗留）改由答辩备用页承接，没有从雷达直接链过去。
+
 ### V12.12｜彩排与定稿
 
 - 定稿运行：演示机（本机 GPU）上按 10 分钟流程从开局跑到活的架构图，路演用的运行号固定下来；CEO 面与结算用的预跑局另用运行号；

@@ -28,7 +28,7 @@ LEVELS = Path("demo/levels.yaml")
 VIEWER = "supervisor:M01"        # 导演读前情、需求单用主管视角（L2，看得到需求单上的经过）
 PM = "pm:P01"
 SHOWN = ("id", "kind", "title", "brief", "to", "decide", "mechanism", "point")
-ROLE = {"customer": "客户", "sales": "业务员", "pm": "产品经理", "rd": "研发"}
+ROLE = {"customer": "客户", "sales": "业务员", "pm": "产品经理", "rd": "研发", "supervisor": "研发负责人"}
 
 
 def load_levels(path: Path = LEVELS) -> list[dict]:
@@ -72,10 +72,11 @@ def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> 
     return path
 
 
-def fresh(round_: int = 1, speed: int = 60, real: bool = False, roadshow: bool = False) -> dict:
+def fresh(round_: int = 1, speed: int = 60, real: bool = False, roadshow: bool = False, oneshot: bool = False) -> dict:
     """一局的进度：cases 每件事送来的会话，done 导演代办过的动作，acted 导演代谁做了什么（前情标「模拟」）；
-    real 这一局的关卡用真实报告；roadshow 路演局：导演只扮演外部世界和事到你手上之前的那几步。"""
-    return {"round": round_, "speed": speed, "paused": False, "real": real, "roadshow": roadshow,
+    real 这一局的关卡用真实报告；roadshow 路演局：导演只扮演外部世界和事到你手上之前的那几步；
+    oneshot 一镜到底（V12.11）：导演按幕（关卡里的 act）一件一件推进，所有岗位都由导演做，主屏停在实况。"""
+    return {"round": round_, "speed": speed, "paused": False, "real": real, "roadshow": roadshow, "oneshot": oneshot,
             "cases": {}, "done": [], "passed": [], "seen": {}, "acted": []}
 
 
@@ -91,18 +92,22 @@ class Director:
     def _levels(self) -> list[dict]:
         return load_levels(self.real / "levels.yaml" if self.state["real"] else LEVELS)
 
-    def new_round(self, real: bool, roadshow: bool) -> None:
-        """开新的一局（重开这一局、换报告、换路演局），骨架跟着这一局用的报告。"""
+    def new_round(self, real: bool, roadshow: bool, oneshot: bool = False) -> None:
+        """开新的一局（重开这一局、换报告、换路演局或一镜到底），骨架跟着这一局用的报告。"""
         if real and self.real is None:
             raise ValueError("没有配置真实报告版（play_real_report）")
-        self.state = fresh(round_=self.state["round"] + 1, speed=self.state["speed"], real=real, roadshow=roadshow)
+        self.state = fresh(round_=self.state["round"] + 1, speed=self.state["speed"], real=real, roadshow=roadshow, oneshot=oneshot)
         self.levels, self.customers = self._levels(), {}
 
     def save(self) -> None:
         self.path.write_text(json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
 
     def open(self) -> list[dict]:
-        """该送来、还没通过的事：业务全部，关卡只到第一个没通过的那一步。"""
+        """该送来、还没通过的事：业务全部，关卡只到第一个没通过的那一步。一镜到底只送当前这一件：关卡里标了 act 的按幕排
+        （同一幕照文件顺序），没标的不送；都没标就按文件顺序全送。"""
+        if self.state["oneshot"]:
+            acts = sorted([x for x in self.levels if "act" in x], key=lambda x: x["act"]) or self.levels
+            return [x for x in acts if x["id"] not in self.state["passed"]][:1]
         stage = [x for x in self.levels if x["kind"] == "stage" and x["id"] not in self.state["passed"]][:1]
         return [x for x in self.levels if x["kind"] == "business" and x["id"] not in self.state["passed"]] + stage
 
@@ -112,6 +117,7 @@ class Director:
         return {"levels": [{k: x.get(k) for k in SHOWN} | {"status": status(x), "cases": s["cases"].get(x["id"], []),
                             "who": self._who(x) if x in now else None} for x in self.levels],
                 "round": s["round"], "real": s["real"], "real_ready": self.real is not None, "roadshow": s["roadshow"],
+                "oneshot": s["oneshot"], "act": next((x.get("act") for x in now), None),
                 "speed": s["speed"], "paused": s["paused"], "done": s["passed"], "acted": s["acted"], "error": self.error,
                 "lines": [x for lv in now for x in self._lines(lv)], "notes": [x for lv in now for x in self._notes(lv)]}
 
@@ -124,6 +130,8 @@ class Director:
             return self._customer_of(sids[0])
         if lv["to"] == "pm":
             return PM
+        if lv["to"] == "supervisor":
+            return VIEWER
         if lv["to"] == "sales":
             return next(x["sales_id"] for x in self._get("/api/sessions") if x["id"] == sids[0])
         req = self._req(sids[0])
@@ -192,7 +200,9 @@ class Director:
 
     def _present(self, lv: dict, present: set[str]) -> set[str]:
         """路演局：业务只把它送达的岗位留给人（之前别的岗位那几步导演做完），关卡各步的岗位都留给人；
-        客户只在事送到客户面时留给人。不是路演局就照这一局有人在玩的身份。"""
+        客户只在事送到客户面时留给人。一镜到底谁都不留。不是路演局就照这一局有人在玩的身份。"""
+        if self.state["oneshot"]:
+            return set()
         if not self.state["roadshow"]:
             return present
         return {a.id for a in self.api().app.seeds.actors
@@ -205,7 +215,7 @@ class Director:
         if key not in s["cases"]:       # 送来：这一关的每位客户开一段会话；没人扮的客户说出开场白，有人扮的由人自己说
             s["cases"][key] = []
             for customer in [lv["customer"], *lv.get("also", [])] if "customer" in lv else []:
-                sid = self._act(customer, "/api/sessions", customer_id=customer).id
+                sid = self._act(customer, "/api/sessions", customer_id=customer, sales_id=lv.get("sales")).id   # sales：业务员陪同的会话
                 s["cases"][key].append(sid)
                 if customer not in present:
                     self._act(customer, "/api/turn", session_id=sid, speaker="customer", text=self._line(lv, sid, customer, 0, ""))
@@ -309,6 +319,22 @@ class Director:
                 return False
             self._act(q.signer_id, "/api/resolve", question_id=q.id, action="sign" if "recall" in a else "update_sheet",
                       note=a.get("recall") or a["sheet"])
+            return True
+        if "delegate" in a:                # V12.11 业务员主动委托自己的 Agent 去查（一句一拍，按顺序）；Agent 在委托人这一层检索
+            sales = next(x["sales_id"] for x in self._get("/api/sessions") if x["id"] == sids[0])
+            if sales in present:
+                return False
+            conv = self._get("/api/agents/conversation", actor=sales, session_id=sids[0])
+            n = sum(m.role == "principal" for m in conv.messages) if conv else 0
+            if n >= len(a["delegate"]):
+                return True
+            self._act(sales, "/api/agents/chat", actor=sales, text=a["delegate"][n], session_id=sids[0])
+            return n + 1 == len(a["delegate"])
+        if "freeze" in a:                  # 研发负责人处理泄露风险：冻结或现在不需要（写依据）
+            q = next((q for q in self._open("leak_risk").values() if q.signer_id not in present), None)
+            if q is None:
+                return False
+            self._act(q.signer_id, "/api/resolve", question_id=q.id, action="freeze_access" if a["freeze"] else "dismiss", note=a["note"])
             return True
         if "reuse" in a:
             # 研发不采用产品经理 Agent 建议的现成产品（在线时 Agent 真的去查了现成产品；离线骨架不查，这一步直接算做完）。

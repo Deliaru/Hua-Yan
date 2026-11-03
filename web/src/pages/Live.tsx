@@ -5,12 +5,14 @@
 // 问题总线：一件事从觉提出、派给谁、Agent 用了哪些工具（哪次被门面拒绝）、还缺什么，到谁签字。
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { Harness } from "../components/Harness";
+import { usePlay } from "../components/Play";
 import { FAMILY, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { BusItem, CatalogItem, LiveCase, RadarRow, Role, StoryLine } from "../types";
 import { EmptyState, Group, PageHead } from "../components/ui";
 
 const VIEWER = "supervisor:CEO";
-const TABS = [["lanes", "实况"], ["radar", "觉雷达"], ["catalog", "决策目录"], ["bus", "问题总线"]] as const;
+const TABS = [["lanes", "实况"], ["radar", "觉雷达"], ["catalog", "决策目录"], ["bus", "问题总线"], ["arch", "活的架构图"]] as const;
 type Tab = (typeof TABS)[number][0];
 const LANES = [["jue", "觉"], ["jev", "Jev"], ["qi", "契"], ["agent", "Agent"], ["human", "人"]] as const;
 const LANE_OF: Record<StoryLine["subject"], string> = { jue: "jue", jev: "jev", qi: "qi", agent: "agent", system: "agent", human: "human" };
@@ -46,10 +48,11 @@ export function Live() {
                 subtitle="这一局里信息怎样自己变成了事、事怎样在觉、Jev、契、Agent 和人之间流转。全部读这一局的事件与问题总线，不另存；主管只读。"
                 aside={<div className="flex gap-1">{TABS.map(([k, label]) => (
                   <button key={k} type="button" onClick={() => pick(k)} className={`chip ${tab === k ? "tag-accent" : ""}`}>{label}</button>))}</div>} />
-      {tab === "lanes" && <Lanes />}
+      {tab === "lanes" && <><Act /><Lanes /></>}
       {tab === "radar" && <Radar />}
       {tab === "catalog" && <Catalog />}
       {tab === "bus" && <Bus />}
+      {tab === "arch" && <Harness viewer={VIEWER} />}
     </div>
   );
 }
@@ -78,6 +81,7 @@ function Lanes() {
     go(l.role, focus, l.who.includes(":agent") || l.who.startsWith("agent:") ? undefined : l.who);
   };
   const who = (l: StoryLine) => l.who === "huayan" ? "化言" : l.subject === "human" || l.subject === "agent" ? L.name(l.who) : "";
+  const newest = data.cases.flatMap((c) => c.story.map((l) => l.ts)).sort().at(-1);   // 最新的一步（交接点）高亮
   return <>{[...topics].map(([phen, cases]) => {
     const lines = cases.flatMap((c, i) => c.story.map((l) => ({ c, i, l }))).sort((a, b) => a.l.ts.localeCompare(b.l.ts));
     // 排格：按时间往后排，换了泳道的下一步可以和上一步同列，同一泳道里不重叠，先后次序不乱
@@ -100,7 +104,8 @@ function Lanes() {
             {placed.map(({ c, i, l, lane, col: k }, n) => (
               <button key={n} type="button" onClick={() => open(c, l)} disabled={!l.role} title={l.text}
                       style={{ gridRow: LANES.findIndex(([x]) => x === lane) + 1, gridColumn: k + 2 }}
-                      className={`mx-0.5 rounded-md px-2 py-1 text-left text-[11.5px] leading-4 ${LANE_TONE[lane]} ${l.role ? "hover:ring-1 hover:ring-accent" : "cursor-default"}`}>
+                      className={`mx-0.5 rounded-md px-2 py-1 text-left text-[11.5px] leading-4 ${LANE_TONE[lane]} ${l.role ? "hover:ring-1 hover:ring-accent" : "cursor-default"}
+                        ${l.ts === newest ? "animate-pulse ring-2 ring-[#c93400]" : ""}`}>
                 <span className="block text-[10.5px] opacity-70">{hhmm(l.ts)} · {c.customer_id ? L.name(c.customer_id) : `第 ${i + 1} 件`}</span>
                 <span className="line-clamp-2">{who(l) && `${who(l)} `}{l.text}</span>
                 {jevText(l) && <span className="mt-0.5 block font-semibold">{jevText(l)}{l.jev?.version ? ` · ${L.version(l.jev.version)}` : ""}</span>}
@@ -301,5 +306,17 @@ function Bus() {
       {!!rejected.length && <p className="text-[12.5px] text-ink-2">Agent 被门面拒绝 {rejected.length} 次；之后的步骤是它按拒绝原因自己改正的。正式状态只有门面能写，签字只有人能签。</p>}
       {!life.steps.length && <p className="text-[12.5px] text-ink-2">这件事没有 Agent 工具调用（离线模式由规则起草，或不需要准备）。工具参数与结果里有委托人那一层的原文，这里只列工具名与拒绝原因。</p>}
     </div>}
+  </div>;
+}
+
+// 一镜到底：当前这一幕与这一件（导演的进度），主屏停在实况时台下知道现在讲到哪
+const ACTS: Record<number, string> = { 1: "信息自己变成了事", 2: "一份报告的一生", 3: "研发成果的两条回流" };
+function Act() {
+  const s = usePlay();
+  if (!s?.oneshot) return null;
+  const now = s.levels.find((x) => x.status === "open");
+  return <div className="flex items-baseline gap-3 rounded-[10px] bg-attn-bg px-4 py-2.5">
+    <span className="text-[15px] font-semibold text-attn-ink">{s.act ? `第 ${s.act} 幕 · ${ACTS[s.act]}` : "一镜到底"}</span>
+    <span className="text-[13px]">{now ? `${now.title}：${now.brief}` : "三幕都走完了"}</span>
   </div>;
 }

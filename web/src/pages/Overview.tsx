@@ -5,6 +5,7 @@ import { api } from "../api";
 import { useApp, useData } from "../ctx";
 import { ReplayNote } from "../components/ui";
 import { CausalChain, Workflow } from "./Chain";
+import { Harness } from "../components/Harness";
 
 const X = [250, 432, 614, 796, 978, 1160];
 const Y = { 0: 164, 1: 296, 2: 428, 3: 560 } as const;
@@ -82,7 +83,7 @@ const STEPS: { node: string; text: string; how: string }[] = [
 ];
 
 export function Overview() {
-  const { go, startDemo } = useApp();
+  const { go, startDemo, me } = useApp();
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-14 px-8 pb-16 pt-10">
       <Hero />
@@ -98,6 +99,11 @@ export function Overview() {
         <Status />
       </div>
       <div id="arch" className="scroll-mt-16"><Pillars /></div>
+      <section className="flex flex-col gap-4">
+        <h2 className="text-center text-[26px] font-semibold leading-[38px] tracking-[-0.01em]">活的架构图</h2>
+        <p className="mx-auto max-w-[860px] text-center text-[14px] leading-[23px] text-ink-2">组织级 Agent Harness 的每个组件，写的是当前运行里的实数：觉提出了几件、Jev 判了几次、契里有几条结论与能力、Agent 调了几次工具又被门面拒了几次、人签了几次字。</p>
+        <Harness viewer={me} />
+      </section>
       <section className="flex flex-col gap-5">
         <h2 className="mx-auto max-w-[860px] text-center text-[26px] font-semibold leading-[38px] tracking-[-0.01em]">
           知识边界（不是审批顺序）

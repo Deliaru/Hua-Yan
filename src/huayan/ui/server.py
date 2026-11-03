@@ -369,6 +369,10 @@ GET = {
     "/api/qi/report-life": lambda app, p: app.report_life(p["doc_id"], p["viewer"]),
     "/api/qi/capability-view": lambda app, p: app.capability_view(p["doc_id"], p["viewer"]),   # V12.9 四屏的能力层
     "/api/spotlight": lambda app, p: SPOTLIGHT,
+    "/api/supervisor/exceptions": lambda app, p: app.exceptions_board(p["viewer"]),   # V12.11 研发负责人：风险与例外
+    "/api/supervisor/lineage": lambda app, p: app.capability_lineage(p["viewer"]),     # V12.11 研发负责人：能力谱系
+    "/api/qi/coverage-map": lambda app, p: app.coverage_map(p["viewer"]),   # V12.11 跨文档覆盖图（答辩备用）
+    "/api/harness": lambda app, p: app.harness_counts(p["viewer"]),   # V12.11 活的架构图
     "/api/qi/aliases": lambda app, p: app.alias_candidates(p["viewer"]),   # V12.9 动态别名
     "/api/jue/radar": lambda app, p: app.jue_radar(p["viewer"]),   # V12.8 觉雷达与觉在学习
     "/api/jue/catalog": lambda app, p: app.decision_catalog(p["viewer"]),   # V12.8 决策目录墙
@@ -939,7 +943,7 @@ def play_tick(elapsed):
         return
     api.advance(d.state["speed"] * elapsed)
     api.tick()
-    for _ in range(10):
+    for _ in range(1 if d.state["oneshot"] else 10):     # 一镜到底一拍只走一步，台下看得清每次交接
         if not d.step(set(trial_roles.values())):
             break
         api.tick()
@@ -967,9 +971,11 @@ play_lock = Lock()
 
 def play_restart(p):
     """重开这一局：开新的一局（新的运行目录），业务与关卡第 1 步重新送来。
-    real：换报告（真实报告版 / 模拟报告）；roadshow：路演局（各岗位的事都留给人）；不给就照这一局的。"""
+    real：换报告（真实报告版 / 模拟报告）；roadshow：路演局（各岗位的事都留给人）；oneshot：一镜到底（导演按幕一件一件做完）；
+    不给就照这一局的。"""
     d = DIRECTOR
-    d.new_round(bool(p.get("real", d.state["real"])), bool(p.get("roadshow", d.state["roadshow"])))
+    d.new_round(bool(p.get("real", d.state["real"])), bool(p.get("roadshow", d.state["roadshow"])),
+                bool(p.get("oneshot", d.state["oneshot"])))
     session_api("default", rebuild=True)
     _roles_path().write_text(json.dumps(trial_roles, ensure_ascii=False, indent=1), encoding="utf-8")
     WAKE.set()

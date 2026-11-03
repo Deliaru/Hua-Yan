@@ -29,11 +29,13 @@ import { Settle } from "./pages/Settle";
 import { Live } from "./pages/Live";
 import { Canvas } from "./pages/Canvas";
 import { Screens } from "./pages/Screens";
+import { Backup } from "./pages/Backup";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
 import { ActivityMenu } from "./components/Process";
 import { DemoPanel } from "./components/Demo";
+import { Opener } from "./components/Opener";
 
 // [页面, 标题, 图标, 分组]：分组 null 为一级项
 const PAGES = [
@@ -41,6 +43,7 @@ const PAGES = [
   ["live", "组织运行实况", NavJue, null],
   ["qi", "契画布", NavLayers, null],
   ["screens", "四屏并排", NavLayers, null],
+  ["backup", "答辩备用", NavEval, null],
   ["customer", "客户", NavCustomer, "工作面"],
   ["sales", "业务员", NavSales, "工作面"],
   ["pm", "产品经理", NavPm, "工作面"],
@@ -124,7 +127,7 @@ export default function App() {
   // V12.8 实况是路演画面：游戏模式里主管身份可见（四屏并排时主屏用主管身份开一个窗口），真实试用里不出现
   // 契画布给研发、四屏给各身份，也只在游戏模式里出现
   const visible = (k: Page) => k === "settle" ? !!meta.play : k === "live" ? !trialActor || (!!meta.play && trialActor.role === "supervisor")
-    : k === "qi" ? !trialActor || (!!meta.play && trialActor.role === "rd") : k === "screens" ? !trialActor || !!meta.play
+    : k === "qi" ? !trialActor || (!!meta.play && trialActor.role === "rd") : k === "screens" || k === "backup" ? !trialActor || !!meta.play
     : !trialActor || ROLE_PAGES[k] === trialActor.role || TRIAL_PAGES.includes(k);
   const page: Page = visible(rawPage) ? rawPage : PAGES.find(([k]) => ROLE_PAGES[k] === trialActor!.role)?.[0] ?? "jue";
   const inDemo = demo && !trial;
@@ -236,6 +239,7 @@ export default function App() {
         {page === "pm" && <Pm key={key} />}
         {page === "rd" && <Rd key={key} />}
         {page === "supervisor" && <Supervisor key={key} />}
+        {["customer", "sales", "pm", "rd", "supervisor"].includes(page) && <Opener key={`opener-${page}`} role={page} />}
         {page === "story" && <Story toDesk={() => setPage("desk")} />}
         {page === "desk" && (actor.role === "sales" ? <Sales key={key} /> : actor.role === "rd" ? <Rd key={key} /> : <Supervisor key={key} />)}
         {page === "jue" && <JuePage key={key} />}
@@ -247,6 +251,7 @@ export default function App() {
         {page === "live" && <Live key={key} />}
         {page === "qi" && <Canvas key={key} />}
         {page === "screens" && <Screens key={key} />}
+        {page === "backup" && <Backup key={key} />}
         {page === "settle" && <Settle key={key} />}
       </main>
 

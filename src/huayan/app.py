@@ -1544,6 +1544,22 @@ class HuayanApp:
                       if h["product"] == product and phenomenon in (None, h["phenomenon"])]
         return {"rows": rows, "hypotheses": [h for h in hypotheses if len(h["rows"]) > 1], "read_by": "整批编译的读稿，未经研发确认"}
 
+    def coverage_map(self, by):
+        """V12.11 跨文档覆盖图（答辩备用）：委托人能读的试样里，每个产品在哪些条件、什么温度下试过、结果怎样，另附研究假设。
+        读整批编译的读取侧产物，只是读稿，不是已确认结论。"""
+        actor = self._actor(by, {"rd"})
+        if not self.config.get("trial_coverage"):
+            raise ValueError("本实例没有配置整批编译的产物目录 trial_coverage")
+        readable = readable_sources(self.kb, actor, self.source_owners)
+        root = Path(self.config["trial_coverage"])
+        keys = ("doc_id", "title", "product", "phenomenon", "conditions", "temperature_c", "result")
+        rows = [{k: r[k] for k in keys} for r in json.loads((root / "coverage.json").read_text(encoding="utf-8"))
+                if r["product"] and r["doc_id"] in readable]
+        hypotheses = [{"product": h["product"], "conditions": h["conditions"], "text": h["text"], "n": n}
+                      for h in json.loads((root / "hypotheses.json").read_text(encoding="utf-8"))
+                      if (n := sum(r["doc_id"] in readable for r in h["rows"])) > 1]
+        return {"rows": rows, "hypotheses": hypotheses, "read_by": "整批编译的读稿，未经研发确认"}
+
     def save_plan_draft(self, req_id, evidence, comparison, transferable, open_items, by):
         """V12.5 方案推演：从历史试样推一个值得验证的方案，存为本单准备材料。方案不是能力，不进客户侧，由接单研发采用或改写。"""
         req, _ = self._requirement(req_id, by, {"rd"}, {"draft", "rd_accepted"})
@@ -2268,6 +2284,85 @@ class HuayanApp:
         return {"question": q.model_dump(mode="json"), "decision": self.templates[q.template_id].decision_label if q.template_id else None,
                 "gap": self.preparation_gap(q.id) if q.status == "open" and q.signer_role else None,
                 "steps": steps, "errors": errors}
+
+    def exceptions_board(self, by):
+        """V12.11 研发负责人的风险与例外：泄露与去密、试样风险、能力走偏与依据变化这几类决策（谁在办、等了多久、怎么处理的），
+        超过时限还没处理的事、Agent 没准备成的事、挂起待复核的能力。只给标题、主人与时长，不给内容。"""
+        self._actor(by, {"supervisor"})
+        now = get_clock().now()
+        row = lambda q: {"id": q.id, "family": q.family, "title": q.title, "owner_id": q.owner_id, "signer_id": q.signer_id,
+                         "status": q.status, "waited_hours": round(((q.resolved_at or now) - q.created_at).total_seconds() / 3600, 1),
+                         "action": q.resolution.action if q.resolution else None, "by": q.resolution.by if q.resolution else None}
+        qs = sorted(self.bus.list(status=None), key=lambda q: q.created_at, reverse=True)
+        limit = self.config.get("overdue_hours", 24)
+        products = {p.id: p.name for p in self.kb.products()}
+        return {"risk": [row(q) for q in qs if q.family in _RISK], "overdue_hours": limit,
+                "overdue": [row(q) for q in qs if q.status == "open" and (now - q.created_at).total_seconds() >= limit * 3600],
+                "failures": [row(self.bus.get(qid)) | {"error": f["error"]} for qid, f in self.agents.failures.items()],
+                "suspended": [{"id": c.id, "form": c.form, "product": products.get(c.payload.get("product_id")), "granted_by": c.granted_by}
+                              for c in self.kb.capabilities() if c.status == "suspended"],
+                "frozen": sorted(self.kb._frozen)}
+
+    def capability_lineage(self, by):
+        """V12.11 研发负责人的能力谱系（V12.9 一份报告的谱系按全部能力汇总）：每项能力的依据（几条结论、谁确认、出自几份来源）、
+        授予人与批准人、用过几次、其中几单在进研发之前就答了、现在的状态与经历过的变化。主管是 L2：只给 L2 及以下受众的能力内容，
+        研发层的能力只给产品、现象与形式，结论只给归属。"""
+        actor = self._actor(by, {"supervisor"})
+        used, escalated, changes = defaultdict(set), {}, defaultdict(list)   # 会话第一次进研发的时刻
+        for e in self.events.query(["requirement_created"]):
+            for sid in e.payload["session_ids"]:
+                escalated.setdefault(sid, e.ts.isoformat())
+        for e in self.events.query(["capability_used"]):
+            used[e.payload["capability_id"]].add((e.session_id, e.ts.isoformat()))
+        for e in self.events.query(["capability_suspended", "capability_revoked", "evidence_changed", "recommendation_withdrawn"]):
+            changes[e.payload.get("capability_id") or e.payload.get("ku_id")].append({"ts": e.ts.isoformat(), "kind": e.kind})
+        level, rows = level_of(actor), []
+        for c in self.kb.capabilities():
+            units = [self.kb._units[k] for k in c.based_on]
+            sessions = {sid for sid, _ in used[c.id] if sid}
+            rows.append({"id": c.id, "form": c.form, "audience": c.audience, "status": c.status, "at": c.at.isoformat(),
+                "granted_by": c.granted_by, "approved_by": c.approved_by, "seed": all(u.source == "seed" for u in units),
+                "product_id": c.payload.get("product_id"), "phenomenon": c.payload.get("phenomenon"),
+                "payload": c.payload if isinstance(c.audience, int) and c.audience <= level else None,
+                "basis": [{"id": u.id, "owner": u.owner, "confirmed_by": u.confirmed_by, "level": u.level, "status": u.status} for u in units],
+                "docs": sorted({e.split("#")[0] for u in units for e in u.evidence}),
+                "used": len(sessions),   # 用这份能力时这段会话还没进过研发的，算替研发答了（口径同 report_life）
+                "answered_for_rd": len({sid for sid, ts in used[c.id] if sid and ts < escalated.get(sid, "~")}),
+                "changes": sorted(changes[c.id] + [x for u in units for x in changes[u.id]], key=lambda x: x["ts"])})
+        return sorted(rows, key=lambda r: (r["seed"], -r["used"], r["id"]))
+
+    def harness_counts(self, by):
+        """V12.11 活的架构图：Harness 每个组件这一局的实数（ARCHITECTURE.md 第 0 节）。只有计数，不带任何内容。"""
+        self._actor(by)
+        kinds = Counter(e.kind for e in self.events.query())
+        meter, llm = self.run_dir / "metering.jsonl", Counter()
+        records = [json.loads(line) for line in meter.read_text(encoding="utf-8").splitlines()] if meter.exists() else []
+        for r in records:
+            if r["kind"] == "llm":
+                llm[r["caller"].split(":")[0]] += 1
+        qs = self.bus.list(status=None)
+        human = lambda a: a.split(":")[0] in ("sales", "pm", "rd", "supervisor") and a != "pm:agent"
+        steps = [s for s in self.agents._steps if s.tool]
+        caps = self.kb.capabilities()
+        return {
+            "info": {"turns": kinds["turn"], "trials": kinds["trial"], "source_changes": kinds["evidence_changed"]},
+            "state": {"sessions": len(self._sessions), "requirements": len(self._requirements), "products": len(self.kb.products())},
+            "jue": {"evaluations": sum(r["kind"] == "jue" for r in records), "raised": len(qs), "auto": kinds["auto_executed"],
+                    "hints": kinds["ask_hint"], "llm": llm["jue"]},
+            "bus": {"open": sum(q.status == "open" for q in qs), "prepared": sum(q.prepared_at is not None for q in qs),
+                    "resolved": sum(q.status != "open" for q in qs)},
+            "agent": {"tools": len(steps), "rejected": sum(s.result_summary.startswith('{"ok":false') for s in steps),
+                      "blocked": sum(bool(s.blocked) for s in steps), "llm": llm["agent"]},
+            "jev": {"calls": sum(r["kind"] == "s1" for r in records), "matches": kinds["match"], "recommends": kinds["recommend"]},
+            "human": {"signs": sum(bool(q.resolution) and human(q.resolution.by) for q in qs), "decisions": kinds["human_decision"],
+                      "confirms": kinds["claim_confirmed"], "grants": sum(e.kind == "capability_granted" and human(e.actor) for e in self.events.query(["capability_granted"]))},
+            "act": {"events": sum(kinds.values())},
+            "qi": {"claims": sum(u.kind == "claim" and u.status == "active" for u in self.kb._units.values()),
+                   "candidates": sum(u.status == "candidate" for u in self.kb._units.values()),
+                   "capabilities": sum(c.status == "active" for c in caps), "suspended": sum(c.status == "suspended" for c in caps),
+                   "used": kinds["capability_used"]},
+            "gateway": dict(llm),
+        }
 
     def _doc_title(self, doc_id):
         source = next(s for s in self.kb.sources if doc_id in s.list_docs())
@@ -3063,6 +3158,7 @@ def _station(e):
 
 # v8 Q9.5 主管时间线 -------------------------------------------------------------------------------
 _QUIET = {"turn", "extraction", "retrieve", "ask_hint", "match"}          # 原话进会话块；检索与打分不上泳道
+_RISK = {"leak_risk", "seal_leak", "seal_points", "trial_risk", "stale_capability", "qi_review", "knowledge_conflict"}   # V12.11 研发负责人看的风险类决策
 _QI_KINDS = {"capability_granted", "capability_revoked", "capability_suspended", "capability_used", "claim_confirmed",
              "claim_withdrawn", "evidence_changed", "scope_extended", "share_requested"}
 _ACTIONS = {"sign": "签字", "answered": "结案", "auto": "自动执行", "dismiss": "越过", "accept": "接单", "return": "退回",

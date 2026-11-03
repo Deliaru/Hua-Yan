@@ -13,8 +13,13 @@
 #      review 研发复核依据已变化的结论并签字保留（写依据）；同一动作做两次就写两遍
 #      reuse 研发不采用产品经理 Agent 建议的现成产品（写理由；在线时 Agent 会真的去查现成产品，离线骨架不查）
 #      recall 业务员回访觉找回的过去没解决的客户（写对客户说的话） · sheet 产品经理按研发判断更新说明书（写补充句）（V12.7）
+#      delegate 会话的业务员主动委托自己的 Agent 去查（几句依次说，Agent 在业务员这一层检索；要真实模型，离线不运行）
+#      freeze 研发负责人处理泄露风险（true 冻结 / false 现在不需要；note 写依据）（V12.11）
+#   sales 这件事是业务员陪同的会话（研发负责人业务：业务员替客户反复打听同一产品的配方，觉提出泄露风险）
 #   trial 世界规律：needs 里的条件不在需求单上，试样就因需求条件缺失失败（研发业务 2）
 #   revise 外部世界改版资料：这一局资料副本里 doc 的 old 改成 new，再请系统重取依据（关卡第 4 步）
+#   act 一镜到底（V12.11）按幕推进时这件事在第几幕：第一幕信息自己变成了事，第二幕一份报告的一生，第三幕研发成果的两条回流；
+#       没标的一镜到底不送
 #   pass 通关条件，任一条：这件事的前情里出现 kind（或 kind:role；kind~文字 还要求这一行含这段文字）；
 #        settled:<决策> = 送来时开着的这类决策有人处理了
 # 关卡第 1、4 步的报告是 seeds/rag/internal/RPT-044（模拟），候选是 seeds/rag/proposals.yaml 录制的编译提议，每局开局离线导入。
@@ -44,6 +49,7 @@ business:
     pass: ["turn:sales"]
 
   - title: 过去没解决的客户
+    act: 1
     brief: 印染厂 A 早先问过锦氨经轴缸色花，那时没有试样，研发没有立项
     to: sales
     decide: 现在不用做；研发的判断生效后，觉会请你回访
@@ -89,6 +95,7 @@ business:
     pass: ["trial~结果：通过"]
 
   - title: 产品机会
+    act: 1
     brief: 几张短平快需求指向同一类现象
     to: pm
     decide: 签产品机会，附商业判断
@@ -105,6 +112,7 @@ business:
 
 stage:
   - title: 研发判断真实报告并授予
+    act: 2
     brief: 一份检测报告与它编译出的候选结论
     to: rd
     decide: 确认哪几条、按什么条件授予
@@ -119,6 +127,7 @@ stage:
     pass: [scope_extended]
 
   - title: 同条件下一单复用
+    act: 2
     brief: 与关卡第 1 步条件相同的新客户
     to: customer
     decide: 无需研发介入
@@ -130,6 +139,7 @@ stage:
     pass: [capability_used]
 
   - title: 条件不符回研发
+    act: 2
     brief: 相似现象，但温度或设备超出授予条件
     to: rd
     decide: 判断是否扩范围
@@ -143,6 +153,7 @@ stage:
     pass: [project_declined, requirement_accepted]
 
   - title: 报告改版复核
+    act: 2
     brief: 关卡第 1 步那份报告的来源改版
     to: rd
     decide: 复核受影响的结论，保留或撤销
@@ -154,6 +165,7 @@ stage:
     pass: ["settled:qi_review"]
 
   - title: 研发判断回流到过去的客户
+    act: 3
     brief: 关卡第 1 步的判断生效后，觉在历史里找到早先没解决的印染厂 A
     to: sales
     decide: 回访客户，告诉他现在有解了
@@ -164,6 +176,7 @@ stage:
     pass: ["settled:capability_recall"]
 
   - title: 说明书跟上研发判断
+    act: 3
     brief: 研发确认的适用条件超出了说明书写明的范围
     to: pm
     decide: 签字更新说明书

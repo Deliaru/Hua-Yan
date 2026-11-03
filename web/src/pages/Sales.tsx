@@ -13,6 +13,7 @@ import { RouteStrip, WorkloadCard } from "../components/Route";
 import { AuthorizedReplies } from "../components/AuthorizedReplies";
 import { Backstory } from "../components/Backstory";
 import { Narration, TimeBar } from "../components/Narration";
+import { RelayLoss } from "../components/RelayLoss";
 
 // V11.3 收件箱：有待你处理的决策的会话排在「轮到你」，其余在「全部会话」
 function SalesSidebar({ mine, current, guided, choose, todo }: {
@@ -142,6 +143,7 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
           ? <Decisions v={v} questions={questions} fill={setReply} replyEmpty={!reply.trim()} escalateNotes={notesFor(conv?.messages, `${v.session_id}/escalate`)} />
           : <p className="text-[13px] leading-5 text-ink-3">此刻没有需要你签字的决策。觉每听一句都会再看一遍：该推荐、该升级、该回问时出现在这里。</p>}
         <TimeBar />
+        <RelayLoss />
         <WorkloadCard />
       </AgentPanel>
     </>

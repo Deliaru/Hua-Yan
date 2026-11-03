@@ -8,8 +8,8 @@ import type { PlayLevel, PlayState } from "../types";
 import { Popover } from "./Controls";
 import { ChevronDown } from "./Icons";
 
-const TO: Record<string, string> = { customer: "客户面", sales: "业务员面", pm: "产品经理面", rd: "研发面" };
-const ROLES: [string, string][] = [["customer", "客户"], ["sales", "业务员"], ["pm", "产品经理"], ["rd", "研发"]];
+const TO: Record<string, string> = { customer: "客户面", sales: "业务员面", pm: "产品经理面", rd: "研发面", supervisor: "研发负责人面" };
+const ROLES: [string, string][] = [["customer", "客户"], ["sales", "业务员"], ["pm", "产品经理"], ["rd", "研发"], ["supervisor", "研发负责人"]];
 const SPEEDS: [number, string][] = [[10, "慢"], [60, "1 秒 = 1 分钟"], [600, "1 秒 = 10 分钟"]];
 const MARK = { passed: "✓", open: "›", waiting: "" };
 
@@ -36,7 +36,7 @@ export function PlayBar() {
     setBusy(label);
     p.then(() => refresh()).catch(fail).finally(() => setBusy(null));
   };
-  const restart = (p: { real?: boolean; roadshow?: boolean }) =>
+  const restart = (p: { real?: boolean; roadshow?: boolean; oneshot?: boolean }) =>
     confirm("开新的一局：业务和关卡第 1 步重新送来，这一局的进度不保留。确定吗？") && run("正在开新的一局……", api.playRestart(p));
   const mine = s.lines.filter((x) => x.customer === me);       // 我扮的客户接下来可以说的话
   const notes = s.notes.filter((x) => x.who === me);           // 外部世界给我的结果（试样）
@@ -57,7 +57,7 @@ export function PlayBar() {
     <Popover trigger={(toggle) => (
       <button onClick={toggle} className={`flex h-8 max-w-[640px] items-center gap-2 rounded-[8px] px-2.5 text-[13px] hover:bg-fill ${
         all ? "bg-[rgba(48,194,91,.11)]" : turn.length ? "bg-attn-bg" : ""}`}>
-        <span className="tag tag-accent">{s.roadshow ? "路演局" : `第 ${s.round} 局`}</span>
+        <span className="tag tag-accent">{s.oneshot ? `一镜到底${s.act ? ` · 第 ${s.act} 幕` : ""}` : s.roadshow ? "路演局" : `第 ${s.round} 局`}</span>
         {turn[0] ? <><span className="truncate font-semibold">{turn[0].id} · {turn[0].title}</span>
                      <span className="truncate text-ink-2">· {turn[0].brief}</span></>
                  : <span className="truncate text-ink-2">{all ? "业务和关卡都过了" : `进行中 ${open} 件`}</span>}
@@ -104,7 +104,8 @@ export function PlayBar() {
             </div>
           </div>
           <p className="text-[12px] text-ink-3">
-            {s.roadshow ? "路演局：各岗位的事都留给你，导演只扮演外部世界（客户、试样结果、资料改版）和事到你手上之前别的岗位那几步。"
+            {s.oneshot ? "一镜到底：导演按三幕一件一件做完，所有岗位都由导演做（前情标「模拟」），主屏停在组织运行实况看每一次交接。"
+              : s.roadshow ? "路演局：各岗位的事都留给你，导演只扮演外部世界（客户、试样结果、资料改版）和事到你手上之前别的岗位那几步。"
                         : "没人玩的岗位和客户由导演代办，前情里标「模拟」。"}
             点一件就以等它的那个人进他的工作面。业务时间 {s.now.slice(5, 16).replace("T", " ")} · 第 {s.round} 局</p>
           {s.error && <p role="alert" className="text-[12px] text-danger">导演这一拍没做成：{s.error}</p>}
@@ -117,10 +118,11 @@ export function PlayBar() {
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
             <span className="text-ink-2">这一局</span>
-            {([[true, "路演局"], [false, "导演代办没人玩的岗位"]] as const).map(([v, label]) => (
-              <button key={label} className={`btn btn-plain ${s.roadshow === v ? "!text-accent" : ""}`} disabled={!!busy || s.roadshow === v}
-                      onClick={() => restart({ roadshow: v })}>{label}</button>
-            ))}
+            {([[true, false, "路演局"], [false, false, "导演代办没人玩的岗位"], [false, true, "一镜到底"]] as const).map(([v, one, label]) => {
+              const on = s.oneshot === one && (one || s.roadshow === v);
+              return <button key={label} className={`btn btn-plain ${on ? "!text-accent" : ""}`} disabled={!!busy || on}
+                             onClick={() => restart({ roadshow: v, oneshot: one })}>{label}</button>;
+            })}
             {s.real_ready && <>
               <span className="ml-2 text-ink-2">关卡的报告</span>
               {([[false, "模拟报告"], [true, "真实试样报告"]] as const).map(([v, label]) => (

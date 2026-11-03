@@ -125,8 +125,8 @@ def _resolve(role: str | None, obj: JueObject, ref: dict, seeds: Seeds | None, s
         return ref.get("pm") or min(a.id for a in seeds.actors if a.role == "pm" and a.id != "pm:agent")
     if role == "sales":     # v8 收口：自助单没有会话业务员时，需求单上的事（客户评价）归客户的归属业务员跟进；Q9.8 会话同理
         return ref["sales_id"] or (ref["account_sales"] if obj.object_type in ("requirement", "session") else None)
-    if role == "supervisor":
-        return min(a.id for a in seeds.actors if a.role == "supervisor")
+    if role == "supervisor":     # V12.11 CEO 也是主管身份（V11.8，只读 CEO 面），风险与例外归研发负责人
+        return min(a.id for a in seeds.actors if a.role == "supervisor" and a.id != "supervisor:CEO")
     if obj.object_type == "knowledge":
         if "signer" in ref:
             return ref["signer"]

@@ -367,6 +367,7 @@ export interface PlayState {
   levels: PlayLevel[]; round: number; speed: number;
   real: boolean; real_ready: boolean;   // 这一局的关卡用真实报告；服务配了真实报告版（play_real_report）才能换
   roadshow: boolean;                    // 路演局：各岗位的事都留给人，导演只扮演外部世界
+  oneshot: boolean; act: number | null; // V12.11 一镜到底：导演按幕一件一件做完；act 是当前这件在第几幕
   paused: boolean; done: string[];
   acted: { ts: string; actor: string; path: string }[]; error: string | null; now: string;
   lines: { customer: string; session_id: string; text: string }[];   // 客户由人扮时，接下来可以说的台词
@@ -468,3 +469,29 @@ export interface RagCompare {
 
 // V12.9 动态别名：整批编译时模型提议的「已有取值的另一种说法」，研发逐条确认（confirmed 为已确认的取值）
 export interface AliasCandidate { text: string; slot: string; value: string; reason: string; docs: string[]; confirmed: string | null }
+
+// V12.11 活的架构图：Harness 各组件这一局的实数
+export interface HarnessCounts {
+  info: { turns: number; trials: number; source_changes: number };
+  state: { sessions: number; requirements: number; products: number };
+  jue: { evaluations: number; raised: number; auto: number; hints: number; llm: number };
+  bus: { open: number; prepared: number; resolved: number };
+  agent: { tools: number; rejected: number; blocked: number; llm: number };
+  jev: { calls: number; matches: number; recommends: number };
+  human: { signs: number; decisions: number; confirms: number; grants: number };
+  act: { events: number };
+  qi: { claims: number; candidates: number; capabilities: number; suspended: number; used: number };
+  gateway: Record<string, number>;
+}
+
+// V12.11 研发负责人：风险与例外、能力谱系
+export interface ExceptionRow { id: string; family: string; title: string; owner_id: string | null; signer_id: string | null; status: string;
+  waited_hours: number; action: string | null; by: string | null; error?: string }
+export interface ExceptionsBoard { risk: ExceptionRow[]; overdue: ExceptionRow[]; overdue_hours: number; failures: ExceptionRow[];
+  suspended: { id: string; form: string; product: string | null; granted_by: string }[]; frozen: string[] }
+export interface LineageRow {
+  id: string; form: string; audience: number | string; status: string; at: string; granted_by: string; approved_by: string | null; seed: boolean;
+  product_id: string | null; phenomenon: string | null; payload: Record<string, any> | null;
+  basis: { id: string; owner: string; confirmed_by: string | null; level: number; status: string }[]; docs: string[];
+  used: number; answered_for_rd: number; changes: { ts: string; kind: string }[];
+}

@@ -4,7 +4,7 @@ import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus, AuthorizedSourceReply,
   Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage, CeoData, PlaySettle, GrantScope, SourceSearch, SourceImageAnswer, AgentStep, PlanDraft, ClientMessage,
-  LiveCase, JueRadar, DecisionCatalog, BusItem, QuestionLife, ReportLife, CapabilityView, RagCompare, AliasCandidate,
+  LiveCase, JueRadar, DecisionCatalog, BusItem, QuestionLife, ReportLife, CapabilityView, RagCompare, AliasCandidate, HarnessCounts, ExceptionsBoard, LineageRow,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -61,7 +61,7 @@ export const api = {
   playState: () => call<PlayState>("play/state"),
   playSettle: () => request<PlaySettle>("play/settle"),                                          // V11.9 这一局的结算
   playControl: (p: { paused?: boolean; speed?: number }) => call<PlayState>("play/control", p),
-  playRestart: (p: { real?: boolean; roadshow?: boolean } = {}) => call<PlayState>("play/restart", p),
+  playRestart: (p: { real?: boolean; roadshow?: boolean; oneshot?: boolean } = {}) => call<PlayState>("play/restart", p),
   trialStamp: () => call<{ events: number; failures: number; sessions: number }>("trial/stamp"),
   agentProcess: (conversation_id: string, viewer: string) => call<Record<string, AgentRun>>(`agents/process?${q({ conversation_id, viewer })}`),
 
@@ -167,6 +167,10 @@ export const api = {
   spotlight: () => call<{ query: string; doc_id: string | null }>("spotlight"),
   setSpotlight: (p: { query?: string; doc_id?: string | null }) => call<{ query: string; doc_id: string | null }>("spotlight", p),
   ragCompare: (question: string, viewer: string) => call<RagCompare>("baseline/rag", { question, viewer }),
+  exceptions: (viewer: string) => call<ExceptionsBoard>(`supervisor/exceptions?${q({ viewer })}`),     // V12.11 研发负责人
+  lineage: (viewer: string) => call<LineageRow[]>(`supervisor/lineage?${q({ viewer })}`),
+  coverageMap: <T,>(viewer: string) => call<T>(`qi/coverage-map?${q({ viewer })}`),                   // V12.11 答辩备用：跨文档覆盖图
+  harness: (viewer: string) => call<HarnessCounts>(`harness?${q({ viewer })}`),                       // V12.11 活的架构图
   aliases: (viewer: string) => call<AliasCandidate[]>(`qi/aliases?${q({ viewer })}`),                  // V12.9 动态别名
   confirmAlias: (text: string, slot: string, value: string, by: string) => call<Capability>("qi/alias", { text, slot, value, by }),
   ceo: (viewer: string) => call<CeoData>(`ceo?${q({ viewer })}`),                                     // V11.8 CEO 面（这一局）

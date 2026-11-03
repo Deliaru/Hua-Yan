@@ -8,6 +8,7 @@ import type { Question, RequirementView } from "../types";
 import { RouteStrip, WorkloadCard } from "../components/Route";
 import { Backstory } from "../components/Backstory";
 import { Narration, TimeBar } from "../components/Narration";
+import { RelayLoss } from "../components/RelayLoss";
 import { useGuideArg } from "../components/Guide";
 import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote } from "../components/ui";
 
@@ -71,6 +72,7 @@ export function Pm() {
       </div>
       <aside className="inspector fixed bottom-0 right-0 top-[52px] z-10 flex w-[372px] flex-col gap-5 overflow-y-auto border-l border-sep px-5 py-5">
         <TimeBar />
+        <RelayLoss />
         <WorkloadCard title="你的判断产生了什么" />
         {!notes && <p className="text-[12.5px] leading-5 text-ink-3">你的判断让多少需求不再进研发，可以在工具栏打开「演示说明」查看。</p>}
       </aside>
