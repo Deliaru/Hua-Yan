@@ -1160,7 +1160,7 @@ class ModelGateway(Protocol):
 ```
 
 - `OpenAICompatGateway`（重试、降级、录制/回放缓存）与 `MockGateway`（`canned[caller]`）从 JUE 复制，只改 import。**录制/回放缓存就是「记录回放」演示模式的实现**：现场跑一次写缓存，回放时同样的输入直接命中。
-- caller 一览：`agent:extract`、`agent:l1_answer`、`agent:sales`、`agent:pm`、`agent:rd`（三个角色助手的每一步）、`jev:match`、`jev:disclose`、`jev:grounding`（Jev 走大模型降级时透传）、`sim:customer`、`baseline:llm_poll`、`baseline:one_shot`。**不得出现 `jue:` 开头的大模型调用。**
+- caller 一览：`agent:extract`、`agent:l1_answer`、`agent:sales`、`agent:pm`、`agent:rd`（三个角色助手的每一步）、`jev:match`、`jev:disclose`、`jev:grounding`（Jev 走大模型降级时透传）、`sim:customer`、`baseline:llm_poll`、`baseline:one_shot`、`baseline:rag`（V12.9 普通 RAG 对照，只在 `eval/rag_baseline.py`）。**不得出现 `jue:` 开头的大模型调用。**
 
 ```python
 class MeterRecord(BaseModel):

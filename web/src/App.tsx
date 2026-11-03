@@ -27,6 +27,8 @@ import { Month } from "./pages/Month";
 import { Ceo } from "./pages/Ceo";
 import { Settle } from "./pages/Settle";
 import { Live } from "./pages/Live";
+import { Canvas } from "./pages/Canvas";
+import { Screens } from "./pages/Screens";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
@@ -37,6 +39,8 @@ import { DemoPanel } from "./components/Demo";
 const PAGES = [
   ["overview", "架构总览", NavArch, null],
   ["live", "组织运行实况", NavJue, null],
+  ["qi", "契画布", NavLayers, null],
+  ["screens", "四屏并排", NavLayers, null],
   ["customer", "客户", NavCustomer, "工作面"],
   ["sales", "业务员", NavSales, "工作面"],
   ["pm", "产品经理", NavPm, "工作面"],
@@ -56,7 +60,7 @@ type Page = (typeof PAGES)[number][0];
 const HIDDEN: Page[] = ["story", "desk"];   // 不在侧栏出现的旧页面
 const TRIAL_PAGES: Page[] = ["jue", "ledger"];   // V11.0 试用实例：除自己的工作面，只留觉视图与知识账本；架构总览、模拟月、三层对照、评测是演示页
 const HUMANS: Role[] = ["sales", "pm", "rd", "supervisor"];   // 觉视图、三层对照、知识与积分、旧沉浸工作面可选的身份（产品经理为真人 P01，不含 Agent）
-const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd", supervisor: "supervisor", ceo: "supervisor" };
+const ROLE_PAGES: Partial<Record<Page, Role>> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd", supervisor: "supervisor", ceo: "supervisor", qi: "rd" };
 const ROLE_NAME: Record<string, string> = { customer: "客户", sales: "业务员", pm: "产品经理", rd: "研发", supervisor: "研发负责人" };
 const TRIAL_ROLES: Role[] = ["sales", "pm", "rd", "supervisor", "customer"];
 const DEFAULT_WHO: Record<Role, string> = { customer: "customer:C03", sales: "sales:S01", pm: "pm:P01", rd: "rd:R01", supervisor: "supervisor:M01" };
@@ -118,7 +122,9 @@ export default function App() {
   // 试用实例里只出现自己的工作面、觉视图与知识账本；地址栏指到别处时回到自己的工作面
   // V11.9 结算页只在游戏模式出现，谁都能看
   // V12.8 实况是路演画面：游戏模式里主管身份可见（四屏并排时主屏用主管身份开一个窗口），真实试用里不出现
+  // 契画布给研发、四屏给各身份，也只在游戏模式里出现
   const visible = (k: Page) => k === "settle" ? !!meta.play : k === "live" ? !trialActor || (!!meta.play && trialActor.role === "supervisor")
+    : k === "qi" ? !trialActor || (!!meta.play && trialActor.role === "rd") : k === "screens" ? !trialActor || !!meta.play
     : !trialActor || ROLE_PAGES[k] === trialActor.role || TRIAL_PAGES.includes(k);
   const page: Page = visible(rawPage) ? rawPage : PAGES.find(([k]) => ROLE_PAGES[k] === trialActor!.role)?.[0] ?? "jue";
   const inDemo = demo && !trial;
@@ -239,6 +245,8 @@ export default function App() {
         {page === "month" && <Month />}
         {page === "ceo" && <Ceo key={key} />}
         {page === "live" && <Live key={key} />}
+        {page === "qi" && <Canvas key={key} />}
+        {page === "screens" && <Screens key={key} />}
         {page === "settle" && <Settle key={key} />}
       </main>
 

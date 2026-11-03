@@ -440,3 +440,25 @@ export interface QuestionLife {
   steps: { at: string; tool: string; blocked: boolean; error: string | null }[];
   errors: { at: string; kind: string; detail: string | null }[];
 }
+
+// V12.9 契画布、四屏、普通 RAG 对照
+export interface ReportLifeEvent { ts: string; kind: string; actor: string; session_id: string | null; ku_id: string | null; capability_id: string | null; note: string | null }
+export interface ReportLife {
+  doc: { doc_id: string; title: string; source: string; kind: string; owner: string | null; level: number };
+  library: { docs: number; library_docs: number; pages: number; pending: number; internal: number };
+  pages: { span: string; fingerprint: string; excerpt: string }[];
+  compiled: { title: string; form: string | null; docs: string[]; report: Record<string, ({ ku_id?: string; capability_id?: string; title?: string; reasons?: string[] } | string)[]> }[];
+  units: { id: string; kind: string; level: number; status: string; owner: string; confirmed_by: string | null; title: string | null; text: string | null; evidence: string[]; product_id: string | null }[];
+  capabilities: Capability[];
+  events: ReportLifeEvent[];
+  used: { n: number; sessions: string[]; answered_for_rd: number };
+  points: Record<string, number>;
+}
+export interface CapabilityView { level: number; capabilities: Capability[]; units: { id: string; title: string; text: string }[] }
+export interface RagCompare {
+  rag: { question: string; answer: string; model: string; hits: { doc_id: string; title: string; page: number; level: number; excerpt: string }[] };
+  huayan: { path: string; story: StoryLine[] } | null;
+}
+
+// V12.9 动态别名：整批编译时模型提议的「已有取值的另一种说法」，研发逐条确认（confirmed 为已确认的取值）
+export interface AliasCandidate { text: string; slot: string; value: string; reason: string; docs: string[]; confirmed: string | null }

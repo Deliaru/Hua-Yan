@@ -1494,7 +1494,40 @@ class HuayanApp:
         temps = [f"{t.celsius[0]:g}℃" for sid in req.session_ids
                  for t in [self._sessions[sid].need.temperature] if t is not None and t.status == "filled"]
         said = [x.text for sid in req.session_ids for x in self._sessions[sid].turns if x.speaker == "customer"][:2]
-        return [" ".join([label, *req.known_slots.values(), *temps]), " ".join(said)]
+        slots = {s.id: s for s in self.kb.view(Actor(id="system:requirement", role="rd", name="研发需求")).slots}
+        aliases = [a for k, v in req.known_slots.items() for a in slots[k].customer_phrases.get(v, [])]   # 契里确认过的说法
+        return [" ".join([label, *req.known_slots.values(), *temps]), " ".join(said), *([" ".join([label, *aliases])] if aliases else [])]
+
+    def alias_candidates(self, by):
+        """V12.9 动态别名：整批编译时模型提议的「已有取值的另一种说法」，研发只看到出自自己按统一读取入口能读的资料的；
+        确认过的标出来。只是候选，模型也会对错，研发逐条确认。"""
+        actor = self._actor(by, {"rd"})
+        if not self.config.get("trial_coverage"):
+            raise ValueError("本实例没有配置整批编译的产物目录 trial_coverage")
+        readable = readable_sources(self.kb, actor, self.source_owners)
+        done = {(c.payload["text"], c.payload["slot"]): c.payload["value"] for c in self.kb.capabilities()
+                if c.form == "phrase" and c.status == "active"}
+        rows = json.loads((Path(self.config["trial_coverage"]) / "aliases.json").read_text(encoding="utf-8"))
+        return [{"text": r["text"], "slot": r["suggest"]["slot"], "value": r["suggest"]["value"], "reason": r["suggest"]["reason"],
+                 "docs": docs, "confirmed": done.get((r["text"], r["suggest"]["slot"]))}
+                for r in rows if r["suggest"] and (docs := [d for d in r["docs"] if d in readable])]
+
+    def confirm_alias(self, text, slot, value, by):
+        """研发确认一条说法（可改成同槽位的另一个已有取值）：一条研发确认的结论，授为研发层的 phrase 能力；
+        之后编译读报告、从需求单检索都认得这个说法（知识库视图并进口语说法）。内部资料来的说法由研发签（QI.md 第⑤类）。"""
+        row = next((r for r in self.alias_candidates(by) if r["text"] == text and r["slot"] == slot), None)
+        if row is None or row["confirmed"]:
+            raise ValueError("没有这条待确认的别名候选")
+        slot_def = next(s for s in self.seeds.slots if s.id == slot)
+        if value not in slot_def.values:
+            raise ValueError(f"只能对到{slot_def.label}的已有取值")
+        at = get_clock().now()
+        unit = KnowledgeUnit(id=self.kb.next_claim_id(), kind="claim", level=3, title=f"说法「{text}」",
+            text=f"「{text}」是{slot_def.label}「{value}」的另一种说法（见于 {'、'.join(row['docs'])}）",
+            owner=by, confirmed_by=by, source="contributed", created_at=at)
+        self.kb.add(unit)
+        return self.kb.grant(Capability(id=self.kb.next_cap_id(), form="phrase", audience=3,
+            payload={"slot": slot, "value": value, "text": text}, based_on=[unit.id], granted_by=by, status="active", at=at))
 
     def trial_coverage(self, product, by, phenomenon=None):
         """V12.5 跨报告的试样覆盖（V12.4 整批编译的读取侧产物）：委托人能读的试样里，这个产品试过哪些条件、结果怎样，
@@ -2235,6 +2268,83 @@ class HuayanApp:
         return {"question": q.model_dump(mode="json"), "decision": self.templates[q.template_id].decision_label if q.template_id else None,
                 "gap": self.preparation_gap(q.id) if q.status == "open" and q.signer_role else None,
                 "steps": steps, "errors": errors}
+
+    def _doc_title(self, doc_id):
+        source = next(s for s in self.kb.sources if doc_id in s.list_docs())
+        return source.docs[doc_id]["title"] if isinstance(source, LibrarySource) else doc_id
+
+    def report_list(self, by):
+        """V12.9 契画布可选的报告：研发按统一读取入口能读、且编译出过结论的来源，授出能力多的在前。"""
+        actor = self._actor(by, {"rd"})
+        readable = readable_sources(self.kb, actor, self.source_owners)
+        docs = defaultdict(set)
+        for u in self.kb._units.values():
+            for d in {e.split("#")[0] for e in u.evidence}:
+                docs[d].add(u.id)
+        caps = lambda ids: sum(bool(set(c.based_on) & ids) for c in self.kb.capabilities())
+        rows = [{"doc_id": d, "title": self._doc_title(d), "n_units": len(ids), "n_caps": caps(ids)} for d, ids in docs.items() if d in readable]
+        return sorted(rows, key=lambda r: (-r["n_caps"], -r["n_units"]))
+
+    def report_life(self, doc_id, by):
+        """V12.9 契画布：一份报告的一生，每一站都是真对象。资料库 → 读取（这份的页与指纹）→ 编译（录制的提议各自的核对结果）
+        → 契纳入（候选结论、能力提议、限制原文）→ 专业生效（确认绑定的指纹、授予、批准）→ 使用与记分 → 变化（改版、挂起、撤下、复核）。
+        只给研发，先过统一读取入口；同层别人的结论只给标题与归属。"""
+        actor = self._actor(by, {"rd"})
+        fragments = read_source(self.kb, doc_id, actor, self.source_owners)
+        source = next(s for s in self.kb.sources if doc_id in s.list_docs())
+        library = [s for s in self.kb.sources if isinstance(s, LibrarySource)]
+        units = [u for u in self.kb._units.values() if any(e.startswith(f"{doc_id}#") for e in u.evidence)]
+        ids = {u.id for u in units}
+        caps = [c for c in self.kb.capabilities() if set(c.based_on) & ids]
+        cap_ids = {c.id for c in caps}
+        compiled = []
+        if self.config.get("compile_report"):            # 这一局开局时导入的录制提议，逐条的核对结果（导演 prepare_round 写）
+            rows = json.loads(Path(self.config["compile_report"]).read_text(encoding="utf-8"))
+            compiled = [r for r in rows if doc_id in r["docs"]]
+        concerned = lambda e: (e.payload.get("ku_id") in ids or e.payload.get("capability_id") in cap_ids
+                               or e.kind == "capability_granted" and e.payload["id"] in cap_ids)
+        events = [{"ts": e.ts.isoformat(), "kind": e.kind, "actor": e.actor, "session_id": e.session_id,
+                   "ku_id": e.payload.get("ku_id"), "capability_id": e.payload.get("capability_id", e.payload.get("id")),
+                   "note": e.payload.get("note") or e.payload.get("reason")}
+                  for e in self.events.query() if e.kind in _QI_KINDS | {"recommendation_withdrawn"} and concerned(e)]
+        used = [e for e in events if e["kind"] == "capability_used"]
+        escalated = {}                   # 会话第一次进研发的时刻；用这份能力时还没进过研发的，算替研发答了
+        for e in self.events.query(["requirement_created"]):
+            for sid in e.payload["session_ids"]:
+                escalated.setdefault(sid, e.ts.isoformat())
+        points = defaultdict(int)
+        for entry in self.ledger.list():
+            if entry.ku_id in ids:
+                points[entry.reason] += entry.points
+        visible = lambda u: u.owner == by or self.kb._readable(actor, u)
+        return {
+            "doc": {"doc_id": doc_id, "title": self._doc_title(doc_id), "source": source.name, "kind": source.kind,
+                    "owner": self.source_owners.get(doc_id), "level": max([3 if source.kind == "internal" else 0, *(f.level for f in fragments)])},
+            "library": {"docs": sum(len(s.list_docs()) for s in self.kb.sources),
+                        "library_docs": sum(len(s.docs) for s in library), "pages": sum(x["pages"] for s in library for x in s.docs.values()),
+                        "pending": sum(x["pending_pages"] for s in library for x in s.docs.values()),
+                        "internal": sum(len(s.list_docs()) for s in self.kb.sources if s.kind == "internal")},
+            "pages": [{"span": f.span, "fingerprint": f.fingerprint, "excerpt": f.text[:160]} for f in fragments],
+            "compiled": compiled,
+            "units": [{"id": u.id, "kind": u.kind, "level": u.level, "status": u.status, "owner": u.owner, "confirmed_by": u.confirmed_by,
+                       "title": u.title if visible(u) else None, "text": u.text if visible(u) else None, "evidence": u.evidence,
+                       "product_id": u.product_id} for u in units],
+            "capabilities": [c.model_dump(mode="json") for c in caps],
+            "events": events,
+            "used": {"n": len(used), "sessions": sorted({e["session_id"] for e in used if e["session_id"]}),
+                     "answered_for_rd": len({e["session_id"] for e in used if e["session_id"] and e["ts"] < escalated.get(e["session_id"], "~")})},
+            "points": dict(points),
+        }
+
+    def capability_view(self, doc_id, by):
+        """V12.9 四屏的能力层：同一份报告编译出的能力，这个身份按知识库的可见规则（当前 active、受众不高于本层）看到哪些；
+        能读到的结论另给原文。每屏用自己的身份读，裁剪在知识库里，不给报告本身。"""
+        actor = self._actor(by)
+        ids = {u.id for u in self.kb._units.values() if any(e.startswith(f"{doc_id}#") for e in u.evidence)}
+        return {"level": level_of(actor),
+                "capabilities": [c.model_dump(mode="json") for c in self.kb._visible_caps(actor) if set(c.based_on) & ids],
+                "units": [{"id": u.id, "title": u.title, "text": u.text} for u in self.kb._units.values()
+                          if u.id in ids and self.kb._readable(actor, u)]}
 
     def jue_timeline(self, target_id, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})

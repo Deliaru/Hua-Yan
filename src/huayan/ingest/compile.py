@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
 from huayan.clock import get_clock
-from huayan.contracts import Capability, KnowledgeUnit, LLMRequest, Message, Tier
+from huayan.contracts import Actor, Capability, KnowledgeUnit, LLMRequest, Message, Tier
 from huayan.contracts._base import BaseModel
 from huayan.domain import find_phenomenon, find_slot_values
 
@@ -100,6 +100,7 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
     report = {"admitted": [], "dropped": [], "duplicates": [], "conflicts": [], "unaligned": [],
               "unaligned_details": [], "pending_evidence": []}
     slot_ids, labels = {s.id for s in kb.seeds.slots}, {s.id: s.label for s in kb.seeds.slots}
+    slots = kb.view(Actor(id="system:compile", role="rd", name="契编译")).slots   # 含研发确认过的说法
     products = {p.id: p for p in kb.seeds.products} | kb._products
     for p in proposals:
         fragments = [_cited(sources, ev) for ev in p.evidence]
@@ -131,7 +132,7 @@ def admit(proposals: list[Proposal], sources, kb) -> dict:
             conditions = {}
             limits = [p.limits.strip()] if p.limits.strip() else []
             for text in p.conditions:
-                matched = find_slot_values(text, kb.seeds.slots)
+                matched = find_slot_values(text, slots)
                 for slot, (value, _) in matched.items():
                     conditions.setdefault(slot, []).append(value)
                 # 认出一个枚举不代表整句条件已表达；其余信息以完整原句交研发判断。

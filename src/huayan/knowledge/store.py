@@ -138,7 +138,12 @@ class KnowledgeBase:
                 for c in caps if c.form == "applicable" and c.payload["product_id"] == product.id]
             products.append(product.model_copy(update={"situations": situations, "applicable": {},
                 "solves": list(dict.fromkeys(s.phenomenon for s in situations))}, deep=True))
-        return self.seeds.model_copy(update={"phenomena": phenomena, "products": products}, deep=True)
+        slots = [s.model_copy(deep=True) for s in self.seeds.slots]
+        for c in caps:                                 # V12.9 研发确认的说法（phrase）并进本层的口语说法
+            if c.form == "phrase":
+                slot = next(s for s in slots if s.id == c.payload["slot"])
+                slot.customer_phrases.setdefault(c.payload["value"], []).append(c.payload["text"])
+        return self.seeds.model_copy(update={"phenomena": phenomena, "products": products, "slots": slots}, deep=True)
 
     def products(self) -> list[Product]:
         return self.view(Actor(id="system:knowledge", role="rd", name="知识库")).products

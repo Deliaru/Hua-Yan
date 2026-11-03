@@ -57,7 +57,17 @@ def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> 
     kb = KnowledgeBase.from_seeds(load_seeds(config["seeds_dir"]), EventLog(), AuditLog(), state_path=config["qi_state"])
     kb.sources = [FolderSource(s["name"], s["kind"], s["root"], s.get("level"), kb._doc_levels) for s in config["sources"]]
     proposals = Path(config["seeds_dir"]) / "rag" / "proposals.yaml"     # 录制的编译提议，代替模型编译
-    admit(Proposals(items=yaml.safe_load(proposals.read_text(encoding="utf-8"))["items"]).items, kb.sources, kb)
+    rows, items = [], Proposals(items=yaml.safe_load(proposals.read_text(encoding="utf-8"))["items"]).items
+    for p in items:              # 逐条导入，契画布按条给出核对结果
+        rows.append({"title": p.title, "form": p.form, "docs": sorted({e.doc_id for e in p.evidence}), "report": admit([p], kb.sources, kb)})
+    config["compile_report"] = str(run_dir / "compile_report.json")
+    if "source_manifest" not in config:      # 内部报告归属编译提议署名的研发，研发按统一读取入口读得到自己的报告（契画布）
+        internal = {d for s in kb.sources if s.kind == "internal" for d in s.list_docs()}
+        owners = {e.doc_id: p.author for p in items for e in p.evidence if e.doc_id in internal and p.author}
+        config["source_manifest"] = str(run_dir / "sources.json")
+        Path(config["source_manifest"]).write_text(json.dumps({"sources": [{"source_id": d, "owner_actor_id": a} for d, a in owners.items()]},
+                                                              ensure_ascii=False), encoding="utf-8")
+    Path(config["compile_report"]).write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
     path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     return path
 

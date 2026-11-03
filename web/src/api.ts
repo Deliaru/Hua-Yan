@@ -4,7 +4,7 @@ import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus, AuthorizedSourceReply,
   Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage, CeoData, PlaySettle, GrantScope, SourceSearch, SourceImageAnswer, AgentStep, PlanDraft, ClientMessage,
-  LiveCase, JueRadar, DecisionCatalog, BusItem, QuestionLife,
+  LiveCase, JueRadar, DecisionCatalog, BusItem, QuestionLife, ReportLife, CapabilityView, RagCompare, AliasCandidate,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -161,6 +161,14 @@ export const api = {
   catalog: (viewer: string) => call<DecisionCatalog>(`jue/catalog?${q({ viewer })}`),                  // V12.8 决策目录墙
   bus: (viewer: string) => call<BusItem[]>(`bus?${q({ viewer })}`),                                    // V12.8 问题总线
   busLife: (question_id: string, viewer: string) => call<QuestionLife>(`bus/life?${q({ question_id, viewer })}`),
+  qiReports: (viewer: string) => call<{ doc_id: string; title: string; n_units: number; n_caps: number }[]>(`qi/reports?${q({ viewer })}`),   // V12.9 契画布
+  reportLife: (doc_id: string, viewer: string) => call<ReportLife>(`qi/report-life?${q({ doc_id, viewer })}`),
+  capabilityView: (doc_id: string, viewer: string) => call<CapabilityView>(`qi/capability-view?${q({ doc_id, viewer })}`),
+  spotlight: () => call<{ query: string; doc_id: string | null }>("spotlight"),
+  setSpotlight: (p: { query?: string; doc_id?: string | null }) => call<{ query: string; doc_id: string | null }>("spotlight", p),
+  ragCompare: (question: string, viewer: string) => call<RagCompare>("baseline/rag", { question, viewer }),
+  aliases: (viewer: string) => call<AliasCandidate[]>(`qi/aliases?${q({ viewer })}`),                  // V12.9 动态别名
+  confirmAlias: (text: string, slot: string, value: string, by: string) => call<Capability>("qi/alias", { text, slot, value, by }),
   ceo: (viewer: string) => call<CeoData>(`ceo?${q({ viewer })}`),                                     // V11.8 CEO 面（这一局）
   monthCeo: (run: string, viewer: string) => request<CeoData>(`month/ceo?${q({ run, viewer })}`),     // V11.8 CEO 面（模拟业务月）
   readiness: (id: string, viewer: string) => call<Readiness>(`readiness?${q({ id, viewer })}`),

@@ -34,7 +34,7 @@ from huayan.gateway.client import ReplayMiss, StructuredOutputError
 from huayan.jev.system1 import OneJevClient
 from huayan.agent.hub import MODEL_ERRORS
 from huayan.sim.schedule import Gate
-from huayan.eval import old_flow
+from huayan.eval import old_flow, rag_baseline
 from huayan.sim import director
 from huayan.ingest.reader import library
 
@@ -250,6 +250,21 @@ def live_of(app, p):
     return {"cases": cases}
 
 
+SPOTLIGHT = {"query": "", "doc_id": None}   # V12.9 四屏并排：几个窗口（各自的身份）一起看的同一句话、同一份报告；只是画面状态
+
+
+def rag_baseline_of(app, p):
+    """V12.9 普通 RAG 对照（eval/rag_baseline）真跑一次；右边是化言这一局里同一句话的实际经过。普通 RAG 的检索不分层，
+    回答里可能带出内部资料，所以只给研发看。"""
+    app._actor(p["viewer"], {"rd"})
+    said = [s for s in app.sessions() if any(t.speaker == "customer" and t.text == p["question"] for t in s.turns)]
+    huayan = None
+    if said:
+        route, story = app.route_of(said[-1].id, p["viewer"]), app.case_story(said[-1].id, p["viewer"])
+        huayan = {"path": route["path"], "story": story["story"]}
+    return {"rag": rag_baseline.answer(app.kb.sources, p["question"], app.gateway), "huayan": huayan}
+
+
 def ceo_of(app, p):
     """V11.8 CEO 面（CEO-VIEW C1/C3）：化言线逐件路径（门面 pipeline），配上同一件事的旧流程推算与客户等第一个答复的时间，
     一份按参数文件、一份按最保守参数；三个岗位的时间构成也是两份。这一局研发新签的适用能力（有授予事件）替研发答了的事，
@@ -330,6 +345,11 @@ GET = {
     "/api/client/messages": lambda app, p: app.client_messages(p["viewer"]),   # V12.6 Client-View 主动消息
     "/api/sheet-revision": lambda app, p: app.sheet_revision(p["question_id"], p["viewer"]),   # V12.7 说明书补充稿
     "/api/live": live_of,   # V12.8 组织运行实况
+    "/api/qi/reports": lambda app, p: app.report_list(p["viewer"]),   # V12.9 契画布
+    "/api/qi/report-life": lambda app, p: app.report_life(p["doc_id"], p["viewer"]),
+    "/api/qi/capability-view": lambda app, p: app.capability_view(p["doc_id"], p["viewer"]),   # V12.9 四屏的能力层
+    "/api/spotlight": lambda app, p: SPOTLIGHT,
+    "/api/qi/aliases": lambda app, p: app.alias_candidates(p["viewer"]),   # V12.9 动态别名
     "/api/jue/radar": lambda app, p: app.jue_radar(p["viewer"]),   # V12.8 觉雷达与觉在学习
     "/api/jue/catalog": lambda app, p: app.decision_catalog(p["viewer"]),   # V12.8 决策目录墙
     "/api/bus": lambda app, p: app.question_board(p["viewer"]),   # V12.8 问题总线
@@ -353,6 +373,9 @@ GET = {
                                        "sessions": len(app._sessions)},   # 开新会话不记事件，单独数
 }
 POST = {
+    "/api/baseline/rag": rag_baseline_of,   # V12.9 普通 RAG 对照
+    "/api/spotlight": lambda app, p: SPOTLIGHT.update({k: p[k] for k in ("query", "doc_id") if k in p}) or SPOTLIGHT,
+    "/api/qi/alias": lambda app, p: app.confirm_alias(p["text"], p["slot"], p["value"], p["by"]),
     "/api/plan/adopt": lambda app, p: app.adopt_plan(p["req_id"], p["by"]),
     "/api/sources/ask-image": lambda app, p: app.ask_source_image(p["doc_id"], int(p["page"]), p["question"], p["by"]),
     "/api/source-preparation/compile": lambda app, p: app.compile_source_preparation(p["req_id"], p["doc_id"], p["by"]),
