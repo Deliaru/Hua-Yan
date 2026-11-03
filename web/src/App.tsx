@@ -26,6 +26,7 @@ import { Pm } from "./pages/Pm";
 import { Month } from "./pages/Month";
 import { Ceo } from "./pages/Ceo";
 import { Settle } from "./pages/Settle";
+import { Live } from "./pages/Live";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
 import { ModeDialog } from "./components/Mode";
@@ -35,6 +36,7 @@ import { DemoPanel } from "./components/Demo";
 // [页面, 标题, 图标, 分组]：分组 null 为一级项
 const PAGES = [
   ["overview", "架构总览", NavArch, null],
+  ["live", "组织运行实况", NavJue, null],
   ["customer", "客户", NavCustomer, "工作面"],
   ["sales", "业务员", NavSales, "工作面"],
   ["pm", "产品经理", NavPm, "工作面"],
@@ -115,7 +117,9 @@ export default function App() {
   if (trial && !trialActor) return <RolePicker meta={meta} onPick={enter} error={error} />;
   // 试用实例里只出现自己的工作面、觉视图与知识账本；地址栏指到别处时回到自己的工作面
   // V11.9 结算页只在游戏模式出现，谁都能看
-  const visible = (k: Page) => k === "settle" ? !!meta.play : !trialActor || ROLE_PAGES[k] === trialActor.role || TRIAL_PAGES.includes(k);
+  // V12.8 实况是路演画面：游戏模式里主管身份可见（四屏并排时主屏用主管身份开一个窗口），真实试用里不出现
+  const visible = (k: Page) => k === "settle" ? !!meta.play : k === "live" ? !trialActor || (!!meta.play && trialActor.role === "supervisor")
+    : !trialActor || ROLE_PAGES[k] === trialActor.role || TRIAL_PAGES.includes(k);
   const page: Page = visible(rawPage) ? rawPage : PAGES.find(([k]) => ROLE_PAGES[k] === trialActor!.role)?.[0] ?? "jue";
   const inDemo = demo && !trial;
 
@@ -234,6 +238,7 @@ export default function App() {
         {page === "ledger" && <Ledger key={key} />}
         {page === "month" && <Month />}
         {page === "ceo" && <Ceo key={key} />}
+        {page === "live" && <Live key={key} />}
         {page === "settle" && <Settle key={key} />}
       </main>
 

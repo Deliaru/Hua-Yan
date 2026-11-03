@@ -132,7 +132,10 @@ export interface Route {
 }
 // V11.1 一件事的前情（门面 case_story）：每行的主体与角色；waiting 是这件事上还开着的决策
 export type StorySubject = "human" | "agent" | "jue" | "jev" | "qi" | "system";
-export interface StoryLine { ts: string; kind: string; subject: StorySubject; role: Role | null; who: string; text: string }
+export interface StoryLine {
+  ts: string; kind: string; subject: StorySubject; role: Role | null; who: string; text: string;
+  jev?: { p_none?: number; p_choice?: Record<string, number>; scored_by?: string; p?: number; version?: string };   // V12.8 实况：Jev 的概率
+}
 export interface StoryWaiting { question_id: string; family: string; decision: string; owner_id: string | null; signer_id: string | null; prepared: boolean }
 export interface CaseStory { session_id: string; requirement_id: string | null; story: StoryLine[]; waiting: StoryWaiting[] }
 // V11.2 / V11.4 旧流程推算（eval/old_flow.py）：now_times 是这次实际还发生的次数（交叉工位按前情数，本职工位照常保留）
@@ -408,3 +411,32 @@ export interface AgentStep {
 }
 // V12.6 Client-View 的主动消息（门面 client_messages）：研发批准给这位客户的机理说明；V12.7 业务员回访、新品发布
 export interface ClientMessage { kind: "decrypt" | "callback" | "release"; session_id: string; product: string; text: string; by: string; at: string }
+
+// V12.8 组织运行实况、觉雷达、决策目录墙、问题总线（主管只读）
+export interface LiveCase {
+  session_id: string; requirement_id: string | null; customer_id: string | null; phenomenon: string | null; path: string;
+  story: StoryLine[]; waiting: StoryWaiting[]; old_roles: string[]; now_roles: string[];
+}
+export interface RadarRow {
+  mode: "scheduled" | "realtime"; object_id: string; family: string; decision: string; title: string; why: string; who: string | null;
+  p: number; scored_by: string; rule: number; jue_k: number | null; cell: string; threshold: number; at: string;
+  question: { id: string; status: Question["status"] } | null;
+}
+export interface JueRadar {
+  rows: RadarRow[]; jue_k_cells: Record<"scheduled" | "realtime", string[]>; engine: Record<"scheduled" | "realtime", string>;
+  learning: { samples: number; trained: number | null; last: { family: string; action: string; by: string; at: string } | null };
+}
+export interface CatalogItem {
+  family: string; decision: string; kind: "advance" | "anomaly"; owner_role: Role; signer_role: Role | null; off: boolean;
+  n: number; last: string | null; jue_k: string[];
+}
+export interface DecisionCatalog { templates: CatalogItem[]; llm_calls: Record<string, number> }
+export interface BusItem {
+  id: string; family: string; title: string; status: Question["status"]; owner_id: string | null; signer_id: string | null;
+  created_at: string; prepared: boolean; by: string | null;
+}
+export interface QuestionLife {
+  question: Question; decision: string | null; gap: string | null;
+  steps: { at: string; tool: string; blocked: boolean; error: string | null }[];
+  errors: { at: string; kind: string; detail: string | null }[];
+}

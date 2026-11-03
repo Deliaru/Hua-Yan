@@ -90,7 +90,7 @@ export function useLabels() {
     scrub: (text: string) => text
       .replace("转译可以确认了吗", "化学要点（L3）可以确认了吗")   // 模板标题进 Agent 提示词（改了会让录制缓存失效），只在显示处改说法
       .replace(/(需求单\s*)?(?:requirement:)?req:[\w-]+/g, "需求单")
-      .replace(/\s*(?:ku:)?(?:case|tr|translation):[\w:-]+/g, "")
+      .replace(/\s*(?:ku:)?(?:case|tr|translation|claim):[\w:-]+/g, "")
       .replace(/slot:(?:sess:)?[\w-]+\/(\w+)/g, (_, s) => slot(s))
       .replace(/(?:session:)?sess:[\w-]+/g, "会话")
       .replace(/theme:(\w+)/g, (_, p) => phen(p))

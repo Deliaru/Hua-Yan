@@ -152,6 +152,11 @@ def _refs(d: ScoredDecision, ref: dict) -> dict[str, str]:
     return q_refs
 
 
+def describe(t: JueTemplate, obj: JueObject, seeds: Seeds | None) -> tuple[str, str]:
+    """问题标题与依据摘要；发布问题与觉雷达共用。"""
+    return t.title.format(object=_label(obj, seeds), attrs=SimpleNamespace(**obj.attrs)), _summary(t.family, obj.attrs)
+
+
 def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], bus: QuestionBus, threshold: float,
             *, seeds: Seeds | None = None, refs: dict[str, dict] | None = None) -> list[Question]:
     """所有非 ask_slot 的组合 p_need ≥ threshold 即生成问题，不区分实时 / 定时。
@@ -170,12 +175,13 @@ def publish(out: JueOutput, state: JueState, templates: dict[str, JueTemplate], 
         t, obj = templates[d.template_id], state.objects[d.object_id]
         ref = (refs or {}).get(d.object_id, {})
         owner_role = "rd" if d.family == "distortion" and obj.attrs["layer"] == 3 else t.owner_role
+        title, summary = describe(t, obj, seeds)
         q = bus.publish(Question(
-            id="", family=d.family, title=t.title.format(object=_label(obj, seeds), attrs=SimpleNamespace(**obj.attrs)),
+            id="", family=d.family, title=title,
             object_id=d.object_id, owner_role=owner_role, owner_id=_resolve(owner_role, obj, ref, seeds),
             signer_role=t.signer_role, signer_id=_resolve(t.signer_role, obj, ref, seeds, signer=True), template_id=t.id,
             p_need=d.p_need, urgency=d.urgency, scored_by=d.scored_by or out.scored_by, discoverer=out.model,
-            evidence=[Evidence(summary=_summary(d.family, obj.attrs), event_ids=ref.get("event_ids", []))],
+            evidence=[Evidence(summary=summary, event_ids=ref.get("event_ids", []))],
             refs=_refs(d, ref), bounty_points=t.bounty_points, dedup_key=f"{d.family}:{d.object_id}",
             created_at=out.at))
         if q.id and q.id not in existing:   # 合并进已有问题或被抑制的不算新发布

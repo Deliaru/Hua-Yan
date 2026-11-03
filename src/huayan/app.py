@@ -3,7 +3,7 @@ import json
 import threading
 import time
 from contextlib import contextmanager
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -25,9 +25,9 @@ from huayan.gateway import build_gateway
 from huayan.jev import Jev
 from huayan.jev.system1 import build_system1
 from huayan.jue.jue_k import JueK
-from huayan.jue.proto import JueProto, load_templates
-from huayan.jue.publish import publish, select_asks
-from huayan.jue.records import load_records
+from huayan.jue.proto import JueProto, judge_level, load_templates, rule_score
+from huayan.jue.publish import describe, publish, select_asks
+from huayan.jue.records import _human_level, load_records
 from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
 from huayan.ingest.compile import admit, propose, recheck
 from huayan.ingest.folder import FolderSource
@@ -124,6 +124,7 @@ class HuayanApp:
         app.templates = load_templates(app.config["templates_dir"])
         app._wire_jue()
         app._jue_trace, app._answers = {}, {}
+        app._watch, app._shadow = {}, {}    # V12.8 觉雷达：每个对象最近一次被觉评估的结果；对照用的 Jue-K
         app._last_scan = None
         app._held = _Held()
         app._drafts = {}     # 线程 → 它正在起草的需求单；别的线程写后评估时跳过，由起草的线程结束时评估
@@ -213,6 +214,13 @@ class HuayanApp:
                   latency_ms=(time.perf_counter() - started) * 1000)
         with (self.run_dir / "jue_samples.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(JueRecord(state=state, output=out).model_dump_json() + "\n")
+        if out.mode == "scheduled":       # 定时扫描每次看全部对象，上一次看过、这次不在的不再算「正在看」
+            self._watch = {k: v for k, v in self._watch.items() if v[0] == "realtime"}
+        passed = defaultdict(list)
+        for d in out.decisions:
+            if d.precondition_passed:
+                passed[d.object_id].append(d)
+        self._watch |= {oid: (out.mode, out.model, obj, passed[oid], out.at) for oid, obj in state.objects.items()}
         return out
 
     def ask_hints(self, need):
@@ -2125,6 +2133,109 @@ class HuayanApp:
                 q.refs["temperature_c"] = json.dumps(self.kb._caps[q.refs["capability_id"]].payload.get("temperature_c"))
         return questions
 
+    def _threshold(self, family, mode, model):
+        """与 ask_hints、实时评估、定时扫描用的门槛一致。"""
+        th = self.config["thresholds"]
+        if family == "ask_slot":
+            return th["ask_jue_k"] if model == "jue_k" else th["ask"]
+        return th["ask_jue_k"] if family == "ask_back" and mode == "realtime" and model == "jue_k" else th["publish"]
+
+    def _jue_k_view(self, mode, objects, at):
+        """有 Jue-K 模型的格并排一根 Jue-K 分。这一局本来用规则打分时另载一份 Jue-K 只作对照，不参与决策、不记样本；
+        已停用的 leak_risk|L2 不恢复。"""
+        engine = self.jue_scheduled if mode == "scheduled" else self.jue_realtime
+        if engine.name != "jue_k" and mode not in self._shadow:
+            shadow = JueK(self.config["jue_k_dir"], self.config["templates_dir"], mode)
+            shadow.templates = engine.templates
+            shadow.models.pop("leak_risk|L2", None)
+            self._shadow[mode] = shadow
+        model = engine if engine.name == "jue_k" else self._shadow[mode]
+        out = model.propose(JueState(at=at, mode=mode, objects=objects)) if objects else None
+        return model, {(d.template_id, d.object_id): d.p_need for d in out.decisions if d.scored_by == "jue_k"} if out else {}
+
+    def jue_radar(self, by):
+        """V12.8 觉雷达（主管只读）：觉正在看的每个对象上前提成立的决策，这一局实际用的分数、门槛、报没报出；
+        有 Jue-K 模型的格另给规则分与 Jue-K 分对照。另附「觉在学习」：这一局人处置觉提出的事项的次数（每次是一条学习样本）。"""
+        self._actor(by, {"supervisor"})
+        questions = {q.dedup_key: q for q in self.bus.list(status=None)}
+        names = {s.id: self.actors[s.customer_id].name.replace("（模拟）", "") if s.customer_id in self.actors else "样例客户"
+                 for s in self._sessions.values()}
+        rows, cells = [], {}
+        for mode in ("scheduled", "realtime"):
+            watched = {oid: v for oid, v in self._watch.items() if v[0] == mode}
+            at = max((v[4] for v in watched.values()), default=get_clock().now())
+            shadow, k = self._jue_k_view(mode, {oid: v[2] for oid, v in watched.items()}, at)
+            cells[mode] = sorted(shadow.models)
+            for oid, (_, model, obj, decisions, seen) in watched.items():
+                sid = oid.removeprefix("slot:").split("/")[0] if oid.startswith("slot:") else oid.removeprefix("session:")
+                req = self._requirements.get(oid.removeprefix("requirement:"))
+                for d in decisions:
+                    t = self.templates[d.template_id]
+                    title, why = describe(t, obj, self.seeds)
+                    q = questions.get(f"{d.family}:{oid}")
+                    rows.append({"mode": mode, "object_id": oid, "family": d.family, "decision": t.decision_label,
+                                 "title": title, "why": why, "who": names.get(req.session_ids[0] if req else sid),
+                                 "p": d.p_need, "scored_by": d.scored_by, "rule": rule_score(t, obj),
+                                 "jue_k": k.get((d.template_id, oid)), "cell": f"{d.family}|L{judge_level(t, obj)}",
+                                 "threshold": self._threshold(d.family, mode, model), "at": seen.isoformat(),
+                                 "question": q and {"id": q.id, "status": q.status}})
+        resolved = [e for e in self.events.query(["question_resolved"]) if _human_level(e.actor) is not None]
+        last = resolved[-1] if resolved else None
+        metrics = Path(self.config["jue_k_dir"]) / "metrics.json"
+        return {"rows": rows, "jue_k_cells": cells,
+                "engine": {"scheduled": self.jue_scheduled.name, "realtime": self.jue_realtime.name},
+                "learning": {"samples": len(resolved),
+                             "trained": json.loads(metrics.read_text(encoding="utf-8"))["rows"] if metrics.exists() else None,
+                             "last": last and {"family": last.payload["family"], "action": last.payload["action"],
+                                               "by": last.actor, "at": last.ts.isoformat()}}}
+
+    def decision_catalog(self, by):
+        """V12.8 决策目录墙（主管只读）：每类决策这一局触发了几次（追问按提示次数，其余按发布的问题），最近一次在什么时候；
+        另按调用方统计这一局的大模型调用，觉的发现环节不经网关，恒为 0。"""
+        self._actor(by, {"supervisor"})
+        fired = defaultdict(list)
+        for q in self.bus.list(status=None):
+            fired[q.family].append(q.created_at)
+        fired["ask_slot"] = [e.ts for e in self.events.query(["ask_hint"]) if e.payload["slots"]]
+        cells = {*getattr(self.jue_realtime, "models", {}), *getattr(self.jue_scheduled, "models", {})}
+        meter = self.run_dir / "metering.jsonl"
+        calls = defaultdict(int)
+        for line in meter.read_text(encoding="utf-8").splitlines() if meter.exists() else []:
+            r = json.loads(line)
+            if r["kind"] == "llm":
+                calls[r["caller"].split(":")[0]] += 1
+        off = set(self.config.get("jue_off", ()))
+        return {"templates": [{"family": t.family, "decision": t.decision_label, "kind": t.kind, "owner_role": t.owner_role,
+                               "signer_role": t.signer_role, "off": t.family in off, "n": len(fired[t.family]),
+                               "last": max(fired[t.family]).isoformat() if fired[t.family] else None,
+                               "jue_k": sorted(c for c in cells if c.startswith(f"{t.family}|"))}
+                              for t in self.templates.values()],
+                "llm_calls": {"jue": 0, **calls}}
+
+    def question_board(self, by):
+        """V12.8 问题总线（主管只读）：觉提出的全部问题，新的在前。"""
+        self._actor(by, {"supervisor"})
+        return [{"id": q.id, "family": q.family, "title": q.title, "status": q.status, "owner_id": q.owner_id,
+                 "signer_id": q.signer_id, "created_at": q.created_at.isoformat(), "prepared": q.prepared_at is not None,
+                 "by": q.resolution and q.resolution.by}
+                for q in sorted(self.bus.list(status=None), key=lambda q: q.created_at, reverse=True)]
+
+    def question_life(self, question_id, by):
+        """V12.8 一件事在问题总线上的一生：觉提出（分数与依据）→ 派给谁 → Agent 用了哪些工具、哪次被门面拒绝、
+        对象上还缺什么（preparation_gap）→ 谁签了什么。主管是 L2：只给工具名与拒绝原因，不给工具参数与结果（里面有委托人那一层的原文）。"""
+        self._actor(by, {"supervisor"})
+        q = _find(self.bus.questions, question_id, "问题")
+        end = q.resolved_at or get_clock().now()
+        rejected = '{"ok":false,"error":"'      # 轨迹里的结果只存前 200 字，按前缀取拒绝原因
+        steps = [{"at": s.at.isoformat(), "tool": s.tool, "blocked": bool(s.blocked),
+                  "error": s.result_summary.removeprefix(rejected).split('"')[0] if s.result_summary.startswith(rejected) else None}
+                 for s in self.agents.trace(self.agents.conversation_of(q)) if q.created_at <= s.at <= end and s.tool]
+        errors = [{"at": r["at"], "kind": r["kind"], "detail": r.get("detail")}
+                  for r in self.agents.errors(q.owner_id) if r.get("question_id") == q.id]
+        return {"question": q.model_dump(mode="json"), "decision": self.templates[q.template_id].decision_label if q.template_id else None,
+                "gap": self.preparation_gap(q.id) if q.status == "open" and q.signer_role else None,
+                "steps": steps, "errors": errors}
+
     def jue_timeline(self, target_id, viewer_id):
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
         if target_id in self._sessions:
@@ -2434,6 +2545,10 @@ class HuayanApp:
             if e.kind == "question_resolved" and story and story[-1]["who"] == who and story[-1]["ts"][:19] == e.ts.isoformat()[:19]:
                 continue          # 不立项等动作同一刻顺带关掉的决策，由动作那一行说
             story.append({"ts": e.ts.isoformat(), "kind": e.kind, "subject": subject, "role": role, "who": who, "text": text})
+            if e.kind == "match":         # V12.8 实况：Jev 的概率写在格子里
+                story[-1]["jev"] = {"p_none": e.payload["p_none"], "p_choice": e.payload["p_choice"], "scored_by": e.payload["scored_by"]}
+            elif e.kind == "recommend":
+                story[-1]["jev"] = {"p": e.payload["p_choice"], "version": e.payload["version"]}
         waiting = [{"question_id": q.id, "family": q.family, "decision": decision[q.family], "owner_id": q.owner_id,
                     "signer_id": q.signer_id, "prepared": q.prepared_at is not None}
                    for q in self.bus.list(status="open") if mine(q) and (

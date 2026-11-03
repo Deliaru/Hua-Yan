@@ -234,6 +234,22 @@ def time_bar_of(app, p):
     return old_flow.time_bar(estimates, params, role)
 
 
+def live_of(app, p):
+    """V12.8 组织运行实况（主管只读）：这一局每件事的前情（带主体，界面分到觉 / Jev / 契 / Agent / 人几条泳道），
+    同一现象的几件事排在一起；每件事附旧流程要经过、这一次没有让人经手的岗位（推算）。"""
+    viewer, params = p["viewer"], old_flow.load_params()
+    sessions = {s.id: s for s in app.sessions()}
+    cases = []
+    for c in app.pipeline(viewer):
+        s = sessions[c["session_id"]]
+        route, story = app.route_of(s.id, viewer), app.case_story(s.id, viewer)
+        est = old_flow.estimate(route, params, story=story["story"])
+        cases.append({"session_id": s.id, "requirement_id": story["requirement_id"], "customer_id": s.customer_id,
+                      "phenomenon": s.need.phenomenon, "path": route["path"], "story": story["story"], "waiting": story["waiting"],
+                      "old_roles": est["old"]["roles"], "now_roles": est["now"]["roles"]})
+    return {"cases": cases}
+
+
 def ceo_of(app, p):
     """V11.8 CEO 面（CEO-VIEW C1/C3）：化言线逐件路径（门面 pipeline），配上同一件事的旧流程推算与客户等第一个答复的时间，
     一份按参数文件、一份按最保守参数；三个岗位的时间构成也是两份。这一局研发新签的适用能力（有授予事件）替研发答了的事，
@@ -313,6 +329,11 @@ GET = {
     "/api/case-story": lambda app, p: app.case_story(p["id"], p["viewer"]),   # V11.1：一件事的前情
     "/api/client/messages": lambda app, p: app.client_messages(p["viewer"]),   # V12.6 Client-View 主动消息
     "/api/sheet-revision": lambda app, p: app.sheet_revision(p["question_id"], p["viewer"]),   # V12.7 说明书补充稿
+    "/api/live": live_of,   # V12.8 组织运行实况
+    "/api/jue/radar": lambda app, p: app.jue_radar(p["viewer"]),   # V12.8 觉雷达与觉在学习
+    "/api/jue/catalog": lambda app, p: app.decision_catalog(p["viewer"]),   # V12.8 决策目录墙
+    "/api/bus": lambda app, p: app.question_board(p["viewer"]),   # V12.8 问题总线
+    "/api/bus/life": lambda app, p: app.question_life(p["question_id"], p["viewer"]),
     "/api/old-flow": old_flow_of,   # V11.2：同一件事按旧流程走的推算
     "/api/time-bar": time_bar_of,   # V11.4：我的时间构成从现状到这一局
     "/api/ceo": ceo_of,   # V11.8：CEO 面的两条流水线与账本（主管只读）
