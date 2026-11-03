@@ -19,6 +19,7 @@ from huayan.sim.customer import SimCustomer
 
 LEVELS = Path("demo/levels.yaml")
 VIEWER = "supervisor:M01"        # 导演读前情、需求单用主管视角（L2，看得到需求单上的经过）
+PM = "pm:P01"
 SHOWN = ("id", "title", "brief", "to", "decide", "mechanism", "point")
 
 
@@ -51,8 +52,22 @@ class Director:
         lv, s = self.level(), self.state
         return {"levels": [{k: x.get(k) for k in SHOWN} | {"ready": "lines" in x} for x in self.levels],
                 "level": s["level"], "round": s["round"], "speed": s["speed"], "paused": s["paused"],
-                "passed": lv["id"] in s["passed"], "cases": s["cases"].get(str(lv["id"]), []),
-                "acted": s["acted"], "error": self.error}
+                "passed": lv["id"] in s["passed"], "done": s["passed"], "cases": s["cases"].get(str(lv["id"]), []),
+                "acted": s["acted"], "error": self.error, "lines": self._lines(lv)}
+
+    def _lines(self, lv: dict) -> list[dict]:
+        """客户由人来扮时，各位客户接下来可以说的那句台词（只是提示，可以改写）。"""
+        out = []
+        for sid in self.state["cases"].get(str(lv["id"]), []):
+            customer = self._customer_of(sid)
+            view = self._get("/api/session", id=sid, viewer=customer)["view"]
+            said = sum(t.speaker == "customer" for t in view.turns)
+            if said < len(lv["lines"]):
+                out.append({"customer": customer, "session_id": sid, "text": lv["lines"][said]})
+        return out
+
+    def _customer_of(self, sid: str) -> str:
+        return next(x["customer_id"] for x in self._get("/api/sessions") if x["id"] == sid)
 
     # 动作与读取：与浏览器同一个入口 ------------------------------------------------------------------
     def _get(self, path: str, **params):
@@ -72,13 +87,18 @@ class Director:
         if "lines" not in lv or lv["id"] in s["passed"]:
             return False
         acted = False
-        if key not in s["cases"]:
-            sid = self._act(lv["customer"], "/api/sessions", customer_id=lv["customer"]).id
-            s["cases"][key] = [sid]
-            self._act(lv["customer"], "/api/turn", session_id=sid, speaker="customer", text=lv["lines"][0])
+        if key not in s["cases"]:       # 送来：这一关的每位客户开一段会话；没人扮的客户说出开场白，有人扮的由人自己说
+            s["cases"][key] = []
+            for customer in [lv["customer"], *lv.get("also", [])]:
+                sid = self._act(customer, "/api/sessions", customer_id=customer).id
+                s["cases"][key].append(sid)
+                if customer not in present:
+                    self._act(customer, "/api/turn", session_id=sid, speaker="customer", text=lv["lines"][0])
             acted = True
-        if lv["customer"] not in present:
-            acted |= any([self._customer(lv, sid) for sid in s["cases"][key]])
+        for sid in s["cases"][key]:
+            customer = self._customer_of(sid)
+            if customer not in present:
+                acted |= self._customer(lv, sid, customer)
         for i, a in enumerate(lv.get("do", [])):
             if f"{key}:{i}" not in s["done"] and self._do(lv, a, present):
                 s["done"].append(f"{key}:{i}")
@@ -89,9 +109,9 @@ class Director:
         self.save()
         return acted
 
-    def _customer(self, lv: dict, sid: str) -> bool:
+    def _customer(self, lv: dict, sid: str, customer: str) -> bool:
         """客户看化言或业务员刚说了什么（或刚出现的推荐卡），回一句；没有新内容就不说。"""
-        view = self._get("/api/session", id=sid, viewer=lv["customer"])["view"]
+        view = self._get("/api/session", id=sid, viewer=customer)["view"]
         seen = self.state["seen"]
         card = view.card.product_id if view.card else None
         if view.turns[-1].speaker == "customer" and seen.get(sid) == card:
@@ -101,13 +121,13 @@ class Director:
         if said < len(lv["lines"]):
             text = lv["lines"][said]
         elif view.hints and view.turns[-1].speaker != "customer":
-            text = self._sim_customer(lv, sid).reply(view.turns[-1].text)
+            text = self._sim_customer(lv, sid, customer).reply(view.turns[-1].text)
         else:
             return False
-        self._act(lv["customer"], "/api/turn", session_id=sid, speaker="customer", text=text)
+        self._act(customer, "/api/turn", session_id=sid, speaker="customer", text=text)
         return True
 
-    def _sim_customer(self, lv: dict, sid: str) -> SimCustomer:
+    def _sim_customer(self, lv: dict, sid: str, customer: str) -> SimCustomer:
         """台词说完以后觉还在追问：按这位客户心里的真值回答（没写的槽位按种子先验抽，随机数按局与会话定）。"""
         if sid not in self.customers:
             seeds = self.api().app.seeds
@@ -115,14 +135,23 @@ class Director:
             rng = random.Random(f"{self.state['round']}:{sid}")
             slots = sample_slots(phen, seeds, rng, lv["card"]["slots"])
             card = NeedCard(id=f"level:{lv['id']}", phenomenon=phen.id, slots=slots, unknown_slots=[], opening_slots=[],
-                            customer_id=lv["customer"], chem_savvy=False, wants_mechanism=False,
+                            customer_id=customer, chem_savvy=False, wants_mechanism=False,
                             truth_product=correct_product(phen.id, slots, seeds.products))
             self.customers[sid] = SimCustomer(card, seeds, rng)
         return self.customers[sid]
 
     def _do(self, lv: dict, a: dict, present: set[str]) -> bool:
         """缺席岗位的一步模板解法；前提还没出现（还没交到这个岗位、Agent 还没准备好）或有人在玩这个岗位时不做。"""
-        sid = self.state["cases"][str(lv["id"])][0]
+        sids = self.state["cases"][str(lv["id"])]
+        sid = sids[0]
+        if a["as"] == "pm":             # 产品经理签产品机会：觉把这几张同类需求提成一个机会、产品经理 Agent 准备好之后
+            rids = {self._get("/api/route", id=x, viewer=VIEWER)["requirement_id"] for x in sids}
+            q = next((q for q in self._get("/api/questions", viewer=PM) if q.family == "opportunity" and q.status == "open"
+                      and q.prepared_at and rids & set(q.refs.get("requirement_ids", "").split(","))), None)
+            if PM in present or q is None:
+                return False
+            self._act(PM, "/api/merge", question_id=q.id, note=a["merge"])
+            return True
         if a["as"] == "sales":
             actor = next(x["sales_id"] for x in self._get("/api/sessions") if x["id"] == sid)
             view = self._get("/api/session", id=sid, viewer=actor)["view"] if actor else None
@@ -152,16 +181,19 @@ class Director:
 
     # 一局 ----------------------------------------------------------------------------------------
     def next_level(self) -> None:
+        """到下一个接上了导演的关（还没接上的跳过）。"""
         if self.level()["id"] not in self.state["passed"]:
             raise ValueError("这一关还没通过")
-        if self.state["level"] + 1 >= len(self.levels):
-            raise ValueError("已经是最后一关")
-        self.state["level"] += 1
+        later = [i for i in range(self.state["level"] + 1, len(self.levels)) if "lines" in self.levels[i]]
+        if not later:
+            raise ValueError("后面没有接上的关了")
+        self.state["level"] = later[0]
         self.save()
 
     def play_through(self, upto: int, tick: Callable[[], None]) -> None:
-        """全部岗位都由导演代办，从第 1 关跑到第 upto + 1 关开头（重开本关时，新的一局先补上前面几关）。"""
-        for n in range(upto):
+        """全部岗位都由导演代办，从第 1 关跑到第 upto + 1 关开头（重开本关时，新的一局先补上前面几关）。
+        tick：导演没事可做时推进一拍（业务时间往前走、觉检查、Agent 准备），产品机会要等觉的定时扫描。"""
+        for n in [i for i in range(upto) if "lines" in self.levels[i]]:
             self.state["level"] = n
             for _ in range(30):
                 if self.level()["id"] in self.state["passed"]:

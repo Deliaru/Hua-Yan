@@ -1,11 +1,11 @@
 # V11 九关的骨架（REPLAN-v11 第 3 节）。只给导演（src/huayan/sim/director.py）读，业务代码不读。
 # 每关：
 #   brief 导演送来什么 · to 到谁的工作面 · decide 玩家要做的决定 · mechanism 触达的机制 · point 旁白要点
-#   customer 送来这件事的客户；card 这位客户心里的真值（只给模拟客户，phenomenon 与已知槽位，其余槽位按种子先验抽）
+#   customer 送来这件事的客户（also 同一时间说同样话的其他客户）；card 这位客户心里的真值（只给模拟客户，phenomenon 与已知槽位，其余槽位按种子先验抽）
 #   lines 模板模式下客户依次说的话：第一句是开场，之后每当化言或业务员说了话、或推荐卡出现，就说下一句；
 #         说完以后只在觉还在追问时由模拟客户按真值回答
 #   do 缺席岗位的模板解法：as 哪个角色（sales 会话的业务员 / rd 需求单的指派研发 / pm 产品经理），
-#      say 业务员对客户说 · decline 研发不立项（product 已有产品适用，reason 原因） · accept 研发接单
+#      say 业务员对客户说 · merge 产品经理签产品机会（写商业判断） · decline 研发不立项（product 已有产品适用，reason 原因） · accept 研发接单
 #   pass 通关条件：这件事的前情里出现其中任一种事件（kind 或 kind:role）
 # 没有 lines 的关还没接上导演（V11.6、V11.7）。
 levels:
@@ -88,6 +88,13 @@ levels:
     decide: 签产品机会，附商业判断
     mechanism: 觉合并、产品经理签字
     point: 零散的短平快汇成课题，研发有精力做中长期
+    customer: customer:C01
+    also: [customer:C02]
+    card: {phenomenon: color_unlevel, slots: {fiber: 锦纶氨纶, equipment: 气流染色机}}
+    lines: ["深一块浅一块，锦氨的，气流缸"]
+    do:
+      - {as: pm, merge: 两家锦氨气流缸厂同类色花，值得做一个低浴比匀染课题}
+    pass: [requirements_merged]
 
   - id: 9
     title: 报告改版复核

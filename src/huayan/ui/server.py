@@ -865,7 +865,7 @@ def play_restart(_):
     d.customers = {}
     api = session_api("default", rebuild=True)
     _roles_path().write_text(json.dumps(trial_roles, ensure_ascii=False, indent=1), encoding="utf-8")
-    d.play_through(level, api.tick)
+    d.play_through(level, lambda: (api.advance(600), api.tick()))
     return d.view()
 
 

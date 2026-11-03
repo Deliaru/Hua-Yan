@@ -24,7 +24,7 @@ export function usePlay(): PlayState | null {
 }
 
 export function PlayBar() {
-  const { fail, refresh } = useApp();
+  const { fail, refresh, me } = useApp();
   const s = usePlay();
   const [busy, setBusy] = useState<string | null>(null);
   if (!s) return null;
@@ -33,14 +33,17 @@ export function PlayBar() {
     setBusy(label);
     p.then(() => refresh()).catch(fail).finally(() => setBusy(null));
   };
-  const state = busy ?? (!lv.ready ? "这一关还没接上导演" : s.passed ? "已通关" : s.paused ? "已暂停" : "进行中");
+  const mine = s.lines.filter((x) => x.customer === me);       // 我扮的客户接下来可以说的话
+  const myTurn = !s.passed && lv.ready && (mine.length > 0 || lv.to === me.split(":")[0]);
+  const state = busy ?? (!lv.ready ? "这一关还没接上导演" : s.passed ? "已通关" : s.paused ? "已暂停" : myTurn ? "轮到你" : "进行中");
   return (
     <Popover trigger={(toggle) => (
-      <button onClick={toggle} className={`flex h-8 max-w-[640px] items-center gap-2 rounded-[8px] px-2.5 text-[13px] hover:bg-fill ${s.passed ? "bg-[rgba(48,194,91,.11)]" : ""}`}>
+      <button onClick={toggle} className={`flex h-8 max-w-[640px] items-center gap-2 rounded-[8px] px-2.5 text-[13px] hover:bg-fill ${
+        s.passed ? "bg-[rgba(48,194,91,.11)]" : myTurn ? "bg-attn-bg" : ""}`}>
         <span className="tag tag-accent">第 {lv.id} 关</span>
         <span className="truncate font-semibold">{lv.title}</span>
         <span className="truncate text-ink-2">· {lv.brief} → {TO[lv.to]}</span>
-        <span className={`shrink-0 ${s.passed ? "text-[#1f8a3d]" : "text-ink-2"}`}>{state}</span>
+        <span className={`shrink-0 ${s.passed ? "text-[#1f8a3d]" : myTurn ? "font-semibold text-attn-ink" : "text-ink-2"}`}>{state}</span>
         <ChevronDown />
       </button>
     )}>
@@ -49,6 +52,15 @@ export function PlayBar() {
           <div>
             <p className="eyebrow">导演送来</p><p>{lv.brief}，到{TO[lv.to]}。</p>
             <p className="eyebrow mt-2">你要做的决定</p><p>{lv.decide}</p>
+            {mine.map((x) => (
+              <div key={x.session_id} className="mt-2 rounded-[8px] bg-attn-bg px-2.5 py-2">
+                <p className="eyebrow">你扮的客户可以这样说</p>
+                <p>「{x.text}」</p>
+                <button className="btn btn-plain mt-1" disabled={!!busy}
+                        onClick={() => run("…", api.addTurn(x.session_id, "customer", x.text).then(() => s))}>照这句说</button>
+                <span className="ml-2 text-[12px] text-ink-3">也可以在客户面用自己的话说</span>
+              </div>
+            ))}
             <p className="eyebrow mt-2">会用到</p><p className="text-ink-2">{lv.mechanism}</p>
             <p className="eyebrow mt-2">看点</p><p className="text-ink-2">{lv.point}</p>
             <p className="mt-2 text-[12px] text-ink-3">没人玩的岗位和客户由导演代办，前情里标「模拟」。业务时间 {s.now.slice(5, 16).replace("T", " ")} · 第 {s.round} 局</p>
@@ -68,7 +80,7 @@ export function PlayBar() {
           <div className="flex flex-col border-t border-sep pt-2">
             {s.levels.map((x, i) => (
               <p key={x.id} className={`flex gap-2 py-0.5 ${i === s.level ? "font-semibold" : i < s.level ? "text-ink-2" : "text-ink-3"}`}>
-                <span className="w-4">{i < s.level || (i === s.level && s.passed) ? "✓" : i === s.level ? "›" : ""}</span>
+                <span className="w-4">{s.done.includes(x.id) ? "✓" : i === s.level ? "›" : ""}</span>
                 <span>{x.id}. {x.title}</span>{!x.ready && <span className="text-[11.5px] text-ink-3">（待接上）</span>}
               </p>
             ))}
