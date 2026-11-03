@@ -941,12 +941,16 @@ def play_tick(elapsed):
     api, d = session_api("default"), DIRECTOR
     if d.state["paused"]:
         return
-    api.advance(d.state["speed"] * elapsed)
+    # 一镜到底每拍推进固定的业务时间，不按墙上时间：彩排那一局写进录制缓存，现场重开同输入命中（V12.12）
+    api.advance(d.state["speed"] * (PLAY_TICK if d.state["oneshot"] else elapsed))
     api.tick()
+    act = next((x.get("act") for x in d.open()), None)
     for _ in range(1 if d.state["oneshot"] else 10):     # 一镜到底一拍只走一步，台下看得清每次交接
         if not d.step(set(trial_roles.values())):
             break
         api.tick()
+    if d.state["oneshot"] and act != next((x.get("act") for x in d.open()), act):
+        d.state["paused"] = True      # 一镜到底每幕走完停下，讲完点「继续」进下一幕（V12.12）
 
 
 def play_ticker():

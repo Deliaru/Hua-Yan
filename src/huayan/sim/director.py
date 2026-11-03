@@ -75,8 +75,9 @@ def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> 
 def fresh(round_: int = 1, speed: int = 60, real: bool = False, roadshow: bool = False, oneshot: bool = False) -> dict:
     """一局的进度：cases 每件事送来的会话，done 导演代办过的动作，acted 导演代谁做了什么（前情标「模拟」）；
     real 这一局的关卡用真实报告；roadshow 路演局：导演只扮演外部世界和事到你手上之前的那几步；
-    oneshot 一镜到底（V12.11）：导演按幕（关卡里的 act）一件一件推进，所有岗位都由导演做，主屏停在实况。"""
-    return {"round": round_, "speed": speed, "paused": False, "real": real, "roadshow": roadshow, "oneshot": oneshot,
+    oneshot 一镜到底（V12.11）：导演按幕（关卡里的 act）一件一件推进，所有岗位都由导演做，主屏停在实况；
+    开局先停着，每幕走完也停下（V12.12），讲完点「继续」。"""
+    return {"round": round_, "speed": speed, "paused": oneshot, "real": real, "roadshow": roadshow, "oneshot": oneshot,
             "cases": {}, "done": [], "passed": [], "seen": {}, "acted": []}
 
 
@@ -184,9 +185,9 @@ class Director:
     def _get(self, path: str, **params):
         return self.api().call("GET", path, params)
 
-    def _act(self, actor: str, path: str, **params):
-        result = self.api().call("POST", path, params | {"by": actor})
-        self.state["acted"].append({"ts": get_clock().now().isoformat(), "actor": actor, "path": path})
+    def _act(self, who: str, path: str, **params):       # who 不叫 actor：Agent 对话接口自己的参数就叫 actor
+        result = self.api().call("POST", path, params | {"by": who})
+        self.state["acted"].append({"ts": get_clock().now().isoformat(), "actor": who, "path": path})
         return result
 
     # 一件事 --------------------------------------------------------------------------------------
@@ -272,12 +273,13 @@ class Director:
         return sim.opening(cue) if said == 0 else sim.reply(f"{heard}\n{cue}")
 
     def _sim_customer(self, lv: dict, sid: str, customer: str) -> SimCustomer:
-        """台词说完以后觉还在追问：按这位客户心里的真值回答（没写的槽位按种子先验抽，随机数按局与会话定）。
+        """台词说完以后觉还在追问：按这位客户心里的真值回答（没写的槽位按种子先验抽，随机数按局与会话定，一镜到底不按局）。
         大模型模式下客户的每一句都由它说（网关同一个，计量记在 sim:customer 名下）。"""
         if sid not in self.customers:
             seeds = self.api().app.seeds
             phen = next(p for p in seeds.phenomena if p.id == lv["card"]["phenomenon"])
-            rng = random.Random(f"{self.state['round']}:{sid}")
+            # 一镜到底每局用同一个随机数：彩排那一局写进录制缓存，现场重开的一局同输入命中（V12.12）
+            rng = random.Random(f"{'oneshot' if self.state['oneshot'] else self.state['round']}:{sid}")
             slots = sample_slots(phen, seeds, rng, lv["card"]["slots"])
             card = NeedCard(id=f"level:{lv['id']}", phenomenon=phen.id, slots=slots, unknown_slots=[], opening_slots=[],
                             customer_id=customer, chem_savvy=False, wants_mechanism=False,
