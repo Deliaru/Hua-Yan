@@ -30,6 +30,11 @@ function Hit({ hit }: { hit: SourceHit }) {
       <button type="button" className="link" onClick={() => setImage(true)}>看原页</button>
     </div>
     <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[12.5px] text-ink-2">{transcribed ? hit.excerpt.split("\n").slice(1).join("\n") : hit.excerpt}</p>
+    {!!hit.queries && hit.queries.length > 1 && <p className="text-[12px] text-ink-2">{hit.queries.length} 种问法都找到了这一页</p>}
+    {!!hit.neighbors.length && <details className="mt-1 text-[12px] text-ink-2">
+      <summary className="cursor-pointer">前后页（续表、续段常在这里）</summary>
+      {hit.neighbors.map((n) => <p key={n.page} className="mt-1 line-clamp-2 whitespace-pre-wrap">第 {n.page} 页：{n.excerpt.replace(/^【模型转写[^】]*】\n/, "")}</p>)}
+    </details>}
     <div className="mt-1.5 flex flex-wrap items-center gap-2">
       <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="单独问原图，如：表 3-1 里 Zn²⁺ 那一行的 λmax"
         className="min-w-[260px] flex-1 rounded border border-line px-2 py-1 text-[12.5px]" />
@@ -52,7 +57,7 @@ export function LibrarySearch({ reqId }: { reqId: string }) {
   const [err, setErr] = useState<string | null>(null);
   const run = (q: string) => {
     setErr(null);
-    api.sourceSearch(q, me).then((data) => setResult({ query: q, data }), (e: Error) => setErr(e.message));
+    api.sourceSearch(q, me, reqId).then((data) => setResult({ query: q, data }), (e: Error) => setErr(e.message));
   };
   return <section className="rounded-xl border border-line bg-white p-5 text-[13px]">
     <h3 className="font-semibold">资料库检索</h3>
@@ -69,6 +74,8 @@ export function LibrarySearch({ reqId }: { reqId: string }) {
     {err && <p role="alert" className="mt-1 text-[12px] text-danger">{err}</p>}
     {result && <div className="mt-3">
       <p className="text-ink-2">「{result.query}」命中 {result.data.hits.length} 页，按关键词与语义两路名次融合排序{result.data.note && `；${result.data.note}`}</p>
+      {!!result.data.queries && result.data.queries.length > 1 && <p className="text-[12px] text-ink-2">
+        同时用本单的说法查了：{result.data.queries.slice(1).map((x) => `「${x}」`).join("、")}</p>}
       <ul className="mt-2 flex flex-col gap-2">{result.data.hits.map((h) => <Hit key={h.pointer} hit={h} />)}</ul>
     </div>}
   </section>;

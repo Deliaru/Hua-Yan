@@ -173,6 +173,42 @@
 - 命中页的相邻页（续表、续段）随命中一起给出，不再要求 Agent 自己想到去翻下一页；
 - 验证：V12.2 里落空的表格题（`v122-table`、`v122-ask2` 的问法）和 V11.13 的 5 句查询重跑，记目标页名次（失败也记）；方案推演在 TF-213HE 一条真实需求上跑通，看需求单上的方案与依据指针。
 
+**完成记录（2026-11-04）**
+
+- 做了什么：
+  - 读取侧 `library.py`：每条命中带前后页摘录（`neighbors`）；新增 `search_many`，几种问法各检索一次，再按名次做一次 RRF，每条命中写明被哪几种问法找到；
+  - 门面 `app.py`：`search_sources` 加可选 `req_id`，从需求单出发时，原句加上门面扩写的两句一起融合检索：一句是现象名、已知槽位取值和已填温度，一句是客户前两句原话；
+  - 门面新增 `trial_coverage`（读 V12.4 的 `coverage.json` 与 `hypotheses.json`，按委托人能读的资料筛，标「整批编译的读稿，未经研发确认」）、`save_plan_draft`（研发 Agent 起草，依据指针经 `_source_fragments` 核对，存 `run_dir/plan_drafts/<单号>.json`）、`plan_draft`、`adopt_plan`（只由人在界面上采用）；
+  - 工具：`trial_coverage`、`save_plan_draft`、`get_plan_draft`；`assistant_rd.md` 加两行，一行讲带单号检索与前后页，一行讲方案推演的顺序和规矩（失败的试样也要列，不外推成适用范围）；
+  - 服务端：`GET /api/plan`、`POST /api/plan/adopt`，`/api/sources/search` 透传 `req_id`；
+  - 前端：研发工作台新增 `PlanCard`，分「历史试样对照 / 可以迁移到本单的条件 / 不确定的参数与建议的验证试样」三块，页码指针点开看原页，人点「采用这个方案」；`LibrarySearch` 显示「N 种问法都找到了这一页」、前后页摘录和本单扩写的问法。
+- 改动文件：`src/huayan/ingest/reader/library.py`、`src/huayan/app.py`、`src/huayan/agent/tools.py`、`src/huayan/ui/server.py`、`prompts/assistant_rd.md`、`web/src/components/{PlanCard,LibrarySearch}.tsx`、`web/src/pages/Rd.tsx`、`web/src/{api,types}.ts`。
+- 方案推演真实运行（运行号 `v125-plan`，真实网关模型，资料库与 V12.4 编译产物）：
+  - 研发 Agent 在一张 TF-213HE 汽流缸色花需求单上依次调用 `get_requirement` → `get_session` → `trial_coverage(TF-213HE, color_unlevel)`，读了 6 份试样报告，最后 `save_plan_draft` 存成功；
+  - 方案内容：
+    - 对照表 7 行，含失败与好坏参半的；
+    - 可迁移条件：P2CQL20240202301、P2CQL2024012304 两份都是汽流染色机、133℃×30min、TF-213HE 2.5 kg；
+    - 失败的试样：trial-3942dbc4ae 减量后色花率 1/5；trial-fa320dba1c 高温型对中低温型 2B 兰没做好；
+    - 不确定项 8 条，依据指针 13 个；
+  - Agent 的最后一句回复是「步数用完」（8 步上限），方案在此之前已存好；
+  - 顺带看到 `pm:agent` 的 `propose_reuse` 传了 product="null"，被门面正常拒绝，与本包无关。
+- 检索回归（`data/scratch/v12ocr/regress_v125.py`，按标题和页码人工判读，不是金标）：
+  - 表格题，目标是上册 p220：
+    - 用户原问句单独检索，排第 1；
+    - `v122-table` 的两句单独检索都没有 p220；`v122-ask2` 那句单独检索排第 5；
+    - 四句融合后排第 8/10；
+    - 相邻页只在第一句里带出过 p220（命中是 p219 或 p221）；p218 的前后页是 p217 和 p219，不含 p220，续表跨两页时 ±1 页够不着；
+  - V11.13 的 5 句（R02），融合时加上 TF-213HE 需求单的两句扩写：
+    - 前三句是同主题，相关页名次持平或略好（第三句的首个相关从第 2 名提到第 1 名）；
+    - 后两句（牢度、TF-213Q 说明书）跟这张单不是一个主题，硬加扩写会把相关页挤下去（牢度从 [1,3,7,9,10] 降到 [4,9]，说明书从第 2 降到第 7）；
+    - 所以门面只用检索那张需求单自己的说法来扩写，不跨单。
+- 与计划的差异：计划写的「用契里已确认的术语 / 别名扩写」这次没做。原因是别名还没有确认入口（V12.4 遗留），要等 V12.9 的「动态别名」做完后再接进 `_need_queries`。
+- 离线 87 项通过，前端构建通过。
+- 遗留：
+  - Agent 的 8 步上限对方案推演偏紧，这次是刚好够用；
+  - 续表跨两页时 ±1 页够不着；
+  - 融合会稀释单句本来就查得准的情况（表格题原问句单独是第 1，融合后是第 8）。
+
 ### V12.6｜Client-View：替换现有客户工作面
 
 独立的客户端，手机外框呈现，与 CEO 面对称（一个在企业外，一个在企业顶层）。数据全部来自现有门面与客户层视图：

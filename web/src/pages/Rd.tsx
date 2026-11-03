@@ -12,6 +12,7 @@ import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, 
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 import { SourceTrial } from "../components/SourceTrial";
 import { LibrarySearch } from "../components/LibrarySearch";
+import { PlanCard } from "../components/PlanCard";
 import { Backstory } from "../components/Backstory";
 import { Narration, TimeBar } from "../components/Narration";
 
@@ -86,6 +87,7 @@ function RdDesk({ question, reqId, panel }: { question: Question | null; reqId: 
               <CandidateClaims key={reqId ?? ""} reqId={reqId} />
               <SourcePreparationCard reqId={view.requirement.id} />
               <LibrarySearch reqId={view.requirement.id} />
+              <PlanCard reqId={view.requirement.id} />
               <ReadinessCard reqId={view.requirement.id} />
               <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
               <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />

@@ -33,7 +33,7 @@ from huayan.ingest.compile import admit, propose, recheck
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource, OperationIR
 from huayan.ingest.reader.source import read_source, read_trial_record, read_source_image, readable_sources
-from huayan.ingest.reader.library import LibrarySource, search_library
+from huayan.ingest.reader.library import LibrarySource, search_library, search_many
 from huayan.ingest.reader.image import ask_image
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder, can_read
@@ -1469,10 +1469,71 @@ class HuayanApp:
         self.scan()
         return revised.model_copy(deep=True)
 
-    def search_sources(self, query, by, k=5):
-        """V11.13 原始资料检索：先按统一读取入口划出委托人能读的整份来源，只在这里面找；命中只是依据，不是结论。"""
+    def search_sources(self, query, by, k=5, req_id=None):
+        """V11.13 原始资料检索：先按统一读取入口划出委托人能读的整份来源，只在这里面找；命中只是依据，不是结论。
+        V12.5 给了需求单时，再用单上的现象与已知条件、客户原话各查一次并融合：说法不同也能落到同一页。"""
         actor = _find(self.actors, by, "主体")
-        return search_library(self.kb.sources, query, readable_sources(self.kb, actor, self.source_owners), k)
+        readable = readable_sources(self.kb, actor, self.source_owners)
+        if req_id is None:
+            return search_library(self.kb.sources, query, readable, k)
+        req, _ = self._requirement(req_id, by, {"pm", "rd"}, {"draft", "reused", "merged", "rd_accepted", "rd_confirmed", "released", "rejected"})
+        return search_many(self.kb.sources, [query, *self._need_queries(req)], readable, k)
+
+    def _need_queries(self, req):
+        """需求单的两种说法：专业的（现象、已知条件、温度）与客户原话（前两句）。"""
+        label = next(p.label for p in self.seeds.phenomena if p.id == req.phenomenon)
+        temps = [f"{t.celsius[0]:g}℃" for sid in req.session_ids
+                 for t in [self._sessions[sid].need.temperature] if t is not None and t.status == "filled"]
+        said = [x.text for sid in req.session_ids for x in self._sessions[sid].turns if x.speaker == "customer"][:2]
+        return [" ".join([label, *req.known_slots.values(), *temps]), " ".join(said)]
+
+    def trial_coverage(self, product, by, phenomenon=None):
+        """V12.5 跨报告的试样覆盖（V12.4 整批编译的读取侧产物）：委托人能读的试样里，这个产品试过哪些条件、结果怎样，
+        以及同产品可比条件下结果不同的研究假设。只是读稿，不是已确认结论。"""
+        actor = _find(self.actors, by, "主体")
+        readable = readable_sources(self.kb, actor, self.source_owners)
+        if not self.config.get("trial_coverage"):
+            raise ValueError("本实例没有配置试样覆盖（V12.4 整批编译的产物目录 trial_coverage）")
+        root = Path(self.config["trial_coverage"])
+        keep = lambda r: r["product"] == product and r["doc_id"] in readable and phenomenon in (None, r["phenomenon"])
+        rows = [r for r in json.loads((root / "coverage.json").read_text(encoding="utf-8")) if keep(r)]
+        hypotheses = [h | {"rows": [r for r in h["rows"] if r["doc_id"] in readable]}
+                      for h in json.loads((root / "hypotheses.json").read_text(encoding="utf-8"))
+                      if h["product"] == product and phenomenon in (None, h["phenomenon"])]
+        return {"rows": rows, "hypotheses": [h for h in hypotheses if len(h["rows"]) > 1], "read_by": "整批编译的读稿，未经研发确认"}
+
+    def save_plan_draft(self, req_id, evidence, comparison, transferable, open_items, by):
+        """V12.5 方案推演：从历史试样推一个值得验证的方案，存为本单准备材料。方案不是能力，不进客户侧，由接单研发采用或改写。"""
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft", "rd_accepted"})
+        if not evidence:
+            raise ValueError("方案要带依据指针")
+        self._source_fragments(evidence, by)
+        record = {"req_id": req.id, "evidence": list(evidence), "comparison": list(comparison), "transferable": list(transferable),
+                  "open_items": list(open_items), "by": f"agent:{by}" if self._agent_drafting else by,
+                  "at": get_clock().now().isoformat(), "adopted_by": None, "adopted_at": None}
+        self._write_plan(req, record)
+        return record
+
+    def plan_draft(self, req_id, by):
+        actor = self._actor(by, {"rd"})
+        req = _find(self._requirements, req_id, "需求单")
+        path = self.run_dir / "plan_drafts" / f"{req.id.replace(':', '_')}.json"
+        return json.loads(path.read_text(encoding="utf-8")) if actor.id == req.assigned_rd and path.exists() else None
+
+    def adopt_plan(self, req_id, by):
+        """接单研发采用 Agent 推出的方案（工作面签字，Agent 没有这个工具）；采用不改适用范围，也不算试样结果。"""
+        req, _ = self._requirement(req_id, by, {"rd"}, {"draft", "rd_accepted"})
+        record = self.plan_draft(req_id, by)
+        if record is None:
+            raise ValueError("本单还没有方案草稿")
+        record |= {"adopted_by": by, "adopted_at": get_clock().now().isoformat()}
+        self._write_plan(req, record)
+        return record
+
+    def _write_plan(self, req, record):
+        path = self.run_dir / "plan_drafts"
+        path.mkdir(exist_ok=True)
+        (path / f"{req.id.replace(':', '_')}.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
 
     def read_source(self, doc_id, by, span=None):
         """内部查证只返回原文与出处键，不产生结论、能力或专业签字。"""

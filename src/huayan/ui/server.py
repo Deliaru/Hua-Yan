@@ -289,7 +289,8 @@ GET = {
     "/api/sources/read": lambda app, p: app.read_source(p["doc_id"], p["viewer"], p.get("span")),
     "/api/sources/trial": lambda app, p: app.read_trial_record(p["doc_id"], p["viewer"]),
     "/api/sources/image": lambda app, p: app.read_source_image(p["doc_id"], int(p["page"]), p["viewer"], p.get("span")),
-    "/api/sources/search": lambda app, p: app.search_sources(p["query"], p["viewer"], int(p.get("k", 5))),   # V12.3
+    "/api/sources/search": lambda app, p: app.search_sources(p["query"], p["viewer"], int(p.get("k", 5)), p.get("req_id")),   # V12.3
+    "/api/plan": lambda app, p: app.plan_draft(p["req_id"], p["viewer"]),                                                   # V12.5
     "/api/capabilities": lambda app, p: app.capabilities(p["viewer"]),
     "/api/claims": lambda app, p: app.candidate_claims(p.get("req_id"), p["viewer"]),
     "/api/demo/ledger": demo_ledger,
@@ -329,6 +330,7 @@ GET = {
                                        "sessions": len(app._sessions)},   # 开新会话不记事件，单独数
 }
 POST = {
+    "/api/plan/adopt": lambda app, p: app.adopt_plan(p["req_id"], p["by"]),
     "/api/sources/ask-image": lambda app, p: app.ask_source_image(p["doc_id"], int(p["page"]), p["question"], p["by"]),
     "/api/source-preparation/compile": lambda app, p: app.compile_source_preparation(p["req_id"], p["doc_id"], p["by"]),
     "/api/source-preparation": lambda app, p: app.save_source_preparation(

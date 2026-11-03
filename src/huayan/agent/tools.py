@@ -109,15 +109,50 @@ DOC_ID = "已登记的资料来源编号（如报告编号P2CQL2024012304），�
 
 class SourceSearchArgs(BaseModel):
     query: str = Field(description="用需求里的现象、产品、设备、纤维、工艺条件写一句话；可换几种说法多查几次")
+    req_id: str | None = Field(None, description="为某张需求单找资料时填它的编号：门面会再用单上的现象、已知条件和客户原话各查一次并融合；问题引用里没有需求单就不填")
 
 
 @tool("search_sources", "read", ["sales", "pm", "rd"],
       "在委托人有权读的原始资料（试样报告、实验报告、说明书、MSDS、培训课件、书籍与标准）里找相关的页；不知道来源编号时先用它。"
       "返回来源编号、标题、页、摘录、两种方法（semantic 语义 / keyword 关键词）各自的名次与相关度、融合后的顺序以及依据指针 pointer；"
       "扫描页的文字是模型转写，摘录开头有标注，要引用的数值先用 ask_source_image 逐格核对；"
+      "每条命中带前后页摘录 neighbors（续表、续段常在下一页）；"
       "命中只是线索，要用 read_source 读原文核对，pointer 可直接存进 save_source_preparation。", SourceSearchArgs)
 def search_sources(ctx: ToolContext, args: SourceSearchArgs) -> ToolResult:
-    return ToolResult(data=ctx.app.search_sources(args.query, ctx.principal.id))
+    return ToolResult(data=ctx.app.search_sources(args.query, ctx.principal.id, req_id=args.req_id))
+
+
+class CoverageArgs(BaseModel):
+    product: str = Field(description="产品型号，如 TF-213HE")
+    phenomenon: str | None = Field(None, description="现象 id，如 color_unlevel；不填就看这个产品的全部试样")
+
+
+@tool("trial_coverage", "read", ["rd"],
+      "看委托人有权读的全部试样报告里，这个产品试过哪些条件（面料、设备、温度）、结果怎样（通过、失败、有好有坏），每条带依据指针；"
+      "另给同产品可比条件下结果不同的研究假设（如可能与温度有关）。这是整批编译的读稿，引用前用 read_source 读原文核对。", CoverageArgs)
+def trial_coverage(ctx: ToolContext, args: CoverageArgs) -> ToolResult:
+    return ToolResult(data=ctx.app.trial_coverage(args.product, ctx.principal.id, args.phenomenon))
+
+
+class PlanArgs(BaseModel):
+    req_id: str
+    evidence: list[str] = Field(description="方案用到的依据指针 doc_id#span@fingerprint（读过原文核对后），不能填原文或摘要")
+    comparison: list[str] = Field(description="历史试样对照：每行一份试样，写面料、设备、温度、工艺用量、结果原句和它的指针")
+    transferable: list[str] = Field(description="可以迁移到本单的条件，以及为什么可以（与本单条件一致或更严）")
+    open_items: list[str] = Field(description="不确定的参数和建议的验证试样，每条写「不确定什么 → 建议怎么试」")
+
+
+@tool("save_plan_draft", "draft", ["rd"],
+      "把从历史试样推出的候选方案存进本单准备材料：对照、可迁移条件、不确定参数与建议试样，各带依据。"
+      "方案只是草稿，不是能力，不进客户侧；由接单研发在工作面采用或改写，保存会替换本单旧方案。", PlanArgs)
+def save_plan_draft(ctx: ToolContext, args: PlanArgs) -> ToolResult:
+    return ToolResult(data=ctx.app.save_plan_draft(args.req_id, args.evidence, args.comparison, args.transferable,
+                                                   args.open_items, ctx.principal.id))
+
+
+@tool("get_plan_draft", "read", ["rd"], "读取本单已保存的候选方案，继续修改前先读。", ReqId)
+def get_plan_draft(ctx: ToolContext, args: ReqId) -> ToolResult:
+    return ToolResult(data=ctx.app.plan_draft(args.req_id, ctx.principal.id))
 
 
 class SourceArgs(BaseModel):

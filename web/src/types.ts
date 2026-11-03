@@ -393,8 +393,14 @@ export interface PlaySettle {
 export interface SourceHit {
   pointer: string; doc_id: string; title: string; page: number; excerpt: string; level: number;
   method: string; semantic: number | null; semantic_rank: number | null; keyword: number | null; keyword_rank: number | null;
+  neighbors: { page: number; excerpt: string }[]; queries?: string[];
 }
-export interface SourceSearch { hits: SourceHit[]; note: string | null }
+export interface SourceSearch { hits: SourceHit[]; note: string | null; queries?: string[] }
+// V12.5 方案推演：研发 Agent 从历史试样推出的候选方案（本单准备材料，不是能力）
+export interface PlanDraft {
+  req_id: string; evidence: string[]; comparison: string[]; transferable: string[]; open_items: string[];
+  by: string; at: string; adopted_by: string | null; adopted_at: string | null;
+}
 export interface SourceImageAnswer { doc_id: string; page: number; question: string; answer: string; read_by: string; image_fingerprint: string }
 export interface AgentStep {
   conversation_id: string; step: number; principal: string; tool: string | null; args: Record<string, unknown>;

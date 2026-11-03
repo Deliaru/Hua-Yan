@@ -122,9 +122,26 @@ def search_library(sources, query, readable, k=5):
     out = []
     for (doc_id, span), h in sorted(hits.items(), key=lambda x: -x[1]["rrf"]):
         f = h["source"].fetch(doc_id, span)
+        page, pages = int(span[1:]), h["source"].pages(doc_id)
         out.append({"pointer": f"{doc_id}#{span}@{f.fingerprint}", "doc_id": doc_id, "title": h["source"].docs[doc_id]["title"],
-                    "page": int(span[1:]), "excerpt": f.text[:240], "level": f.level,
+                    "page": page, "excerpt": f.text[:240], "level": f.level,
+                    # V12.5 前后页（续表、续段）随命中给出，读的人不用自己想到去翻
+                    "neighbors": [{"page": n, "excerpt": pages[n - 1][:160]} for n in (page - 1, page + 1) if 1 <= n <= len(pages)],
                     "method": "+".join(m for m in ("semantic", "keyword") if m in h),
                     "semantic": h.get("semantic"), "semantic_rank": h.get("semantic_rank"),
                     "keyword": h.get("keyword"), "keyword_rank": h.get("keyword_rank")})
     return {"hits": out, "note": note}
+
+
+def search_many(sources, queries, readable, k=5):
+    """V12.5 同一件需求换几种问法各检索一次，按每种问法里的名次再做一次 RRF；每条命中写明被哪几种问法找到。"""
+    fused, notes = {}, set()
+    for query in dict.fromkeys(q for q in queries if q.strip()):
+        result = search_library(sources, query, readable, k)
+        notes |= {result["note"]} - {None}
+        for rank, hit in enumerate(result["hits"], 1):
+            h = fused.setdefault(hit["pointer"], hit | {"queries": [], "fused": 0.0})
+            h["queries"].append(query)
+            h["fused"] += 1 / (60 + rank)
+    hits = sorted(fused.values(), key=lambda h: -h["fused"])[:2 * k]
+    return {"hits": hits, "queries": list(dict.fromkeys(q for q in queries if q.strip())), "note": "；".join(sorted(notes)) or None}
