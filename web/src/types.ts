@@ -40,6 +40,7 @@ export interface Meta {
   phenomena: { id: string; label: string }[];
   products: { id: string; name: string }[];
   trial?: { actor: string | null };
+  play?: boolean;                    // V11.5 游戏模式（--play）
   jue?: { realtime: string; scheduled: string; cells: string[] };   // V9.6：实际加载的觉模型与学习格   // V9.1 试用实例：本浏览器选定的身份（服务端记住，读写都以它为主体）
 }
 
@@ -350,4 +351,11 @@ export interface MonthQi {
 export interface FrozenActor {
   actor_id: string; name: string; frozen_at: string; frozen_by: string;
   evidence: string[]; n_denied: number; customers: string[];
+}
+
+// V11.5 游戏模式：导演的进度（sim/director.py 的 view）
+export interface PlayLevel { id: number; title: string; brief: string; to: string; decide: string; mechanism: string; point: string; ready: boolean }
+export interface PlayState {
+  levels: PlayLevel[]; level: number; round: number; speed: number; paused: boolean; passed: boolean;
+  cases: string[]; acted: { ts: string; actor: string; path: string }[]; error: string | null; now: string;
 }

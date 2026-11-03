@@ -5,6 +5,7 @@ import { api } from "../api";
 import { useApp, useData, useLabels } from "../ctx";
 import type { StoryLine } from "../types";
 import { Group } from "./ui";
+import { usePlay } from "./Play";
 
 const ROLE: Record<string, string> = { customer: "客户", sales: "业务员", pm: "产品经理", rd: "研发", supervisor: "负责人" };
 const SUBJECT: Record<string, string> = { jue: "觉", jev: "Jev", qi: "契", system: "系统" };
@@ -18,13 +19,15 @@ export function Backstory({ id, title = "前情" }: { id: string; title?: string
   const L = useLabels();
   const data = useData(() => api.caseStory(id, me), [id, me]);
   const [open, setOpen] = useState(false);
+  const play = usePlay();   // V11.5 游戏模式：导演代办的行标「模拟」（同一人、同一分钟）
+  const simulated = (x: StoryLine) => !!play?.acted.some((a) => a.actor === x.who && a.ts.slice(0, 16) === x.ts.slice(0, 16));
   if (!data || !data.story.length) return null;
   const { story, waiting } = data;
   const first = story[0];
   // 收起时：第一句（通常是客户原话）+ 最近几步
   const shown = open || story.length <= RECENT + 1 ? story : [first, ...story.slice(-RECENT)];
   const hidden = story.length - shown.length;
-  const agentName = (who: string) => (who === "pm:agent" ? "产品经理 Agent" : `${L.name(who)}的 Agent`);
+  const agentName = (who: string) => (who === "huayan" ? "化言" : who === "pm:agent" ? "产品经理 Agent" : `${L.name(who)}的 Agent`);
   const label = (x: StoryLine) =>
     x.subject === "human" ? <><span className="tag shrink-0">{ROLE[x.role ?? ""] ?? "人"}</span><span className="shrink-0 font-semibold">{L.name(x.who)}</span></>
       : x.subject === "agent" ? <span className="tag tag-agent shrink-0">{agentName(x.who)}</span>
@@ -39,7 +42,7 @@ export function Backstory({ id, title = "前情" }: { id: string; title?: string
           <div className={`row !min-h-0 !items-baseline !py-2 text-[13px] leading-5 ${PROCESS.has(x.kind) ? "text-ink-3" : ""}`}>
             <span className="num w-[78px] shrink-0 text-[11.5px] text-ink-3">{when(x.ts, first.ts)}</span>
             <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              {label(x)}<span className="min-w-0">{L.scrub(x.text)}</span>
+              {label(x)}{simulated(x) && <span className="tag tag-warn shrink-0 !font-normal">模拟</span>}<span className="min-w-0">{L.scrub(x.text)}</span>
             </span>
           </div>
         </div>

@@ -13,7 +13,7 @@ const CROSS = ["#e08a2b", "#c7a25a"];
 const ROLE: Record<string, string> = { sales: "业务员", pm: "产品经理", rd: "研发" };
 const OWN_GOAL: Record<string, string> = { sales: "销售额、回款率、新客户数", pm: "产品线利润、新品上市数量", rd: "新品转化率、专利数、配方稳定性" };
 const SEGMENT: Record<string, string> = { "sales.pm": "做产品经理的事", "pm.sales": "被业务员交叉占用", "pm.rd": "被研发交叉占用", "rd.pm": "做产品经理的事" };
-const ANSWER = new Set(["ask_hint", "recommend", "escalate", "sales_assigned"]);   // 客户收到的第一个回应
+const ANSWER = new Set(["turn", "recommend", "escalate", "sales_assigned"]);   // 客户收到的第一个回应：化言或业务员开口、推荐、转交
 
 const Src = ({ s }: { s: string }) => (
   <span className={`tag !h-[18px] !px-1.5 !text-[11px] !font-normal ${s === "假设" ? "tag-warn" : s === "推算" ? "" : "tag-accent"}`}>{s}</span>
@@ -30,7 +30,7 @@ export function Narration({ id }: { id: string }) {
   const est = useData(() => api.oldFlow(id, me), [id, me]);
   const data = useData(() => api.caseStory(id, me), [id, me]);
   if (!notes || !est || !data?.story.length) return null;
-  const trial = !!meta.trial;
+  const trial = !!meta.trial && !meta.play;   // 真实试用；游戏模式照常讲
   const { old } = est;
   const story = data.story;
   const first = story[0].ts, last = story[story.length - 1].ts;
@@ -39,7 +39,7 @@ export function Narration({ id }: { id: string }) {
   const saved = (x: (typeof freed)[number]) => Math.round(x.minutes - (x.now_minutes ?? 0));
   const savedMin = freed.reduce((n, x) => n + saved(x), 0);
   const bypassed = old.roles.filter((r) => !est.now.roles.includes(r));
-  const reply = story.find((x: StoryLine) => ANSWER.has(x.kind) || (x.kind === "turn" && x.role === "sales"));
+  const reply = story.find((x: StoryLine) => ANSWER.has(x.kind) && !(x.kind === "turn" && x.role === "customer"));
   return (
     <Group title="旁白" foot={assumed ? `旧流程按参数推算；其中 ${est.assumed.length} 项参数传化还没给，用的是假设值。` : "旧流程按传化给的参数推算。"}>
       <div className="flex flex-col gap-3 px-4 py-3.5">
@@ -97,7 +97,7 @@ function Value({ mark, label, color, children }: { mark: string; label: string; 
 // 个人时间构成：现状（传化研发估计，标假设）→ 这一局（推算）。点开看每一段的算式
 export function TimeBar() {
   const { me, meta, notes } = useApp();
-  const trial = !!meta.trial;
+  const trial = !!meta.trial && !meta.play;   // 真实试用；游戏模式照常讲
   const role = me.split(":")[0];
   const bar = useData(() => (ROLE[role] ? api.timeBar(me) : Promise.resolve(null)), [me]);
   const [open, setOpen] = useState(false);

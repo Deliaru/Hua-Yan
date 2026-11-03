@@ -3,7 +3,7 @@
 import type {
   Capability, Claim, Conversation, ContributionStat, MemoryEntry, JueTimeline, LeakHit, Meta, PendingAction, Question, ReqItem, RequirementSummary,
   RequirementView, RunMode, SessionSummary, SessionView, SheetDraft, NextAction, Activity, AgentRun, SourcePreparation, SourcePreparationStatus, AuthorizedSourceReply,
-  Route, CaseStory, OldFlow, TimeBar, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage,
+  Route, CaseStory, OldFlow, TimeBar, PlayState, Readiness, SessionReadiness, Workload, DemoRoute, StoryState, LedgerItem, MonthDay, MonthProgress, FrozenActor, SourceTrialRecord, SourceImage,
 } from "./types";
 
 // 会话隔离：每个浏览器一个会话号，后端为它单独维护一套演示进度（多人同时试用互不干扰）；存 localStorage，刷新不丢进度
@@ -56,6 +56,11 @@ export const api = {
   progress: (viewer: string) => call<Activity | null>(`progress?${q({ viewer })}`),
   agentFailures: (viewer: string) => call<Record<string, { at: string; error: string }>>(`agents/failures?${q({ viewer })}`),
   agentRetry: (question_id: string, by: string) => call<{ question_id: string }>("agents/retry", { question_id, by }),
+  // V11.5 游戏模式：关卡进度与控制
+  playState: () => call<PlayState>("play/state"),
+  playControl: (p: { paused?: boolean; speed?: number }) => call<PlayState>("play/control", p),
+  playNext: () => call<PlayState>("play/next", {}),
+  playRestart: () => call<PlayState>("play/restart", {}),
   trialStamp: () => call<{ events: number; failures: number; sessions: number }>("trial/stamp"),
   agentProcess: (conversation_id: string, viewer: string) => call<Record<string, AgentRun>>(`agents/process?${q({ conversation_id, viewer })}`),
 

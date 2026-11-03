@@ -2129,6 +2129,8 @@ class HuayanApp:
             if e.kind == "turn":
                 if p["speaker"] == "customer":
                     return "human", "customer", session.customer_id, f"说：「{p['text']}」"
+                if p["speaker"] == "assistant":      # 客户自助页上的化言
+                    return "agent", None, "huayan", f"对客户说：「{p['text']}」"
                 return "human", "sales", session.sales_id, f"对客户说：「{p['text']}」"
             if e.kind == "ask_hint" and p["slots"]:
                 return "jue", None, "jue", f"判断还缺{slots(p['slots'])}，需要向客户问清"

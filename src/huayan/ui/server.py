@@ -35,6 +35,7 @@ from huayan.jev.system1 import OneJevClient
 from huayan.agent.hub import MODEL_ERRORS
 from huayan.sim.schedule import Gate
 from huayan.eval import old_flow
+from huayan.sim import director
 
 CONFIG = os.environ.get("HUAYAN_CONFIG", "config/app.yaml")
 PORT = int(os.environ.get("HUAYAN_PORT", "8766"))
@@ -47,6 +48,9 @@ REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week", "v6_routes")   
 
 RESUME = None      # 命令行 --run <id> --resume：默认会话续跑该运行
 TRIAL = None       # 命令行 --trial <id>：试用实例的运行号（V9.1）
+PLAY = None        # 命令行 --play <id>：游戏模式（V11.5）。沿用试用实例的共享门面与角色会话，时钟换成可控的 SimClock
+DIRECTOR = None    # 游戏模式的导演（sim/director.py）；每局一个运行目录 <id>-r<局号>
+PLAY_TICK = 3      # 游戏模式后台每几秒看一眼：推进时钟、觉检查、导演代办
 TICK_SECONDS = int(os.environ.get("HUAYAN_TICK_SECONDS", "60"))   # 试用实例里觉按真实时间周期检查（扫描本身每 30 分钟一次）
 MAX_SESSIONS = int(os.environ.get("HUAYAN_MAX_SESSIONS", "30"))   # 超出时淘汰最久未用的会话
 
@@ -472,10 +476,13 @@ class Api:
     def build(self, resume=None):
         """resume：续跑已有运行（--run <id> --resume），业务时间接着最后一条事件。试用实例用真实时间，运行目录已有就续跑。"""
         if TRIAL:
-            self.clock = WallClock()
+            run = f"{PLAY}-r{DIRECTOR.state['round']}" if PLAY else TRIAL
+            self.clock = SimClock(T0) if PLAY else WallClock()
             use_clock(self.clock)
             run_root = Path(yaml.safe_load(Path(self.config_path).read_text(encoding="utf-8"))["run_root"])
-            self.app, self.writes = HuayanApp.build(self.config_path, run_id=TRIAL, resume=(run_root / TRIAL).exists()), 0
+            self.app, self.writes = HuayanApp.build(self.config_path, run_id=run, resume=(run_root / run).exists()), 0
+            if PLAY and self.app.events.events:
+                self.clock.advance_to(self.app.events.events[-1].ts)
         else:
             self.clock = SimClock(T0)
             use_clock(self.clock)
@@ -679,7 +686,7 @@ class Api:
         if method == "GET":
             return route(self.app, params)
         before = self.clock.now()
-        if not TRIAL:                   # 试用实例是真实时间，不推进
+        if not TRIAL or PLAY:           # 试用实例是真实时间，不推进
             self.clock.advance_to(before + timedelta(minutes=1))
         activity = self.activity = self.current.activity = Activity(path, params.get("by"))
         if activity.by:
@@ -689,7 +696,7 @@ class Api:
                 result = route(self.app, params)
             except (PermissionDenied, ValueError, KeyError, StopIteration):
                 # 被门面拒绝的写操作不占业务时间：误点不会让回放台词的时刻错位
-                if not TRIAL:
+                if not TRIAL or PLAY:
                     self.clock = SimClock(before)
                     use_clock(self.clock)
                 raise
@@ -718,6 +725,12 @@ class Api:
             status = self.app.switch_models(**changes)
             self.attach(self.app)
             return {"status": status, "mode": self.mode()}
+
+    def advance(self, seconds):
+        """游戏模式：业务时间往前走（倍速 × 真实经过的秒数）。"""
+        with self.lock:
+            use_clock(self.clock)
+            self.clock.advance_to(self.clock.now() + timedelta(seconds=seconds))
 
     def tick(self):
         """试用实例的后台周期：觉按真实时间检查到点的扫描，并派发待准备的问题。"""
@@ -813,6 +826,73 @@ def trial_params(sid, method, path, params):
 WAKE = Event()       # 写操作或重跑之后叫醒后台，不用等满一个周期
 
 
+def play_tick(elapsed):
+    """游戏模式的一拍：没暂停时按倍速推进业务时间，觉检查、Agent 准备，导演替缺席的客户与岗位做该做的事。"""
+    api, d = session_api("default"), DIRECTOR
+    if d.state["paused"]:
+        return
+    api.advance(d.state["speed"] * elapsed)
+    api.tick()
+    for _ in range(10):
+        if not d.step(set(trial_roles.values())):
+            break
+        api.tick()
+
+
+def play_ticker():
+    last = time.monotonic()
+    while True:
+        WAKE.wait(PLAY_TICK)
+        WAKE.clear()
+        now = time.monotonic()
+        try:
+            with play_lock:
+                play_tick(now - last)
+            DIRECTOR.error = None
+        except Exception as e:          # 导演这一拍没做成：记下来给界面看，下一拍再试
+            DIRECTOR.error = f"{type(e).__name__}: {e}"
+            traceback.print_exc()
+        last = now
+
+
+play_lock = Lock()
+
+
+def play_restart(_):
+    """重开本关：开新的一局（新的运行目录），前面几关全部由导演代办补上，停在这一关开头。"""
+    d, level = DIRECTOR, DIRECTOR.state["level"]
+    d.state = director.fresh(round_=d.state["round"] + 1, speed=d.state["speed"])
+    d.customers = {}
+    api = session_api("default", rebuild=True)
+    _roles_path().write_text(json.dumps(trial_roles, ensure_ascii=False, indent=1), encoding="utf-8")
+    d.play_through(level, api.tick)
+    return d.view()
+
+
+def play_control(p):
+    """暂停 / 继续、倍速（业务时间每真实一秒走几秒）。"""
+    if "paused" in p:
+        DIRECTOR.state["paused"] = bool(p["paused"])
+    if "speed" in p:
+        DIRECTOR.state["speed"] = int(p["speed"])
+    DIRECTOR.save()
+    return DIRECTOR.view()
+
+
+def play_next(_):
+    DIRECTOR.next_level()
+    WAKE.set()
+    return DIRECTOR.view()
+
+
+PLAY_API = {
+    "/api/play/state": lambda p: DIRECTOR.view() | {"now": session_api("default").clock.now().isoformat()},
+    "/api/play/control": play_control,
+    "/api/play/next": play_next,
+    "/api/play/restart": play_restart,
+}
+
+
 def trial_ticker():
     while True:
         WAKE.wait(TICK_SECONDS)
@@ -838,9 +918,12 @@ class Handler(SimpleHTTPRequestHandler):
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
             sid = self.headers.get("X-Huayan-Session", "default")
-            if TRIAL and url.path not in MONTH and not url.path.startswith("/api/trial/"):
+            if TRIAL and url.path not in MONTH and not url.path.startswith(("/api/trial/", "/api/play/")):
                 params = trial_params(sid, method, url.path, params)
-            if TRIAL and url.path == "/api/trial/stamp":         # 界面轮询有没有别人的变化，不排会话锁
+            if PLAY and url.path in PLAY_API:            # 游戏的进度与控制：谁都能点，和导演这一拍排队
+                with play_lock:
+                    result = PLAY_API[url.path](params)
+            elif TRIAL and url.path == "/api/trial/stamp":         # 界面轮询有没有别人的变化，不排会话锁
                 result = GET[url.path](session_api(sid).app, params)
             elif TRIAL and url.path == "/api/trial/role":
                 result = set_trial_role(sid, params)
@@ -860,7 +943,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if TRIAL and url.path == "/api/agents/retry":
                     WAKE.set()
             if TRIAL and url.path == "/api/meta":
-                result = dump(result) | {"trial": {"actor": trial_roles.get(sid)}}
+                result = dump(result) | {"trial": {"actor": trial_roles.get(sid)}, "play": bool(PLAY)}
             status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
@@ -1010,6 +1093,8 @@ if __name__ == "__main__":
     ap.add_argument("--run", help="运行目录名（runs/ 下）；与 --resume 一起用")
     ap.add_argument("--resume", action="store_true", help="在 --run 指定的运行上续跑：默认会话读回事件、问题、知识与需求单")
     ap.add_argument("--trial", help="试用实例的运行号：全部浏览器共用一份业务，运行目录已有就续跑（V9.1）")
+    ap.add_argument("--play", help="游戏模式的局名（V11.5）：导演按 demo/levels.yaml 送来关卡，缺席的岗位由导演代办；"
+                                   "大家共用一局，身份同试用实例；每重开一关是新的一局")
     ap.add_argument("--config", help="应用配置（默认 HUAYAN_CONFIG 或 config/app.yaml）")
     ap.add_argument("--host", default="127.0.0.1", help="监听地址；试用时让同一网络里的人访问可设 0.0.0.0")
     args = ap.parse_args()
@@ -1019,8 +1104,14 @@ if __name__ == "__main__":
         ap.error("--trial 自带续跑，不和 --run 一起用")
     if args.trial and not re.fullmatch(r"[\w-]+", args.trial):
         ap.error("--trial 运行号只用字母、数字、下划线和短横线")
+    if args.play and (args.trial or args.run or not re.fullmatch(r"[\w-]+", args.play)):
+        ap.error("--play 局名只用字母、数字、下划线和短横线，不和 --trial、--run 一起用")
     CONFIG = args.config or CONFIG
-    RESUME, TRIAL = args.run, args.trial
+    RESUME, TRIAL, PLAY = args.run, args.trial or args.play, args.play
+    if PLAY:
+        run_root = Path(yaml.safe_load(Path(CONFIG).read_text(encoding="utf-8"))["run_root"])
+        run_root.mkdir(parents=True, exist_ok=True)
+        DIRECTOR = director.Director(lambda: session_api("default"), run_root / f"{PLAY}.play.json")
     session_api("default")   # 先构建一次：Jue-K 模型等首次加载较慢
     # V11.0：试用机拉了新代码却没重新构建前端时，浏览器里还是旧界面；启动时提醒一次
     built = (DIST / "index.html").stat().st_mtime if (DIST / "index.html").exists() else 0
@@ -1028,7 +1119,7 @@ if __name__ == "__main__":
         print("注意：web/dist 不存在或比 web/src 旧，浏览器看到的不是当前界面；先运行 npm --prefix web run build")
     if TRIAL:
         load_trial_roles()
-        Thread(target=trial_ticker, daemon=True).start()
+        Thread(target=play_ticker if PLAY else trial_ticker, daemon=True).start()
         app = session_api("default").app
         print(f"化言试用实例：http://{args.host}:{PORT}（运行 {app.run_dir}，{len(app.sessions())} 个会话、"
               f"{len(app._requirements)} 张需求单，已登记身份 {len(trial_roles)} 个）")

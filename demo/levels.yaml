@@ -1,0 +1,98 @@
+# V11 九关的骨架（REPLAN-v11 第 3 节）。只给导演（src/huayan/sim/director.py）读，业务代码不读。
+# 每关：
+#   brief 导演送来什么 · to 到谁的工作面 · decide 玩家要做的决定 · mechanism 触达的机制 · point 旁白要点
+#   customer 送来这件事的客户；card 这位客户心里的真值（只给模拟客户，phenomenon 与已知槽位，其余槽位按种子先验抽）
+#   lines 模板模式下客户依次说的话：第一句是开场，之后每当化言或业务员说了话、或推荐卡出现，就说下一句；
+#         说完以后只在觉还在追问时由模拟客户按真值回答
+#   do 缺席岗位的模板解法：as 哪个角色（sales 会话的业务员 / rd 需求单的指派研发 / pm 产品经理），
+#      say 业务员对客户说 · decline 研发不立项（product 已有产品适用，reason 原因） · accept 研发接单
+#   pass 通关条件：这件事的前情里出现其中任一种事件（kind 或 kind:role）
+# 没有 lines 的关还没接上导演（V11.6、V11.7）。
+levels:
+  - id: 1
+    title: 常规问题客户自助
+    brief: 印染厂 A 只说现象，没说面料和设备
+    to: customer
+    decide: 回答化言的两个追问
+    mechanism: 觉追问、契匹配、推荐卡
+    point: 业务员、产品经理、研发都没被打断
+    customer: customer:C01
+    card: {phenomenon: color_unlevel, slots: {fiber: 锦纶氨纶, equipment: 溢流染色机}}
+    lines: ["深一块浅一块", "锦氨的，溢流缸"]
+    pass: [recommend]
+
+  - id: 2
+    title: 商务诉求交业务员
+    brief: 印染厂 B 拿到推荐后要报价
+    to: sales
+    decide: 报价
+    mechanism: 觉判商务诉求、交归属业务员
+    point: 不用重新采集需求，接手就是报价
+    customer: customer:C02
+    card: {phenomenon: color_unlevel, slots: {fiber: 锦纶氨纶, equipment: 溢流染色机}}
+    lines: ["深一块浅一块", "锦氨的，溢流缸", "这个产品想要个报价"]
+    do:
+      - {as: sales, say: "您好，刚才推荐的匀染剂按 25 公斤一桶报价，明天把正式报价单发您。"}
+    pass: ["turn:sales"]
+
+  - id: 3
+    title: 新问题直达研发
+    brief: 印染厂 C 的白地沾色，现有产品都不适用
+    to: rd
+    decide: 接单，或判断已有产品适用、不立项
+    mechanism: 匹配失败、Jev、觉升级、准备缺口
+    point: 研发拿到原话和已问清的条件，不用回头补问
+    customer: customer:C03
+    card: {phenomenon: bleeding_staining, slots: {fiber: 锦纶, dye_class: 酸性染料, process: 浸染}}
+    lines: ["白地被沾色了", "锦纶的布，尼龙用的那种料，酸性染料，缸里浸染的"]
+    do:
+      - {as: rd, decline: {product: HY-FX350, reason: 已有产品可覆盖：锦纶固色剂适用于锦纶酸性染料的白地沾色}}
+    pass: [requirement_accepted, project_declined]
+
+  - id: 4
+    title: 研发判断真实报告并授予
+    brief: 一份检测报告与它编译出的候选结论
+    to: rd
+    decide: 确认哪几条、按什么条件授予
+    mechanism: 读取、编译、确认、授予
+    point: 研发判一次，组织记住，范围和条件都写清
+
+  - id: 5
+    title: 同条件下一单复用
+    brief: 与第 4 关条件相同的新客户
+    to: customer
+    decide: 无需研发介入
+    mechanism: 能力使用
+    point: 研发签过的判断替他回答了这一单
+
+  - id: 6
+    title: 条件不符回研发
+    brief: 相似现象，但温度或设备超出授予条件
+    to: rd
+    decide: 判断是否扩范围
+    mechanism: 条件检查、能力停用、升级
+    point: 效率不是靠放松把关换来的
+
+  - id: 7
+    title: 试样失败回问
+    brief: 一个在旧流程里会丢的条件，导致试样失败
+    to: rd
+    decide: 录试样；对照旧流程会返工几轮
+    mechanism: 世界规律、试样、回问
+    point: 条件问清了，试样不再白做
+
+  - id: 8
+    title: 产品机会
+    brief: 几张短平快需求指向同一类现象
+    to: pm
+    decide: 签产品机会，附商业判断
+    mechanism: 觉合并、产品经理签字
+    point: 零散的短平快汇成课题，研发有精力做中长期
+
+  - id: 9
+    title: 报告改版复核
+    brief: 第 4 关报告的来源改版
+    to: rd
+    decide: 复核受影响的结论，保留或撤销
+    mechanism: 来源指纹、复核、撤销后改道
+    point: 来源变了，用过它的能力立刻停下等人复核

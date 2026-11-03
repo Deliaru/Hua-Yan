@@ -5,6 +5,7 @@
 // V6-5.5「演示讲解」：左侧导航换成讲解栏（components/Demo.tsx），中、右两栏仍是真实工作面。
 // V9.1 试用实例（meta.trial）：进入先选身份，之后身份固定（服务端以它为主体），只显示这个身份的工作面；不出现讲解与重置。
 import { useEffect, useState } from "react";
+import { PlayBar } from "./components/Play";
 import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
 import type { Meta, Role, RunMode, RunStatus } from "./types";
@@ -148,12 +149,12 @@ export default function App() {
         <div className="w-[200px]"><Logo /></div>
         <ActivityMenu />
         {/* 导览占中间的剩余空间居中：两侧再宽也不会叠上 */}
-        <div className="flex min-w-0 flex-1 justify-center">{page === "desk" && <Guide />}</div>
+        <div className="flex min-w-0 flex-1 justify-center">{meta.play ? <PlayBar /> : page === "desk" && <Guide />}</div>
         <div className="flex items-center gap-1.5">
           {!inDemo && <button onClick={() => setNotes(!notesOn)} className={`btn btn-plain ${notesOn ? "!text-accent" : ""}`}
                               title="化言在背后做了什么：知识层级、需求经过了谁、你的时间用在了哪里。真实用户日常看不到这些，讲解时再打开">
             {notesOn ? "收起演示说明" : "演示说明"}</button>}
-          <StatusMenu s={meta.status} m={meta.mode} trial={!!trial} onMode={() => setModeOpen(true)} />
+          <StatusMenu s={meta.status} m={meta.mode} trial={!!trial} play={!!meta.play} onMode={() => setModeOpen(true)} />
           <CheckpointMenu onLoad={(name) => restart(`正在载入检查点「${name}」……`, api.loadCheckpoint(name))} />
           <Popover align="right" trigger={(toggle) => (
             <button onClick={toggle} className={`flex h-8 items-center gap-2 rounded-[8px] pl-1 pr-2 hover:bg-fill ${
@@ -271,7 +272,7 @@ function Name({ id }: { id: string }) {
 // 回放时大模型与 OneJev 的输出来自录制缓存，逐项写「录制回放」，不写「在线」；觉（Jue-K）是本地推理，回放时也在实时运行
 // 自带密钥（BYOK）时写试用者填的模型名；没接 OneJev 时 Jev 是大模型降级，标黄
 
-function StatusMenu({ s, m, trial, onMode }: { s: RunStatus; m: RunMode; trial: boolean; onMode: () => void }) {
+function StatusMenu({ s, m, trial, play, onMode }: { s: RunStatus; m: RunMode; trial: boolean; play: boolean; onMode: () => void }) {
   const R = "录制回放";
   const byok = m.kind === "byok";
   const jev: Record<string, string> = { onejev: "OneJev", mock: "桩", llm_fallback: "大模型降级" };
@@ -282,7 +283,7 @@ function StatusMenu({ s, m, trial, onMode }: { s: RunStatus; m: RunMode; trial: 
   const llm = (): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${m.llm_model} · ${R}`, "replay"]
     : [`${m.llm_model} · ${byok ? "自带密钥" : "在线"}`, "ok"];
   const items: [string, string, Kind][] = [
-    ["数据", trial ? "共享试用" : "模拟", "ok"],
+    ["数据", play ? "模拟 · 游戏" : trial ? "共享试用" : "模拟", "ok"],
     ...(s.seeds_placeholder ? [["种子", "占位", "warn"] as [string, string, Kind]] : []),
     ["Agent", ...llm()],
     ["抽取", ...(s.extractor === "llm" ? llm() : ["规则", "warn"] as [string, Kind])],
