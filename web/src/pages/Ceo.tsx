@@ -1,11 +1,13 @@
-// V11.8 CEO 面（CEO-VIEW C3、C4、C5）：同一批客户需求放在两条流水线上跑——旧线是传化原来的流程（按参数推算），
+// V11.8 CEO 面（CEO-VIEW C3、C4、C5）：同一批客户需求放在流水线上跑——旧线是传化原来的流程（按参数推算），
 // 化言线是这些事实际走过的路径（门面 pipeline，这一局或模拟业务月）。第一屏是三个岗位的时间构成和三个头条数字，
-// 下面是两条流水线：来单量按参数放大成一个月，人工工位按「人数 × 现状交叉占用的比例」排队，觉、契、Agent 不排队。
+// V12.10 加组织变化热力图（岗位 × 事：旧流程里谁做、化言里谁做）、AI 成本（网关计量折成钱，与省下的人工同一账本），
+// 流水线加中间一条「只有 Agent，没有觉」（Story.tsx 三种做法的口径）。
+// 来单量按参数放大成一个月，人工工位按「人数 × 现状交叉占用的比例」排队，觉、契、Agent 不排队。
 // 账本与排队都在这里按参数算，改参数即重算；每个数带来源标签。撤销一条能力只是推演，不改任何状态。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useData } from "../ctx";
-import type { CeoCase, CeoData, CeoParams, MonthProgress, OldFlowStation } from "../types";
+import type { CeoCase, CeoData, CeoParams, LlmUsage, MonthProgress, OldFlowStation } from "../types";
 import { Group, PageHead } from "../components/ui";
 
 export type Basis = "given" | "safe";   // 照参数文件 / 按最保守参数
@@ -41,17 +43,19 @@ const perCase = (cases: Ledger["cases"], set: Basis, f: (r: OldFlowStation) => n
 type Visit = { lane: string; role: Role | null; hours: number; wait: number; loop: boolean };
 type Seg = Visit & { ready: number; start: number; end: number };
 type Good = { i: number; c: CeoCase; arrive: number; plan: Visit[]; segs: Seg[]; done: number };
+type Mode = "old" | "agent" | "now";   // 传化原来的流程 / 只有 Agent 没有觉 / 化言
 
-function visits(c: CeoCase, set: Basis, p: CeoParams, now: boolean, i: number, revoked: boolean): Visit[] {
+function visits(c: CeoCase, set: Basis, p: CeoParams, mode: Mode, i: number, revoked: boolean): Visit[] {
   const draw = ((i * 0.6180339887) % 1);       // 期望次数的小数部分：第 i 件按黄金分割取整，同一批货分得均匀、每次一样
   let prev = "customer";
   const out: Visit[] = [];
-  if (now) {
+  if (mode === "now") {
     for (const s of MACHINE) if (c.stations.some((x) => x.station === s)) out.push({ lane: s, role: null, hours: 1 / 60, wait: 0, loop: false });
     if (revoked) return [...out, { lane: "研发开发", role: "rd", hours: p.minutes.rd_review / 60, wait: p.wait_hours, loop: true }];
   }
-  for (const r of c[set].old.stations) {
-    const times = now ? r.now_times ?? r.times : r.times;
+  if (mode === "agent") out.push({ lane: "Agent", role: null, hours: 1 / 60, wait: 0, loop: false });
+  for (const r of mode === "agent" ? c[set].agent.stations : c[set].old.stations) {
+    const times = mode === "now" ? r.now_times ?? r.times : r.times;
     const n = Math.floor(times) + (times % 1 > draw ? 1 : 0);
     for (let k = 0; k < n; k++) {
       const wait = r.station === "补问一轮" ? 6 * p.wait_hours : r.station === "试样返工一轮" ? p.trial_wait_hours : r.role !== prev ? p.wait_hours : 0;
@@ -62,13 +66,13 @@ function visits(c: CeoCase, set: Basis, p: CeoParams, now: boolean, i: number, r
   return out;
 }
 
-function simulate(cases: CeoCase[], set: Basis, p: CeoParams, n: number, now: boolean, revoked: (c: CeoCase) => boolean): Good[] {
+function simulate(cases: CeoCase[], set: Basis, p: CeoParams, n: number, mode: Mode, revoked: (c: CeoCase) => boolean): Good[] {
   const share = (role: Role) => 1 - p.time_split[role].own / 100;
   const free: Record<Role, number[]> = Object.fromEntries((["sales", "pm", "rd"] as Role[]).map((r) =>
     [r, Array(Math.max(1, Math.round(p[`${r}_people`] * share(r)))).fill(0)])) as Record<Role, number[]>;
   const goods: Good[] = Array.from({ length: n }, (_, i) => {
     const c = cases[i % cases.length];
-    return { i, c, arrive: (i * MONTH) / n, plan: visits(c, set, p, now, i, now && revoked(c)), segs: [], done: (i * MONTH) / n };
+    return { i, c, arrive: (i * MONTH) / n, plan: visits(c, set, p, mode, i, mode === "now" && revoked(c)), segs: [], done: (i * MONTH) / n };
   });
   // 先到先服务：每次取最早就绪的一步，交给这个岗位最早空出来的人（最小堆按就绪时刻排）
   const heap: [number, number][] = [];
@@ -138,7 +142,9 @@ export function Ceo() {
                   title="转述少丢条件、研发早发现、工位快、交接等待短、人工与试样便宜：差距往小里算">按最保守参数</button>
         </div>} />
       <TimeBars data={data} set={set} />
+      <Heatmap data={data} set={set} tag={tag} />
       <Headline data={data} set={set} p={p} volume={volume} tag={tag} assumed={assumed} />
+      <AiCost data={data} set={set} p={p} volume={volume} assumed={assumed} />
       <Params p={p} set={(k, v) => setEdits({ ...edits, [k]: v })} volume={volume} setVolume={setVolume} assumed={assumed} />
       <Lines data={data} set={set} p={p} n={Math.max(1, Math.round(p.monthly_inquiries * volume))} revoke={revoke} setRevoke={setRevoke} onPick={setPick} tag={tag} />
       {pick && <CaseDetail c={pick} set={set} names={data.names} onClose={() => setPick(null)} />}
@@ -172,24 +178,30 @@ export function TimeBars({ data, set }: { data: Ledger; set: Basis }) {
 }
 
 // ---------- 三个头条数字：每个都能点开看算式与来源 ----------
+// 一年省下的钱：各岗位每件少花的工时 × 时薪，加少返工的试样，都按每月件数 × 12
+function savings(cs: Ledger["cases"], set: Basis, p: CeoParams, v: number) {
+  const saved = (role: Role) => perCase(cs, set, (r) => (r.role === role ? r.minutes - (r.now_minutes ?? r.minutes) : 0));
+  const reworks = perCase(cs, set, (r) => (r.station === "试样返工一轮" ? r.times - (r.now_times ?? r.times) : 0));
+  const yearly = { rd: (12 * v * saved("rd") / 60) * p.rd_hour_cost, sales: (12 * v * saved("sales") / 60) * p.sales_hour_cost,
+                   pm: (12 * v * saved("pm") / 60) * p.pm_hour_cost, trial: 12 * v * reworks * p.trial_cost };
+  return { saved, reworks, yearly, total: yearly.rd + yearly.sales + yearly.pm + yearly.trial };
+}
+
 export function Headline({ data, set, p, volume, tag, assumed }: { data: Ledger; set: Basis; p: CeoParams; volume: number; tag: string; assumed: (k: string) => boolean }) {
   const [open, setOpen] = useState<number | null>(null);
   const cs = data.cases;
-  const saved = (role: Role) => perCase(cs, set, (r) => (r.role === role ? r.minutes - (r.now_minutes ?? r.minutes) : 0));
-  const reworks = perCase(cs, set, (r) => (r.station === "试样返工一轮" ? r.times - (r.now_times ?? r.times) : 0));
   const v = p.monthly_inquiries * volume;
+  const { saved, reworks, yearly, total } = savings(cs, set, p, v);
   const rdHours = (v * saved("rd")) / 60;
   const oldWait = median(cs.map((c) => c[set].first_reply_hours));
   const nowWait = median(cs.filter((c) => c.answered).map((c) => (Date.parse(c.answered!) - Date.parse(c.arrived)) / 3.6e6));
-  const yearly = { rd: (12 * v * saved("rd") / 60) * p.rd_hour_cost, sales: (12 * v * saved("sales") / 60) * p.sales_hour_cost,
-                   pm: (12 * v * saved("pm") / 60) * p.pm_hour_cost, trial: 12 * v * reworks * p.trial_cost };
   const P = ({ k, children }: { k: string; children: React.ReactNode }) => <span className="num">{children}{assumed(k) && <Src s="假设" />}</span>;
   const cards = [
     { label: "还给研发的时间", value: `每月 ${Math.round(rdHours)} 小时`, sub: `相当于多招 ${(Math.round((rdHours / p.work_hours_month) * 10) / 10 || 0).toFixed(1)} 名研发；研发本职 ${data.bars[set].rd.own_before}% → ${Math.round(data.bars[set].rd.own_after)}%`,
       formula: <>每件事研发少花 <span className="num">{saved("rd").toFixed(1)}</span> 分钟（这 {cs.length} 件事里补问、返工、看单实际少发生的次数 × 每次耗时 <Src s="推算" />）× 每月 <P k="monthly_inquiries">{Math.round(v)}</P> 件 ÷ 60；再 ÷ 每人每月 <P k="work_hours_month">{p.work_hours_month}</P> 工时</> },
     { label: "客户等第一个答复", value: `${hours(oldWait)} → ${hours(nowWait)}`, sub: nowWait > 0 ? `快约 ${Math.round(oldWait / nowWait)} 倍（中位数）` : "",
       formula: <>旧流程：业务员当场答或转产品经理查资料原路回来；要研发判断的经记录、转述到研发看单再原路回来，每次交接等 <P k="wait_hours">{p.wait_hours}</P> 小时 <Src s="推算" />。化言：客户第一句到推荐、业务员答复或研发本人处理的时刻 <Src s={tag} /></> },
-    { label: "一年多出来的钱", value: money(yearly.rd + yearly.sales + yearly.pm + yearly.trial), sub: "研发、业务员与产品经理工时，加少失败的试样",
+    { label: "一年多出来的钱", value: money(total), sub: "研发、业务员与产品经理工时，加少失败的试样",
       formula: <>研发 {money(yearly.rd)}（时薪 <P k="rd_hour_cost">{p.rd_hour_cost}</P>）+ 业务员 {money(yearly.sales)}（<P k="sales_hour_cost">{p.sales_hour_cost}</P>）+ 产品经理 {money(yearly.pm)}（<P k="pm_hour_cost">{p.pm_hour_cost}</P>）+ 试样 {money(yearly.trial)}（每件少返工 <span className="num">{reworks.toFixed(2)}</span> 轮 × <P k="trial_cost">{p.trial_cost}</P> 元）。都按每月件数 × 12 <Src s="推算" />；更快响应多赢下的单不计入</> },
   ];
   return (
@@ -210,7 +222,8 @@ export function Headline({ data, set, p, volume, tag, assumed }: { data: Ledger;
 // ---------- 参数：来单量与规模、单价。默认照参数文件，假设的逐项标出 ----------
 function Params({ p, set, volume, setVolume, assumed }: { p: CeoParams; set: (k: string, v: number) => void; volume: number; setVolume: (v: number) => void; assumed: (k: string) => boolean }) {
   const fields: [string, string][] = [["monthly_inquiries", "每月询问（件）"], ["sales_people", "业务员（人）"], ["pm_people", "产品经理（人）"], ["rd_people", "研发（人）"],
-    ["rd_hour_cost", "研发时薪"], ["sales_hour_cost", "业务员时薪"], ["pm_hour_cost", "产品经理时薪"], ["trial_cost", "一轮试样（元）"]];
+    ["rd_hour_cost", "研发时薪"], ["sales_hour_cost", "业务员时薪"], ["pm_hour_cost", "产品经理时薪"], ["trial_cost", "一轮试样（元）"],
+    ["llm_input_price", "模型输入（元/百万 token）"], ["llm_output_price", "模型输出（元/百万 token）"]];
   return (
     <Group title="参数" foot="传化没给的数都是假设（黄标），可以直接改；改了账本和流水线立即重算。来单量只放大推算与模拟的数据。">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5 px-4 py-3 text-[12.5px]">
@@ -232,9 +245,10 @@ function Lines({ data, set, p, n, revoke, setRevoke, onPick, tag }: {
   data: CeoData; set: Basis; p: CeoParams; n: number; revoke: string; setRevoke: (id: string) => void; onPick: (c: CeoCase) => void; tag: string;
 }) {
   const revoked = (c: CeoCase) => !!revoke && c.used.includes(revoke) && (c.path === "自助解决" || c.reused);
-  const old = useMemo(() => simulate(data.cases, set, p, n, false, revoked), [data, set, p, n]);
-  const now = useMemo(() => simulate(data.cases, set, p, n, true, revoked), [data, set, p, n, revoke]);
-  const horizon = Math.max(...old.map((g) => g.done), ...now.map((g) => g.done), MONTH);
+  const old = useMemo(() => simulate(data.cases, set, p, n, "old", revoked), [data, set, p, n]);
+  const agent = useMemo(() => simulate(data.cases, set, p, n, "agent", revoked), [data, set, p, n]);
+  const now = useMemo(() => simulate(data.cases, set, p, n, "now", revoked), [data, set, p, n, revoke]);
+  const horizon = Math.max(...old.map((g) => g.done), ...agent.map((g) => g.done), ...now.map((g) => g.done), MONTH);
   const [t, setT] = useState(0);
   const [speed, setSpeed] = useState(2.8);
   const [run, setRun] = useState(true);
@@ -250,11 +264,12 @@ function Lines({ data, set, p, n, revoke, setRevoke, onPick, tag }: {
     rd: goods.filter((g) => g.segs.some((s) => s.lane === "研发开发")).length,
     loops: goods.reduce((k, g) => k + g.segs.filter((s) => s.loop).length, 0),
   });
-  const so = stat(old), sn = stat(now);
+  const so = stat(old), sa = stat(agent), sn = stat(now);
+  const people = (k: "old" | "agent" | "now") => (data.cases.reduce((m, c) => m + c[set][k].roles.length, 0) / data.cases.length).toFixed(1);
   const self = data.cases.filter((c) => c.path === "自助解决").length;
   const fresh = data.caps.filter((c) => c.new);
   return (
-    <Group title="两条流水线" aside={<span className="flex items-center gap-2">
+    <Group title="三条流水线" aside={<span className="flex items-center gap-2">
       <span className="num text-ink-2">第 {Math.floor(t / 8) + 1} 个工作日 {Math.floor(t % 8) + 9}:00</span>
       <button className="btn btn-plain !h-7" onClick={() => setRun(!run)}>{run ? "暂停" : "继续"}</button>
       <button className="btn btn-plain !h-7" onClick={() => setT(0)}>从头</button>
@@ -262,15 +277,16 @@ function Lines({ data, set, p, n, revoke, setRevoke, onPick, tag }: {
     </span>} foot={<>每月 {n} 件按这 {data.cases.length} 件事的路径轮流放大 <Src s="推算" />；人工工位按「人数 × 现状交叉占用的比例」排队，排得越久颜色越深；点工位看停在那里的事，点一件看它的经过。</>}>
       <div className="flex flex-col gap-4 px-4 py-4">
         <Line title="传化原来的流程" src={<><Src s="推算" />{data.params.given.assumed.length > 0 && <Src s="假设" />}</>} goods={old} lanes={HUMAN_LANES} t={t} onPick={onPick} />
+        <Line title="只有 Agent，没有觉" src={<Src s="推算" />} goods={agent} lanes={["Agent", ...HUMAN_LANES]} t={t} onPick={onPick}
+              note="记录、转述、查资料由 Agent 起草；没人在客户还在时提示该问什么，到研发的需求照样缺条件（失真对照：应升级的卡一次性翻译与业务员转述退回同为 95.1%），研发签过的判断也不会替他答下一单" />
         <Line title="化言" src={<Src s={tag} />} goods={now} lanes={[...MACHINE, ...HUMAN_LANES]} t={t} onPick={onPick} />
         <div className="grid grid-cols-4 gap-3 border-t border-sep pt-3 text-[12.5px]">
-          <Metric label="一件需求从进来到办完（中位数）" old={work(so.lead)} now={work(sn.lead)} />
-          <Metric label="当月办完" old={`${so.month} / ${n} 件`} now={`${sn.month} / ${n} 件`} />
-          <Metric label="进研发" old={`${so.rd} 件`} now={`${sn.rd} 件`} />
-          <Metric label="补问与返工绕回" old={`${so.loops} 圈`} now={`${sn.loops} 圈`} />
-          <Metric label="一件需求经过几个人（不含客户）" old={(data.cases.reduce((k, c) => k + c[set].old.roles.length, 0) / data.cases.length).toFixed(1)}
-                  now={(data.cases.reduce((k, c) => k + c[set].now.roles.length, 0) / data.cases.length).toFixed(1)} />
-          <Metric label="客户自助解决" old="0" now={`${Math.round((self / data.cases.length) * 100)}%`} />
+          <Metric label="一件需求从进来到办完（中位数）" old={work(so.lead)} mid={work(sa.lead)} now={work(sn.lead)} />
+          <Metric label="当月办完" old={`${so.month} / ${n} 件`} mid={`${sa.month} / ${n} 件`} now={`${sn.month} / ${n} 件`} />
+          <Metric label="进研发" old={`${so.rd} 件`} mid={`${sa.rd} 件`} now={`${sn.rd} 件`} />
+          <Metric label="补问与返工绕回" old={`${so.loops} 圈`} mid={`${sa.loops} 圈`} now={`${sn.loops} 圈`} />
+          <Metric label="一件需求经过几个人（不含客户）" old={people("old")} mid={people("agent")} now={people("now")} />
+          <Metric label="客户自助解决" old="0" mid="0" now={`${Math.round((self / data.cases.length) * 100)}%`} />
           <Metric label="研发这一局新签的判断" old="—" now={fresh.length ? `${fresh.length} 条，替他答了 ${data.cases.filter((c) => c.reused).length} 件` : "还没有"} />
           <div className="flex flex-col gap-1">
             <p className="text-ink-2">撤销一条能力（推演，不改状态）</p>
@@ -286,20 +302,20 @@ function Lines({ data, set, p, n, revoke, setRevoke, onPick, tag }: {
   );
 }
 
-const Metric = ({ label, old, now }: { label: string; old: string; now: string }) => (
+const Metric = ({ label, old, mid, now }: { label: string; old: string; mid?: string; now: string }) => (
   <div className="flex flex-col gap-0.5">
     <p className="text-ink-2">{label}</p>
-    <p className="num"><span className="text-ink-3">{old}</span> → <span className="font-semibold" style={{ color: GAIN }}>{now}</span></p>
+    <p className="num"><span className="text-ink-3">{old}</span>{mid && <> → <span className="text-ink-2">{mid}</span></>} → <span className="font-semibold" style={{ color: GAIN }}>{now}</span></p>
   </div>
 );
 
-function Line({ title, src, goods, lanes, t, onPick }: { title: string; src: React.ReactNode; goods: Good[]; lanes: string[]; t: number; onPick: (c: CeoCase) => void }) {
+function Line({ title, src, goods, lanes, t, onPick, note }: { title: string; src: React.ReactNode; goods: Good[]; lanes: string[]; t: number; onPick: (c: CeoCase) => void; note?: string }) {
   const [open, setOpen] = useState<string | null>(null);
   const at = (lane: string) => goods.flatMap((g) => g.segs.filter((s) => s.lane === lane && s.ready <= t && t < s.end).map((s) => ({ g, s })));
   const arrived = goods.filter((g) => g.arrive <= t).length, done = goods.filter((g) => g.done <= t).length;
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="flex items-center gap-1.5 text-[13px] font-semibold">{title}{src}</p>
+      <p className="flex items-center gap-1.5 text-[13px] font-semibold">{title}{src}{note && <span className="text-[11.5px] font-normal text-ink-2">{note}</span>}</p>
       <div className="flex items-stretch gap-1.5">
         <Box label="需求" count={arrived} />
         {lanes.map((lane) => {
@@ -366,5 +382,82 @@ function CaseDetail({ c, set, names, onClose }: { c: CeoCase; set: Basis; names:
         </div>
       </div>
     </Group></div>
+  );
+}
+
+// ---------- V12.10 组织变化热力图：岗位 × 事。旧流程里这些事全由人做；化言里人还做几次，空出来的由谁接走 ----------
+const WORK = ["业务员答技术问题", "业务员记录需求", "产品经理查资料答复", "产品经理转述", "研发看单判断", "补问一轮", "试样返工一轮", "产品经理评价", "业务员报价", "业务员开单"];
+// 空出来的那几次由谁接走：客户自助时契用研发签过的能力答；觉抽取需求、在客户还在时提示追问；产品经理 Agent 起草产品需求；试样少失败是没发生
+const TAKEN: Record<string, string> = { 业务员答技术问题: "契", 业务员记录需求: "觉", 产品经理查资料答复: "契", 产品经理转述: "Agent", 研发看单判断: "契", 补问一轮: "觉" };
+const ROWS: [string, Role | null][] = [["业务员", "sales"], ["产品经理", "pm"], ["研发", "rd"], ["觉", null], ["契", null], ["Agent", null]];
+
+function Heatmap({ data, set, tag }: { data: CeoData; set: Basis; tag: string }) {
+  const [view, setView] = useState<"old" | "now">("now");
+  const rows = data.cases.flatMap((c) => c[set].old.stations);
+  const sum = (name: string, f: (r: OldFlowStation) => number) => rows.filter((r) => r.station === name).reduce((n, r) => n + f(r), 0);
+  const old = (name: string) => sum(name, (r) => r.times), now = (name: string) => sum(name, (r) => r.now_times ?? r.times);
+  const cols = WORK.filter((w) => old(w) > 0);
+  const top = Math.max(...cols.map(old), ...Object.values(data.signs), 1);
+  const role = (w: string) => rows.find((r) => r.station === w)!.role;
+  const n = (x: number) => (Number.isInteger(x) ? x : x.toFixed(1));
+  const cell = (row: string, r: Role | null, w: string) => {
+    if (r ? role(w) !== r : view === "old" || TAKEN[w] !== row) return <td key={w} className="border border-sep" />;
+    const value = r ? (view === "old" ? old(w) : now(w)) : old(w) - now(w);
+    if (!r && value <= 0) return <td key={w} className="border border-sep" />;
+    const freed = r && view === "now" && value === 0;
+    return <td key={w} className="border border-sep px-1 py-1.5 text-center num transition-colors duration-700"
+               style={{ background: freed ? "transparent" : r ? `rgba(224,138,43,${0.12 + 0.75 * value / top})` : `rgba(10,108,223,${0.1 + 0.6 * value / top})` }}>
+      {freed ? <span className="text-[11px] text-ok">空出</span> : value > 0 ? n(value) : ""}
+      {r && view === "now" && value < old(w) && !freed && <span className="block text-[10.5px] text-ink-3">原 {n(old(w))}</span>}
+    </td>;
+  };
+  return (
+    <Group title="组织变化：岗位 × 事" aside={<span className="flex gap-1.5">
+      {(["old", "now"] as const).map((k) => <button key={k} className={`chip ${view === k ? "!bg-ink !text-white" : ""}`} onClick={() => setView(k)}>{k === "old" ? "传化原来的流程" : "化言"}</button>)}
+    </span>} foot={<>这 {data.cases.length} 件事，每格是这件事落在这个岗位上的次数：旧流程按参数推算 <Src s="推算" />，化言照这些事实际的经过数 <Src s={tag} />。
+      人不再做的格子写「空出」，接走它的觉、契、Agent 在下面三行；试样少失败的那几轮没有人接，是没再发生。最右一列是化言里人留下来的事：签字与专业判断。</>}>
+      <div className="overflow-x-auto px-4 py-3">
+        <table className="w-full border-collapse text-[12px]">
+          <thead><tr><th className="w-[72px]" />{cols.map((w) => <th key={w} className="px-1 pb-1.5 font-normal text-ink-2">{w}</th>)}
+            <th className="px-1 pb-1.5 font-normal text-ink-2">签字与专业判断</th></tr></thead>
+          <tbody>{ROWS.map(([label, r]) => <tr key={label}>
+            <td className={`pr-2 font-semibold ${r ? "" : "text-accent"}`}>{label}</td>
+            {cols.map((w) => cell(label, r, w))}
+            <td className="border border-sep px-1 py-1.5 text-center num"
+                style={{ background: r && view === "now" ? `rgba(36,138,61,${0.12 + 0.6 * (data.signs[r] ?? 0) / top})` : "transparent" }}>
+              {r && view === "now" ? data.signs[r] ?? 0 : ""}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </Group>
+  );
+}
+
+// ---------- V12.10 AI 成本：网关计量的 token 按单价折成钱，与省下的人工放在同一本账上 ----------
+const cents = (y: number) => (y < 100 ? `${y.toFixed(2)} 元` : money(y));
+const HUAYAN_CALLERS: Record<string, string> = { agent: "抽取与三个岗位助手", jev: "Jev 降级时的大模型", ingest: "读取与编译" };
+function AiCost({ data, set, p, volume, assumed }: { data: CeoData; set: Basis; p: CeoParams; volume: number; assumed: (k: string) => boolean }) {
+  const yuan = (u: LlmUsage, keys = Object.keys(u)) => keys.reduce((y, k) => y + (u[k].input_tokens * p.llm_input_price + u[k].output_tokens * p.llm_output_price) / 1e6, 0);
+  const ours = Object.keys(data.ai).filter((k) => k in HUAYAN_CALLERS);           // 模拟客户（sim）与普通 RAG 对照（baseline）不是化言的成本
+  const calls = ours.reduce((n, k) => n + data.ai[k].calls, 0);
+  const each = yuan(data.ai, ours) / data.cases.length;
+  const v = p.monthly_inquiries * volume;
+  const saved = savings(data.cases, set, p, v).total, cost = 12 * v * each;
+  const priced = assumed("llm_input_price") || assumed("llm_output_price");
+  return (
+    <Group title="AI 成本与省下的人工，同一本账" foot={<>token 来自网关计量 <Src s="实测" />，按每百万 token 输入 {p.llm_input_price} 元、输出 {p.llm_output_price} 元折算{priced && <Src s="假设" />}；
+      这一局的总费用 ÷ {data.cases.length} 件事得出每件；一年按每月件数 × 12 <Src s="推算" />。觉打分不调用大模型，不计费。</>}>
+      <div className="grid grid-cols-4 gap-4 px-4 py-3.5 text-[12.5px]">
+        <div><p className="text-ink-2">每件需求的模型费用</p><p className="num text-[20px] font-semibold">{calls ? `${each.toFixed(2)} 元` : "—"}</p>
+          <p className="text-ink-2">{calls ? `这一局 ${calls} 次调用` : "这一局没有调用大模型（离线回放或规则模式）"}</p></div>
+        <div><p className="text-ink-2">一年的模型费用</p><p className="num text-[20px] font-semibold">{money(cost)}</p></div>
+        <div><p className="text-ink-2">一年省下的人工与试样</p><p className="num text-[20px] font-semibold" style={{ color: GAIN }}>{money(saved)}</p>
+          <p className="text-ink-2">{saved > 0 && cost > 0 ? `模型费用约占 ${((cost / saved) * 100).toFixed(1)}%` : ""}</p></div>
+        <div className="text-ink-2">
+          {ours.map((k) => <p key={k}>{HUAYAN_CALLERS[k]}：{data.ai[k].calls} 次 · {cents(yuan(data.ai, [k]))}</p>)}
+          {data.compile && <p>整批编译资料库（一次性）：{Object.values(data.compile).reduce((n, r) => n + r.calls, 0)} 次 · {cents(yuan(data.compile))}</p>}
+        </div>
+      </div>
+    </Group>
   );
 }

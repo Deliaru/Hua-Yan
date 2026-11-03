@@ -27,6 +27,11 @@ STATION = {
 SEGMENT = {("sales", "pm"): ("业务员答技术问题", "业务员记录需求"), ("pm", "sales"): ("产品经理查资料答复", "产品经理转述"),
            ("pm", "rd"): ("补问一轮",), ("rd", "pm"): ("补问一轮",)}
 CROSS = {name for names in SEGMENT.values() for name in names}
+# V12.10 第三种做法「有 Agent 没有觉」（Story.tsx 三种做法的口径）：记录、转述、查资料答复由 Agent 起草，人不再做；
+# 但没有觉，没人在客户还在时提示该问什么，转述到研发的需求照样缺条件——失真对照里应升级的卡，一次性翻译与业务员转述
+# 研发需退回的比例相同（docs/reports/distortion_300：G1 95.1%、G2 95.1%），所以补问、返工与旧流程相同；没有契，研发签过的判断
+# 不会替他回答下一单，复用的事照旧流程走到研发。
+AGENT = ("业务员记录需求", "产品经理转述", "产品经理查资料答复")
 
 
 def load_params(default: Path = DEFAULT, override: Path = OVERRIDE) -> dict:
@@ -112,6 +117,7 @@ def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None
     if loss:
         names = (labels or {}) | {"phenomenon": "现象"}
         lost = [names.get(s, s) for s in loss["missing"] + loss["wrong"]]
+    agent = [r | {"times": 0, "minutes": 0} if r["station"] in AGENT else r for r in rows]
     now = [role for role, cell in route["roles"].items() if cell["state"] == "human" and role != "customer"]
     return {
         "path": path, "cases": cases, "source": "推算", "assumed": p["assumed"], "params_source": p["source"],
@@ -120,6 +126,8 @@ def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None
                 "reworks": round(reworks, 2), "by_role_minutes": by_role, "work_hours": round(work, 2),
                 "wait_hours": round(handoffs * p["wait_hours"] + reworks * p["trial_wait_hours"], 1)},
         "now": {"roles": [ROLE_NAME[r] for r in now], "human_steps": route["n_human_steps"]},
+        "agent": {"stations": agent, "roles": [ROLE_NAME[r] for r in dict.fromkeys(r["role"] for r in agent if r["times"])],
+                  "work_hours": round(sum(r["minutes"] for r in agent) / 60, 2)},
     }
 
 

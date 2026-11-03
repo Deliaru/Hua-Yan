@@ -35,7 +35,10 @@ sales_hour_cost: 150      # 小时人工成本（元）
 pm_hour_cost: 200
 rd_hour_cost: 250
 trial_cost: 3000          # 一轮试样的物料与机台（元）
-# 「按最保守参数」：差距往小里算——转述少丢条件、研发早发现、工位快、交接等待短、人工与试样便宜
+# V12.10 AI 成本：网关计量的 token 按这个单价折成钱（元 / 百万 token），与省下的人工放在同一账本。模型网关没配单价，这里是假设
+llm_input_price: 2
+llm_output_price: 8
+# 「按最保守参数」：差距往小里算——转述少丢条件、研发早发现、工位快、交接等待短、人工与试样便宜、模型贵
 conservative:
   minutes: {sales_record: 10, pm_relay: 20, rd_review: 30, back_round: 30, rework: 120, pm_answer: 15}
   wait_hours: 2
@@ -47,3 +50,5 @@ conservative:
   pm_hour_cost: 120
   rd_hour_cost: 150
   trial_cost: 1000
+  llm_input_price: 4
+  llm_output_price: 16

@@ -13,7 +13,7 @@ import os
 import re
 import shutil
 import time
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import traceback
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -288,9 +288,29 @@ def ceo_of(app, p):
     caps = [{"id": x.id, "product": products[x.payload["product_id"]], "phenomenon": phenomena[x.payload["phenomenon"]],
              "granted_by": app.actors[x.granted_by].name, "new": x.id in granted}
             for x in app.kb.capabilities() if x.id in used]
+    # V12.10 组织变化热力图的「化言新增的人工」：业务员、产品经理、研发本人的签字与专业判断（含契的确认与授予）
+    signs = defaultdict(int)
+    for e in _human_events(app.events.query()) + [e for e in app.events.query(["claim_confirmed", "capability_granted"])
+                                                   if e.actor.split(":")[0] in ("sales", "pm", "rd")]:
+        signs[e.actor.split(":")[0]] += 1
     return {"cases": cases, "caps": caps, "params": sets, "names": {a.id: a.name for a in app.seeds.actors},
             "bars": {k: {role: old_flow.time_bar([c[k] for c in cases], ps, role) for role in ("sales", "pm", "rd")}
-                     for k, ps in sets.items()}}
+                     for k, ps in sets.items()},
+            "signs": signs, "ai": _llm_usage(app.run_dir / "metering.jsonl"),
+            "compile": _llm_usage(Path(app.config["trial_coverage"]) / "metering.jsonl") if app.config.get("trial_coverage") else None}
+
+
+def _llm_usage(meter):
+    """V12.10 网关计量里的大模型调用：按 caller 前缀汇总调用次数与 token；费用在界面按参数单价折算。"""
+    out = defaultdict(lambda: {"calls": 0, "input_tokens": 0, "output_tokens": 0})
+    for line in meter.read_text(encoding="utf-8").splitlines() if meter.exists() else []:
+        r = json.loads(line)
+        if r["kind"] == "llm":
+            row = out[r["caller"].split(":")[0]]
+            row["calls"] += 1
+            row["input_tokens"] += r["input_tokens"]
+            row["output_tokens"] += r["output_tokens"]
+    return dict(out)
 
 
 def demo_ledger(app, p):

@@ -374,7 +374,11 @@ export interface PlayState {
 }
 // V11.8 CEO 面：化言线逐件路径（门面 pipeline）+ 同一件事的旧流程推算（given 按参数文件、safe 按最保守参数）
 export interface CeoStation { station: string; enter: string; leave: string; by: string[]; loop: boolean }
-export interface CeoEstimate extends OldFlow { first_reply_hours: number }
+export interface CeoEstimate extends OldFlow {
+  first_reply_hours: number;
+  agent: { stations: OldFlowStation[]; roles: string[]; work_hours: number };   // V12.10「有 Agent 没有觉」：记录、转述、查资料答复由 Agent 做
+}
+export type LlmUsage = Record<string, { calls: number; input_tokens: number; output_tokens: number }>;   // 按 caller 前缀
 export interface CeoCase {
   session_id: string; stations: CeoStation[]; arrived: string; answered: string | null; used: string[];
   path: string; quote: string; reused: boolean; given: CeoEstimate; safe: CeoEstimate;
@@ -384,6 +388,8 @@ export type CeoParams = { minutes: Record<string, number>; time_split: Record<st
 export interface CeoData {
   cases: CeoCase[]; caps: { id: string; product: string; phenomenon: string; granted_by: string; new: boolean }[];   // granted_by 是签字人姓名
   params: Record<"given" | "safe", CeoParams>; names: Record<string, string>; bars: Record<"given" | "safe", Record<"sales" | "pm" | "rd", TimeBar>>;
+  signs: Record<string, number>;          // V12.10 各岗位本人的签字与专业判断次数
+  ai: LlmUsage; compile: LlmUsage | null; // 这一局的网关计量；整批编译资料库那一次的计量
 }
 // V11.9 游戏结算：各件业务与关卡各步送来的事（会话号）与这一局的账本（各件只给路径与推算，不给原话与经手人）
 export interface PlaySettle {
