@@ -24,7 +24,6 @@ from huayan.sim.cards import sample_slots
 from huayan.sim.customer import SimCustomer
 
 LEVELS = Path("demo/levels.yaml")
-PROPOSALS = Path("seeds/rag/proposals.yaml")    # 录制的编译提议（模拟），代替模型编译
 VIEWER = "supervisor:M01"        # 导演读前情、需求单用主管视角（L2，看得到需求单上的经过）
 PM = "pm:P01"
 SHOWN = ("id", "title", "brief", "to", "decide", "mechanism", "point")
@@ -34,38 +33,53 @@ def load_levels(path: Path = LEVELS) -> list[dict]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))["levels"]
 
 
-def prepare_round(config_path: str, run_dir: Path) -> Path:
+def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> Path:
     """开一局、应用还没起来时：内部资料复制一份给这一局（第 9 关改的是副本），再照 scripts/compile_qi.py 把录制的
-    编译提议导入成待研发审的候选（第 4 关）。返回这一局的配置；已经有了就照用（服务重启后续上这一局）。"""
+    编译提议导入成待研发审的候选（第 4 关）。返回这一局的配置；已经有了就照用（服务重启后续上这一局）。
+    real：真实报告版的目录（配置 play_real_report，不入库），这一局换成它 round.yaml 里的种子副本与资料来源。"""
     path = run_dir / "app.yaml"
     if path.exists():
         return path
     config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+    if real is not None:
+        config.update(yaml.safe_load((real / "round.yaml").read_text(encoding="utf-8")))
     for i, s in enumerate(config["sources"]):
         if s["kind"] == "internal":
             s["root"] = str(shutil.copytree(s["root"], run_dir / "sources" / str(i)))
     config["qi_state"] = str(run_dir / "qi_state.json")
     kb = KnowledgeBase.from_seeds(load_seeds(config["seeds_dir"]), EventLog(), AuditLog(), state_path=config["qi_state"])
     kb.sources = [FolderSource(s["name"], s["kind"], s["root"], s.get("level"), kb._doc_levels) for s in config["sources"]]
-    admit(Proposals(items=yaml.safe_load(PROPOSALS.read_text(encoding="utf-8"))["items"]).items, kb.sources, kb)
+    proposals = Path(config["seeds_dir"]) / "rag" / "proposals.yaml"     # 录制的编译提议，代替模型编译
+    admit(Proposals(items=yaml.safe_load(proposals.read_text(encoding="utf-8"))["items"]).items, kb.sources, kb)
     path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     return path
 
 
-def fresh(level: int = 0, round_: int = 1, speed: int = 60) -> dict:
-    """一局的进度：cases 每关送来的会话，done 导演代办过的动作，acted 导演代谁做了什么（前情标「模拟」）。"""
-    return {"level": level, "round": round_, "speed": speed, "paused": False,
+def fresh(level: int = 0, round_: int = 1, speed: int = 60, real: bool = False) -> dict:
+    """一局的进度：cases 每关送来的会话，done 导演代办过的动作，acted 导演代谁做了什么（前情标「模拟」）；
+    real 这一局第 4、5、6、9 关用真实报告。"""
+    return {"level": level, "round": round_, "speed": speed, "paused": False, "real": real,
             "cases": {}, "done": [], "passed": [], "seen": {}, "acted": []}
 
 
 class Director:
-    def __init__(self, api: Callable[[], object], path: Path, levels: list[dict] | None = None):
-        """api：取当前这一局的 Api（重开本关后换成新的一局）；path：进度文件。"""
-        self.api, self.path = api, path
-        self.levels = levels or load_levels()
-        self.state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else fresh()
+    def __init__(self, api: Callable[[], object], path: Path, levels: list[dict] | None = None, real: Path | None = None):
+        """api：取当前这一局的 Api（重开本关后换成新的一局）；path：进度文件；real：真实报告版的目录，没配就只有模拟报告。"""
+        self.api, self.path, self.real = api, path, real
+        self.state = fresh() | (json.loads(path.read_text(encoding="utf-8")) if path.exists() else {})
+        self.levels = levels or self._levels()
         self.customers: dict[str, SimCustomer] = {}
         self.error: str | None = None
+
+    def _levels(self) -> list[dict]:
+        return load_levels(self.real / "levels.yaml" if self.state["real"] else LEVELS)
+
+    def new_round(self, real: bool) -> None:
+        """开新的一局（重开本关、换报告），关卡骨架跟着这一局用的报告。"""
+        if real and self.real is None:
+            raise ValueError("没有配置真实报告版（play_real_report）")
+        self.state = fresh(round_=self.state["round"] + 1, speed=self.state["speed"], real=real)
+        self.levels, self.customers = self._levels(), {}
 
     def save(self) -> None:
         self.path.write_text(json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -76,7 +90,7 @@ class Director:
     def view(self) -> dict:
         lv, s = self.level(), self.state
         return {"levels": [{k: x.get(k) for k in SHOWN} | {"ready": "pass" in x} for x in self.levels],
-                "level": s["level"], "round": s["round"], "speed": s["speed"], "paused": s["paused"],
+                "level": s["level"], "round": s["round"], "real": s["real"], "real_ready": self.real is not None, "speed": s["speed"], "paused": s["paused"],
                 "passed": lv["id"] in s["passed"], "done": s["passed"], "cases": s["cases"].get(str(lv["id"]), []),
                 "acted": s["acted"], "error": self.error, "lines": self._lines(lv), "notes": self._notes(lv)}
 
@@ -147,7 +161,7 @@ class Director:
                 sid = self._act(customer, "/api/sessions", customer_id=customer).id
                 s["cases"][key].append(sid)
                 if customer not in present:
-                    self._act(customer, "/api/turn", session_id=sid, speaker="customer", text=lv["lines"][0])
+                    self._act(customer, "/api/turn", session_id=sid, speaker="customer", text=self._line(lv, sid, customer, 0, ""))
             if "revise" in lv:
                 self._revise(lv["revise"])
             s["seen"][key] = [q for want in lv["pass"] if want.startswith("settled:")
@@ -177,7 +191,7 @@ class Director:
         seen[sid] = card
         said = sum(t.speaker == "customer" for t in view.turns)
         if said < len(lv["lines"]):
-            text = lv["lines"][said]
+            text = self._line(lv, sid, customer, said, view.turns[-1].text)
         elif view.asks:                 # 研发回问：客户在自助页按心里的真值回答
             text = self._sim_customer(lv, sid, customer).reply(view.asks[0].ask_text)
         elif view.hints and view.turns[-1].speaker != "customer":
@@ -187,8 +201,20 @@ class Director:
         self._act(customer, "/api/turn", session_id=sid, speaker="customer", text=text)
         return True
 
+    def _line(self, lv: dict, sid: str, customer: str, said: int, heard: str) -> str:
+        """客户的第 said 句台词。模板模式照台词说；大模型模式（网关不是桩）由模拟客户（caller sim:customer）用自己的话
+        说出台词的意思，心里的真值照关卡，剧情与通关条件不变。heard 是化言或业务员刚说的话。"""
+        line = lv["lines"][said]
+        app = self.api().app
+        if app.config["gateway_mock"]:
+            return line
+        sim = self._sim_customer(lv, sid, customer)
+        cue = f"（这一句请用你自己的话、一两句说出这个意思：「{line}」。不要补充别的条件。）"
+        return sim.opening(cue) if said == 0 else sim.reply(f"{heard}\n{cue}")
+
     def _sim_customer(self, lv: dict, sid: str, customer: str) -> SimCustomer:
-        """台词说完以后觉还在追问：按这位客户心里的真值回答（没写的槽位按种子先验抽，随机数按局与会话定）。"""
+        """台词说完以后觉还在追问：按这位客户心里的真值回答（没写的槽位按种子先验抽，随机数按局与会话定）。
+        大模型模式下客户的每一句都由它说（网关同一个，计量记在 sim:customer 名下）。"""
         if sid not in self.customers:
             seeds = self.api().app.seeds
             phen = next(p for p in seeds.phenomena if p.id == lv["card"]["phenomenon"])
@@ -197,7 +223,8 @@ class Director:
             card = NeedCard(id=f"level:{lv['id']}", phenomenon=phen.id, slots=slots, unknown_slots=[], opening_slots=[],
                             customer_id=customer, chem_savvy=False, wants_mechanism=False,
                             truth_product=correct_product(phen.id, slots, seeds.products))
-            self.customers[sid] = SimCustomer(card, seeds, rng)
+            app = self.api().app
+            self.customers[sid] = SimCustomer(card, seeds, rng, gateway=None if app.config["gateway_mock"] else app.gateway)
         return self.customers[sid]
 
     def _do(self, lv: dict, a: dict, present: set[str]) -> bool:
@@ -226,6 +253,17 @@ class Director:
             self._act(q.signer_id, "/api/resolve", question_id=q.id, action="sign", note=a["review"],
                       reviewed_evidence=review["reviewed_evidence"])
             return True
+        if "reuse" in a:
+            # 研发不采用产品经理 Agent 建议的现成产品（在线时 Agent 真的去查了现成产品；离线骨架不查，这一步直接算做完）。
+            # 每张单都等产品经理 Agent 查完现成产品、都处理完才算做完
+            mine = [self._req(x) for x in sids]
+            if not all(r and r.reuse for r in mine):
+                return False
+            reqs = [r for r in mine if r.status == "draft" and r.reuse.product_id and not r.reuse.declined_reason]
+            for r in reqs:
+                if r.assigned_rd not in present:
+                    self._act(r.assigned_rd, "/api/reuse/decline", req_id=r.id, reason=a["reuse"])
+            return all(r.assigned_rd not in present for r in reqs)
         sid = sids[0]
         if a["as"] == "sales":
             actor = next(x["sales_id"] for x in self._get("/api/sessions") if x["id"] == sid)

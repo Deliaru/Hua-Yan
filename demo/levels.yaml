@@ -9,6 +9,7 @@
 #      decline 研发不立项（product 已有产品适用，可空；reason 原因；claims 以这份报告编译出的本人候选为依据）
 #      accept 研发接单 · confirm 研发确认化学要点 · trial 研发录入试样（结果按 trial 的世界规律） · rework 研发签退回重新转译
 #      review 研发复核依据已变化的结论并签字保留（写依据）；同一动作做两次就写两遍
+#      reuse 研发不采用产品经理 Agent 建议的现成产品（写理由；在线时 Agent 会真的去查现成产品，离线骨架不查）
 #   trial 世界规律：needs 里的条件不在需求单上，试样就因需求条件缺失失败（第 7 关）
 #   revise 外部世界改版资料：这一局资料副本里 doc 的 old 改成 new，再请系统重取依据（第 9 关）
 #   pass 通关条件，任一条：这件事的前情里出现 kind（或 kind:role；kind~文字 还要求这一行含这段文字）；
@@ -128,6 +129,7 @@ levels:
     card: {phenomenon: color_unlevel, slots: {fiber: 锦纶氨纶, equipment: 气流染色机}}
     lines: ["深一块浅一块，锦氨的，气流缸"]
     do:
+      - {as: rd, reuse: 锦氨匀染剂 HY-LV205 的适用范围只到溢流和卷染，气流缸低浴比没有试样，不能直接套用}
       - {as: pm, merge: 两家锦氨气流缸厂同类色花，值得做一个低浴比匀染课题}
     pass: [requirements_merged]
 

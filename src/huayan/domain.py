@@ -16,8 +16,8 @@ def load_seeds(seeds_dir: str | Path) -> Seeds:
         doc = yaml.safe_load((Path(seeds_dir) / f"{name}.yaml").read_text(encoding="utf-8"))
         placeholder = placeholder or bool(doc["placeholder"])
         data[name] = [model.model_validate(item) for item in doc["items"]]
-    for product in data["products"]:
-        product.situations = [Situation(phenomenon=ph, conditions=product.applicable,
+    for product in data["products"]:      # 种子可直接写情境（如说明书给的摄氏温度范围），没写就按 applicable 生成
+        product.situations = product.situations or [Situation(phenomenon=ph, conditions=product.applicable,
             capability_id=f"cap:applicable:{product.id}:{ph}") for ph in product.solves]
     return Seeds(**data, placeholder=placeholder)
 

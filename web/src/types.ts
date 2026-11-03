@@ -356,7 +356,9 @@ export interface FrozenActor {
 // V11.5 游戏模式：导演的进度（sim/director.py 的 view）
 export interface PlayLevel { id: number; title: string; brief: string; to: string; decide: string; mechanism: string; point: string; ready: boolean }
 export interface PlayState {
-  levels: PlayLevel[]; level: number; round: number; speed: number; paused: boolean; passed: boolean; done: number[];
+  levels: PlayLevel[]; level: number; round: number; speed: number;
+  real: boolean; real_ready: boolean;   // 这一局第 4、5、6、9 关用真实报告；服务配了真实报告版（play_real_report）才能换
+  paused: boolean; passed: boolean; done: number[];
   cases: string[]; acted: { ts: string; actor: string; path: string }[]; error: string | null; now: string;
   lines: { customer: string; session_id: string; text: string }[];   // 客户由人扮时，接下来可以说的台词
   notes: { who: string; text: string }[];   // 有人在玩的岗位要用到的外部世界信息（试样结果）

@@ -84,6 +84,15 @@ export function PlayBar() {
             <button className="btn btn-primary" disabled={!s.passed || !!busy} onClick={() => run("…", api.playNext())}>下一关</button>
             <button className="btn btn-plain ml-auto" onClick={() => go("settle")}>看这一局的结算</button>
           </div>
+          {s.real_ready && (
+            <div className="flex items-center gap-1.5 text-[12.5px]">
+              <span className="text-ink-2">第 4、5、6、9 关的报告</span>
+              {([[false, "模拟报告"], [true, "真实试样报告"]] as const).map(([v, label]) => (
+                <button key={label} className={`btn btn-plain ${s.real === v ? "!text-accent" : ""}`} disabled={!!busy || s.real === v}
+                        onClick={() => confirm("换报告要开新的一局，前面几关由导演代办补上，这一关从头来。确定吗？") && run("正在换报告……", api.playRestart(v))}>{label}</button>
+              ))}
+            </div>
+          )}
           <div className="flex flex-col border-t border-sep pt-2">
             {s.levels.map((x, i) => (
               <p key={x.id} className={`flex gap-2 py-0.5 ${i === s.level ? "font-semibold" : i < s.level ? "text-ink-2" : "text-ink-3"}`}>

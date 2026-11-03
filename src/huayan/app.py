@@ -788,6 +788,8 @@ class HuayanApp:
                        "conditions": {slot: [value] for slot, value in req.known_slots.items() if slot in required}}
             if limits:
                 payload["limits"] = limits
+            if (temperature := self._sessions[req.session_ids[0]].need.known_temperature()) is not None:
+                payload["temperature_c"] = list(temperature)     # 研发按这张单的温度判定适用，范围只到这个温度
             basis = self.kb.grant(Capability(id=self.kb.next_cap_id(), form="applicable", audience=0, payload=payload,
                 based_on=list(claim_ids), granted_by=by, status="proposed", at=at))
         req.status = "rejected"
@@ -2203,7 +2205,8 @@ class HuayanApp:
             if e.kind == "requirement_translated":
                 return act("确认化学要点")
             if e.kind == "project_declined":
-                return act(f"判断不立项，已有产品{product(p['product_id'])}适用" + (f"：{p['reason']}" if inner else ""))
+                found = f"，已有产品{product(p['product_id'])}适用" if p["product_id"] else ""
+                return act(f"判断不立项{found}" + (f"：{p['reason']}" if inner else ""))
             if e.kind == "trial":
                 ok = p["result"] == "pass"
                 cause = {"product": "产品本身", "equipment": "设备", "operation": "操作", "requirement": "需求条件缺失"}

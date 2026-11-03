@@ -511,7 +511,7 @@ class Api:
             use_clock(self.clock)
             run_root = Path(yaml.safe_load(Path(self.config_path).read_text(encoding="utf-8"))["run_root"])
             if PLAY:      # 每局一份资料副本与编译好的待审候选，应用起来之前离线导入
-                path = str(director.prepare_round(self.config_path, run_root / run))
+                path = str(director.prepare_round(self.config_path, run_root / run, DIRECTOR.real if DIRECTOR.state["real"] else None))
                 self.app, self.writes = HuayanApp.build(path, run_id=run, resume=True), 0
             else:
                 self.app, self.writes = HuayanApp.build(self.config_path, run_id=run, resume=(run_root / run).exists()), 0
@@ -892,11 +892,11 @@ def play_ticker():
 play_lock = Lock()
 
 
-def play_restart(_):
-    """重开本关：开新的一局（新的运行目录），前面几关全部由导演代办补上，停在这一关开头。"""
+def play_restart(p):
+    """重开本关：开新的一局（新的运行目录），前面几关全部由导演代办补上，停在这一关开头。
+    real：换报告（真实报告版 / 模拟报告），不给就照这一局的。"""
     d, level = DIRECTOR, DIRECTOR.state["level"]
-    d.state = director.fresh(round_=d.state["round"] + 1, speed=d.state["speed"])
-    d.customers = {}
+    d.new_round(bool(p["real"]) if "real" in p else d.state["real"])
     api = session_api("default", rebuild=True)
     _roles_path().write_text(json.dumps(trial_roles, ensure_ascii=False, indent=1), encoding="utf-8")
     d.play_through(level, lambda: (api.advance(600), api.tick()))
@@ -1158,9 +1158,11 @@ if __name__ == "__main__":
     CONFIG = args.config or CONFIG
     RESUME, TRIAL, PLAY = args.run, args.trial or args.play, args.play
     if PLAY:
-        run_root = Path(yaml.safe_load(Path(CONFIG).read_text(encoding="utf-8"))["run_root"])
+        cfg = yaml.safe_load(Path(CONFIG).read_text(encoding="utf-8"))
+        run_root = Path(cfg["run_root"])
         run_root.mkdir(parents=True, exist_ok=True)
-        DIRECTOR = director.Director(lambda: session_api("default"), run_root / f"{PLAY}.play.json")
+        real = cfg.get("play_real_report")          # 可选：真实报告版的目录（不入库），配了浏览器里才能换报告
+        DIRECTOR = director.Director(lambda: session_api("default"), run_root / f"{PLAY}.play.json", real=real and Path(real))
     session_api("default")   # 先构建一次：Jue-K 模型等首次加载较慢
     # V11.0：试用机拉了新代码却没重新构建前端时，浏览器里还是旧界面；启动时提醒一次
     built = (DIST / "index.html").stat().st_mtime if (DIST / "index.html").exists() else 0
