@@ -104,7 +104,19 @@ class KuId(BaseModel):
     ku_id: str
 
 
-DOC_ID = "已登记的资料来源编号（如报告编号P2CQL2024012304），从问题引用或search_knowledge、get_knowledge结果的出处里取；不是业务试样wk:trial:…或需求单编号，不要猜"
+DOC_ID = "已登记的资料来源编号（如报告编号P2CQL2024012304），从问题引用、search_sources命中或search_knowledge、get_knowledge结果的出处里取；不是业务试样wk:trial:…或需求单编号，不要猜"
+
+
+class SourceSearchArgs(BaseModel):
+    query: str = Field(description="用需求里的现象、产品、设备、纤维、工艺条件写一句话；可换几种说法多查几次")
+
+
+@tool("search_sources", "read", ["sales", "pm", "rd"],
+      "在委托人有权读的原始资料（试样报告、实验报告、说明书、MSDS、培训课件）里找相关的页；不知道来源编号时先用它。"
+      "返回来源编号、标题、页、摘录、相关度和所用方法（semantic 语义 / keyword 关键词）以及依据指针 pointer；"
+      "命中只是线索，要用 read_source 读原文核对，pointer 可直接存进 save_source_preparation。", SourceSearchArgs)
+def search_sources(ctx: ToolContext, args: SourceSearchArgs) -> ToolResult:
+    return ToolResult(data=ctx.app.search_sources(args.query, ctx.principal.id))
 
 
 class SourceArgs(BaseModel):
@@ -147,7 +159,7 @@ def read_trial_record(ctx: ToolContext, args: SourceTrialArgs) -> ToolResult:
 
 class SourcePreparationArgs(BaseModel):
     req_id: str
-    evidence: list[str] = Field(description="仅填doc_id#span@fingerprint指针数组；可逐字复制read_trial_record中evidence[].fragment。不能填原文、摘要或Python列表字符串。")
+    evidence: list[str] = Field(description="仅填doc_id#span@fingerprint指针数组；可逐字复制read_trial_record中evidence[].fragment或search_sources命中的pointer（读过原文核对后）。不能填原文、摘要或Python列表字符串。")
     claim_ids: list[str] = []
     pending: str = ""
 
@@ -171,8 +183,8 @@ class CompileSourceArgs(BaseModel):
 
 
 @tool("compile_source_preparation", "draft", ["rd"],
-      "将服务端登记的该来源完整操作或负例观察 IR 经现有编译器导入本单待审候选，并保存导入结果与待补项。"
-      "须先保存完整依据；只产生候选，不确认、授予或标记事项准备完成。", CompileSourceArgs)
+      "将该来源编译成本单待审候选：有登记的操作或负例观察 IR 就按 IR 导入，没有就用本单已保存的这份来源的依据页现编单次观察。"
+      "须先保存依据；只产生候选，不确认、授予或标记事项准备完成。", CompileSourceArgs)
 def compile_source_preparation(ctx: ToolContext, args: CompileSourceArgs) -> ToolResult:
     return ToolResult(data=ctx.app.compile_source_preparation(args.req_id, args.doc_id, ctx.principal.id))
 

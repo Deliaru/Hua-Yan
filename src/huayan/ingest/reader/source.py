@@ -12,6 +12,7 @@ from huayan.contracts import KnowledgeUnit
 from huayan.ingest.trial_ir import EvidenceReportSource
 from huayan.knowledge.permission import PermissionDenied, can_read
 
+from .library import LibrarySource
 from .trials import TrialRecord
 from .evidence import EvidenceBlock
 
@@ -25,15 +26,26 @@ def read_source(kb, doc_id, actor, owners, span=None):
         raise ValueError(f"内部来源尚未指定归属人：{doc_id}")
     fragments = source.fetch(doc_id)
     level = max([3 if source.kind == "internal" else 0, *(f.level for f in fragments)])
-    # 只作读取权限描述，不加入正式知识状态；share 仅认整份来源对应的 report 编号。
-    unit = KnowledgeUnit(id=f"ku:report:{doc_id}", kind="report", level=level, title=doc_id,
-                         text="", owner=owner or "public", created_at=get_clock().now())
-    if not can_read(actor, unit, kb._shared(actor)) or (level > 1 and kb.is_frozen(actor.id)):
+    if not _may_read(kb, doc_id, actor, owner, level):
         raise PermissionDenied("无权读取该来源")
     selected = fragments if span is None else [f for f in fragments if f.span == span]
     if not selected:
         raise ValueError(f"来源片段不存在：{doc_id}#{span}")
     return [f.model_copy(update={"level": level}, deep=True) for f in selected]
+
+
+def _may_read(kb, doc_id, actor, owner, level):
+    # 只作读取权限描述，不加入正式知识状态；share 仅认整份来源对应的 report 编号。
+    unit = KnowledgeUnit(id=f"ku:report:{doc_id}", kind="report", level=level, title=doc_id,
+                         text="", owner=owner or "public", created_at=get_clock().now())
+    return can_read(actor, unit, kb._shared(actor)) and not (level > 1 and kb.is_frozen(actor.id))
+
+
+def readable_sources(kb, actor, owners):
+    """V11.13 检索前先划范围：委托人按统一入口能读的整份来源（内部来源没指定归属人的不算）。"""
+    return {d for s in kb.sources for d in s.list_docs()
+            if s.kind != "internal" or owners.get(d) is not None
+            if _may_read(kb, d, actor, owners.get(d), max([3 if s.kind == "internal" else 0, *(f.level for f in s.fetch(d))]))}
 
 
 def read_trial_record(kb, doc_id, actor, owners, path):
@@ -67,6 +79,11 @@ def read_source_image(kb, doc_id, actor, owners, page, span=None):
     """回取原页或块的已登记区域；没有坐标时如实返回整页。"""
     fragments = read_source(kb, doc_id, actor, owners, span)
     source = next(s for s in kb.sources if doc_id in s.list_docs())
+    if isinstance(source, LibrarySource):            # V11.13 资料库：登记时渲染的整页图，没有区域坐标
+        images = source.images(doc_id)
+        if not 1 <= page <= len(images) or span not in (None, f"p{page}"):
+            raise ValueError("该来源没有指定原页")
+        return _image(doc_id, span, page, None, Path(images[page - 1]).read_bytes(), fragments[0])
     if not isinstance(source, EvidenceReportSource):
         raise ValueError("该来源尚未登记原页图像")
     report = json.loads(source.path.read_text(encoding="utf-8"))
@@ -90,6 +107,10 @@ def read_source_image(kb, doc_id, actor, owners, page, span=None):
         bbox = location.bbox
     path = Path(images[page - 1])
     raw = (path if path.is_absolute() else source.path.parent / path).read_bytes()
+    return _image(doc_id, span, page, bbox, raw, fragments[0])
+
+
+def _image(doc_id, span, page, bbox, raw, fragment):
     with Image.open(BytesIO(raw)) as image:
         mime = Image.MIME[image.format]
         width, height = image.size
@@ -102,6 +123,6 @@ def read_source_image(kb, doc_id, actor, owners, page, span=None):
                 raw = stream.getvalue()
             width, height, mime = right - left, bottom - top, "image/png"
     return {"doc_id": doc_id, "span": span, "page": page, "bbox": bbox,
-            "kind": "region" if bbox is not None else "page", "level": fragments[0].level,
-            "source": fragments[0].source, "width": width, "height": height,
+            "kind": "region" if bbox is not None else "page", "level": fragment.level,
+            "source": fragment.source, "width": width, "height": height,
             "fingerprint": sha256(raw).hexdigest()[:12], "image_url": f"data:{mime};base64,{b64encode(raw).decode('ascii')}"}

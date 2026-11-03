@@ -29,10 +29,11 @@ from huayan.jue.proto import JueProto, load_templates
 from huayan.jue.publish import publish, select_asks
 from huayan.jue.records import load_records
 from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
-from huayan.ingest.compile import admit, recheck
+from huayan.ingest.compile import admit, propose, recheck
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource, OperationIR
-from huayan.ingest.reader.source import read_source, read_trial_record, read_source_image
+from huayan.ingest.reader.source import read_source, read_trial_record, read_source_image, readable_sources
+from huayan.ingest.reader.library import LibrarySource, search_library
 from huayan.knowledge import AuditLog, KnowledgeBase, Ledger, PermissionDenied, level_of
 from huayan.knowledge.permission import colleague_l3, holder, can_read
 from huayan.knowledge.disclosure import VERSIONS, cap, render, render_refs
@@ -101,11 +102,15 @@ class HuayanApp:
             state_path=app.config.get("qi_state") or app.run_dir / "qi_state.json")
         app._load_public(Path(app.config["seeds_dir"]) / "public.yaml")
         app.kb.sources = [EvidenceReportSource(s["root"]) if Path(s["root"]).suffix == ".json" else
+                         LibrarySource(s["name"], s["kind"], s["root"]) if s.get("library") else
                          FolderSource(s["name"], s["kind"], s["root"], s.get("level"), app.kb._doc_levels)
                           for s in app.config["sources"]]
         manifest = app.config.get("source_manifest")
         app.source_owners = {s["source_id"]: s["owner_actor_id"] for s in
                             json.loads(Path(manifest).read_text(encoding="utf-8"))["sources"]} if manifest else {}
+        for source in app.kb.sources:
+            if isinstance(source, LibrarySource):
+                app.source_owners |= source.owners      # V11.13 资料库的归属在它自己的清单里
         app._wire_models(byok)
         app._sessions = {s.id: s for s in map(Session.model_validate_json, _read_dir(app.run_dir / "sessions"))}
         app._requirements = {r.id: r for r in map(Requirement.model_validate_json, _read_dir(app.run_dir / "requirements"))}
@@ -1463,6 +1468,11 @@ class HuayanApp:
         self.scan()
         return revised.model_copy(deep=True)
 
+    def search_sources(self, query, by, k=5):
+        """V11.13 原始资料检索：先按统一读取入口划出委托人能读的整份来源，只在这里面找；命中只是依据，不是结论。"""
+        actor = _find(self.actors, by, "主体")
+        return search_library(self.kb.sources, query, readable_sources(self.kb, actor, self.source_owners), k)
+
     def read_source(self, doc_id, by, span=None):
         """内部查证只返回原文与出处键，不产生结论、能力或专业签字。"""
         actor = _find(self.actors, by, "主体")
@@ -1519,9 +1529,11 @@ class HuayanApp:
         req, _ = self._requirement(req_id, by, {"rd"}, {"draft", "rd_accepted"})
         prepared = self.source_preparation(req_id, by)
         ir_path = self.config.get("source_irs", {}).get(doc_id)
-        if prepared is None or ir_path is None:
-            raise ValueError("请先保存本单依据，并登记该来源的观察 IR")
-        self._source_fragments(prepared["evidence"], by)
+        if prepared is None:
+            raise ValueError("请先保存本单依据")
+        fragments = self._source_fragments(prepared["evidence"], by)
+        if ir_path is None:
+            return self._compile_observations(req, prepared, [f for f in fragments if f.doc_id == doc_id], by)
         candidates = {u.id for u in self.candidate_claims(req_id, by)}
         if not set(prepared["claim_ids"]) <= candidates:
             raise ValueError("准备关联的候选状态已变化，请重新准备")
@@ -1544,6 +1556,22 @@ class HuayanApp:
         pending = "\n".join(dict.fromkeys([prepared["pending"], *ir.pending]))
         record = prepared | {"claim_ids": claim_ids, "pending": pending,
                              "compilation": {"ir_id": ir.id, "at": get_clock().now().isoformat(), "report": report}}
+        path = self.run_dir / "source_preparations" / f"{req.id.replace(':', '_')}.json"
+        path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+        return record
+
+    def _compile_observations(self, req, prepared, fragments, by):
+        """V11.13 没登记 IR 的来源（资料库）：用本单存下的依据页现编观察（V11.10 编译器），只产生候选。"""
+        if not fragments:
+            raise ValueError("本单准备材料里没有这份来源的依据，请先读原文并保存依据")
+        proposals = [p.model_copy(update={"author": by}) for p in propose(fragments, self.gateway, self.seeds)]
+        report = self.import_proposals(proposals, by)
+        mine = {u.id for u in self.candidate_claims(req.id, by)}
+        admitted = [row["ku_id"] for row in report["admitted"]]
+        record = prepared | {"claim_ids": list(dict.fromkeys(prepared["claim_ids"] + [k for k in admitted if k in mine])),
+                             "compilation": {"method": "observation", "doc_id": fragments[0].doc_id,
+                                             "other_phenomenon": [k for k in admitted if k not in mine],
+                                             "at": get_clock().now().isoformat(), "report": report}}
         path = self.run_dir / "source_preparations" / f"{req.id.replace(':', '_')}.json"
         path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
         return record
