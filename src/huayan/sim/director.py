@@ -1,4 +1,5 @@
-"""V11.5 导演：游戏模式里扮演外部世界（客户）和这一局没人玩的岗位，按 demo/levels.yaml 的关卡骨架一件件送来事情。
+"""V11.5 导演：游戏模式里扮演外部世界（客户）和这一局没人玩的岗位，按 demo/levels.yaml 的骨架送来事情。
+V11.12：各岗位自己的业务开局一起送来，关卡（一条完整的业务流程）一步过了才送下一步；路演局里各岗位的事都留给人。
 导演不是 Harness 的调度者：觉、总线、hub、Agent、门面照常运行。导演的每个写动作都走 Api.call（与浏览器同一个入口），
 读也只用同一套只读接口；做过的动作记在 acted 里，前情据此把这些行标「模拟」。真值（客户心里的需求卡）只在导演这一侧。
 模板模式零调用：客户按关卡台词说话，台词说完后只在觉还在追问、或研发回问时由模拟客户（sim/customer.py）按真值回答。
@@ -26,11 +27,17 @@ from huayan.sim.customer import SimCustomer
 LEVELS = Path("demo/levels.yaml")
 VIEWER = "supervisor:M01"        # 导演读前情、需求单用主管视角（L2，看得到需求单上的经过）
 PM = "pm:P01"
-SHOWN = ("id", "title", "brief", "to", "decide", "mechanism", "point")
+SHOWN = ("id", "kind", "title", "brief", "to", "decide", "mechanism", "point")
+ROLE = {"customer": "客户", "sales": "业务员", "pm": "产品经理", "rd": "研发"}
 
 
 def load_levels(path: Path = LEVELS) -> list[dict]:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))["levels"]
+    """业务按岗位编号（研发业务 1……），关卡按顺序编号（关卡第 1 步……）。"""
+    data, count, out = yaml.safe_load(path.read_text(encoding="utf-8")), {}, []
+    for x in data["business"]:
+        count[x["to"]] = count.get(x["to"], 0) + 1
+        out.append(x | {"id": f"{ROLE[x['to']]}业务 {count[x['to']]}", "kind": "business"})
+    return out + [x | {"id": f"关卡第 {i} 步", "kind": "stage"} for i, x in enumerate(data["stage"], 1)]
 
 
 def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> Path:
@@ -55,10 +62,10 @@ def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> 
     return path
 
 
-def fresh(level: int = 0, round_: int = 1, speed: int = 60, real: bool = False) -> dict:
-    """一局的进度：cases 每关送来的会话，done 导演代办过的动作，acted 导演代谁做了什么（前情标「模拟」）；
-    real 这一局第 4、5、6、9 关用真实报告。"""
-    return {"level": level, "round": round_, "speed": speed, "paused": False, "real": real,
+def fresh(round_: int = 1, speed: int = 60, real: bool = False, roadshow: bool = False) -> dict:
+    """一局的进度：cases 每件事送来的会话，done 导演代办过的动作，acted 导演代谁做了什么（前情标「模拟」）；
+    real 这一局的关卡用真实报告；roadshow 路演局：导演只扮演外部世界和事到你手上之前的那几步。"""
+    return {"round": round_, "speed": speed, "paused": False, "real": real, "roadshow": roadshow,
             "cases": {}, "done": [], "passed": [], "seen": {}, "acted": []}
 
 
@@ -74,30 +81,48 @@ class Director:
     def _levels(self) -> list[dict]:
         return load_levels(self.real / "levels.yaml" if self.state["real"] else LEVELS)
 
-    def new_round(self, real: bool) -> None:
-        """开新的一局（重开本关、换报告），关卡骨架跟着这一局用的报告。"""
+    def new_round(self, real: bool, roadshow: bool) -> None:
+        """开新的一局（重开这一局、换报告、换路演局），骨架跟着这一局用的报告。"""
         if real and self.real is None:
             raise ValueError("没有配置真实报告版（play_real_report）")
-        self.state = fresh(round_=self.state["round"] + 1, speed=self.state["speed"], real=real)
+        self.state = fresh(round_=self.state["round"] + 1, speed=self.state["speed"], real=real, roadshow=roadshow)
         self.levels, self.customers = self._levels(), {}
 
     def save(self) -> None:
         self.path.write_text(json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
 
-    def level(self) -> dict:
-        return self.levels[self.state["level"]]
+    def open(self) -> list[dict]:
+        """该送来、还没通过的事：业务全部，关卡只到第一个没通过的那一步。"""
+        stage = [x for x in self.levels if x["kind"] == "stage" and x["id"] not in self.state["passed"]][:1]
+        return [x for x in self.levels if x["kind"] == "business" and x["id"] not in self.state["passed"]] + stage
 
     def view(self) -> dict:
-        lv, s = self.level(), self.state
-        return {"levels": [{k: x.get(k) for k in SHOWN} | {"ready": "pass" in x} for x in self.levels],
-                "level": s["level"], "round": s["round"], "real": s["real"], "real_ready": self.real is not None, "speed": s["speed"], "paused": s["paused"],
-                "passed": lv["id"] in s["passed"], "done": s["passed"], "cases": s["cases"].get(str(lv["id"]), []),
-                "acted": s["acted"], "error": self.error, "lines": self._lines(lv), "notes": self._notes(lv)}
+        s, now = self.state, self.open()
+        status = lambda x: "passed" if x["id"] in s["passed"] else "open" if x in now else "waiting"
+        return {"levels": [{k: x.get(k) for k in SHOWN} | {"status": status(x), "cases": s["cases"].get(x["id"], []),
+                            "who": self._who(x) if x in now else None} for x in self.levels],
+                "round": s["round"], "real": s["real"], "real_ready": self.real is not None, "roadshow": s["roadshow"],
+                "speed": s["speed"], "paused": s["paused"], "done": s["passed"], "acted": s["acted"], "error": self.error,
+                "lines": [x for lv in now for x in self._lines(lv)], "notes": [x for lv in now for x in self._notes(lv)]}
+
+    def _who(self, lv: dict) -> str | None:
+        """这件事在等谁：送达工作面上的那个人（路演时点一件就以他进入）；还没落到具体的人手上就是 None。"""
+        sids = self.state["cases"].get(lv["id"], [])
+        if not sids:
+            return None
+        if lv["to"] == "customer":
+            return self._customer_of(sids[0])
+        if lv["to"] == "pm":
+            return PM
+        if lv["to"] == "sales":
+            return next(x["sales_id"] for x in self._get("/api/sessions") if x["id"] == sids[0])
+        req = self._req(sids[0])
+        return req.assigned_rd if req else None
 
     def _lines(self, lv: dict) -> list[dict]:
         """客户由人来扮时，各位客户接下来可以说的那句台词（只是提示，可以改写）。"""
         out = []
-        for sid in self.state["cases"].get(str(lv["id"]), []):
+        for sid in self.state["cases"].get(lv["id"], []):
             customer = self._customer_of(sid)
             view = self._get("/api/session", id=sid, viewer=customer)["view"]
             said = sum(t.speaker == "customer" for t in view.turns)
@@ -108,7 +133,7 @@ class Director:
     def _notes(self, lv: dict) -> list[dict]:
         """研发由人来扮时，外部世界给他的试样结果（只是提示，录入照常在研发面上做）。"""
         out = []
-        for sid in self.state["cases"].get(str(lv["id"]), []) if "trial" in lv else []:
+        for sid in self.state["cases"].get(lv["id"], []) if "trial" in lv else []:
             req = self._req(sid)
             if req and req.status == "rd_confirmed":
                 result, _, missing = self._trial(lv, req)
@@ -146,14 +171,26 @@ class Director:
         self.state["acted"].append({"ts": get_clock().now().isoformat(), "actor": actor, "path": path})
         return result
 
-    # 一关 ----------------------------------------------------------------------------------------
+    # 一件事 --------------------------------------------------------------------------------------
     def step(self, present: set[str]) -> bool:
-        """导演看一眼：这一关还没送来就送来；缺席的客户、岗位各做该做的一步；到了通关条件就记下。返回这一眼做没做事。
-        present = 这一局有人在玩的身份；他们的事留给人做。"""
-        lv, s = self.level(), self.state
-        key = str(lv["id"])
-        if "pass" not in lv or lv["id"] in s["passed"]:
-            return False
+        """导演看一眼所有还没通过的事，返回这一眼做没做事。present = 这一局有人在玩的身份；他们的事留给人做。"""
+        acted = False
+        for lv in self.open():
+            acted |= self._step(lv, self._present(lv, present))
+        self.save()
+        return acted
+
+    def _present(self, lv: dict, present: set[str]) -> set[str]:
+        """路演局：业务只把它送达的岗位留给人（之前别的岗位那几步导演做完），关卡各步的岗位都留给人；
+        客户只在事送到客户面时留给人。不是路演局就照这一局有人在玩的身份。"""
+        if not self.state["roadshow"]:
+            return present
+        return {a.id for a in self.api().app.seeds.actors
+                if a.role == lv["to"] or (lv["kind"] == "stage" and a.role != "customer")}
+
+    def _step(self, lv: dict, present: set[str]) -> bool:
+        """这件事还没送来就送来；缺席的客户、岗位各做该做的一步；到了通过条件就记下。"""
+        s, key = self.state, lv["id"]
         acted = False
         if key not in s["cases"]:       # 送来：这一关的每位客户开一段会话；没人扮的客户说出开场白，有人扮的由人自己说
             s["cases"][key] = []
@@ -178,7 +215,6 @@ class Director:
         if self._passed(lv):
             s["passed"].append(lv["id"])
             acted = True
-        self.save()
         return acted
 
     def _customer(self, lv: dict, sid: str, customer: str) -> bool:
@@ -230,7 +266,7 @@ class Director:
     def _do(self, lv: dict, a: dict, present: set[str]) -> bool:
         """缺席岗位的一步模板解法；前提还没出现（还没交到这个岗位、Agent 还没准备好、客户还没答回问）或有人在玩这个岗位时不做。
         同一个动作要做两次（再确认、再试样）就在关卡里写两遍，前提保证它们一前一后。"""
-        sids = self.state["cases"][str(lv["id"])]
+        sids = self.state["cases"][lv["id"]]
         if "merge" in a or "scope" in a:
             # 产品经理：签产品机会（觉合并、Agent 准备之后）；批准这张单上研发判定的适用范围（报告导入的研发层适用与
             # 不立项给客户层的适用各一条，都准备好了一起批）
@@ -245,7 +281,7 @@ class Director:
                           note=a.get("merge") or a["scope"])
             return True
         if "review" in a:                   # 研发复核依据已变化的结论：读本次原文，签字保留
-            q = next((q for q in self._open("qi_review").values() if q.id in self.state["seen"][str(lv["id"])]
+            q = next((q for q in self._open("qi_review").values() if q.id in self.state["seen"][lv["id"]]
                       and q.prepared_at and q.signer_id not in present), None)
             if q is None:
                 return False
@@ -318,34 +354,19 @@ class Director:
         def hit(want, x):
             kind, _, text = want.partition("~")
             return kind in (x["kind"], f"{x['kind']}:{x['role']}") and text in x["text"]
-        key = str(lv["id"])
+        key = lv["id"]
         for want in lv["pass"]:
             if want.startswith("settled:") and set(self.state["seen"][key]) - set(self._open(want.removeprefix("settled:"))):
                 return True
         return any(hit(want, x) for sid in self.state["cases"][key] for x in self._story(sid) for want in lv["pass"])
 
     # 一局 ----------------------------------------------------------------------------------------
-    def next_level(self) -> None:
-        """到下一个接上了导演的关（还没接上的跳过）。"""
-        if self.level()["id"] not in self.state["passed"]:
-            raise ValueError("这一关还没通过")
-        later = [i for i in range(self.state["level"] + 1, len(self.levels)) if "pass" in self.levels[i]]
-        if not later:
-            raise ValueError("后面没有接上的关了")
-        self.state["level"] = later[0]
-        self.save()
-
-    def play_through(self, upto: int, tick: Callable[[], None]) -> None:
-        """全部岗位都由导演代办，从第 1 关跑到第 upto + 1 关开头（重开本关时，新的一局先补上前面几关）。
-        tick：导演没事可做时推进一拍（业务时间往前走、觉检查、Agent 准备），产品机会要等觉的定时扫描。"""
-        for n in [i for i in range(upto) if "pass" in self.levels[i]]:
-            self.state["level"] = n
-            for _ in range(30):
-                if self.level()["id"] in self.state["passed"]:
-                    break
-                if not self.step(set()):
-                    tick()
-            else:
-                raise ValueError(f"第 {self.level()['id']} 关自动跑不通，停在这里")
-        self.state["level"] = upto
-        self.save()
+    def play_all(self, tick: Callable[[], None]) -> None:
+        """全部岗位都由导演代办，把业务和关卡都跑完（备 CEO 面看的局）。tick：导演没事可做时推进一拍
+        （业务时间往前走、觉检查、Agent 准备），产品机会要等觉的定时扫描。"""
+        for _ in range(30 * len(self.levels)):
+            if not self.open():
+                return
+            if not self.step(set()):
+                tick()
+        raise ValueError(f"自动跑不通，停在：{'、'.join(x['id'] for x in self.open())}")

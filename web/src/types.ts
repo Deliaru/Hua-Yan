@@ -355,13 +355,17 @@ export interface FrozenActor {
 
 // V11.10 授予适用能力的范围：默认是试过的条件，研发授予时可以放宽（条件取值、温度、限制原文）
 export interface GrantScope { conditions: Record<string, string[]>; temperature_c: [number, number] | null; limits: string }
-// V11.5 游戏模式：导演的进度（sim/director.py 的 view）
-export interface PlayLevel { id: number; title: string; brief: string; to: string; decide: string; mechanism: string; point: string; ready: boolean }
+// V11.5 游戏模式：导演的进度（sim/director.py 的 view）。V11.12：各岗位的业务（business）开局一起送来，关卡（stage）一步过了才送下一步
+export interface PlayLevel {
+  id: string; kind: "business" | "stage"; title: string; brief: string; to: string; decide: string; mechanism: string; point: string;
+  status: "waiting" | "open" | "passed"; cases: string[]; who: string | null;   // who：这件事在等谁（还没落到具体的人手上为 null）
+}
 export interface PlayState {
-  levels: PlayLevel[]; level: number; round: number; speed: number;
-  real: boolean; real_ready: boolean;   // 这一局第 4、5、6、9 关用真实报告；服务配了真实报告版（play_real_report）才能换
-  paused: boolean; passed: boolean; done: number[];
-  cases: string[]; acted: { ts: string; actor: string; path: string }[]; error: string | null; now: string;
+  levels: PlayLevel[]; round: number; speed: number;
+  real: boolean; real_ready: boolean;   // 这一局的关卡用真实报告；服务配了真实报告版（play_real_report）才能换
+  roadshow: boolean;                    // 路演局：各岗位的事都留给人，导演只扮演外部世界
+  paused: boolean; done: string[];
+  acted: { ts: string; actor: string; path: string }[]; error: string | null; now: string;
   lines: { customer: string; session_id: string; text: string }[];   // 客户由人扮时，接下来可以说的台词
   notes: { who: string; text: string }[];   // 有人在玩的岗位要用到的外部世界信息（试样结果）
 }
@@ -378,9 +382,9 @@ export interface CeoData {
   cases: CeoCase[]; caps: { id: string; product: string; phenomenon: string; granted_by: string; new: boolean }[];   // granted_by 是签字人姓名
   params: Record<"given" | "safe", CeoParams>; names: Record<string, string>; bars: Record<"given" | "safe", Record<"sales" | "pm" | "rd", TimeBar>>;
 }
-// V11.9 游戏结算：九关各送来的事（会话号）与这一局的账本（各件只给路径与推算，不给原话与经手人）
+// V11.9 游戏结算：各件业务与关卡各步送来的事（会话号）与这一局的账本（各件只给路径与推算，不给原话与经手人）
 export interface PlaySettle {
   params: CeoData["params"]; bars: CeoData["bars"];
   cases: (Pick<CeoCase, "session_id" | "path" | "reused" | "arrived" | "answered" | "given" | "safe"> & { rerouted: boolean })[];
-  levels: { id: number; title: string; point: string; passed: boolean; cases: string[] }[];
+  levels: { id: string; kind: "business" | "stage"; title: string; point: string; passed: boolean; cases: string[] }[];
 }

@@ -83,7 +83,12 @@ export default function App() {
   const setNotes = (on: boolean) => { localStorage.setItem("huayan-notes", on ? "1" : "0"); setNotesState(on); };
   const guide = useGuide();
 
-  const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
+  const fail = (e: unknown) => {
+    const message = e instanceof Error ? e.message : String(e);
+    setError(message);
+    // 服务端已不认这个浏览器的身份（如别处点了换身份）：重取 meta，回到选身份，不再停在加载中反复请求
+    if (message === "请先选择你在试用中的身份") api.meta().then(setMeta);
+  };
   useEffect(() => { api.meta().then(setMeta, fail); }, []);
   // V9.2 试用实例：别人的提交与后台准备完成后，几秒内自动刷新（只看事件数是否变了，不排会话锁）
   const trialOn = !!meta?.trial?.actor;
@@ -128,7 +133,7 @@ export default function App() {
   };
   const ctx = {
     meta, me: actor.id, role: actor.role, agentOnline: !meta.status.gateway_mock, version, side,
-    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, focus, startDemo: () => setDemo(true), openMode: () => setModeOpen(true),
+    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, become: (id: string) => enter(id), focus, startDemo: () => setDemo(true), openMode: () => setModeOpen(true),
     notes: notesOn || inDemo,
     go: (p: string, f?: string | null, id?: string) => {
       const role = ROLE_PAGES[p as Page];

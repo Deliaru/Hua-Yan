@@ -11,6 +11,7 @@ export interface Ctx {
   refresh: () => void;
   fail: (e: unknown) => void;
   switchTo: (actor: string) => void;  // 演示导览一键切换到该做下一步的人
+  become: (actor: string) => void;    // V11.12 试用 / 游戏：本浏览器换成这个身份，进他的工作面（路演时一个人轮流演各岗位）
   go: (page: string, focus?: string | null, who?: string) => void;   // v6：跳到某个角色子工作面（可指定那个人）并打开同一对象
   focus: string | null;             // 跳转时带来的对象 id，子工作面据此选中
   side: HTMLElement | null;         // 侧栏下半部分：各页面把自己的 source list 放进来

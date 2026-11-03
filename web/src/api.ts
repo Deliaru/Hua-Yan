@@ -60,8 +60,7 @@ export const api = {
   playState: () => call<PlayState>("play/state"),
   playSettle: () => request<PlaySettle>("play/settle"),                                          // V11.9 这一局的结算
   playControl: (p: { paused?: boolean; speed?: number }) => call<PlayState>("play/control", p),
-  playNext: () => call<PlayState>("play/next", {}),
-  playRestart: (real?: boolean) => call<PlayState>("play/restart", real === undefined ? {} : { real }),
+  playRestart: (p: { real?: boolean; roadshow?: boolean } = {}) => call<PlayState>("play/restart", p),
   trialStamp: () => call<{ events: number; failures: number; sessions: number }>("trial/stamp"),
   agentProcess: (conversation_id: string, viewer: string) => call<Record<string, AgentRun>>(`agents/process?${q({ conversation_id, viewer })}`),
 
