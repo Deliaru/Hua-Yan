@@ -12,6 +12,7 @@
 #      accept 研发接单 · confirm 研发确认化学要点 · trial 研发录入试样（结果按 trial 的世界规律） · rework 研发签退回重新转译
 #      review 研发复核依据已变化的结论并签字保留（写依据）；同一动作做两次就写两遍
 #      reuse 研发不采用产品经理 Agent 建议的现成产品（写理由；在线时 Agent 会真的去查现成产品，离线骨架不查）
+#      recall 业务员回访觉找回的过去没解决的客户（写对客户说的话） · sheet 产品经理按研发判断更新说明书（写补充句）（V12.7）
 #   trial 世界规律：needs 里的条件不在需求单上，试样就因需求条件缺失失败（研发业务 2）
 #   revise 外部世界改版资料：这一局资料副本里 doc 的 old 改成 new，再请系统重取依据（关卡第 4 步）
 #   pass 通关条件，任一条：这件事的前情里出现 kind（或 kind:role；kind~文字 还要求这一行含这段文字）；
@@ -41,6 +42,19 @@ business:
     do:
       - {as: sales, say: "您好，刚才推荐的匀染剂按 25 公斤一桶报价，明天把正式报价单发您。"}
     pass: ["turn:sales"]
+
+  - title: 过去没解决的客户
+    brief: 印染厂 A 早先问过锦氨经轴缸色花，那时没有试样，研发没有立项
+    to: sales
+    decide: 现在不用做；研发的判断生效后，觉会请你回访
+    mechanism: 研发不立项、会话留档
+    point: 没解决的客户不会被忘掉
+    customer: customer:C01
+    card: {phenomenon: color_unlevel, slots: {fiber: 锦纶氨纶, equipment: 经轴染色机}}
+    lines: ["深一块浅一块，锦氨弹力布，经轴缸"]
+    do:
+      - {as: rd, decline: {reason: 锦氨在经轴染色机上还没有试样，先不立项}}
+    pass: [project_declined]
 
   - title: 新问题直达研发
     brief: 印染厂 C 的白地沾色，现有产品都不适用
@@ -138,3 +152,23 @@ stage:
     do:
       - {as: rd, review: 改版只补记了第三缸的浴比与手感，锦氨经轴的匀染结论不变，保留}
     pass: ["settled:qi_review"]
+
+  - title: 研发判断回流到过去的客户
+    brief: 关卡第 1 步的判断生效后，觉在历史里找到早先没解决的印染厂 A
+    to: sales
+    decide: 回访客户，告诉他现在有解了
+    mechanism: 觉（能力回流唤醒）、契（适用能力）、重新匹配
+    point: 一次判断不只答下一单，还把过去没解决的客户找回来
+    do:
+      - {as: sales, recall: 您之前问的锦氨经轴缸色花，研发新确认锦氨匀染剂 HY-LV205 可以用，已经推荐在您的需求里。}
+    pass: ["settled:capability_recall"]
+
+  - title: 说明书跟上研发判断
+    brief: 研发确认的适用条件超出了说明书写明的范围
+    to: pm
+    decide: 签字更新说明书
+    mechanism: 觉（说明书与研发判断不一致）、产品经理 Agent 起草、公开层
+    point: 研发的判断回到公开层，下一位客户看说明书就知道
+    do:
+      - {as: pm, sheet: 经试样确认，锦纶氨纶弹力面料在经轴染色机上染色同样适用。}
+    pass: ["settled:sheet_mismatch"]

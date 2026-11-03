@@ -383,6 +383,16 @@ def propose_merge(ctx: ToolContext, args: MergeArgs) -> ToolResult:
     return ToolResult(data=_req(req))
 
 
+class SheetRevisionArgs(BaseModel):
+    question_id: str = Field(description="当前 sheet_mismatch 问题的 question_id（q:…）")
+    text: str = Field(description="接在说明书后面的一两句补充，只写对外可说的适用条件与工艺，不写机理、配方")
+
+
+@tool("draft_sheet_revision", "draft", ["pm"], "研发判断超出说明书时，起草说明书补充句，交产品经理签字", SheetRevisionArgs)
+def draft_sheet_revision(ctx: ToolContext, args: SheetRevisionArgs) -> ToolResult:
+    return ToolResult(data=ctx.app.draft_sheet_revision(args.question_id, args.text, ctx.principal.id))
+
+
 LANG = {"pm": "product_lang", "rd": "chem_lang"}         # 编辑哪一层由门面按角色决定，这里只用来读原条目
 
 

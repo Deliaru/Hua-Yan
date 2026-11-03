@@ -406,5 +406,5 @@ export interface AgentStep {
   conversation_id: string; step: number; principal: string; tool: string | null; args: Record<string, unknown>;
   result_summary: string; blocked: string[]; pending_action_id: string | null; at: string;
 }
-// V12.6 Client-View 的主动消息（门面 client_messages）：研发批准给这位客户的机理说明
-export interface ClientMessage { kind: "decrypt"; session_id: string; product: string; text: string; by: string; at: string }
+// V12.6 Client-View 的主动消息（门面 client_messages）：研发批准给这位客户的机理说明；V12.7 业务员回访、新品发布
+export interface ClientMessage { kind: "decrypt" | "callback" | "release"; session_id: string; product: string; text: string; by: string; at: string }

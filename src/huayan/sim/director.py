@@ -204,6 +204,9 @@ class Director:
             s["seen"][key] = [q for want in lv["pass"] if want.startswith("settled:")
                               for q in self._open(want.removeprefix("settled:"))]
             acted = True
+        for want in lv["pass"]:             # V12.7 觉在送来之后才提出的决策（回流唤醒、说明书更新）也算进来
+            if want.startswith("settled:"):
+                s["seen"][key] = sorted(set(s["seen"][key]) | set(self._open(want.removeprefix("settled:"))))
         for sid in s["cases"][key]:
             customer = self._customer_of(sid)
             if customer not in present:
@@ -288,6 +291,14 @@ class Director:
             review = self._act(q.signer_id, "/api/qi/review", ku_ids=[q.refs["ku_id"]])
             self._act(q.signer_id, "/api/resolve", question_id=q.id, action="sign", note=a["review"],
                       reviewed_evidence=review["reviewed_evidence"])
+            return True
+        if "recall" in a or "sheet" in a:  # V12.7 业务员回访过去没解决的客户；产品经理按研发判断更新说明书
+            family = "capability_recall" if "recall" in a else "sheet_mismatch"
+            q = next((q for q in self._open(family).values() if q.signer_id not in present), None)
+            if q is None:
+                return False
+            self._act(q.signer_id, "/api/resolve", question_id=q.id, action="sign" if "recall" in a else "update_sheet",
+                      note=a.get("recall") or a["sheet"])
             return True
         if "reuse" in a:
             # 研发不采用产品经理 Agent 建议的现成产品（在线时 Agent 真的去查了现成产品；离线骨架不查，这一步直接算做完）。

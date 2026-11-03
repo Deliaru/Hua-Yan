@@ -14,6 +14,7 @@ import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, La
 const GROUPS: [string, string, (q: Question) => boolean][] = [
   ["适用范围待定", "研发判过「已有产品适用」", (q) => q.family === "scope_update"],
   ["产品机会", "几位客户的同类需求", (q) => q.family === "opportunity"],
+  ["说明书跟上研发", "研发判断超出说明书", (q) => q.family === "sheet_mismatch"],
   ["待纠偏", "研发退回的需求", (q) => q.family === "accept_requirement" || q.family === "contribution_pm"],
 ];
 const reqOf = (q: Question) => q.refs.requirement_id ?? (q.refs.requirement_ids ?? "").split(",").filter(Boolean)[0] ?? null;
@@ -101,8 +102,42 @@ function Pane({ q, onDone }: { q: Question; onDone: (text: string) => void }) {
       {rid && <Narration id={rid} />}
       {q.family === "scope_update" && <Scope q={q} onDone={onDone} />}
       {q.family === "opportunity" && <Opportunity q={q} onDone={onDone} />}
+      {q.family === "sheet_mismatch" && <SheetRevision q={q} onDone={onDone} />}
       {q.family === "accept_requirement" && view && <Correct q={q} view={view} onDone={onDone} />}
       {q.family === "contribution_pm" && view && <Contribute view={view} onDone={onDone} />}
+    </>
+  );
+}
+
+// V12.7 说明书跟上研发判断：觉发现研发签出的适用超出说明书，产品经理 Agent 起草补充句，产品经理签字后接进说明书，客户层随即看到
+function SheetRevision({ q, onDone }: { q: Question; onDone: (t: string) => void }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const draft = useData(() => api.sheetRevision(q.id, me), [q.id, me]);
+  const [text, setText] = useState<string | null>(null);
+  const value = text ?? draft?.text ?? "";
+  return (
+    <>
+      <Group title="研发判断超出说明书的地方">
+        <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">产品</span>
+          <span className="text-[15px] font-semibold">{L.product(q.refs.product_id)}</span></div>
+        <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">现象</span><span className="text-[14px]">{L.phen(q.refs.phenomenon)}</span></div>
+        <div className="row !items-start"><span className="w-20 shrink-0 text-[13px] text-ink-2">超出</span>
+          <span className="text-[14px] leading-[21px]">{q.refs.beyond}</span></div>
+      </Group>
+      <Group title="签字：更新说明书" foot="补充句接在说明书后面，客户层随即看到；只写对外可说的适用条件与工艺，含保密内容会被拒绝。">
+        <div className="row !items-start">
+          <div className="flex flex-1 flex-col gap-2">
+            {draft?.by && <p className="text-[12.5px] text-ink-2"><AgentMark who="产品经理 Agent 起草，可以直接改" /></p>}
+            <Field value={value} onChange={setText} rows={3} placeholder="例如：经试样确认，涤纶在汽流染色机上 133℃ 保温 30min 匀染良好。" />
+            <div className="flex gap-2">
+              <Act label="更新说明书" disabled={!value.trim()} run={() => api.resolve(q.id, "update_sheet", me, value).then(() =>
+                onDone(`已更新 ${L.product(q.refs.product_id)} 的说明书，客户层看到的说明书与研发判断一致了。`))} />
+              <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me).then(() => onDone("这次不改说明书。"))} />
+            </div>
+          </div>
+        </div>
+      </Group>
     </>
   );
 }

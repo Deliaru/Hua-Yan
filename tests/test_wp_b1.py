@@ -116,9 +116,9 @@ def test_scan_finds_injection_and_asks_without_llm(mini_seeds, sim_clock, tmp_pa
     assert [o.attrs["n_stubs_top"] for o in state.objects.values() if o.object_type == "actor"] == [6]
     assert "actor:sales:S01" in state.objects
 
-    # 模板目录：Q2 新增 qi_grant、qi_review，Q5.5 新增 trial_rework，v8 新增 trial_risk、stale_capability，Q9.8 新增 mechanism_followup，共 25 个；自动动作仍只有两种。
+    # 模板目录：Q2 新增 qi_grant、qi_review，Q5.5 新增 trial_rework，v8 新增 trial_risk、stale_capability，Q9.8 新增 mechanism_followup，V12.7 新增 capability_recall、sheet_mismatch，共 27 个；自动动作仍只有两种。
     templates = load_templates(TEMPLATES)
-    assert len({t.family for t in templates.values()}) == 25
+    assert len({t.family for t in templates.values()}) == 27
     assert {t.auto_action for t in templates.values() if t.auto_action} == {"escalate", "assign_sales"}
     for name in ("b1_required", "b2_info_value", "rule_alert"):
         load_templates(ROOT / "config" / "baselines" / name)

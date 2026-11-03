@@ -75,6 +75,12 @@ def _summary(family: str, a: dict) -> str:
         return (f"授予 {a['days_since_grant']:.0f} 天、被使用 {a['n_used']} 次；之后 {a['n_outcomes']} 次试样产品原因失败 {a['n_fail']} 次，"
                 f"最近 7 天失败率 {a['recent_fail_rate']:.0%}（此前 {a['early_fail_rate']:.0%}），"
                 f"失败集中在同一可收窄取值的比例 {a['fail_concentration']:.0%}，客户评价不通过 {a['n_market_fail']} 次")
+    if family == "capability_recall":
+        missing = f"，还有 {a['n_unknown']} 项条件当时没问到" if a["n_unknown"] else ""
+        return (f"这位客户 {a['days_waiting']:.0f} 天前来问过，当时{'研发判断不立项' if a['declined'] else '没有合适的产品'}；"
+                f"研发新签出的适用判断覆盖了他当时说的条件{missing}")
+    if family == "sheet_mismatch":
+        return f"研发签出的适用判断有 {a['n_beyond']} 处超出说明书写明的范围，说明书还没跟上"
     if family == "contribution":
         return f"研发修改过、未被已有转化知识覆盖的条目 {a['n_edited_uncovered']} 条"
     return "上一步已签字、本步未签（规则到点）"

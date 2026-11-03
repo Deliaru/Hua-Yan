@@ -1,0 +1,14 @@
+id: capability_recall
+family: capability_recall
+kind: advance
+object_type: knowledge
+decision_label: 是否回访过去没解决的客户
+# V12.7 能力回流唤醒：人签出的适用能力生效后，情境相同、当时没解决的会话（自助没有下文、研发不立项、推荐撤回）
+precondition: "attrs.days_waiting >= 0"
+# 当时的条件都被新判断覆盖的先报；还有没问到的条件，回访时要先问清
+rule_score: "0.9 - 0.2 * attrs.n_unknown"
+worth_prompt: "一位客户 {attrs.days_waiting:.0f} 天前问过产品 {attrs.product_id} 能处理的现象「{attrs.value}」，当时没有解决（研发不立项：{attrs.declined}）；研发新签出的适用判断覆盖了他当时说的条件，还有 {attrs.n_unknown} 项条件当时没问到。是否由归属业务员回访这位客户？"
+title: "{object}：研发的新判断能解决一位过去没解决的客户，要不要回访？"
+owner_role: sales
+signer_role: sales
+urgency: "min(1, 0.5 + attrs.days_waiting / 30)"

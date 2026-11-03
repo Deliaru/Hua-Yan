@@ -33,7 +33,7 @@ def test_business_all_at_once_then_stage_in_order(tmp_path):
     api = _api(tmp_path)
     director = Director(lambda: api, tmp_path / "play.json")
     # 开局：各岗位的业务一起送来，关卡只送第 1 步
-    assert [x["id"] for x in director.open()] == ["客户业务 1", "业务员业务 1", "研发业务 1", "研发业务 2", "产品经理业务 1", "关卡第 1 步"]
+    assert [x["id"] for x in director.open()] == ["客户业务 1", "业务员业务 1", "业务员业务 2", "研发业务 1", "研发业务 2", "产品经理业务 1", "关卡第 1 步"]
     director.play_all(_tick(api))
     s = director.state
     assert sorted(s["passed"]) == sorted(x["id"] for x in director.levels)
@@ -85,9 +85,10 @@ def test_roadshow_leaves_every_role_its_business(tmp_path):
     quote = api.app.view_session(s["cases"]["业务员业务 1"][0], "sales:S01")
     assert quote.turns[-1].speaker == "customer" and not any(t.speaker == "sales" for t in quote.turns)
     assert _route(api, s["cases"]["研发业务 1"][0])["roles"]["rd"]["state"] == "pending"
-    assert all(v == "open" for k, v in status.items() if not k.startswith("关卡") or k == "关卡第 1 步")
-    assert status["关卡第 2 步"] == "waiting" and not s["passed"]
-    assert {a["actor"].split(":")[0] for a in s["acted"]} <= {"customer", "system"}
+    # 业务员业务 2 是第三幕的前情（过去没解决的客户）：研发不立项由导演做完，不等人
+    assert all(v == "open" for k, v in status.items() if (not k.startswith("关卡") or k == "关卡第 1 步") and k != "业务员业务 2")
+    assert status["关卡第 2 步"] == "waiting" and s["passed"] == ["业务员业务 2"]
+    assert {a["actor"].split(":")[0] for a in s["acted"] if a["path"] != "/api/decline"} <= {"customer", "system"}
 
 
 def test_stage_follows_report_to_next_order_and_revision(tmp_path):
@@ -123,6 +124,17 @@ def test_stage_follows_report_to_next_order_and_revision(tmp_path):
     assert app.kb._caps[cap.id].status == "active"
     assert escalated      # 挂起那一刻用过它的客户改道交研发（撤销后改道），不等复核
     assert {a["path"] for a in s["acted"]} <= set(server.POST)
+    # V12.7 关卡第 5 步：这条能力生效后，觉找回早先研发不立项的同条件客户，业务员回访，那段会话按新判断拿到推荐
+    old = case("业务员业务 2")
+    recall = next(q for q in app.bus.list(status=None, family="capability_recall"))
+    assert recall.refs["session_id"] == old and recall.status == "resolved" and recall.scored_by == "rule"
+    assert app.view_session(old, "customer:C01").card.product_id == "HY-LV205"
+    assert [m["kind"] for m in app.client_messages("customer:C01")] == ["callback"]
+    assert not any(q.refs.get("session_id") == six for q in app.bus.list(status=None, family="capability_recall"))   # 纯锦纶不在条件里
+    # 关卡第 6 步：研发签出的经轴染色机超出说明书，产品经理签字后补充句接进说明书，客户层看得到
+    sheet = next(q for q in app.bus.list(status=None, family="sheet_mismatch"))
+    assert sheet.status == "resolved" and "经轴染色机" in sheet.refs["beyond"]
+    assert "经轴染色机上染色同样适用" in app.kb._units["ku:sheet:HY-LV205"].text
     # V11.8 CEO 面：逐件路径只给主管；研发业务 2 第一次试样未通过记为绕回
     ceo = api.call("GET", "/api/ceo", {"viewer": "supervisor:CEO"})
     seven = next(c for c in ceo["cases"] if c["session_id"] == seven)

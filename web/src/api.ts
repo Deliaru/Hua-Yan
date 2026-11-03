@@ -151,6 +151,7 @@ export const api = {
   // v6：路由、开工条件、岗位工作、产品经理协作、研发不立项
   route: (id: string, viewer: string) => call<Route>(`route?${q({ id, viewer })}`),
   caseStory: (id: string, viewer: string) => call<CaseStory>(`case-story?${q({ id, viewer })}`),   // V11.1 前情
+  sheetRevision: (question_id: string, viewer: string) => call<{ text: string; by?: string; at?: string }>(`sheet-revision?${q({ question_id, viewer })}`),   // V12.7
   clientMessages: (viewer: string) => call<ClientMessage[]>(`client/messages?${q({ viewer })}`),   // V12.6 Client-View 主动消息
   oldFlow: (id: string, viewer: string) => call<OldFlow>(`old-flow?${q({ id, viewer })}`),         // V11.2 旧流程推算
   timeBar: (viewer: string) => call<TimeBar>(`time-bar?${q({ viewer })}`),                         // V11.4 我的时间构成

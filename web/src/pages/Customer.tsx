@@ -17,6 +17,13 @@ import { Narration } from "../components/Narration";
 const MY_STATUS: Record<string, string> = { open: "等你补充情况", recommended: "已有推荐", escalated: "研发在处理", closed: "已记录" };
 const SUBJECT: Record<string, string> = { jue: "觉", jev: "Jev", qi: "契", agent: "Agent", system: "系统" };
 
+// 主动消息的标题：研发批准的机理说明 / 业务员按研发新判断回访 / 你提过的需求做成了新品
+const headline = (m: ClientMessage, who: string) => ({
+  decrypt: `${who} 给你说明了「${m.product}」的作用原理`,
+  callback: `${who} 回访：研发新确认「${m.product}」能处理你之前的问题`,
+  release: `你提过的需求做成了新品「${m.product}」`,
+}[m.kind]);
+
 export function Customer() {
   const { me, focus, notes } = useApp();
   const all = useData(() => api.sessions(), []) ?? [];
@@ -65,8 +72,8 @@ function Home({ mine, messages, onOpen }: { mine: { id: string; status: string; 
         <p className="px-1 pb-1.5 text-[12px] font-semibold text-ink-2">新消息</p>
         {messages.map((m) => <button key={`${m.session_id}:${m.at}`} onClick={() => onOpen(m.session_id)}
           className="mb-2 block w-full rounded-[16px] bg-white px-4 py-3 text-left shadow-[0_1px_2px_rgba(0,0,0,.06)]">
-          <p className="text-[13px] font-semibold"><span className="mr-1.5 text-accent">●</span>{L.name(m.by)} 给你说明了「{m.product}」的作用原理</p>
-          <p className="mt-0.5 line-clamp-2 text-[12.5px] text-ink-2">{m.text}</p>
+          <p className="text-[13px] font-semibold"><span className="mr-1.5 text-accent">●</span>{headline(m, L.name(m.by))}</p>
+          {m.text && <p className="mt-0.5 line-clamp-2 text-[12.5px] text-ink-2">{m.text}</p>}
         </button>)}
       </div>}
       <div className="px-4 pt-4">
@@ -255,8 +262,8 @@ function Chat({ v, route, messages, story }: { v: SessionView; route: Route | nu
         {v.card && <Card v={v} story={story} />}
         {messages.map((m) => (
           <div key={m.at} className="mx-3 mt-2 rounded-[16px] bg-white px-4 py-3 shadow-[0_0_0_1px_rgba(0,122,255,.25)]">
-            <p className="text-[12px] font-semibold text-accent">{L.name(m.by)} 批准给你的说明 · {m.product}</p>
-            <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-[20px]">{m.text}</p>
+            <p className="text-[12px] font-semibold text-accent">{headline(m, L.name(m.by))}</p>
+            {m.text && <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-[20px]">{m.text}</p>}
           </div>
         ))}
         <div className="mx-3"><AuthorizedReplies sessionId={v.session_id} /></div>

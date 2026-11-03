@@ -904,7 +904,8 @@ class HuayanApp:
         """v6.1 E1：会话上「研发开工需要的条件」，按会话裁剪：只含条件名、取值、本会话客户原话、是否觉追问所得。
         客户与业务员只能看自己参与的会话；不含需求单、回问与失真（那些属于 L2/L3 视图）。"""
         viewer, session = self._actor(viewer_id), _find(self._sessions, session_id, "会话")
-        if level_of(viewer) <= 1 and viewer_id not in (session.customer_id, session.sales_id):
+        if level_of(viewer) <= 1 and viewer_id not in (session.customer_id, session.sales_id,
+                                                       self.config["customer_sales"].get(session.customer_id)):
             raise PermissionDenied("只能查看自己参与的会话")
         phen = session.need.phenomenon
         items = self._conditions([session.id], phen, session.need.known()) if phen else []
@@ -1916,12 +1917,21 @@ class HuayanApp:
         return q.model_copy(deep=True)
 
     def client_messages(self, by):
-        """V12.6 Client-View 的主动消息：研发批准给这位客户的机理说明（`decrypt` 能力，受众就是这位客户）。"""
+        """V12.6 Client-View 的主动消息：研发批准给这位客户的机理说明（`decrypt` 能力，受众就是这位客户）；
+        V12.7 业务员按研发新判断回访（`capability_recall` 签字）、这位客户提过的需求做成了新品发布。"""
         self._actor(by, {"customer"})
         names = {p.id: p.name for p in self.kb.products()}
-        return [{"kind": "decrypt", "session_id": c.payload["session_id"], "product": names[c.payload["product_id"]],
-                 "text": c.payload["text"], "by": c.granted_by, "at": c.at.isoformat()}
-                for c in self.kb.capabilities() if c.form == "decrypt" and c.status == "active" and c.audience == by]
+        mine = {s.id for s in self._sessions.values() if s.customer_id == by}
+        out = [{"kind": "decrypt", "session_id": c.payload["session_id"], "product": names[c.payload["product_id"]],
+                "text": c.payload["text"], "by": c.granted_by, "at": c.at.isoformat()}
+               for c in self.kb.capabilities() if c.form == "decrypt" and c.status == "active" and c.audience == by]
+        out += [{"kind": "callback", "session_id": q.refs["session_id"], "product": names[q.refs["product_id"]],
+                 "text": q.resolution.note, "by": q.resolution.by, "at": q.resolved_at.isoformat()}
+                for q in self.bus.list(family="capability_recall", status="resolved") if q.refs["session_id"] in mine]
+        out += [{"kind": "release", "session_id": sid, "product": names[e.payload["product_id"]], "text": "", "by": e.actor,
+                 "at": e.ts.isoformat()} for e in self.events.query(["product_released"])
+                for sid in self._requirements[e.payload["requirement_id"]].session_ids if sid in mine]
+        return sorted(out, key=lambda m: m["at"], reverse=True)
 
     def decide_decrypt(self, question_id, by, approve, text=""):
         self._actor(by, {"rd"})
@@ -1960,6 +1970,9 @@ class HuayanApp:
         for oid, obj in state.objects.items():      # v8：机会汇聚、适用范围扩展派给分管该现象的产品经理
             a = obj.attrs
             refs[oid]["pm"] = self._line_pm(a.get("phenomenon") or (a["value"] if a.get("slot") == "phenomenon" else None))
+            if oid.startswith("knowledge:recall:"):     # V12.7 回访交这段会话的业务员；自助会话交客户的归属业务员
+                session = self._sessions[refs[oid]["session_id"]]
+                refs[oid]["sales_id"] = session.sales_id or self.config["customer_sales"].get(session.customer_id)
         out = self._propose(self.jue_scheduled, state)
         self._close_stale(out, set(state.objects))
         self._last_scan = at
@@ -1974,10 +1987,19 @@ class HuayanApp:
         if by == "pm:agent" or q.signer_id != actor.id:
             raise PermissionDenied("只有问题的签字人可以处置")
         allowed = {"knowledge_conflict": "update_sheet", "leak_risk": "freeze_access", "qi_review": "sign",
-                   "mechanism_followup": "take_over"}
+                   "mechanism_followup": "take_over", "capability_recall": "sign", "sheet_mismatch": "update_sheet"}
         if action != "dismiss" and allowed.get(q.family) != action:
             raise ValueError(f"{q.family} 问题不能执行 {action}")
-        if action == "update_sheet":
+        if q.family == "sheet_mismatch" and action == "update_sheet":
+            self._revise_sheet(q, note, by)
+        elif q.family == "capability_recall" and action == "sign":
+            session = self._sessions[q.refs["session_id"]]
+            session.status = "open"          # 不立项关掉的会话按新判断重新匹配；当时没问到的条件照常由觉追问
+            recommend(session, self)
+            session.hints = self.ask_hints(session.need)
+            self._save_session(session)
+            self._after([session.id])
+        elif action == "update_sheet":
             pid, slot, value = q.refs["product_id"], *q.object_id.split("|")[1].split("=")
             for capability in self.kb.capabilities():
                 if capability.form != "applicable" or capability.status != "active" or capability.payload["product_id"] != pid:
@@ -1999,6 +2021,42 @@ class HuayanApp:
         if session and session.sales_id is None:      # v8 Q9.8：自助会话由客户归属业务员接手
             self._assign_sales(session, by)
         return result.model_copy(deep=True)
+
+    def _revise_sheet(self, q, text, by):
+        """V12.7 说明书跟上研发判断：产品经理签字，把补充句（默认用产品经理 Agent 的草稿）接到说明书后面，回到公开层。"""
+        text = (text or self.sheet_revision(q.id, by)["text"]).strip()
+        if not text:
+            raise ValueError("请写明说明书补充的句子")
+        # 补充句写的是已授予客户层的适用条件（推荐卡上本来就显示），只查 L3 术语，不按与研发结论原文重合拦
+        if leak_hits(text, [], [], self.kb):
+            raise ValueError("补充句含 L3 术语，请改写")
+        unit = self.kb._units[f"ku:sheet:{q.refs['product_id']}"]
+        self.kb.add(unit.model_copy(update={"text": f"{unit.text}\n{text}"}))
+        self.events.append("sheet_updated", by, {"product_id": q.refs["product_id"], "capability_id": q.refs["capability_id"],
+                                                 "added": text})
+
+    def _sheet_path(self, question_id):
+        return self.run_dir / "sheet_revisions" / f"{question_id.replace(':', '_')}.json"
+
+    def draft_sheet_revision(self, question_id, text, by):
+        """V12.7 产品经理 Agent 起草说明书补充句（对外可说的话）；签字仍由真人产品经理。"""
+        q = _find(self.bus.questions, question_id, "问题")
+        if q.family != "sheet_mismatch" or q.status != "open" or by != q.owner_id:
+            raise PermissionDenied("只能为交给自己准备的说明书更新起草")
+        if leak_hits(text, [], [], self.kb):
+            raise ValueError("补充句含 L3 术语，请改写")
+        path = self._sheet_path(question_id)
+        path.parent.mkdir(exist_ok=True)
+        record = {"question_id": question_id, "text": text.strip(), "by": by, "at": get_clock().now().isoformat()}
+        path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+        return record
+
+    def sheet_revision(self, question_id, by):
+        q = _find(self.bus.questions, question_id, "问题")
+        if by not in (q.owner_id, q.signer_id):
+            raise PermissionDenied("只有准备人和签字人能看说明书补充稿")
+        path = self._sheet_path(question_id)
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"text": ""}
 
     def unfreeze_access(self, actor_id, by):
         """v8 Q9.8：主管解冻；之后的泄露风险证据从解冻起重新累计。"""
@@ -2166,7 +2224,8 @@ class HuayanApp:
         if object_id in self._requirements:
             object_id = self._requirements[object_id].session_ids[0]
         session = _find(self._sessions, object_id, "会话")
-        if level_of(viewer) <= 1 and viewer_id not in (session.customer_id, session.sales_id):
+        if level_of(viewer) <= 1 and viewer_id not in (session.customer_id, session.sales_id,
+                                                       self.config["customer_sales"].get(session.customer_id)):
             raise PermissionDenied("只能查看自己参与的会话")
         reqs = [r for r in self._requirements.values() if session.id in r.session_ids]
         rids = {r.id for r in reqs}
@@ -2469,6 +2528,8 @@ class HuayanApp:
         if q.family in {"release", "seal_leak"} and (hits := self.leak_check(req.id, req.assigned_rd)):
             return (f"{req.id} 的说明书与用法仍有 {len(hits)} 句命中保密内容（句序号 "
                     f"{'、'.join(str(h.index) for h in hits)}，按「。；！？换行」切句、用法接续说明书编号），请用 edit_sheet 改写")
+        if q.family == "sheet_mismatch" and not self._sheet_path(q.id).exists():
+            return "还没有说明书补充句，请用 draft_sheet_revision 起草"
         if q.family == "opportunity" and not any(e.payload["question_id"] == q.id
                                                  for e in self.events.query(["merge_proposed"])):
             return "还没有合并建议，请用 propose_merge 写下"

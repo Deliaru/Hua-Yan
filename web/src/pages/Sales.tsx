@@ -74,10 +74,14 @@ export function Sales() {
   const { me, focus } = useApp();
   const [chosen, choose] = useState<string | null>(focus);
   useEffect(() => { if (focus) choose(focus); }, [focus]);
-  const mine = useMySessions();
+  const own = useMySessions();
+  const all = useData(() => api.sessions(), []) ?? [];
   // 导览指向的会话（轮到本人时）：没手动选过就直接打开它，选过别的就在侧栏高亮它
   const g = useGuide();
   const questions = useData(() => api.questions(me), [me]);
+  // V12.7 回访过去没解决的自助客户：那段会话还没有业务员，带着交给你的决策一起列进来
+  const asked = new Set((questions ?? []).map((q) => q.refs.session_id));
+  const mine = [...own, ...all.filter((s) => s.sales_id !== me && asked.has(s.id)).reverse()];
   // 签字类台词（如客户评价）只写了需求单：按要签的那项决策挂在哪段会话来定位
   const signAt = (questions ?? []).find((q) => `sign:${q.family}` === g.target && q.refs.session_id)?.refs.session_id;
   const guided = g.who !== me ? null : (g.customer ? mine.find((s) => s.customer_id === g.customer)?.id : undefined)
@@ -118,7 +122,8 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
           <RouteStrip objectId={v.session_id} />
           {summary.origin === "customer" && (
             <p className="rounded-[10px] bg-attn-bg px-3.5 py-2.5 text-[13px] leading-5 text-attn-ink">
-              客户在自助对话里提出了商务诉求，觉把这件事交给你。下面是客户的完整原话、已明确的条件和已推荐的产品，不需要你重新询问、重新记录。</p>
+              {summary.sales_id ? "客户在自助对话里提出了商务诉求，觉把这件事交给你。下面是客户的完整原话、已明确的条件和已推荐的产品，不需要你重新询问、重新记录。"
+                : "这位客户自助问过、当时没有解决。研发后来签出的判断覆盖了他当时说的条件，觉请你回访；下面是他当时的原话和条件。"}</p>
           )}
           <Backstory id={v.session_id} />
           <Narration id={v.session_id} />
@@ -309,7 +314,7 @@ function Decisions({ v, questions, fill, replyEmpty, escalateNotes }: {
 }) {
   const L = useLabels();
   const by = (f: string) => questions.filter((q) => q.family === f);
-  const handled = new Set(["escalate_need", "ask_back", "market_eval", "mechanism_followup"]);
+  const handled = new Set(["escalate_need", "ask_back", "market_eval", "mechanism_followup", "capability_recall"]);
   return (
     <>
       {v.card && v.reuse?.status !== "adopted" && <RecCard card={v.card} sid={v.session_id} fill={fill} replyEmpty={replyEmpty} />}
@@ -329,6 +334,7 @@ function Decisions({ v, questions, fill, replyEmpty, escalateNotes }: {
       ))}
       {by("market_eval").map((q) => <MarketEval key={q.id} q={q} />)}
       {by("mechanism_followup").map((q) => <Followup key={q.id} q={q} />)}
+      {by("capability_recall").map((q) => <Recall key={q.id} q={q} />)}
       {questions.filter((q) => !handled.has(q.family)).map((q) => (
         <Group key={q.id} title={L.family(q.family)}>
           <div className="row !items-start">
@@ -450,6 +456,28 @@ function Followup({ q }: { q: Question }) {
           <p className="text-[12.5px] text-ink-2">建议：讲用法与公开的合规信息；客户确有正当需要，就在推荐卡上替客户申请解密，交研发审批。配方永不对外。</p>
           <div className="flex flex-wrap gap-2">
             <Act label="接手" done="已接手" run={() => api.resolve(q.id, "take_over", me)} />
+            <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />
+          </div>
+        </div>
+      </div>
+    </Group>
+  );
+}
+
+// V12.7 能力回流唤醒：研发新签出的判断覆盖了这位客户当时的条件，业务员签字回访；签字后按新判断重新匹配，客户端收到回访
+function Recall({ q }: { q: Question }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const [note, setNote] = useState(`您之前问的问题，研发新确认了${L.product(q.refs.product_id)}可以处理，已经推荐在您的需求里，有问题随时找我。`);
+  return (
+    <Group title={<span className="text-attn-ink">回访过去没解决的客户</span>} aside={<Score q={q} />}>
+      <div className="row attn-edge !items-start !py-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <p className="text-[14px]">{L.scrub(q.title)}</p>
+          {q.evidence.slice(-1).map((e, i) => <p key={i} className="text-[12.5px] leading-5 text-ink-2">{L.scrub(e.summary)}</p>)}
+          <Field value={note} onChange={setNote} rows={2} placeholder="回访时对客户说的话" />
+          <div className="flex flex-wrap gap-2">
+            <Act label="回访客户" done="已回访" disabled={!note.trim()} run={() => api.resolve(q.id, "sign", me, note)} />
             <Act kind="quiet" label="现在不需要" run={() => api.resolve(q.id, "dismiss", me)} />
           </div>
         </div>

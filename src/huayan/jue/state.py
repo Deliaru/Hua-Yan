@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from huayan.contracts import (Actor, JueObject, JueState, NeedState, Phenomenon, Product, Requirement,
                               Seeds, Session, SlotDef, Trial)
-from huayan.domain import correct_product, match_candidates
+from huayan.domain import correct_product, match_candidates, temperature_match
 from huayan.escalation.translate import leak_hits, match_translations
 from huayan.events import EventLog
 
@@ -276,6 +276,8 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
                      *_knowledge(events, at, products, caps, at - timedelta(days=w["knowledge_days"])),
                      *_stale(events, at, caps, seeds),
                      *_scope(events, at, caps),
+                     *_recall(events, at, caps),
+                     *_sheet(events, at, caps, seeds),
                      *_qi(events, at, caps, units or {}),
                      *_actors(events, at, at - timedelta(hours=w["actor_hours"]), caps)]:
         objects[obj.object_id], refs[obj.object_id] = obj, ref
@@ -408,6 +410,89 @@ def _scope(events, at, caps):
              "conditions": json.dumps(cap.payload["conditions"], ensure_ascii=False), "limits": cap.payload.get("limits", ""),
              "session_ids": sorted({sid for e in evs for sid in e.payload.get("session_ids", [])}),
              "requirement_ids": [e.payload["requirement_id"] for e in evs]}
+
+
+def _signed(caps):
+    """运行中由人签出、已生效的适用能力（第 0 天迁移进来的说明书情境不算）。"""
+    return [c for c in caps if c.form == "applicable" and c.status == "active" and c.approved_by not in (None, "seed")]
+
+
+def _covers(payload: dict, known: dict[str, str], temperature) -> bool:
+    return (all(v in payload["conditions"][k] for k, v in known.items() if k in payload["conditions"])
+            and temperature_match(tuple(temperature) if temperature else None,
+                                  tuple(payload["temperature_c"]) if payload.get("temperature_c") else None) != "outside")
+
+
+def _handled(events, at, family: str) -> set[str]:
+    return {e.payload["object_id"] for e in events.query(["question_resolved"], until=at) if e.payload["family"] == family}
+
+
+def _recall(events, at, caps):
+    """V12.7 能力回流唤醒：人签出的适用能力生效后，找出在它之前来过、情境相同、当时没解决的会话
+    （自助没有下文、研发不立项、推荐被撤回）；每段会话一个对象，回访过的不再提。客户自助的会话只看客户层能用的能力。"""
+    state, last = {}, {}
+    for e in events.query(["match", "recommend", "escalate", "recommendation_withdrawn", "project_declined"], until=at):
+        if e.kind == "match":
+            last[e.session_id] = e
+            state.setdefault(e.session_id, "open")
+        elif e.kind == "project_declined" and e.payload["product_id"] is None:     # 判为已有产品适用的，当场就推荐了
+            state.update({sid: "declined" for sid in e.payload["session_ids"]})
+        elif e.kind != "project_declined":
+            state[e.session_id] = {"recommend": "solved", "escalate": "rd", "recommendation_withdrawn": "open"}[e.kind]
+    done = _handled(events, at, "capability_recall")
+    signed = _signed(caps)
+    for sid, m in last.items():
+        status, oid = state[sid], f"knowledge:recall:{sid}"
+        level = 0 if m.actor.startswith("customer:") else 1
+        fits = [c for c in signed if status in ("open", "declined") and oid not in done and c.at > m.ts
+                and isinstance(c.audience, int) and c.audience <= level and c.payload["phenomenon"] == m.payload["phenomenon"]
+                and _covers(c.payload, m.payload["known"], m.payload["temperature_c"])]
+        if not fits:
+            continue
+        cap = fits[-1]
+        unknown = [k for k in cap.payload["conditions"] if k not in m.payload["known"]]
+        yield JueObject(object_id=oid, object_type="knowledge", attrs={
+            "product_id": cap.payload["product_id"], "slot": "phenomenon", "value": cap.payload["phenomenon"],
+            "declined": status == "declined", "n_unknown": len(unknown) + (bool(cap.payload.get("temperature_c")) and not m.payload["temperature_c"]),
+            "days_waiting": (at - m.ts).total_seconds() / 86400,
+        }), {"capability_id": cap.id, "session_id": sid, "customer_id": m.payload["customer_id"],
+             "product_id": cap.payload["product_id"], "event_ids": [m.id]}
+
+
+def _sheet(events, at, caps, seeds):
+    """V12.7 说明书与研发判断不一致：人签出、已生效的客户层适用能力超出该产品说明书（第 0 天迁移进来的情境）写明的范围；
+    同一产品同一现象一个对象。研发层的判断不进说明书；产品经理改过说明书（问题已处置）的不再提。"""
+    sheet, signed = defaultdict(list), defaultdict(list)
+    for c in caps:
+        if c.form == "applicable" and c.approved_by == "seed":
+            sheet[c.payload["product_id"]].append(c.payload)
+    for c in _signed(caps):
+        if c.audience == 0 and sheet[c.payload["product_id"]]:
+            signed[(c.payload["product_id"], c.payload["phenomenon"])].append(c)
+    labels = {s.id: s.label for s in seeds.slots}
+    names = {p.id: p.label for p in seeds.phenomena}
+    span = lambda t: f"{t[0]:g}℃" if t[0] == t[1] else f"{t[0]:g}—{t[1]:g}℃"
+    done = _handled(events, at, "sheet_mismatch")
+    for (pid, ph), group in signed.items():
+        oid = f"knowledge:sheet:{pid}|{ph}"
+        same = [x for x in sheet[pid] if x["phenomenon"] == ph]
+        beyond = [] if same else [f"现象「{names[ph]}」（说明书没写）"]
+        for cap in group:
+            for slot, values in cap.payload["conditions"].items():
+                beyond += [f"{labels[slot]}「{v}」" for v in values
+                           if same and not any(v in x["conditions"].get(slot, [v]) for x in same)]
+            t = cap.payload.get("temperature_c")
+            if t and same and not any(temperature_match(tuple(t), tuple(x["temperature_c"]) if x.get("temperature_c") else None)
+                                      == "satisfied" for x in same):
+                written = "、".join(span(x["temperature_c"]) for x in same if x.get("temperature_c"))
+                beyond.append(f"温度 {span(t)}（说明书写的是 {written}）")
+        beyond = list(dict.fromkeys(beyond))
+        if oid in done or not beyond:
+            continue
+        yield JueObject(object_id=oid, object_type="knowledge", attrs={
+            "product_id": pid, "slot": "phenomenon", "value": ph, "n_beyond": len(beyond),
+            "days_since_grant": (at - group[-1].at).total_seconds() / 86400,
+        }), {"capability_id": group[-1].id, "product_id": pid, "phenomenon": ph, "beyond": "；".join(beyond), "event_ids": []}
 
 
 def _sales_of(actor: str) -> str | None:

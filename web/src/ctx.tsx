@@ -31,6 +31,7 @@ export function Side({ children }: { children: React.ReactNode }) {
 
 // ── 显示用标签：界面上不出现内部 id 与枚举 ─────────────────
 export const FAMILY: Record<string, string> = {
+  capability_recall: "回访过去没解决的客户", sheet_mismatch: "说明书跟上研发判断",
   qi_grant: "授予能力", qi_review: "资料变了，复核判断", trial_rework: "试样失败，重新梳理需求", trial_risk: "试样风险", stale_capability: "判断可能过时",
   ask_slot: "追问", escalate_need: "要不要转研发", reuse_product: "现成产品能不能用", opportunity: "合并成产品机会",
   accept_requirement: "接单", ask_back: "回问客户", distortion: "需求转述走样", confirm_translation: "确认化学要点",

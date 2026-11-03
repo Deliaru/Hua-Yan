@@ -1,0 +1,13 @@
+id: sheet_mismatch
+family: sheet_mismatch
+kind: advance
+object_type: knowledge
+decision_label: 是否按研发判断更新说明书
+# V12.7：人签出、已生效的适用能力超出该产品说明书写明的范围（如说明书 125—130℃，研发确认 133℃）
+precondition: "attrs.n_beyond >= 1"
+rule_score: "1"
+worth_prompt: "研发签出的产品 {attrs.product_id} 对现象「{attrs.value}」的适用判断有 {attrs.n_beyond} 处超出说明书写明的范围，已生效 {attrs.days_since_grant:.0f} 天。是否由产品经理 Agent 起草说明书补充句，交产品经理签字更新说明书？"
+title: "{object}：研发判断超出了说明书，要不要更新说明书？"
+owner_role: pm
+signer_role: pm
+urgency: "0.5"
