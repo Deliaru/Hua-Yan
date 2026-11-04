@@ -305,13 +305,14 @@ function Name({ id }: { id: string }) {
 function StatusMenu({ s, m, trial, play, onMode }: { s: RunStatus; m: RunMode; trial: boolean; play: boolean; onMode: () => void }) {
   const R = "录制回放";
   const byok = m.kind === "byok";
+  const rec = m.kind === "recorded";       // V12.12 路演：主线从彩排录制出，录制里没有的实时调用
   const jev: Record<string, string> = { onejev: "OneJev", mock: "桩", llm_fallback: "大模型降级" };
   const jue: Record<string, string> = { jue_k: "Jue-K · 本地实时", jue_proto: "规则原型", onejev: "OneJev" };
   // [项, 值, 种类]：ok 正常运行，warn 降级，replay 录制回放
   type Kind = "ok" | "warn" | "replay";
   // 写出所用模型名：回放是录制时的模型，自带密钥是试用者填的模型
   const llm = (): [string, Kind] => s.gateway_mock ? ["离线 · 规则", "warn"] : s.replay ? [`${m.llm_model} · ${R}`, "replay"]
-    : [`${m.llm_model} · ${byok ? "自带密钥" : "在线"}`, "ok"];
+    : rec ? [`${m.llm_model} · 录制优先`, "replay"] : [`${m.llm_model} · ${byok ? "自带密钥" : "在线"}`, "ok"];
   const items: [string, string, Kind][] = [
     ["数据", play ? "模拟 · 游戏" : trial ? "共享试用" : "模拟", "ok"],
     ...(s.seeds_placeholder ? [["种子", "占位", "warn"] as [string, string, Kind]] : []),
@@ -319,12 +320,13 @@ function StatusMenu({ s, m, trial, play, onMode }: { s: RunStatus; m: RunMode; t
     ["抽取", ...(s.extractor === "llm" ? llm() : ["规则", "warn"] as [string, Kind])],
     ["Jev", ...(s.system1_impl !== "onejev" ? [jev[s.system1_impl] ?? s.system1_impl, "warn"] as [string, Kind]
       : s.replay ? [`${m.jev_model} · ${R}`, "replay"] as [string, Kind]
+      : rec ? [`${m.jev_model} · 录制优先`, "replay"] as [string, Kind]
       : byok ? [`${m.jev_model} · 自带接口${m.jev_fallback ? "，失败降级" : ""}`, "ok"] as [string, Kind] : [`${m.jev_model} · 在线`, "ok"] as [string, Kind])],
     ["觉", jue[s.realtime_model] ?? s.realtime_model, s.realtime_model === "jue_proto" ? "warn" : "ok"],
   ];
   const degraded = items.filter(([, , k]) => k === "warn").length;
   const mode = s.replay ? "录制回放" : byok ? "自带密钥" : s.gateway_mock ? (trial ? "离线运行" : "离线演示") : "现场运行";
-  const sub = s.replay ? "非在线运行" : degraded ? `${degraded} 项降级` : byok ? "真实运行" : "全部正常";
+  const sub = s.replay ? "非在线运行" : rec ? "主线回放彩排录制" : degraded ? `${degraded} 项降级` : byok ? "真实运行" : "全部正常";
   const TAG: Record<Kind, string> = { ok: "text-ink", warn: "tag tag-warn", replay: "tag" };
   return (
     <>
@@ -348,6 +350,7 @@ function StatusMenu({ s, m, trial, play, onMode }: { s: RunStatus; m: RunMode; t
           {s.replay && <p className="mx-2 mt-2 rounded-[8px] bg-fill px-2.5 py-2 text-[12px] leading-[18px] text-ink">{RECORDING_NOTE}</p>}
           <p className="px-2 pt-1.5 text-[11px] leading-4 text-ink-3">
             {s.replay ? "录制回放：Agent、抽取与 Jev 的输出是录制时的真实结果，只能按演示台词走；觉在本地实时计算。" : ""}
+            {rec ? "录制优先：彩排时用真实模型跑过的那条主线，同样的输入直接用录下的真实结果；现场新打的字、新委托 Agent 的事录制里没有，实时调用模型。觉在本地实时计算。" : ""}
             {byok ? "自带密钥：Agent、抽取与 Jev 真实调用你填的接口；觉在本地实时计算。" : ""}
             黄色为降级运行，结果上同样标注来源。</p>
           {m.kind !== "local" && <button className="btn btn-plain mx-2 mb-1 mt-2.5 w-[calc(100%-16px)]" onClick={() => { close(); onMode(); }}>

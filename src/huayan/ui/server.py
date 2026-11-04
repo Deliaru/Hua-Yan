@@ -857,7 +857,9 @@ class Api:
         b, config = self.byok, self.app.config
         llm = None if config["gateway_mock"] else self.app.gateway.tiers["fast"]["model"]
         jev = (b.jev_model if b.jev_base_url else None) if b else self.app.system1.model if config["system1_impl"] == "onejev" else None
-        return {"kind": "replay" if config["replay"] else "byok" if b else "local", "llm_model": llm, "jev_model": jev,
+        # recorded（V12.12 路演）：真实模型加录制缓存，彩排录过的输入从录制出，没录过的（现场打字、委托 Agent）实时调用
+        kind = "replay" if config["replay"] else "byok" if b else "recorded" if llm and config.get("llm_cache_dir") else "local"
+        return {"kind": kind, "llm_model": llm, "jev_model": jev,
                 "jev_fallback": bool(b and b.jev_base_url and b.jev_fallback)}
 
 
