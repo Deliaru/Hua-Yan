@@ -173,7 +173,7 @@ export default function App() {
         <ActivityMenu />
         {/* 导览占中间的剩余空间居中：两侧再宽也不会叠上 */}
         <div className="flex min-w-0 flex-1 justify-center">{meta.play ? <PlayBar /> : page === "desk" && <Guide />}</div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           {!inDemo && <button onClick={() => setNotes(!notesOn)} className={`btn btn-plain ${notesOn ? "!text-accent" : ""}`}
                               title="化言在背后做了什么：知识层级、需求经过了谁、你的时间用在了哪里。真实用户日常看不到这些，讲解时再打开">
             {notesOn ? "收起演示说明" : "演示说明"}</button>}

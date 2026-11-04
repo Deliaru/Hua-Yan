@@ -19,7 +19,7 @@ export function Popover({ trigger, children, align = "left" }: {
     return () => document.removeEventListener("mousedown", away);
   }, [at]);
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative min-w-0">
       {trigger(() => setAt(at ? null : ref.current!.getBoundingClientRect()))}
       {at && createPortal(
         <div ref={pop} className="popover anim-fade" style={{ position: "fixed", top: at.bottom + 6,

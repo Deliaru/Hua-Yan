@@ -2372,16 +2372,20 @@ class HuayanApp:
         return source.docs[doc_id]["title"] if isinstance(source, LibrarySource) else doc_id
 
     def report_list(self, by):
-        """V12.9 契画布可选的报告：研发按统一读取入口能读、且编译出过结论的来源，授出能力多的在前。"""
+        """V12.9 契画布可选的报告：研发按统一读取入口能读、且编译出过结论的来源。已生效能力多的在前，
+        同样多时这一局自己的报告在资料库整批编译的前面（V12.14：整批导入以后，开局默认仍是主线那份）。"""
         actor = self._actor(by, {"rd"})
         readable = readable_sources(self.kb, actor, self.source_owners)
+        library = {d for s in self.kb.sources if isinstance(s, LibrarySource) for d in s.docs}
         docs = defaultdict(set)
         for u in self.kb._units.values():
             for d in {e.split("#")[0] for e in u.evidence}:
                 docs[d].add(u.id)
-        caps = lambda ids: sum(bool(set(c.based_on) & ids) for c in self.kb.capabilities())
-        rows = [{"doc_id": d, "title": self._doc_title(d), "n_units": len(ids), "n_caps": caps(ids)} for d, ids in docs.items() if d in readable]
-        return sorted(rows, key=lambda r: (-r["n_caps"], -r["n_units"]))
+        caps = lambda ids, active=False: sum(bool(set(c.based_on) & ids) and (not active or c.status == "active")
+                                             for c in self.kb.capabilities())
+        rows = [{"doc_id": d, "title": self._doc_title(d), "n_units": len(ids), "n_caps": caps(ids), "n_active": caps(ids, True),
+                 "library": d in library} for d, ids in docs.items() if d in readable]
+        return sorted(rows, key=lambda r: (-r["n_active"], r["library"], -r["n_caps"], -r["n_units"]))
 
     def report_life(self, doc_id, by):
         """V12.9 契画布：一份报告的一生，每一站都是真对象。资料库 → 读取（这份的页与指纹）→ 编译（录制的提议各自的核对结果）

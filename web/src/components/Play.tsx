@@ -55,7 +55,7 @@ export function PlayBar() {
   );
   return (
     <Popover trigger={(toggle) => (
-      <button onClick={toggle} className={`flex h-8 max-w-[640px] items-center gap-2 rounded-[8px] px-2.5 text-[13px] hover:bg-fill ${
+      <button onClick={toggle} className={`flex h-8 min-w-0 max-w-[min(640px,100%)] items-center gap-2 rounded-[8px] px-2.5 text-[13px] hover:bg-fill ${
         all ? "bg-[rgba(48,194,91,.11)]" : turn.length ? "bg-attn-bg" : ""}`}>
         <span className="tag tag-accent">{s.oneshot ? `一镜到底${s.act ? ` · 第 ${s.act} 幕` : ""}` : s.roadshow ? "路演局" : `第 ${s.round} 局`}</span>
         {turn[0] ? <><span className="truncate font-semibold">{turn[0].id} · {turn[0].title}</span>

@@ -71,8 +71,14 @@ export function Canvas() {
     <div className="mx-auto flex max-w-[1280px] flex-col gap-5 px-8 pb-24 pt-7">
       <PageHead title="契画布：一份报告的一生"
                 subtitle="原件里的一句话怎样变成组织能力：读取侧留原件与指纹，契只收候选、经研发确认和授予才生效；之后每一次使用、每一次改版都记在这条谱系上。"
-                aside={<select value={doc ?? ""} onChange={(e) => choose(e.target.value)} className="rounded border border-line px-2 py-1 text-[13px]">
-                  {reports.map((r) => <option key={r.doc_id} value={r.doc_id}>{r.title}（{r.n_units} 条结论、{r.n_caps} 项能力）</option>)}
+                aside={<select value={doc ?? ""} onChange={(e) => choose(e.target.value)}
+                               className="w-[340px] max-w-[40%] shrink-0 rounded border border-line px-2 py-1 text-[13px]" aria-label="选一份报告">
+                  {([["这一局的报告", false], ["资料库整批编译", true]] as const).map(([label, lib]) => {
+                    const rows = reports.filter((r) => r.library === lib);
+                    return rows.length > 0 && <optgroup key={label} label={`${label}（${rows.length} 份）`}>
+                      {rows.map((r) => <option key={r.doc_id} value={r.doc_id}>{r.title}（{r.n_units} 条结论、{r.n_caps} 项能力）</option>)}
+                    </optgroup>;
+                  })}
                 </select>} />
       <div className="grid grid-cols-8 gap-1.5">
         {STATIONS.map((s, i) => (
