@@ -30,6 +30,7 @@ import { Settle } from "./pages/Settle";
 import { Live } from "./pages/Live";
 import { Canvas } from "./pages/Canvas";
 import { Screens } from "./pages/Screens";
+import { Search } from "./pages/Search";
 import { Backup } from "./pages/Backup";
 import { Guide, useGuide } from "./components/Guide";
 import { RECORDING_NOTE } from "./components/ui";
@@ -42,6 +43,7 @@ import { Opener } from "./components/Opener";
 const PAGES = [
   ["overview", "架构总览", NavArch, null],
   ["live", "组织运行实况", NavJue, null],
+  ["search", "资料检索", NavLayers, null],
   ["qi", "契画布", NavLayers, null],
   ["screens", "四屏并排", NavLayers, null],
   ["backup", "答辩备用", NavEval, null],
@@ -132,7 +134,7 @@ export default function App() {
   // V11.9 结算页只在游戏模式出现，谁都能看
   // V12.8 实况是路演画面：游戏模式里主管身份可见（四屏并排时主屏用主管身份开一个窗口），真实试用里不出现
   // 契画布给研发、四屏给各身份，也只在游戏模式里出现
-  const visible = (k: Page) => k === "settle" ? !!meta.play : k === "live" ? !trialActor || (!!meta.play && trialActor.role === "supervisor")
+  const visible = (k: Page) => k === "search" ? !trialActor || trialActor.role !== "customer" : k === "settle" ? !!meta.play : k === "live" ? !trialActor || (!!meta.play && trialActor.role === "supervisor")
     : k === "qi" ? !trialActor || (!!meta.play && trialActor.role === "rd") : k === "screens" || k === "backup" ? !trialActor || !!meta.play
     : !trialActor || ROLE_PAGES[k] === trialActor.role || TRIAL_PAGES.includes(k);
   const page: Page = visible(rawPage) ? rawPage : PAGES.find(([k]) => ROLE_PAGES[k] === trialActor!.role)?.[0] ?? "jue";
@@ -256,6 +258,7 @@ export default function App() {
         {page === "month" && <Month />}
         {page === "ceo" && <Ceo key={key} />}
         {page === "live" && <Live key={key} />}
+        {page === "search" && <Search key={key} />}
         {page === "qi" && <Canvas key={key} />}
         {page === "screens" && <Screens key={key} />}
         {page === "backup" && <Backup key={key} />}
