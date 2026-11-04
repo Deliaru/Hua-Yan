@@ -1,7 +1,8 @@
 // V11.5 游戏模式的进度条（工具栏中间）。V11.12：各岗位自己的业务开局一起送来，关卡（一条完整的业务流程）一步过了才送下一步。
 // 收起时写轮到你的事；点开按岗位列业务、单列关卡各步，点一件就以等它的那个人进他的工作面（路演时一个人轮流演各岗位）。
-// 下面是暂停 / 倍速 / 重开这一局，以及路演局、报告的选择。进度由服务端的导演保存，几个浏览器共用一局。
+// 下面是暂停 / 继续，换一局（看演示 / 自己玩）与重开这一局。进度由服务端的导演保存，几个浏览器共用一局。
 import { useEffect, useState } from "react";
+import { NO_GUIDE, publish } from "./Guide";
 import { api } from "../api";
 import { useApp, useLabels } from "../ctx";
 import type { PlayLevel, PlayState } from "../types";
@@ -26,8 +27,84 @@ export function usePlay(): PlayState | null {
   return s;
 }
 
+// 这件事由谁做：写了人就是那个人；还没落到人手上的，用这个岗位的第一个人（身份不对时只 go 会被打回自己的页）
+function whoFor(x: PlayLevel, me: string, actors: { id: string; role: string }[]) {
+  return x.who ?? (me.startsWith(`${x.to}:`) ? me : actors.find((a) => a.role === x.to && a.id !== "supervisor:CEO" && a.id !== "pm:agent")?.id);
+}
+function useEnter() {
+  const { me, meta, go, become } = useApp();
+  return (x: PlayLevel) => {
+    const who = whoFor(x, me, meta.actors);
+    const page = who?.split(":")[0] ?? x.to;     // 产品经理那件事可能先等研发：进等它的那个人的工作面
+    return who && who !== me ? become(who, page, x.focus) : go(page, x.focus);
+  };
+}
+
+// 关卡里这一步（hint）→ 工作面上该发亮的地方与「演示自动填入」的内容：发话是「发出」框，判已有产品适用是「不接：现成产品能用」，
+// 批范围 / 合并课题是产品经理的签字区，录试样是试样按钮，客户是输入框，其余是「要你定」卡片的主按钮（示范文字写在下一步条上）
+function TARGET(x: PlayLevel): [string, string | null] {
+  const h = (x.hint ?? {}) as Record<string, string>;
+  if (x.to === "customer") return ["say", null];
+  if (h.say) return ["send", h.say];
+  if (h.reuse) return ["reuse-no", h.reuse];
+  if (h.decline) return ["decline", JSON.stringify(h.decline)];
+  if (h.scope) return ["scope", h.scope];
+  if (h.merge) return ["merge", h.merge];
+  if (h.trial) return ["trial", null];
+  return ["task", null];
+}
+const NOTE_KEYS = ["review", "recall", "sheet", "note"];
+// 一件事要几个岗位接力时，按正在等的那个人这一步写要做什么
+const STEP: Record<string, string> = { say: "回客户一句话", decline: "判断现成产品就能用，不接单", scope: "批准扩大产品的适用范围",
+  merge: "把几位客户的需求合成一个课题", reuse: "这次不采用现成产品：点「演示自动填入」写理由，再点「不采用」", accept: "接单", trial: "录试样结果",
+  review: "复核资料改版后的结论", recall: "回访过去没解决的客户", sheet: "按研发的判断更新说明书" };
+const todo = (x: PlayLevel) => STEP[Object.keys(x.hint ?? {})[0]] ?? x.decide;
+
+// 自己玩：工作面顶上一条「下一步」。轮到你时写要做什么，并让工作面上「要你定」的主按钮（客户是输入框）呼吸高亮；
+// 轮到别人时写轮到谁、做什么，点一下就换成他进他的工作面。
+export function NextStep() {
+  const { me, meta, fail, refresh, go } = useApp();
+  const L = useLabels();
+  const s = usePlay();
+  const enter = useEnter();
+  const open = s && !s.oneshot ? s.levels.filter((x) => x.status === "open") : [];
+  // 还没落到具体的人手上（who 为空）的事在路上：客户还在说、Agent 还在准备，不算轮到谁
+  const landed = open.filter((x) => x.who);
+  const mine = landed.find((x) => x.who === me);
+  const next = mine ?? landed[0];
+  const line = s?.lines.find((x) => x.customer === me);
+  const [target, arg] = mine ? TARGET(mine) : [null, null];
+  const note = mine?.hint && NOTE_KEYS.map((k) => (mine.hint as Record<string, unknown>)[k]).find((v) => typeof v === "string") as string | undefined;
+  useEffect(() => { publish(target ? { who: me, target, arg, customer: null } : NO_GUIDE); }, [me, target, arg]);
+  // 轮到你的下一件换了：直接打开那件事（同一件不重复跳，看别处时不被拉回）
+  useEffect(() => { if (mine?.focus) go(me.split(":")[0], mine.focus); }, [mine?.id, mine?.focus]);
+  if (!s || s.oneshot) return null;
+  const all = s.done.length === s.levels.length;
+  const who = next?.who ?? undefined;
+  return (
+    <div className="sticky top-[52px] z-20 flex items-center gap-3 border-b border-sep bg-attn-bg px-6 py-2.5 text-[14px]">
+      <span className="tag tag-accent shrink-0">下一步</span>
+      {all ? <><span className="flex-1">整条业务都走完了。</span><button className="btn btn-primary" onClick={() => go("settle")}>看这一局省了什么</button></>
+        : !next ? <span className="flex-1 text-ink-2">{s.paused ? "这一局停着，点右边「继续」。"
+            : `事情在路上（客户在说、Agent 在准备）：${open.map((x) => x.title).join("、") || "导演正在送下一件事"}。到了谁手上，这里马上告诉你。`}</span>
+        : mine ? <>
+            <span className="min-w-0 flex-1"><b>轮到你：{todo(mine)}</b><span className="text-ink-2"> · {mine.brief}。页面上呼吸发亮的就是要点的。</span></span>
+            {note && <button className="chip shrink-0" title={`${note}（点一下复制）`} onClick={() => navigator.clipboard.writeText(note)}>
+              示范：「{note.slice(0, 14)}…」复制</button>}
+            {line && <button className="btn btn-primary glow shrink-0" onClick={() => api.addTurn(line.session_id, "customer", line.text).then(refresh, fail)}>
+              照这句说：「{line.text.slice(0, 18)}{line.text.length > 18 ? "…" : ""}」</button>}
+          </>
+        : <>
+            <span className="min-w-0 flex-1">轮到 <b>{L.name(who)}</b>（{ROLES.find(([r]) => r === who?.split(":")[0])?.[1]}）：{todo(next)}</span>
+            <button className="btn btn-primary glow shrink-0" onClick={() => enter(next)}>换成{L.name(who)}，去处理</button>
+          </>}
+      {s.paused && !all && <button className="btn btn-plain shrink-0" onClick={() => api.playControl({ paused: false }).then(refresh, fail)}>继续</button>}
+    </div>
+  );
+}
+
 export function PlayBar() {
-  const { fail, refresh, me, go, become } = useApp();
+  const { fail, refresh, me, go } = useApp();
   const L = useLabels();
   const s = usePlay();
   const [busy, setBusy] = useState<string | null>(null);
@@ -43,7 +120,7 @@ export function PlayBar() {
   const turn = s.levels.filter((x) => x.status === "open" && (x.who === me || (!x.who && x.to === me.split(":")[0])));
   const open = s.levels.filter((x) => x.status === "open").length;
   const all = s.done.length === s.levels.length;
-  const enter = (x: PlayLevel) => (x.who && x.who !== me ? become(x.who) : go(x.to));
+  const enter = useEnter();
   const row = (x: PlayLevel) => (
     <button key={x.id} onClick={() => enter(x)} disabled={x.status === "waiting"}
             className={`flex w-full gap-2 rounded-[6px] px-1.5 py-0.5 text-left hover:bg-fill disabled:hover:bg-transparent ${
@@ -54,86 +131,74 @@ export function PlayBar() {
     </button>
   );
   return (
-    <Popover trigger={(toggle) => (
-      <button onClick={toggle} className={`flex h-8 min-w-0 max-w-[min(640px,100%)] items-center gap-2 rounded-[8px] px-2.5 text-[13px] hover:bg-fill ${
-        all ? "bg-[rgba(48,194,91,.11)]" : turn.length ? "bg-attn-bg" : ""}`}>
-        <span className="tag tag-accent">{s.oneshot ? `一镜到底${s.act ? ` · 第 ${s.act} 幕` : ""}` : s.roadshow ? "路演局" : `第 ${s.round} 局`}</span>
-        {turn[0] ? <><span className="truncate font-semibold">{turn[0].id} · {turn[0].title}</span>
-                     <span className="truncate text-ink-2">· {turn[0].brief}</span></>
-                 : <span className="truncate text-ink-2">{all ? "业务和关卡都过了" : `进行中 ${open} 件`}</span>}
-        <span className={`shrink-0 ${turn.length ? "font-semibold text-attn-ink" : "text-ink-2"}`}>
-          {busy ?? (s.paused ? "已暂停" : turn.length ? `轮到你 ${turn.length} 件` : "")}</span>
-        <ChevronDown />
-      </button>
-    )}>
-      {() => (
-        <div className="flex w-[460px] flex-col gap-3 p-3 text-[13px] leading-5">
-          {turn.map((x) => (
-            <div key={x.id}>
-              <p className="eyebrow">{x.id} · 轮到你</p>
-              <p>{x.brief}，到{TO[x.to]}。<span className="text-ink-2">要你做的：{x.decide}</span></p>
-              <p className="text-[12px] text-ink-2">会用到：{x.mechanism} · 看点：{x.point}</p>
-            </div>
-          ))}
-          {mine.map((x) => (
-            <div key={x.session_id} className="rounded-[8px] bg-attn-bg px-2.5 py-2">
-              <p className="eyebrow">你扮的客户可以这样说</p>
-              <p>「{x.text}」</p>
-              <button className="btn btn-plain mt-1" disabled={!!busy}
-                      onClick={() => run("…", api.addTurn(x.session_id, "customer", x.text))}>照这句说</button>
-              <span className="ml-2 text-[12px] text-ink-3">也可以在客户面用自己的话说</span>
-            </div>
-          ))}
-          {notes.map((x, i) => (
-            <div key={i} className="rounded-[8px] bg-attn-bg px-2.5 py-2">
-              <p className="eyebrow">外部世界（模拟）</p><p>{x.text}</p>
-            </div>
-          ))}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-sep pt-2">
-            <div className="flex flex-col">
-              <p className="eyebrow">各岗位的业务</p>
-              {ROLES.map(([role, label]) => {
-                const items = s.levels.filter((x) => x.kind === "business" && x.to === role);
-                return items.length > 0 && <div key={role}><p className="mt-1 text-[12px] text-ink-2">{label}</p>{items.map(row)}</div>;
-              })}
-            </div>
-            <div className="flex flex-col">
-              <p className="eyebrow">关卡：一条完整的业务流程</p>
-              <p className="mt-1 text-[12px] text-ink-2">同一份试样报告，一步过了才送下一步</p>
-              {s.levels.filter((x) => x.kind === "stage").map(row)}
-            </div>
-          </div>
-          <p className="text-[12px] text-ink-3">
-            {s.oneshot ? "一镜到底：导演按三幕一件一件做完，所有岗位都由导演做（前情标「模拟」），主屏停在组织运行实况看每一次交接。"
-              : s.roadshow ? "路演局：各岗位的事都留给你，导演只扮演外部世界（客户、试样结果、资料改版）和事到你手上之前别的岗位那几步。"
-                        : "没人玩的岗位和客户由导演代办，前情里标「模拟」。"}
-            点一件就以等它的那个人进他的工作面。业务时间 {s.now.slice(5, 16).replace("T", " ")} · 第 {s.round} 局</p>
-          {s.error && <p role="alert" className="text-[12px] text-danger">导演这一拍没做成：{s.error}</p>}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button className="btn btn-plain" onClick={() => run("…", api.playControl({ paused: !s.paused }))}>{s.paused ? "继续" : "暂停"}</button>
-            {SPEEDS.map(([v, label]) => (
-              <button key={v} className={`btn btn-plain ${s.speed === v ? "!text-accent" : ""}`} onClick={() => run("…", api.playControl({ speed: v }))}>{label}</button>
+    <div className="flex min-w-0 items-center gap-1.5">
+      <Popover trigger={(toggle) => (
+        <button onClick={toggle} className={`flex h-8 min-w-0 max-w-[min(640px,100%)] items-center gap-2 rounded-[8px] px-2.5 text-[13px] hover:bg-fill ${
+          all ? "bg-[rgba(48,194,91,.11)]" : turn.length ? "bg-attn-bg" : ""}`}>
+          <span className="tag tag-accent">{s.oneshot ? `看演示${s.act ? ` · 第 ${s.act} 幕` : ""}` : "自己玩"}</span>
+          {turn[0] ? <><span className="truncate font-semibold">{turn[0].id} · {turn[0].title}</span>
+                       <span className="truncate text-ink-2">· {turn[0].brief}</span></>
+                   : <span className="truncate text-ink-2">{all ? "业务和关卡都过了" : `进行中 ${open} 件`}</span>}
+          <span className={`shrink-0 ${turn.length ? "font-semibold text-attn-ink" : "text-ink-2"}`}>
+            {busy ?? (s.paused ? "已暂停" : turn.length ? `轮到你 ${turn.length} 件` : "")}</span>
+          <ChevronDown />
+        </button>
+      )}>
+        {() => (
+          <div className="flex w-[460px] flex-col gap-3 p-3 text-[13px] leading-5">
+            {turn.map((x) => (
+              <div key={x.id}>
+                <p className="eyebrow">{x.id} · 轮到你</p>
+                <p>{x.brief}，到{TO[x.to]}。<span className="text-ink-2">要你做的：{x.decide}</span></p>
+                <p className="text-[12px] text-ink-2">会用到：{x.mechanism} · 看点：{x.point}</p>
+              </div>
             ))}
-            <button className="btn btn-plain ml-auto" onClick={() => go("settle")}>看这一局的结算</button>
+            {mine.map((x) => (
+              <div key={x.session_id} className="rounded-[8px] bg-attn-bg px-2.5 py-2">
+                <p className="eyebrow">你扮的客户可以这样说</p>
+                <p>「{x.text}」</p>
+                <button className="btn btn-plain mt-1" disabled={!!busy}
+                        onClick={() => run("…", api.addTurn(x.session_id, "customer", x.text))}>照这句说</button>
+                <span className="ml-2 text-[12px] text-ink-3">也可以在客户面用自己的话说</span>
+              </div>
+            ))}
+            {notes.map((x, i) => (
+              <div key={i} className="rounded-[8px] bg-attn-bg px-2.5 py-2">
+                <p className="eyebrow">外部世界（模拟）</p><p>{x.text}</p>
+              </div>
+            ))}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-sep pt-2">
+              <div className="flex flex-col">
+                <p className="eyebrow">各岗位的业务</p>
+                {ROLES.map(([role, label]) => {
+                  const items = s.levels.filter((x) => x.kind === "business" && x.to === role);
+                  return items.length > 0 && <div key={role}><p className="mt-1 text-[12px] text-ink-2">{label}</p>{items.map(row)}</div>;
+                })}
+              </div>
+              <div className="flex flex-col">
+                <p className="eyebrow">关卡：一条完整的业务流程</p>
+                <p className="mt-1 text-[12px] text-ink-2">同一份试样报告，一步过了才送下一步</p>
+                {s.levels.filter((x) => x.kind === "stage").map(row)}
+              </div>
+            </div>
+            <p className="text-[12px] text-ink-3">
+              {s.oneshot ? "看演示：导演按三幕把所有岗位的事做完，你在组织运行实况里看每一次交接。" : "自己玩：各岗位的事都留给你，导演只扮演客户和外部世界（试样结果、资料改版）。"}
+              点一件就以等它的那个人进他的工作面。业务时间 {s.now.slice(5, 16).replace("T", " ")} · 第 {s.round} 局</p>
+            {s.error && <p role="alert" className="text-[12px] text-danger">导演这一拍没做成：{s.error}</p>}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button className="btn btn-plain" onClick={() => run("…", api.playControl({ paused: !s.paused }))}>{s.paused ? "继续" : "暂停"}</button>
+              <span className="ml-3 text-ink-2">换一局</span>
+              {([[true, "看演示"], [false, "自己玩"]] as const).map(([watch, label]) => (
+                <button key={label} className={`btn btn-plain ${s.oneshot === watch ? "!text-accent" : ""}`} disabled={!!busy}
+                        onClick={() => restart({ oneshot: watch, roadshow: !watch })}>{label}</button>))}
+              <button className="btn btn-plain ml-auto" disabled={!!busy} onClick={() => restart({})}>重开这一局</button>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
-            <span className="text-ink-2">这一局</span>
-            {([[true, false, "路演局"], [false, false, "导演代办没人玩的岗位"], [false, true, "一镜到底"]] as const).map(([v, one, label]) => {
-              const on = s.oneshot === one && (one || s.roadshow === v);
-              return <button key={label} className={`btn btn-plain ${on ? "!text-accent" : ""}`} disabled={!!busy || on}
-                             onClick={() => restart({ roadshow: v, oneshot: one })}>{label}</button>;
-            })}
-            {s.real_ready && <>
-              <span className="ml-2 text-ink-2">关卡的报告</span>
-              {([[false, "模拟报告"], [true, "真实试样报告"]] as const).map(([v, label]) => (
-                <button key={label} className={`btn btn-plain ${s.real === v ? "!text-accent" : ""}`} disabled={!!busy || s.real === v}
-                        onClick={() => restart({ real: v })}>{label}</button>
-              ))}
-            </>}
-            <button className="btn btn-plain ml-auto" disabled={!!busy} onClick={() => restart({})}>重开这一局</button>
-          </div>
-        </div>
-      )}
-    </Popover>
+        )}
+      </Popover>
+      {s.paused && !busy && (   // 暂停时导演不动、业务时间不走，「继续」放在外面一眼看得到
+        <button className="btn btn-primary !h-[28px] shrink-0" title={s.oneshot ? "一镜到底：导演接着往下演" : "导演和业务时间接着走"}
+                onClick={() => run("…", api.playControl({ paused: false }))}>继续</button>)}
+    </div>
   );
 }

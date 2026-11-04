@@ -19,6 +19,7 @@ const PATH_NOTE: Record<string, string> = {
   产品机会: "几位客户的同类需求，由产品经理附商业判断汇成一个课题",
   复用: "产品经理 Agent 找到现成产品，研发审定后直接交付",
   追问中: "觉还在追问研发开工需要的条件",
+  转研发中: "条件已问清、现有产品都不合适：产品经理 Agent 正在整理，随后直达研发",
 };
 
 export const PAGE_OF: Record<string, string> = { customer: "customer", sales: "sales", pm: "pm", rd: "rd" };

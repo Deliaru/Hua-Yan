@@ -216,6 +216,7 @@ function Composer({ v, reply, setReply, replyNotes }: {
   const [err, setErr] = useState<string | null>(null);
   const fromAgent = !!v.reply_draft && reply === v.reply_draft;
   const ask = useGlow("reply"), rec = useGlow("send-rec"), sendNow = useGlow("send");
+  const example = useGuideArg("send");     // 自己玩：关卡里写好的示范话
   const glow = ask || rec || sendNow;
   const pick = ask && !reply.trim();   // 导览：先挑追问提词（或让 Agent 起草），有了话再「发出」
   const send = () => {
@@ -247,6 +248,7 @@ function Composer({ v, reply, setReply, replyNotes }: {
             {fromAgent && <AgentMark />}
             {!reply && !agentOnline && <span className="text-[12px] text-ink-3">Agent 离线，无草稿</span>}
             <span className="ml-auto flex gap-1.5">
+              {example && !reply && <button type="button" className="chip glow" onClick={() => setReply(example)}>填入示范</button>}
               <Act kind="chip" label="帮我回一句" glow={pick && !v.hints.length} disabled={!agentOnline} run={() => api.chat(me, "帮我回一句", v.session_id, v.session_id)} />
               <Act kind="chip" label="直接推荐" run={() => api.recommend(v.session_id)} />
             </span>

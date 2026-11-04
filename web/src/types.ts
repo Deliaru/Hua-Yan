@@ -360,8 +360,9 @@ export interface FrozenActor {
 export interface GrantScope { conditions: Record<string, string[]>; temperature_c: [number, number] | null; limits: string }
 // V11.5 游戏模式：导演的进度（sim/director.py 的 view）。V11.12：各岗位的业务（business）开局一起送来，关卡（stage）一步过了才送下一步
 export interface PlayLevel {
-  id: string; kind: "business" | "stage"; title: string; brief: string; to: string; decide: string; mechanism: string; point: string;
-  status: "waiting" | "open" | "passed"; cases: string[]; who: string | null;   // who：这件事在等谁（还没落到具体的人手上为 null）
+  id: string; kind: "business" | "stage"; title: string; brief: string; to: string; decide: string; mechanism: string; point: string; vs: string;   // vs：和过去比强在哪
+  act?: number; status: "waiting" | "open" | "passed"; cases: string[]; who: string | null;
+  pass: string[]; hint: Record<string, unknown> | null; focus: string | null;   // 过关条件；关卡里替正在等的岗位写好的这一步（界面据此指按钮、给示范）   // who：这件事在等谁（还没落到具体的人手上为 null）
 }
 export interface PlayState {
   levels: PlayLevel[]; round: number; speed: number;

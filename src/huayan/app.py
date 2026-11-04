@@ -2585,7 +2585,9 @@ class HuayanApp:
                 "复用" if main and main.status == "reused" else
                 "研发不立项" if main and main.status == "rejected" else "入研" if main else
                 "交业务员" if session.origin == "customer" and session.sales_id else
-                "自助解决" if session.status == "recommended" else "追问中")
+                "自助解决" if session.status == "recommended" else
+                # 觉已判现有产品都不合适、正等产品经理 Agent 整理交研发：条件已问清，不再是「追问中」
+                "转研发中" if any(q.object_id == f"session:{session.id}" for q in self.bus.list(family="route_rd")) else "追问中")
         inner = level_of(viewer) >= 2      # L0/L1 只看会话上的决策，不看研发、产品经理的结案备注
         objects = {f"session:{session.id}"} | ({f"requirement:{rid}" for rid in rids} if inner else set())
         merges = {e.payload["question_id"] for e in events if e.kind == "requirements_merged"} if inner else set()

@@ -294,7 +294,7 @@ function SheetWaiting({ view }: { view: RequirementView }) {
   const { preparing } = useInbox();
   const req = view.requirement;
   const t = useData(() => api.timeline(req.id, me), [req.id, me]);
-  const glowTrial = useGlow("trial");
+  const glowTrial = useGlow("trial") || useGlow("task");   // 自己玩：这张单轮到研发时，试样按钮也算「要点的」
   const doing = preparing.find((q) => reqsOf(q).includes(req.id));
   // 需求单视图里没有试样状态：试样通过后觉会提出「客户评价」，以此判断试样已录入
   const trial = !!t && req.status === "rd_confirmed" && !t.nodes.some((n) => n.family === "market_eval" || n.family === "seal_points");
@@ -708,6 +708,7 @@ function ReuseReview({ q, view, dismiss }: { q: Question; view: RequirementView;
   const scriptArg = useGuideArg("reuse-note");   // 回放部署：台词要求把说明里的一个词换掉
   const scripted = scriptArg ? r.customer_note.replace(...(JSON.parse(scriptArg) as [string, string])) : null;
   const [reason, setReason] = useState("");
+  const noArg = useGuideArg("reuse-no");        // 自己玩：这一步要研发不采用，给好理由
   const cases = view.cited.filter((c) => r.ku_refs.includes(c.ku_id));
   return (
     <>
@@ -733,7 +734,8 @@ function ReuseReview({ q, view, dismiss }: { q: Question; view: RequirementView;
             <Act label="通过并转给业务员" disabled={note !== r.customer_note} run={() => api.adoptReuse(req.id, me)} />{dismiss}
           </div>
           <Field value={reason} onChange={setReason} placeholder="不采用的理由（随后觉提出是否接单）" />
-          <div><Act kind="plain" label="不采用" disabled={!reason.trim()} run={() => api.declineReuse(req.id, reason, me)} /></div>
+          {noArg && reason !== noArg && <div><button type="button" className="chip glow" onClick={() => setReason(noArg)}>演示自动填入</button></div>}
+          <div><Act kind="plain" label="不采用" glow={!!noArg && reason === noArg} disabled={!reason.trim()} run={() => api.declineReuse(req.id, reason, me)} /></div>
         </div>
       </div>
     </>

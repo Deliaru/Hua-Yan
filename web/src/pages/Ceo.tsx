@@ -9,6 +9,7 @@ import { api } from "../api";
 import { useApp, useData } from "../ctx";
 import type { CeoCase, CeoData, CeoParams, LlmUsage, MonthProgress, OldFlowStation } from "../types";
 import { Group, PageHead } from "../components/ui";
+import { HowTo } from "../components/Tour";
 
 export type Basis = "given" | "safe";   // 照参数文件 / 按最保守参数
 type Role = "sales" | "pm" | "rd";
@@ -141,6 +142,11 @@ export function Ceo() {
           <button className={`chip ${set === "safe" ? "!bg-[#248a3d] !text-white" : ""}`} onClick={() => { setSet(set === "safe" ? "given" : "safe"); setEdits({}); }}
                   title="转述少丢条件、研发早发现、工位快、交接等待短、人工与试样便宜：差距往小里算">按最保守参数</button>
         </div>} />
+      <HowTo items={[
+        "先看「三个岗位的时间用在哪里」：业务员、产品经理、研发原来有多少时间耗在转述、补问、重复答疑上，化言之后剩多少。",
+        "再看「三条流水线」：同一批客户需求，上面是传化原来的流程，中间是「只有 Agent 没有觉」，下面是化言。格子越短越好，红色是返工和回头补问。点任意一件看它的经过。",
+        "最后看账本：省下的人工小时、等待天数，和花掉的 AI 成本放在一本账上。黄标的数是假设，可以直接改，改了立即重算；「按最保守参数」把差距往小里算。",
+      ]} />
       <TimeBars data={data} set={set} />
       <Heatmap data={data} set={set} tag={tag} />
       <Headline data={data} set={set} p={p} volume={volume} tag={tag} assumed={assumed} />

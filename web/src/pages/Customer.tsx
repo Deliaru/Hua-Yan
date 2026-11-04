@@ -129,6 +129,7 @@ function Holder({ r }: { r: Route }) {
   const who = role ? r.roles[role].by.find((id) => id !== "pm:agent") : undefined;
   const text: Record<string, string> = {
     追问中: "化言在问清研发开工需要的条件",
+    转研发中: "现有产品都不合适，化言正在把你的原话和条件整理好交研发",
     自助解决: "现有产品适用，推荐已给你",
     复用: "研发审定了一个现成产品，推荐已给你",
     交业务员: `已交给 ${L.name(r.roles.sales.by[0])} 跟进中，他看得到你说过的每一句`,
@@ -255,6 +256,10 @@ function Chat({ v, route, messages, story }: { v: SessionView; route: Route | nu
             </li>
           ))}
         </ol>
+        {!v.card && route && ["转研发中", "入研", "产品机会"].includes(route.path) && (   // 自助客户不对着沉默干等
+          <p className="mx-3 mb-1 max-w-[82%] rounded-[18px] bg-white px-3.5 py-2 text-[13.5px] leading-[20px]">
+            <span className="mr-1 text-[11px] font-semibold text-ink-2">化言</span>
+            按你说的条件，现有产品都不合适。你的原话和已问清的条件会直接交给研发，有进展会在这里告诉你。</p>)}
         {v.asks.slice(0, 1).map((a) => (    // 研发的回问直达客户，一次问一条
           <p key={a.question_id} className="mx-3 mb-1 max-w-[82%] rounded-[18px] bg-white px-3.5 py-2 text-[13.5px] leading-[20px] shadow-[0_0_0_1px_rgba(176,80,10,.25)]">
             <span className="mr-1 text-[11px] font-semibold text-attn-ink">研发想确认</span>{a.ask_text}</p>
@@ -284,7 +289,7 @@ function Chat({ v, route, messages, story }: { v: SessionView; route: Route | nu
       {err && <p role="alert" className="shrink-0 bg-white px-4 pt-1 text-[12px] text-danger">{err}</p>}
       <form onSubmit={(e) => { e.preventDefault(); send(said); }} className="flex shrink-0 items-center gap-2 border-t border-sep bg-white px-3 pb-5 pt-2">
         <input value={said} onChange={(e) => setSaid(e.target.value)} aria-label="我说" disabled={busy}
-               placeholder="描述现象，或回答化言的问题……" className="min-w-0 flex-1 rounded-full bg-fill px-3.5 py-1.5 text-[14px] outline-none placeholder:text-ink-3" />
+               placeholder="描述现象，或回答化言的问题……" className={`min-w-0 flex-1 rounded-full bg-fill px-3.5 py-1.5 text-[14px] outline-none placeholder:text-ink-3 ${glowSay && !said ? "glow" : ""}`} />
         {line && !said && <button type="button" className={`chip ${glowSay ? "glow" : ""}`} disabled={busy} onClick={() => setSaid(line)}>演示填入</button>}
         <button className={`btn btn-primary !h-[30px] !rounded-full !px-3.5 ${glowSay && said ? "glow" : ""}`} disabled={busy || !said.trim()}>{busy ? "……" : "发送"}</button>
       </form>

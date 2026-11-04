@@ -92,7 +92,7 @@ def estimate(route: dict, params: dict, cases: int = 1, loss: dict | None = None
     elif path == "交业务员":
         stations = [("业务员答技术问题", 1), ("业务员报价", 1)]
     else:   # 入研、研发不立项、复用、产品机会：都要经过转述到研发；只有入研开发要试样
-        develop = path in ("入研", "产品机会")
+        develop = path in ("入研", "转研发中", "产品机会")
         stations = [("业务员记录需求", 1), ("产品经理转述", 1), ("研发看单判断", 1),
                     ("补问一轮", rate * (p["caught_by_rd"] if develop else 1))]
         if develop:

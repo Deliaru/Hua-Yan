@@ -52,7 +52,8 @@ REPORT_NAMES = ("distortion", "distortion_300", "jue_k", "week", "v6_routes")   
 RESUME = None      # 命令行 --run <id> --resume：默认会话续跑该运行
 TRIAL = None       # 命令行 --trial <id>：试用实例的运行号（V9.1）
 PLAY = None        # 命令行 --play <id>：游戏模式（V11.5）。沿用试用实例的共享门面与角色会话，时钟换成可控的 SimClock
-DIRECTOR = None    # 游戏模式的导演（sim/director.py）；每局一个运行目录 <id>-r<局号>
+DIRECTORS = {}     # 游戏模式每个浏览器一局：会话号 → 导演（sim/director.py）；每局一个运行目录 <id>[-<会话号>]-r<局号>
+PLAY_REAL = None   # 真实报告版的目录（配置 play_real_report）
 PLAY_TICK = 3      # 游戏模式后台每几秒看一眼：推进时钟、觉检查、导演代办
 TICK_SECONDS = int(os.environ.get("HUAYAN_TICK_SECONDS", "60"))   # 试用实例里觉按真实时间周期检查（扫描本身每 30 分钟一次）
 MAX_SESSIONS = int(os.environ.get("HUAYAN_MAX_SESSIONS", "30"))   # 超出时淘汰最久未用的会话
@@ -488,6 +489,7 @@ class Api:
     def __init__(self, app, config_path=CONFIG, clock=None, byok=None):
         self.app, self.config_path, self.byok = app, config_path, byok
         self.clock = clock or get_clock()   # 本会话的业务时钟；每次调用先在当前线程换上它
+        self.sid = "default"                # 游戏模式：这一局属于哪个浏览器会话
         self.lock = TrialGate() if TRIAL else RLock()
         self.prep = PrepGate()               # V12.14 游戏模式一批 Agent 准备之间的闸口，不在准备时谁都直接过
         self.writes = 0     # 本轮成功的写操作数；回放部署里按它对齐台词的下一步
@@ -643,12 +645,13 @@ class Api:
     def build(self, resume=None):
         """resume：续跑已有运行（--run <id> --resume），业务时间接着最后一条事件。试用实例用真实时间，运行目录已有就续跑。"""
         if TRIAL:
-            run = f"{PLAY}-r{DIRECTOR.state['round']}" if PLAY else TRIAL
+            d = director_of(self.sid) if PLAY else None
+            run = f"{PLAY}{'' if self.sid == 'default' else '-' + self.sid}-r{d.state['round']}" if PLAY else TRIAL
             self.clock = SimClock(T0) if PLAY else WallClock()
             use_clock(self.clock)
             run_root = Path(yaml.safe_load(Path(self.config_path).read_text(encoding="utf-8"))["run_root"])
             if PLAY:      # 每局一份资料副本与编译好的待审候选，应用起来之前离线导入
-                path = str(director.prepare_round(self.config_path, run_root / run, DIRECTOR.real if DIRECTOR.state["real"] else None))
+                path = str(director.prepare_round(self.config_path, run_root / run, d.real if d.state["real"] else None))
                 self.app, self.writes = HuayanApp.build(path, run_id=run, resume=True), 0
             else:
                 self.app, self.writes = HuayanApp.build(self.config_path, run_id=run, resume=(run_root / run).exists()), 0
@@ -873,7 +876,7 @@ class Api:
                     use_clock(self.clock)
                 raise
             if TRIAL:
-                WAKE.set()          # 觉提出的问题交给后台准备，不让这次写操作等 Agent
+                wake(self.sid)      # 觉提出的问题交给后台准备，不让这次写操作等 Agent
             else:
                 self.app.tick()
         except Exception as e:
@@ -997,13 +1000,33 @@ def trial_params(sid, method, path, params):
     return params
 
 
-WAKE = Event()       # 写操作或重跑之后叫醒后台，不用等满一个周期
+WAKES: dict[str, Event] = {}     # 写操作或重跑之后叫醒后台，不用等满一个周期（游戏模式每局一个）
+SEEN: dict[str, float] = {}      # 游戏模式各局最近一次有浏览器来访的时刻；没人看的局不再推进
 
 
-def play_tick(elapsed):
+def wake(sid="default"):
+    WAKES.setdefault(sid, Event()).set()
+
+
+def director_of(sid):
+    if sid not in DIRECTORS:
+        cfg = yaml.safe_load(Path(CONFIG).read_text(encoding="utf-8"))
+        name = PLAY if sid == "default" else f"{PLAY}-{sid}"
+        DIRECTORS[sid] = director.Director(lambda: session_api(sid), Path(cfg["run_root"]) / f"{name}.play.json", real=PLAY_REAL)
+        if sid != "default" and not DIRECTORS[sid].path.exists():
+            DIRECTORS[sid].state["paused"] = True      # 新来的浏览器先停着，等他在开始页选「看演示」或「自己玩」
+    return DIRECTORS[sid]
+
+
+def play_tick(sid, elapsed):
     """游戏模式的一拍：没暂停时按倍速推进业务时间，觉检查、Agent 准备，导演替缺席的客户与岗位做该做的事。"""
-    api, d = session_api("default"), DIRECTOR
+    api, d = session_api(sid), director_of(sid)
     if d.state["paused"]:
+        # 暂停只停导演和业务时间；暂停后人自己做了事（客户说话、签字），觉提出的问题照常交 Agent 准备，不让人对着不动的界面干等。
+        # 没人动就什么都不做，主线停在幕间时不多出调用，录制照旧对得上
+        if api.writes != d.paused_at:
+            d.paused_at = api.writes
+            api.tick()
         return
     # 一镜到底每拍推进固定的业务时间，不按墙上时间，同一局重开走出同样的请求，录下的断网退路才放得出来；
     # 上一拍没事可做就直接跳到觉的下一次扫描（30 分钟），不空等（V12.12）
@@ -1011,72 +1034,87 @@ def play_tick(elapsed):
     api.tick()
     act = next((x.get("act") for x in d.open()), None)
     for _ in range(1 if d.state["oneshot"] else 10):     # 一镜到底一拍只走一步，台下看得清每次交接
-        d.idle = not d.step(set(trial_roles.values()))
+        d.idle = not d.step({trial_roles[sid]} if sid in trial_roles else set())
         if d.idle:
             break
         api.tick()
     if d.state["oneshot"] and act != next((x.get("act") for x in d.open()), None):
-        d.state["paused"] = True      # 一镜到底每幕走完停下，讲完点「继续」进下一幕；三幕走完也停住，巡游时业务时间不再往前跑（V12.12）
+        d.state["paused"], d.paused_at = True, api.writes      # 一镜到底每幕走完停下，讲完点「继续」进下一幕；三幕走完也停住，巡游时业务时间不再往前跑（V12.12）
 
 
-def play_ticker():
-    last = time.monotonic()
-    while True:
-        WAKE.wait(PLAY_TICK)
-        WAKE.clear()
+def play_ticker(sid):
+    """一局一个后台线程；这一局 10 分钟没人看就停下，再有人来时重新起。"""
+    last, ev, d = time.monotonic(), WAKES.setdefault(sid, Event()), director_of(sid)
+    while time.monotonic() - SEEN.get(sid, 0) < 600:
+        ev.wait(PLAY_TICK)
+        ev.clear()
         now = time.monotonic()
         try:
-            with play_lock:
-                play_tick(now - last)
-                DIRECTOR.save()
-            DIRECTOR.error = None
+            with play_locks[sid]:
+                play_tick(sid, now - last)
+                d.save()
+            d.error = None
         except Exception as e:          # 导演这一拍没做成：记下来给界面看，下一拍再试
-            DIRECTOR.error = f"{type(e).__name__}: {e}"
+            d.error = f"{type(e).__name__}: {e}"
             traceback.print_exc()
         last = now
+    tickers.discard(sid)
 
 
-play_lock = Lock()
+play_locks: defaultdict[str, Lock] = defaultdict(Lock)
+tickers: set[str] = set()
 
 
-def play_restart(p):
+def play_seen(sid):
+    SEEN[sid] = time.monotonic()
+    with apis_lock:
+        if sid in tickers:
+            return
+        tickers.add(sid)
+    Thread(target=play_ticker, args=(sid,), daemon=True).start()
+
+
+def play_restart(sid, p):
     """重开这一局：开新的一局（新的运行目录），业务与关卡第 1 步重新送来。
     real：换报告（真实报告版 / 模拟报告）；roadshow：路演局（各岗位的事都留给人）；oneshot：一镜到底（导演按幕一件一件做完）；
     不给就照这一局的。"""
-    d = DIRECTOR
+    d = director_of(sid)
     d.new_round(bool(p.get("real", d.state["real"])), bool(p.get("roadshow", d.state["roadshow"])),
                 bool(p.get("oneshot", d.state["oneshot"])))
-    session_api("default", rebuild=True)
+    session_api(sid, rebuild=True)
     _roles_path().write_text(json.dumps(trial_roles, ensure_ascii=False, indent=1), encoding="utf-8")
-    WAKE.set()
+    wake(sid)
     return d.view()
 
 
-def play_control(p):
+def play_control(sid, p):
     """暂停 / 继续、倍速（业务时间每真实一秒走几秒）。"""
+    d = director_of(sid)
     if "paused" in p:
-        DIRECTOR.state["paused"] = bool(p["paused"])
+        d.state["paused"] = bool(p["paused"])
+        d.paused_at = session_api(sid).writes
     if "speed" in p:
-        DIRECTOR.state["speed"] = int(p["speed"])
-    return DIRECTOR.view()        # 进度由导演这一拍落盘（play_ticker），这里不和它抢着写文件
+        d.state["speed"] = int(p["speed"])
+    return d.view()        # 进度由导演这一拍落盘（play_ticker），这里不和它抢着写文件
 
 
-def play_settle(_):
+def play_settle(sid, _):
     """V11.9 结算：各件业务与关卡各步送来的事走了哪条路，三个岗位的时间构成与这一局的账本（同 CEO 面的口径，两份参数）。
     这是游戏世界的总账，由导演以 CEO 身份读汇总，只给各件的路径与旧流程推算，不给原话与经手人，谁都能看。
     rerouted：推荐后来被撤下、改道交研发（关卡里来源改版挂起能力时，前面用过它的事会这样）。"""
-    data = session_api("default").call("GET", "/api/ceo", {"viewer": "supervisor:CEO"})
+    d = director_of(sid)
+    data = session_api(sid).call("GET", "/api/ceo", {"viewer": "supervisor:CEO"})
     keep = ("session_id", "path", "reused", "arrived", "answered", "given", "safe")
     return {"params": data["params"], "bars": data["bars"],
             "cases": [{k: c[k] for k in keep} | {"rerouted": any(x["station"] == "契" and x["loop"] for x in c["stations"])}
                       for c in data["cases"]],
             "levels": [{"id": x["id"], "kind": x["kind"], "title": x["title"], "point": x["point"],
-                        "passed": x["id"] in DIRECTOR.state["passed"], "cases": DIRECTOR.state["cases"].get(x["id"], [])}
-                       for x in DIRECTOR.levels]}
+                        "passed": x["id"] in d.state["passed"], "cases": d.state["cases"].get(x["id"], [])}
+                       for x in d.levels]}
 
 
 PLAY_NOWAIT = {
-    "/api/play/state": lambda p: DIRECTOR.view() | {"now": session_api("default").clock.now().isoformat()},
+    "/api/play/state": lambda sid, p: director_of(sid).view() | {"now": session_api(sid).clock.now().isoformat()},
     "/api/play/control": play_control,
     "/api/play/settle": play_settle,
 }
@@ -1085,8 +1123,8 @@ PLAY_API = {"/api/play/restart": play_restart}
 
 def trial_ticker():
     while True:
-        WAKE.wait(TICK_SECONDS)
-        WAKE.clear()
+        WAKES.setdefault("default", Event()).wait(TICK_SECONDS)
+        WAKES["default"].clear()
         try:
             session_api("default").tick()
         except Exception:
@@ -1110,11 +1148,13 @@ class Handler(SimpleHTTPRequestHandler):
             sid = self.headers.get("X-Huayan-Session", "default")
             if TRIAL and url.path not in MONTH and not url.path.startswith(("/api/trial/", "/api/play/")):
                 params = trial_params(sid, method, url.path, params)
+            if PLAY and SESSION_ID.fullmatch(sid):         # 游戏模式每个浏览器一局：有人在看，这一局的后台就跑着
+                play_seen(sid)
             if PLAY and url.path in PLAY_NOWAIT:           # V12.3 读进度、暂停与倍速不等导演这一拍：真实模型下一拍要几分钟
-                result = PLAY_NOWAIT[url.path](params)
+                result = PLAY_NOWAIT[url.path](sid, params)
             elif PLAY and url.path in PLAY_API:          # 重开这一局：和导演这一拍排队
-                with play_lock:
-                    result = PLAY_API[url.path](params)
+                with play_locks[sid]:
+                    result = PLAY_API[url.path](sid, params)
             elif TRIAL and url.path == "/api/trial/stamp":         # 界面轮询有没有别人的变化，不排会话锁
                 result = GET[url.path](session_api(sid).app, params)
             elif TRIAL and url.path == "/api/trial/role":
@@ -1133,7 +1173,7 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 result = session_api(sid).call(method, url.path, params)
                 if TRIAL and url.path == "/api/agents/retry":
-                    WAKE.set()
+                    wake(sid if PLAY else "default")
             if TRIAL and url.path == "/api/meta":
                 result = dump(result) | {"trial": {"actor": trial_roles.get(sid)}, "play": bool(PLAY)}
             status, body = 200, dump(result)
@@ -1248,11 +1288,12 @@ apis_lock = Lock()
 def session_api(sid, byok=None, rebuild=False):
     if sid != "default" and not SESSION_ID.fullmatch(sid):
         raise ValueError("会话号格式不对")
-    if TRIAL:
-        sid = "default"            # 试用实例：所有浏览器共用一个门面，身份另记在 trial_roles
+    if TRIAL and not PLAY:
+        sid = "default"            # 试用实例：所有浏览器共用一个门面，身份另记在 trial_roles；游戏模式每个浏览器一局
     with apis_lock:
         if sid not in apis or rebuild:
             api = Api(None, CONFIG, byok=byok)
+            api.sid = sid
             api.build(RESUME if sid == "default" and not rebuild else None)
             if sid in apis:
                 apis[sid].app.system1.close()
@@ -1306,7 +1347,7 @@ if __name__ == "__main__":
         run_root = Path(cfg["run_root"])
         run_root.mkdir(parents=True, exist_ok=True)
         real = cfg.get("play_real_report")          # 可选：真实报告版的目录（不入库），配了浏览器里才能换报告
-        DIRECTOR = director.Director(lambda: session_api("default"), run_root / f"{PLAY}.play.json", real=real and Path(real))
+        PLAY_REAL = real and Path(real)
     session_api("default")   # 先构建一次：Jue-K 模型等首次加载较慢
     # V11.0：试用机拉了新代码却没重新构建前端时，浏览器里还是旧界面；启动时提醒一次
     built = (DIST / "index.html").stat().st_mtime if (DIST / "index.html").exists() else 0
@@ -1314,7 +1355,8 @@ if __name__ == "__main__":
         print("注意：web/dist 不存在或比 web/src 旧，浏览器看到的不是当前界面；先运行 npm --prefix web run build")
     if TRIAL:
         load_trial_roles()
-        Thread(target=play_ticker if PLAY else trial_ticker, daemon=True).start()
+        if not PLAY:
+            Thread(target=trial_ticker, daemon=True).start()
         app = session_api("default").app
         print(f"化言试用实例：http://{args.host}:{PORT}（运行 {app.run_dir}，{len(app.sessions())} 个会话、"
               f"{len(app._requirements)} 张需求单，已登记身份 {len(trial_roles)} 个）")

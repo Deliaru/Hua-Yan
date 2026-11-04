@@ -159,8 +159,9 @@ def validate_extraction(result, seeds, turns, product_ids):
     result = result.model_copy(deep=True)
     # 大模型偶尔回现象的中文名而不是编号（试用接口实测），按名换回编号
     result.phenomenon = {p.label: p.id for p in seeds.phenomena}.get(result.phenomenon, result.phenomenon)
-    if result.phenomenon is not None and result.phenomenon not in {p.id for p in seeds.phenomena}:
-        raise ValueError("抽取返回未知现象")
+    # 目录外的现象按「没认出」处理，与取值不合法的槽位一样丢掉：原来直接报错，录制缓存里同一句每次都错，导演那件事永远卡住（V12 自己玩实测）
+    if result.phenomenon not in {p.id for p in seeds.phenomena}:
+        result.phenomenon = None
     result.slots = [s for s in result.slots if s.slot in slots
                     and ((s.status == "unknown" and s.value is None)
                          or (s.status == "filled" and s.value in slots[s.slot].values))]

@@ -37,7 +37,7 @@ export function Pm() {
   const object = useObject(reqs);
   const [qid, setQid] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);   // 刚签完的那项：问题已结案，主区显示签字的效果
-  useEffect(() => { if (focus) { const q = qs.find((x) => reqOf(x) === focus); if (q) setQid(q.id); } }, [focus, qs.length]);
+  useEffect(() => { if (focus) { const q = qs.find((x) => x.id === focus || reqOf(x) === focus); if (q) { setQid(q.id); setDone(null); } } }, [focus, qs.length]);
   const q = qs.find((x) => x.id === qid) ?? (done ? null : qs.find((x) => x.prepared_at != null || x.owner_id === me) ?? null);
   const mineReqs = new Set(qs.map(reqOf));
   const background = reqs.filter((r) => r.status === "draft" && !mineReqs.has(r.id));

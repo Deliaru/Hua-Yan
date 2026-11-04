@@ -7,12 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { Harness } from "../components/Harness";
 import { usePlay } from "../components/Play";
+import { CaseSummary, HowTo } from "../components/Tour";
 import { FAMILY, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { BusItem, CatalogItem, LiveCase, RadarRow, Role, StoryLine } from "../types";
 import { EmptyState, Group, PageHead } from "../components/ui";
 
 const VIEWER = "supervisor:CEO";
-const TABS = [["lanes", "实况"], ["radar", "觉雷达"], ["catalog", "决策目录"], ["bus", "问题总线"], ["arch", "活的架构图"]] as const;
+const TABS = [["flow", "流程回放"], ["lanes", "泳道"], ["radar", "觉雷达"], ["catalog", "决策目录"], ["bus", "问题总线"], ["arch", "活的架构图"]] as const;
 type Tab = (typeof TABS)[number][0];
 const LANES = [["jue", "觉"], ["jev", "Jev"], ["qi", "契"], ["agent", "Agent"], ["human", "人"]] as const;
 const LANE_OF: Record<StoryLine["subject"], string> = { jue: "jue", jev: "jev", qi: "qi", agent: "agent", system: "agent", human: "human" };
@@ -40,21 +41,125 @@ function useTick(ms = 3000) {
 }
 
 export function Live() {
-  const [tab, setTab] = useState<Tab>(() => (localStorage.getItem("huayan-live-tab") as Tab) || "lanes");
-  const pick = (t: Tab) => { localStorage.setItem("huayan-live-tab", t); setTab(t); };
+  const [tab, setTab] = useState<Tab>(() => (localStorage.getItem("huayan-live-tab2") as Tab) || "flow");
+  const pick = (t: Tab) => { localStorage.setItem("huayan-live-tab2", t); setTab(t); };
+  useEffect(() => {      // 看演示的导览条点「泳道」等，已在这一页时也切过去
+    const on = () => setTab((localStorage.getItem("huayan-live-tab2") as Tab) || "flow");
+    window.addEventListener("huayan-live-tab", on);
+    return () => window.removeEventListener("huayan-live-tab", on);
+  }, []);
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-5 px-8 pb-24 pt-7">
       <PageHead title="组织运行实况"
                 subtitle="这一局里信息怎样自己变成了事、事怎样在觉、Jev、契、Agent 和人之间流转。全部读这一局的事件与问题总线，不另存；主管只读。"
                 aside={<div className="flex gap-1">{TABS.map(([k, label]) => (
-                  <button key={k} type="button" onClick={() => pick(k)} className={`chip ${tab === k ? "tag-accent" : ""}`}>{label}</button>))}</div>} />
+                  <button key={k} type="button" onClick={() => pick(k)} className={`chip whitespace-nowrap ${tab === k ? "tag-accent" : ""}`}>{label}</button>))}</div>} />
+      {tab === "flow" && <HowTo items={['每一行是一件业务（一位客户），从左往右是它经过的每一步；顶上那句大字就是刚发生的这一步，讲的人跟着念。', '颜色代表谁做的：紫色是觉（发现该处理的事）、蓝色是 Jev（给出概率的判断）、绿色是契（研发授权过的能力）、灰色是 Agent、黄色是人。人做的步越少，说明打扰越少。', '一件事走完，下面出现绿色总结：它说明了什么、和过去比强在哪、旧流程推算要多少人工和等待。点任一格可以跳到那个岗位当时看到的页面。']} />}
+      {tab === "flow" && <><Act /><Flow /></>}
+      {tab === "lanes" && <HowTo items={['同一类问题的几件事放在一张图里，五条泳道从上到下：觉、Jev、契、Agent、人。', '看格子落在哪条泳道：大部分落在觉、契、Agent 上，人那一道只剩签字和拍板，这就是「人只做判断，杂活交给组织」。', '红框在闪的是最新一步；下面一行写这件事没打扰哪些岗位，旧流程要经过谁。']} />}
       {tab === "lanes" && <><Act /><Lanes /></>}
+      {tab === "radar" && <HowTo items={['觉一直在看所有对象，每一行是它正在考虑的一件事，条越长越值得处理，竖线是门槛。', '过了门槛才提给人，没过的就不打扰人。觉做这些判断不调用大模型，靠规则和本地训练的小模型。']} />}
       {tab === "radar" && <Radar />}
+      {tab === "catalog" && <HowTo items={['化言能自己发现的 27 类决策，按业务阶段排；这一局触发过的会亮起，写着次数。', '这是「组织级」和「岗位助手」的区别：不是等人来问，而是组织自己知道哪些事该谁来定。']} />}
       {tab === "catalog" && <Catalog />}
+      {tab === "bus" && <HowTo items={['每一件被觉提出的事，从提出、派给谁、Agent 用了哪些工具、还缺什么，到谁签字，一行看完。', 'Agent 只能准备草稿，签字永远是人；被门面拒绝的工具调用也会写出来，说明权限是真的在管。']} />}
       {tab === "bus" && <Bus />}
+      {tab === "arch" && <HowTo items={['系统的真实架构图，这一局走过的部分会亮起来，对照着讲觉、Jev、契和 Agent 各管什么。']} />}
       {tab === "arch" && <Harness viewer={VIEWER} />}
     </div>
   );
+}
+
+// ---------- 流程回放：每件事一行横向流程，按时间一步一步亮出来 ----------
+// 导演一拍可能做完好几步，界面不一下子全摊开：按业务时间排好，每步隔 0.6–1.8 秒亮出来，顶部大字说这一步是谁做了什么，讲的人跟着念。
+const SPEEDS = [[1800, "慢放"], [600, "快放"]] as const;
+const SUBJECT: Record<StoryLine["subject"], string> = { jue: "觉", jev: "Jev", qi: "契", agent: "Agent", system: "系统", human: "人" };
+let shownSoFar = 0;     // 切到别的标签再回来，接着上次放到的地方
+
+function Flow() {
+  const { go } = useApp();
+  const L = useLabels();
+  const tick = useTick();
+  const data = useData(() => api.live(VIEWER), [tick]);
+  const [shown, setShown] = useState(shownSoFar);
+  const [playing, setPlaying] = useState(true);
+  const [ms, setMs] = useState<number>(SPEEDS[0][0]);
+  const cur = useRef<HTMLButtonElement>(null);
+  const play = usePlay();
+  const level = (sid: string) => play?.levels.find((x) => x.cases.includes(sid));
+  const steps = (data?.cases ?? []).flatMap((c, i) => c.story.map((l, j) => ({ c, i, j, l })))
+    .sort((a, b) => a.l.ts.localeCompare(b.l.ts) || a.i - b.i || a.j - b.j);
+  const total = steps.length;
+  const n = Math.min(shown, total);
+  useEffect(() => {
+    shownSoFar = n;
+    if (!playing || n >= total) return;
+    const t = setTimeout(() => setShown(n + 1), n === 0 ? 300 : ms);
+    return () => clearTimeout(t);
+  }, [playing, n, total, ms]);
+  useEffect(() => { cur.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" }); }, [n]);
+  if (!data) return null;
+  if (!total) return <EmptyState title="这一局还没有事" text="点顶部「继续」，导演送来第一件事后，这里一步一步画出它经过了谁。" />;
+  const visible = steps.slice(0, n);
+  const now = visible.at(-1);
+  const actor = (l: StoryLine) => l.subject === "human" ? (l.role ? ROLE_NAME[l.role] : "人") + (l.who ? ` ${L.name(l.who)}` : "")
+    : l.who === "huayan" ? "化言" : l.subject === "agent" && l.who ? L.name(l.who) : SUBJECT[l.subject];
+  const name = (c: LiveCase, i: number) => c.customer_id ? L.name(c.customer_id) : `第 ${i + 1} 件`;
+  const open = (c: LiveCase, l: StoryLine) => {
+    if (!l.role) return;
+    go(l.role, ["sales", "customer"].includes(l.role) ? c.session_id : c.requirement_id ?? c.session_id,
+       l.who.includes(":agent") || l.who.startsWith("agent:") ? undefined : l.who);
+  };
+  const rows = data.cases.map((c, i) => ({ c, i, mine: visible.filter((x) => x.c === c) })).filter((r) => r.mine.length);
+  return <>
+    <div className="sticky top-0 z-20 flex items-center gap-3 rounded-[12px] bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,.08)]">
+      <span className="num shrink-0 text-[12px] text-ink-3">第 {n} / {total} 步</span>
+      <p className="min-w-0 flex-1 text-[16px] leading-6">
+        {now ? <><span className="text-ink-3">{hhmm(now.l.ts)} · {name(now.c, now.i)} · </span>
+          <b className={`rounded px-1.5 ${LANE_TONE[LANE_OF[now.l.subject]]}`}>{actor(now.l)}</b> {now.l.text}
+          {jevText(now.l) && <span className="ml-1 font-semibold">（{jevText(now.l)}）</span>}</> : "准备开始"}
+      </p>
+      <div className="flex shrink-0 gap-1">
+        <button className="btn btn-plain" onClick={() => setShown(Math.max(0, n - 1))} disabled={!n}>上一步</button>
+        <button className="btn btn-plain" onClick={() => setPlaying(!playing)}>{playing ? "暂停" : "播放"}</button>
+        <button className="btn btn-plain" onClick={() => setShown(n + 1)} disabled={n >= total}>下一步</button>
+        {SPEEDS.map(([v, label]) => <button key={v} className={`btn btn-plain ${ms === v ? "!text-accent" : ""}`} onClick={() => setMs(v)}>{label}</button>)}
+        <button className="btn btn-plain" onClick={() => setShown(0)}>从头放</button>
+        <button className="btn btn-plain" onClick={() => setShown(total)} disabled={n >= total}>全部</button>
+      </div>
+    </div>
+    {rows.map(({ c, i, mine }) => {
+      const done = mine.length === c.story.length;
+      return (
+        <div key={c.session_id} className="anim-rise rounded-[12px] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,.05)]">
+          <p className="text-[13.5px]"><b>{name(c, i)}</b><span className="text-ink-2"> · {c.phenomenon ? L.phen(c.phenomenon) : "尚未识别现象"}</span>
+            {done && <span className="tag ml-2">{c.path}</span>}
+            {done && <span className="ml-2 text-[12px] text-ink-2">{(() => { const spared = c.old_roles.filter((r) => !c.now_roles.includes(r));
+              return spared.length ? `没打扰：${spared.join("、")}（旧流程要经过 ${c.old_roles.join(" → ")}，推算）` : ""; })()}</span>}</p>
+          <div className="mt-2 flex items-stretch overflow-x-auto pb-1">
+            {mine.map((x, k) => {
+              const last = x === now;
+              return <div key={k} className="flex shrink-0 items-center">
+                {k > 0 && <span className="px-1 text-[16px] text-ink-3">→</span>}
+                <button ref={last ? cur : undefined} type="button" onClick={() => open(c, x.l)} disabled={!x.l.role} title={x.l.text}
+                        className={`anim-rise w-[168px] rounded-[10px] px-2.5 py-1.5 text-left text-[12px] leading-[17px] ${LANE_TONE[LANE_OF[x.l.subject]]}
+                          ${last ? "ring-2 ring-[#c93400]" : ""} ${x.l.role ? "hover:ring-1 hover:ring-accent" : "cursor-default"}`}>
+                  <span className="block text-[11px] font-semibold">{actor(x.l)}<span className="font-normal opacity-60"> · {hhmm(x.l.ts)}</span></span>
+                  <span className="line-clamp-3">{x.l.text}</span>
+                  {jevText(x.l) && <span className="block font-semibold">{jevText(x.l)}</span>}
+                </button>
+              </div>;
+            })}
+          </div>
+          {done && level(c.session_id) && <CaseSummary level={level(c.session_id)!} sid={c.session_id} />}
+        </div>);
+    })}
+    {n >= total && play?.levels.filter((x) => x.status === "passed" && !x.cases.length).map((x) => (
+      <div key={x.id} className="anim-rise rounded-[12px] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,.05)]">
+        <p className="text-[13.5px]"><b>{x.title}</b><span className="text-ink-2"> · {x.brief}</span></p>
+        <CaseSummary level={x} />
+      </div>))}
+  </>;
 }
 
 // ---------- 实况：泳道 ----------

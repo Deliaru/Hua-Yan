@@ -40,6 +40,7 @@ export function Narration({ id }: { id: string }) {
   const savedMin = freed.reduce((n, x) => n + saved(x), 0);
   const bypassed = old.roles.filter((r) => !est.now.roles.includes(r));
   const reworks = old.stations.find((x) => x.station === "试样返工一轮")?.now_times ?? 0;   // 这次实际录了几次未通过的试样
+  const pending = ["追问中", "转研发中"].includes(est.path);   // 还没走到结果：不提前讲省了什么
   const reply = story.find((x: StoryLine) => ANSWER.has(x.kind) && !(x.kind === "turn" && x.role === "customer"));
   return (
     <Group title="旁白" foot={assumed ? `旧流程按参数推算；其中 ${est.assumed.length} 项参数传化还没给，用的是假设值。` : "旧流程按传化给的参数推算。"}>
@@ -47,7 +48,7 @@ export function Narration({ id }: { id: string }) {
         {!trial && (
           <Part label="发生了什么" src={<Src s="模拟" />}>
             {est.now.roles.length ? `这次经过${est.now.roles.join("、")}，人亲手做了 ${est.now.human_steps} 步${reworks ? `，试样返工 ${reworks} 轮` : ""}` : "这次没有经过任何岗位的人"}
-            ，前后 {span(first, last)}{reply && reply.ts > first ? `；客户说完 ${span(first, reply.ts)}就有了回应` : ""}。
+            ，前后 {span(first, last)}{reply && reply.ts > first ? `；客户说完 ${span(first, reply.ts)}就有了回应` : ""}{pending ? "；这件事还没走完，走完再算省了什么" : ""}。
           </Part>
         )}
         <Part label="过去怎么做" src={<><Src s="推算" />{assumed && <Src s="假设" />}</>} muted>
@@ -56,7 +57,7 @@ export function Narration({ id }: { id: string }) {
           {`；人工约 ${+old.work_hours.toFixed(1)} 工时，前后等约 ${hours(old.wait_hours)}。`}
           {old.lost?.length ? `转述时会丢掉：${old.lost.join("、")}。` : ""}
         </Part>
-        {!trial && <>
+        {!trial && !pending && <>
           {(freed.length > 0 || bypassed.length > 0) && (
             <Part label="解放了谁的什么" src={<Src s="推算" />} strong>
               {bypassed.length > 0 && `${bypassed.join("、")}这次没被打断。`}

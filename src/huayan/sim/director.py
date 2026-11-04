@@ -28,7 +28,8 @@ from huayan.sim.customer import SimCustomer
 LEVELS = Path("demo/levels.yaml")
 VIEWER = "supervisor:M01"        # 导演读前情、需求单用主管视角（L2，看得到需求单上的经过）
 PM = "pm:P01"
-SHOWN = ("id", "kind", "title", "brief", "to", "decide", "mechanism", "point")
+PM_FAMILY = {"merge": "opportunity", "scope": "scope_update", "sheet": "sheet_mismatch"}   # 关卡里产品经理那一步对应的决策
+SHOWN = ("id", "kind", "title", "brief", "to", "decide", "mechanism", "point", "vs", "act", "pass")   # pass：界面据此指出该点哪个按钮
 ROLE = {"customer": "客户", "sales": "业务员", "pm": "产品经理", "rd": "研发", "supervisor": "研发负责人"}
 
 
@@ -100,6 +101,7 @@ class Director:
         self.state = fresh() | (json.loads(path.read_text(encoding="utf-8")) if path.exists() else {})
         self.levels = levels or self._levels()
         self.idle = False          # 上一拍导演没事可做（一镜到底据此跳到觉的下一次扫描，V12.12）
+        self.paused_at = 0         # 暂停时这一局的写操作数；暂停后多出来的是人自己做的事
         self.customers: dict[str, SimCustomer] = {}
         self.error: str | None = None
 
@@ -111,7 +113,7 @@ class Director:
         if real and self.real is None:
             raise ValueError("没有配置真实报告版（play_real_report）")
         self.state = fresh(round_=self.state["round"] + 1, speed=self.state["speed"], real=real, roadshow=roadshow, oneshot=oneshot)
-        self.levels, self.customers, self.idle = self._levels(), {}, False
+        self.levels, self.customers, self.idle, self.paused_at = self._levels(), {}, False, 0
 
     def save(self) -> None:
         self.path.write_text(json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -128,28 +130,64 @@ class Director:
 
     def view(self) -> dict:
         s, now = self.state, self.open()
-        status = lambda x: "passed" if x["id"] in s["passed"] else "open" if x in now else "waiting"
+        # 人做完那一步就算过：不等导演这一拍（这一拍可能正等 Agent 准备好几分钟），下一步条马上指向下一件
+        live = {x["id"] for x in now if s["cases"].get(x["id"]) and self._passed(x)}
+        status = lambda x: "passed" if x["id"] in s["passed"] or x["id"] in live else "open" if x in now else "waiting"
         return {"levels": [{k: x.get(k) for k in SHOWN} | {"status": status(x), "cases": s["cases"].get(x["id"], []),
-                            "who": self._who(x) if x in now else None} for x in self.levels],
+                            "who": self._who(x) if x in now else None,
+                            "hint": self._hint(x) if x in now else None, "focus": self._focus(x) if x in now else None}
+                           for x in self.levels],
                 "round": s["round"], "real": s["real"], "real_ready": self.real is not None, "roadshow": s["roadshow"],
                 "oneshot": s["oneshot"], "act": next((x.get("act") for x in now), None),
                 "speed": s["speed"], "paused": s["paused"], "done": s["passed"], "acted": s["acted"], "error": self.error,
                 "lines": [x for lv in now for x in self._lines(lv)], "notes": [x for lv in now for x in self._notes(lv)]}
 
+    def _focus(self, lv: dict) -> str | None:
+        """自己玩：进工作面时直接打开的对象。业务员、客户按会话，产品经理、研发按需求单。"""
+        sids = self.state["cases"].get(lv["id"], [])
+        if not sids and lv["id"] in self.state["cases"]:      # 没有客户的关卡：直接打开觉提出的那件决策
+            family = next(({"recall": "capability_recall", "sheet": "sheet_mismatch"}[k] for a in lv.get("do", []) for k in a if k in ("recall", "sheet")), None)
+            return next(iter(self._open(family)), None) if family else None
+        if not sids or lv["to"] in ("customer", "sales"):
+            return sids[0] if sids else None
+        req = self._req(sids[0])
+        return req.id if req else None
+
+    def _hint(self, lv: dict) -> dict | None:
+        """自己玩：关卡里替正在等的那个岗位写好的这一步（界面据此指按钮、给「演示自动填入」的内容）。"""
+        role = (self._who(lv) or lv["to"]).split(":")[0]
+        return next(({k: v for k, v in a.items() if k != "as"} for i, a in enumerate(lv.get("do", []))
+                     if a.get("as") == role and f"{lv['id']}:{i}" not in self.state["done"]), None)   # 这个岗位还没做的第一步
+
     def _who(self, lv: dict) -> str | None:
         """这件事在等谁：送达工作面上的那个人（路演时点一件就以他进入）；还没落到具体的人手上就是 None。"""
         sids = self.state["cases"].get(lv["id"], [])
+        if lv["id"] in self.state["cases"] and not sids:   # 没有客户的关卡（回访、改说明书）：觉提出那件决策后轮到签字人
+            family = next(({"recall": "capability_recall", "sheet": "sheet_mismatch"}[k] for a in lv.get("do", []) for k in a if k in ("recall", "sheet")), None)
+            return next((q.signer_id for q in self._open(family).values() if q.prepared_at), None) if family else None
         if not sids:
             return None
         if lv["to"] == "customer":
             return self._customer_of(sids[0])
+        # 产品经理那一步要等觉提出对应的决策（合并课题 / 扩范围 / 改说明书），提出之前不算轮到他
+        pm_family = next((PM_FAMILY[k] for a in lv.get("do", []) if a.get("as") == "pm" for k in a if k in PM_FAMILY), None)
+        pm_ready = pm_family is None or any(q.prepared_at and (not q.refs.get("session_ids") or set(q.refs["session_ids"].split(",")) & set(sids))
+                                            for q in self._open(pm_family).values())
         if lv["to"] == "pm":
-            return PM
-        if lv["to"] == "supervisor":
-            return VIEWER
+            if pm_ready:
+                return PM
+            req = self._req(sids[0]) if any(a.get("as") == "rd" for a in lv.get("do", [])) else None
+            return req.assigned_rd if req and req.status == "draft" else None     # 产品机会：先等研发看现成产品能不能用
+        if lv["to"] == "supervisor":       # 业务员的委托查完、觉提出泄露风险之后才轮到研发负责人
+            return next((q.signer_id for q in self._open("leak_risk").values() if q.prepared_at), None)
         if lv["to"] == "sales":
             return next(x["sales_id"] for x in self._get("/api/sessions") if x["id"] == sids[0])
         req = self._req(sids[0])
+        if req and req.reuse is None and any("reuse" in a for a in lv.get("do", [])):
+            return None                    # 产品经理 Agent 还在找现成产品，找完才轮到研发看
+        # 研发判完、轮到产品经理批准范围的关卡（研发判断真实报告并授予）：研发动过这张单，就在等产品经理
+        if req and req.status != "draft" and pm_family:
+            return PM if pm_ready else None
         return req.assigned_rd if req else None
 
     def _lines(self, lv: dict) -> list[dict]:
@@ -260,16 +298,17 @@ class Director:
         view = self._get("/api/session", id=sid, viewer=customer)["view"]
         seen = self.state["seen"]
         card = view.card.product_id if view.card else None
-        if view.turns[-1].speaker == "customer" and seen.get(sid) == card and not view.asks:
+        last = view.turns[-1] if view.turns else None     # 开场那句没说成（如抽取报错）时会话是空的，照第一句台词重说
+        if last and last.speaker == "customer" and seen.get(sid) == card and not view.asks:
             return False
         seen[sid] = card
         said = sum(t.speaker == "customer" for t in view.turns)
         if said < len(lv["lines"]):
-            text = self._line(lv, sid, customer, said, view.turns[-1].text)
+            text = self._line(lv, sid, customer, said, last.text if last else "")
         elif view.asks:                 # 研发回问：客户在自助页按心里的真值回答
             text = self._sim_customer(lv, sid, customer).reply(view.asks[0].ask_text)
-        elif view.hints and view.turns[-1].speaker != "customer":
-            text = self._sim_customer(lv, sid, customer).reply(view.turns[-1].text)
+        elif view.hints and last.speaker != "customer":
+            text = self._sim_customer(lv, sid, customer).reply(last.text)
         else:
             return False
         self._act(customer, "/api/turn", session_id=sid, speaker="customer", text=text)
@@ -418,6 +457,8 @@ class Director:
             kind, _, text = want.partition("~")
             return kind in (x["kind"], f"{x['kind']}:{x['role']}") and text in x["text"]
         key = lv["id"]
+        if "revise" in lv and key in self.state["cases"] and not self.state["seen"][key]:
+            return True                # 改版的那份报告这一局没有结论生效（研发判断时用了别的依据），没有要复核的，直接过
         for want in lv["pass"]:
             if want.startswith("settled:") and set(self.state["seen"][key]) - set(self._open(want.removeprefix("settled:"))):
                 return True

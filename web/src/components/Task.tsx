@@ -74,7 +74,8 @@ export function TaskHead({ q, title, why }: { q?: Question; title?: string; why?
 }
 
 export function TaskCard({ q, title, why, children }: { q?: Question; title?: string; why?: React.ReactNode; children: React.ReactNode }) {
-  const glow = useGlow(`sign:${q?.family}`);
+  // 自己玩：轮到你时「要你定」的主按钮发亮（批范围、合并课题、判已有产品适用也在这张卡片里）
+  const glow = [useGlow(`sign:${q?.family}`), useGlow("task"), useGlow("scope"), useGlow("merge"), useGlow("decline")].some(Boolean);
   return (
     <section className={`flex flex-col gap-2 ${glow ? "guide-scope" : ""}`}>
       <TaskHead q={q} title={title} why={why} />

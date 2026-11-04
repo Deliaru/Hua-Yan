@@ -4,8 +4,9 @@
 // 旧主线（v5 演示故事 + 带导览的沉浸工作面）沿 v5 流程，与 v6 冲突，V6-5.5 起不在侧栏出现；代码与 #story / #desk 地址保留。
 // V6-5.5「演示讲解」：左侧导航换成讲解栏（components/Demo.tsx），中、右两栏仍是真实工作面。
 // V9.1 试用实例（meta.trial）：进入先选身份，之后身份固定（服务端以它为主体），只显示这个身份的工作面；不出现讲解与重置。
+import { WatchStep } from "./components/Tour";
 import { useEffect, useState } from "react";
-import { PlayBar } from "./components/Play";
+import { NextStep, PlayBar } from "./components/Play";
 import { api } from "./api";
 import { AppCtx, useLabels } from "./ctx";
 import type { Meta, Role, RunMode, RunStatus } from "./types";
@@ -115,13 +116,18 @@ export default function App() {
   if (!meta) return error ? <p className="p-10 text-danger">{error}</p> : null;
   const trial = meta.trial;
   const trialActor = meta.actors.find((a) => a.id === trial?.actor);
-  const enter = (id: string | null) => api.trialRole(id).then(() => api.meta()).then((m) => {
-    setMeta(m); setFocus(null); setVersion((v) => v + 1);
+  const enter = (id: string | null, to?: Page, f: string | null = null) => api.trialRole(id).then(() => api.meta()).then((m) => {
+    setMeta(m); setFocus(f); setVersion((v) => v + 1);
     const role = m.actors.find((a) => a.id === m.trial?.actor)?.role;
-    const own = PAGES.find(([k]) => ROLE_PAGES[k] === role)?.[0];
+    const own = to ?? PAGES.find(([k]) => ROLE_PAGES[k] === role)?.[0];
     if (own) setPage(own);
   }, fail);
-  if (trial && !trialActor) return <RolePicker meta={meta} onPick={enter} error={error} />;
+  // 游戏模式的两个入口：看演示（一镜到底，以 CEO 看实况）/ 自己玩（各岗位的事都留给你，从客户开始）
+  const start = (watch: boolean) => api.playRestart({ oneshot: watch, roadshow: !watch })
+    .then(() => (watch ? null : api.playControl({ paused: false })))
+    .then(() => api.meta())
+    .then((m) => enter(watch ? "supervisor:CEO" : m.actors.find((a) => a.role === "customer")!.id, watch ? "live" : undefined), fail);
+  if (trial && !trialActor) return <RolePicker meta={meta} onPick={enter} onStart={meta.play ? start : undefined} error={error} />;
   // 试用实例里只出现自己的工作面、觉视图与知识账本；地址栏指到别处时回到自己的工作面
   // V11.9 结算页只在游戏模式出现，谁都能看
   // V12.8 实况是路演画面：游戏模式里主管身份可见（四屏并排时主屏用主管身份开一个窗口），真实试用里不出现
@@ -146,7 +152,7 @@ export default function App() {
   };
   const ctx = {
     meta, me: actor.id, role: actor.role, agentOnline: !meta.status.gateway_mock, version, side,
-    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, become: (id: string) => enter(id), focus, startDemo: () => setDemo(true), openMode: () => setModeOpen(true),
+    refresh: () => setVersion((v) => v + 1), fail, switchTo: setMe, become: (id: string, to?: string, f?: string | null) => enter(id, to as Page | undefined, f ?? null), focus, startDemo: () => setDemo(true), openMode: () => setModeOpen(true),
     notes: notesOn || inDemo,
     go: (p: string, f?: string | null, id?: string) => {
       const role = ROLE_PAGES[p as Page];
@@ -233,6 +239,7 @@ export default function App() {
       </aside>
 
       <main style={{ marginLeft: sideW, ["--side-w" as string]: `${sideW}px` }} className="pt-[52px]">
+        {meta.play && <><NextStep /><WatchStep /></>}
         {page === "overview" && <Overview />}
         {page === "customer" && <Customer key={key} />}
         {page === "sales" && <Sales key={key} />}
@@ -272,12 +279,30 @@ export default function App() {
 }
 
 // 试用实例的入口：选一次身份，服务端记住；之后读写都以这个身份为主体
-function RolePicker({ meta, onPick, error }: { meta: Meta; onPick: (id: string) => void; error: string | null }) {
+function RolePicker({ meta, onPick, onStart, error }: { meta: Meta; onPick: (id: string) => void; onStart?: (watch: boolean) => void; error: string | null }) {
+  const [busy, setBusy] = useState(false);
+  const go = (watch: boolean) => { setBusy(true); onStart!(watch); };
   return (
-    <div className="mx-auto max-w-[560px] px-6 pt-20">
+    <div className="mx-auto max-w-[620px] px-6 pb-16 pt-20">
       <Logo />
+      {onStart && <>
+        <h1 className="mt-6 text-[22px] font-semibold">你想怎么用化言？</h1>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          {([[true, "看演示", "导演把三幕从头演到尾，你只点「继续」，看一件件事怎样在觉、Agent 和各岗位之间流转。适合给别人讲。"],
+             [false, "自己玩", "你轮流当客户、业务员、产品经理、研发。顶部一直告诉你下一步轮到谁、点哪里，跟着点就能走完一条完整业务。"]] as const).map(([watch, title, text]) => (
+            <button key={title} disabled={busy} onClick={() => go(watch)}
+                    className="rounded-[14px] bg-white p-5 text-left shadow-[0_1px_3px_rgba(0,0,0,.08)] hover:ring-2 hover:ring-accent disabled:opacity-50">
+              <p className="text-[18px] font-semibold">{title}</p>
+              <p className="mt-1.5 text-[13px] leading-5 text-ink-2">{text}</p>
+            </button>))}
+        </div>
+        {busy && <p className="mt-3 text-[13px] text-ink-2">正在开一局……</p>}
+        <p className="mt-10 text-[12.5px] text-ink-3">或者接着现在这一局，直接选一个身份进去：</p>
+      </>}
+      {!onStart && <>
       <h1 className="mt-6 text-[22px] font-semibold">选择你在这次试用中的身份</h1>
       <p className="mt-1.5 text-[13px] text-ink-2">大家处理的是同一份业务。选定后，这个浏览器里的查看和操作都以这个身份进行。</p>
+      </>}
       {TRIAL_ROLES.map((r) => {
         const people = meta.actors.filter((a) => a.role === r && a.id !== "pm:agent");
         return people.length ? (
