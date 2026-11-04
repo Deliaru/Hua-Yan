@@ -25,6 +25,7 @@
 # 关卡第 1、4 步的报告是 seeds/rag/internal/RPT-044（模拟），候选是 seeds/rag/proposals.yaml 录制的编译提议，每局开局离线导入。
 business:
   - title: 常规问题客户自助
+    act: 1
     brief: 印染厂 A 只说现象，没说面料和设备
     to: customer
     decide: 回答化言的两个追问
@@ -36,6 +37,7 @@ business:
     pass: [recommend]
 
   - title: 商务诉求交业务员
+    act: 1
     brief: 印染厂 B 拿到推荐后要报价
     to: sales
     decide: 报价
@@ -63,6 +65,7 @@ business:
     pass: [project_declined]
 
   - title: 新问题直达研发
+    act: 1
     brief: 印染厂 C 的白地沾色，现有产品都不适用
     to: rd
     decide: 接单，或判断已有产品适用、不立项
@@ -76,6 +79,7 @@ business:
     pass: [requirement_accepted, project_declined]
 
   - title: 试样失败回问
+    act: 1
     brief: 一个在旧流程里会丢的条件，导致试样失败
     to: rd
     decide: 录试样；对照旧流程会返工几轮
@@ -86,6 +90,7 @@ business:
     lines: ["每缸颜色对不上", "人棉的，水过了软水器"]
     trial: {needs: [bath_ph]}
     do:
+      - {as: rd, reuse: 浴液 pH 还没问清，缸差可能和碱性浴有关，不直接套用现成产品，先试样}
       - {as: rd, accept: true}
       - {as: rd, confirm: true}
       - {as: rd, trial: true}

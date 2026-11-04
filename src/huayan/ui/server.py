@@ -941,12 +941,14 @@ def play_tick(elapsed):
     api, d = session_api("default"), DIRECTOR
     if d.state["paused"]:
         return
-    # 一镜到底每拍推进固定的业务时间，不按墙上时间：彩排那一局写进录制缓存，现场重开同输入命中（V12.12）
-    api.advance(d.state["speed"] * (PLAY_TICK if d.state["oneshot"] else elapsed))
+    # 一镜到底每拍推进固定的业务时间，不按墙上时间，同一局重开走出同样的请求，录下的断网退路才放得出来；
+    # 上一拍没事可做就直接跳到觉的下一次扫描（30 分钟），不空等（V12.12）
+    api.advance(1800 if d.state["oneshot"] and d.idle else d.state["speed"] * (PLAY_TICK if d.state["oneshot"] else elapsed))
     api.tick()
     act = next((x.get("act") for x in d.open()), None)
     for _ in range(1 if d.state["oneshot"] else 10):     # 一镜到底一拍只走一步，台下看得清每次交接
-        if not d.step(set(trial_roles.values())):
+        d.idle = not d.step(set(trial_roles.values()))
+        if d.idle:
             break
         api.tick()
     if d.state["oneshot"] and act != next((x.get("act") for x in d.open()), act):

@@ -136,7 +136,7 @@ class LLMExtractor:
     def extract(self, turns, prev, products=(), asking=()):
         slots = {s.id: s for s in self.seeds.slots}
         data = {"products": [{"id": p["id"], "name": p["name"]} for p in products],
-                "recommended_product_id": next((p["id"] for p in products if p.get("recommended")), None),"slots": [{"id": s.id, "label": s.label, "values": s.values} for s in self.seeds.slots],
+                "recommended_product_id": next((p["id"] for p in products if p.get("recommended")), None),"slots": [{"id": s.id, "label": s.label, "values": s.values, "phrases": s.customer_phrases} for s in self.seeds.slots],   # V12.12 取值的客户说法（人棉 → 粘胶）
                 "categories": sorted({p.category for p in self.seeds.products}),
                 "phenomena": [{"id": p.id, "label": p.label, "phrases": p.customer_phrases}
                               for p in self.seeds.phenomena],

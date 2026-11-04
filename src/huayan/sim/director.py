@@ -75,7 +75,7 @@ def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> 
 def fresh(round_: int = 1, speed: int = 60, real: bool = False, roadshow: bool = False, oneshot: bool = False) -> dict:
     """一局的进度：cases 每件事送来的会话，done 导演代办过的动作，acted 导演代谁做了什么（前情标「模拟」）；
     real 这一局的关卡用真实报告；roadshow 路演局：导演只扮演外部世界和事到你手上之前的那几步；
-    oneshot 一镜到底（V12.11）：导演按幕（关卡里的 act）一件一件推进，所有岗位都由导演做，主屏停在实况；
+    oneshot 一镜到底（V12.11）：导演按幕（关卡里的 act）一幕一幕推进，所有岗位都由导演做，主屏停在实况；
     开局先停着，每幕走完也停下（V12.12），讲完点「继续」。"""
     return {"round": round_, "speed": speed, "paused": oneshot, "real": real, "roadshow": roadshow, "oneshot": oneshot,
             "cases": {}, "done": [], "passed": [], "seen": {}, "acted": []}
@@ -87,6 +87,7 @@ class Director:
         self.api, self.path, self.real = api, path, real
         self.state = fresh() | (json.loads(path.read_text(encoding="utf-8")) if path.exists() else {})
         self.levels = levels or self._levels()
+        self.idle = False          # 上一拍导演没事可做（一镜到底据此跳到觉的下一次扫描，V12.12）
         self.customers: dict[str, SimCustomer] = {}
         self.error: str | None = None
 
@@ -98,19 +99,20 @@ class Director:
         if real and self.real is None:
             raise ValueError("没有配置真实报告版（play_real_report）")
         self.state = fresh(round_=self.state["round"] + 1, speed=self.state["speed"], real=real, roadshow=roadshow, oneshot=oneshot)
-        self.levels, self.customers = self._levels(), {}
+        self.levels, self.customers, self.idle = self._levels(), {}, False
 
     def save(self) -> None:
         self.path.write_text(json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
 
     def open(self) -> list[dict]:
-        """该送来、还没通过的事：业务全部，关卡只到第一个没通过的那一步。一镜到底只送当前这一件：关卡里标了 act 的按幕排
-        （同一幕照文件顺序），没标的不送；都没标就按文件顺序全送。"""
-        if self.state["oneshot"]:
-            acts = sorted([x for x in self.levels if "act" in x], key=lambda x: x["act"]) or self.levels
-            return [x for x in acts if x["id"] not in self.state["passed"]][:1]
-        stage = [x for x in self.levels if x["kind"] == "stage" and x["id"] not in self.state["passed"]][:1]
-        return [x for x in self.levels if x["kind"] == "business" and x["id"] not in self.state["passed"]] + stage
+        """该送来、还没通过的事：业务全部，关卡只到第一个没通过的那一步。一镜到底只送当前这一幕：关卡里标了 act 的按幕排，
+        同一幕的业务一起送、关卡一步一步送；没标的不送，都没标就全送（V12.12）。"""
+        levels = [x for x in self.levels if x["id"] not in self.state["passed"]]
+        if self.state["oneshot"] and any("act" in x for x in self.levels):
+            levels = [x for x in levels if "act" in x]
+            levels = [x for x in levels if x["act"] == min((y["act"] for y in levels), default=None)]
+        stage = [x for x in levels if x["kind"] == "stage"][:1]
+        return [x for x in levels if x["kind"] == "business"] + stage
 
     def view(self) -> dict:
         s, now = self.state, self.open()

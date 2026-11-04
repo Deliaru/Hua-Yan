@@ -314,10 +314,11 @@ const ACTS: Record<number, string> = { 1: "信息自己变成了事", 2: "一份
 function Act() {
   const s = usePlay();
   if (!s?.oneshot) return null;
-  const now = s.levels.find((x) => x.status === "open");
+  const open = s.levels.filter((x) => x.status === "open");
+  const now = open[0];
   return <div className="flex items-baseline gap-3 rounded-[10px] bg-attn-bg px-4 py-2.5">
     <span className="text-[15px] font-semibold text-attn-ink">{s.act ? `第 ${s.act} 幕 · ${ACTS[s.act]}` : "一镜到底"}</span>
-    <span className="min-w-0 flex-1 text-[13px]">{now ? `${now.title}：${now.brief}` : "三幕都走完了"}</span>
+    <span className="min-w-0 flex-1 text-[13px]">{!now ? "三幕都走完了" : open.length > 1 ? `同时在走 ${open.length} 件：${open.map((x) => x.title).join("、")}` : `${now.title}：${now.brief}`}</span>
     {s.paused && now && <button className="btn btn-plain shrink-0" onClick={() => api.playControl({ paused: false })}>停在这里 · 继续</button>}
   </div>;
 }
