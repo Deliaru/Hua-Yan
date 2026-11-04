@@ -18,8 +18,9 @@ from huayan.clock import get_clock
 from huayan.contracts import NeedCard
 from huayan.domain import correct_product, load_seeds
 from huayan.events import EventLog
-from huayan.ingest.compile import Proposals, admit
+from huayan.ingest.compile import Proposal, Proposals, admit
 from huayan.ingest.folder import FolderSource
+from huayan.ingest.reader.library import LibrarySource
 from huayan.knowledge import AuditLog, KnowledgeBase
 from huayan.sim.cards import sample_slots
 from huayan.sim.customer import SimCustomer
@@ -43,7 +44,9 @@ def load_levels(path: Path = LEVELS) -> list[dict]:
 def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> Path:
     """开一局、应用还没起来时：内部资料复制一份给这一局（第 9 关改的是副本），再照 scripts/compile_qi.py 把录制的
     编译提议导入成待研发审的候选（第 4 关）。返回这一局的配置；已经有了就照用（服务重启后续上这一局）。
-    real：真实报告版的目录（配置 play_real_report，不入库），这一局换成它 round.yaml 里的种子副本与资料来源。"""
+    real：真实报告版的目录（配置 play_real_report，不入库），这一局换成它 round.yaml 里的种子副本与资料来源；
+    round.yaml 配了 library_proposals（V12.4 资料库试样报告整批编译的提议）就一并导入成候选，library_skip 里的报告不导
+    （资料库里那份就是主线报告，主线已按录制的提议导入）。资料库只读，不复制。"""
     path = run_dir / "app.yaml"
     if path.exists():
         return path
@@ -51,15 +54,24 @@ def prepare_round(config_path: str, run_dir: Path, real: Path | None = None) -> 
     if real is not None:
         config.update(yaml.safe_load((real / "round.yaml").read_text(encoding="utf-8")))
     for i, s in enumerate(config["sources"]):
-        if s["kind"] == "internal":
+        if s["kind"] == "internal" and not s.get("library"):
             s["root"] = str(shutil.copytree(s["root"], run_dir / "sources" / str(i)))
     config["qi_state"] = str(run_dir / "qi_state.json")
     kb = KnowledgeBase.from_seeds(load_seeds(config["seeds_dir"]), EventLog(), AuditLog(), state_path=config["qi_state"])
-    kb.sources = [FolderSource(s["name"], s["kind"], s["root"], s.get("level"), kb._doc_levels) for s in config["sources"]]
+    kb.sources = [LibrarySource(s["name"], s["kind"], s["root"]) if s.get("library") else
+                  FolderSource(s["name"], s["kind"], s["root"], s.get("level"), kb._doc_levels) for s in config["sources"]]
     proposals = Path(config["seeds_dir"]) / "rag" / "proposals.yaml"     # 录制的编译提议，代替模型编译
     rows, items = [], Proposals(items=yaml.safe_load(proposals.read_text(encoding="utf-8"))["items"]).items
     for p in items:              # 逐条导入，契画布按条给出核对结果
         rows.append({"title": p.title, "form": p.form, "docs": sorted({e.doc_id for e in p.evidence}), "report": admit([p], kb.sources, kb)})
+    if config.get("library_proposals"):
+        owners = next(s for s in kb.sources if isinstance(s, LibrarySource) and s.kind == "internal").owners
+        for f in sorted(Path(config["library_proposals"]).glob("*.json")):
+            if f.stem in config.get("library_skip", []):
+                continue
+            for p in map(Proposal.model_validate, json.loads(f.read_text(encoding="utf-8"))):
+                p = p.model_copy(update={"author": owners.get(f.stem)})
+                rows.append({"title": p.title, "form": p.form, "docs": [f.stem], "report": admit([p], kb.sources, kb)})
     config["compile_report"] = str(run_dir / "compile_report.json")
     if "source_manifest" not in config:      # 内部报告归属编译提议署名的研发，研发按统一读取入口读得到自己的报告（契画布）
         internal = {d for s in kb.sources if s.kind == "internal" for d in s.list_docs()}

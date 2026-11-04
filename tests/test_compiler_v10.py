@@ -68,6 +68,11 @@ def test_pending_scope_follows_explicit_product_line_pm(tmp_path):
         phenomenon="color_unlevel", form="applicable", conditions=["涤纶"],
         evidence=[EvidenceRef(doc_id="synthetic-conditions", span="p1", quote="涤纶")])
     admitted = app.import_proposals([proposal], "rd:R01")["admitted"][0]
+    # 研发名下的候选先不提批准，研发确认后才提（V12.14，QI.md 的 K5）
+    assert not app.bus.list(family="scope_update")
+    ids = [admitted["ku_id"]]
+    app.kb.confirm(ids, "rd:R01", reviewed_evidence=app.review_claims(ids, "rd:R01")["reviewed_evidence"])
+    app.scan()
     q = next(q for q in app.bus.list(family="scope_update") if q.refs["capability_id"] == admitted["capability_id"])
     assert q.signer_id == "pm:P01"
     # 产品线编制改动随重启/续跑生效：待批准范围交现任产品经理
@@ -81,9 +86,8 @@ def test_pending_scope_follows_explicit_product_line_pm(tmp_path):
     assert q.signer_id == new_pm.id and q.status == "open"
     assert q.id in {item.id for item in app.questions(new_pm.id)}
     assert HuayanApp.build(str(path), run_id="pm-line", resume=True).bus.get(q.id).signer_id == new_pm.id
-    assert app.kb._units[admitted["ku_id"]].status == "candidate"
     assert app.kb._caps[admitted["capability_id"]].status == "proposed"
-    assert not app.events.query(["claim_confirmed", "scope_extended"])
+    assert not app.events.query(["scope_extended"])
 
 
 def test_report_source_explore_exposes_candidate_only_to_owning_rd(tmp_path):

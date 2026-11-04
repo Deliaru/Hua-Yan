@@ -7,6 +7,7 @@ web/dist 存在时同时提供构建后的前端页面。
 运行方式按会话选择：录制回放（默认），或填自己的大模型 / OneJev 接口真实运行（BYOK，见 huayan.gateway.byok）。
 V9.1 试用实例（--trial <运行号>）：全部浏览器共用一个门面与固定运行目录，启动即续跑，真实时间；
 每个浏览器进入时选一次身份，服务端记住，写操作的 by、读操作的 viewer 由服务端填。"""
+import hashlib
 import importlib.util
 import json
 import os
@@ -14,6 +15,7 @@ import re
 import shutil
 import time
 from collections import OrderedDict, defaultdict
+from functools import partial
 import traceback
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -115,6 +117,26 @@ class TrialGate(Gate):
             return fn()
         finally:
             self.acquire(self.me())
+
+
+class PrepGate(Gate):
+    """V12.14 一批 Agent 准备之间的闸口（各组同时准备时谁先改状态）：录制时记下先后，重放照录制让。
+    现场插手或录制里没有的调用使先后对不上（该轮到的那组已经做完、录制的先后用完）时，改为谁先到谁先，不在台上卡住。"""
+
+    def run(self, jobs):
+        self.alive = {name for name, _ in jobs}
+
+        def job(name, fn):
+            try:
+                fn()
+            finally:
+                self.alive.discard(name)
+        super().run([(name, partial(job, name, fn)) for name, fn in jobs])
+
+    def _ready(self, name):
+        if self.replay and (self._pos >= len(self.order) or self.order[self._pos] not in self.alive):
+            self.replay = False
+        return super()._ready(name)
 
 
 def use_clock(clock):
@@ -467,6 +489,7 @@ class Api:
         self.app, self.config_path, self.byok = app, config_path, byok
         self.clock = clock or get_clock()   # 本会话的业务时钟；每次调用先在当前线程换上它
         self.lock = TrialGate() if TRIAL else RLock()
+        self.prep = PrepGate()               # V12.14 游戏模式一批 Agent 准备之间的闸口，不在准备时谁都直接过
         self.writes = 0     # 本轮成功的写操作数；回放部署里按它对齐台词的下一步
         self.activity = None                # 正在进行或最近一次写操作的处理过程
         self.current = local()              # V9.2：试用实例里各人的请求并行，过程记在发起它的线程上
@@ -487,9 +510,11 @@ class Api:
         if TRIAL:      # 等模型时让出会话锁；计量在锁外写，另加一把锁免得行交错
             if not app.config["gateway_mock"]:
                 complete = app.gateway._complete
-                app.gateway._complete = lambda req, schema=None: self.lock.outside(lambda: complete(req, schema))
+                app.gateway._complete = lambda req, schema=None: self.lock.outside(lambda: self.prep.outside(lambda: complete(req, schema)))
             ask = app.system1.ask
-            app.system1.ask = lambda *a, **k: self.lock.outside(lambda: ask(*a, **k))
+            app.system1.ask = lambda *a, **k: self.lock.outside(lambda: self.prep.outside(lambda: ask(*a, **k)))
+            if PLAY:
+                app.agents.dispatch = self._parallel(app.agents)
             if not hasattr(app.meter, "unlocked_record"):
                 app.meter.unlocked_record, meter_lock = app.meter.record, Lock()
 
@@ -497,6 +522,43 @@ class Api:
                     with meter_lock:
                         return app.meter.unlocked_record(**kw)
                 app.meter.record = record
+
+    def _parallel(self, hub):
+        """V12.14 游戏模式：觉提出的问题按对话分组同时准备（同一段对话里仍顺序做，沿用 v8 模拟器的 dispatch(only=...)），
+        各组等模型时让出会话锁。同一次派单里派过的问题不再派，没准备好的留到下一次（同 dispatch 里的 exhausted）。
+        配了录制缓存时，每批各组拿闸口的先后随录制存下（按业务时间与这批问题），重放同一批照录制的先后，问题编号与提示词才对得上。"""
+        dispatch = partial(type(hub).dispatch, hub)       # 每次接上都包原方法，重接不会套两层
+
+        def run(only=None):
+            if only is not None:
+                return dispatch(only)
+            out, seen = [], set()
+            activity = getattr(self.current, "activity", None)
+
+            def work(ids):
+                use_clock(self.clock)
+                self.current.activity = activity
+                with self.lock:
+                    out.extend(dispatch(ids))
+
+            while True:
+                groups = defaultdict(set)
+                for q in hub.pending_dispatch():
+                    if q.id not in seen:
+                        groups[hub.conversation_of(q)].add(q.id)
+                if not groups:
+                    return out
+                seen |= set().union(*groups.values())
+                jobs = sorted((conv, sorted(ids)) for conv, ids in groups.items())
+                cache = self.app.config.get("llm_cache_dir")
+                key = hashlib.sha256(json.dumps([self.clock.now().isoformat(), jobs]).encode()).hexdigest()[:16]
+                path = cache and Path(cache) / "schedule" / f"{key}.json"
+                self.prep = PrepGate(json.loads(path.read_text(encoding="utf-8")) if path and path.exists() else None)
+                self.lock.outside(lambda: self.prep.run([(conv, partial(work, ids)) for conv, ids in jobs]))
+                if path and not path.exists():
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(json.dumps(self.prep.order), encoding="utf-8")
+        return run
 
     def emit(self, kind, **fields):
         activity = getattr(self.current, "activity", None) if TRIAL else self.activity

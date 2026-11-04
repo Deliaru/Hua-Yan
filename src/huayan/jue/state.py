@@ -275,7 +275,7 @@ def collect_scheduled(events: EventLog, at: datetime, seeds: Seeds, products: li
     for obj, ref in [*_themes(events, at, seeds, at - timedelta(days=w["theme_days"])),
                      *_knowledge(events, at, products, caps, at - timedelta(days=w["knowledge_days"])),
                      *_stale(events, at, caps, seeds),
-                     *_scope(events, at, caps),
+                     *_scope(events, at, caps, units or {}),
                      *_recall(events, at, caps),
                      *_sheet(events, at, caps, seeds),
                      *_qi(events, at, caps, units or {}),
@@ -396,9 +396,12 @@ def _stale(events, at, caps, seeds):
                  [*scope, *(k.split("=")[0] for k in spots)])}, ensure_ascii=False)}
 
 
-def _scope(events, at, caps):
+def _scope(events, at, caps, units):
+    """待批准的适用能力交产品经理。依据是研发名下还没确认的候选时先不提：研发确认后再批准（QI.md 的 K5），
+    整批编译出的候选不会一下子把几十件批准推给产品经理；公开产品页的候选由产品经理核对，照常提。"""
     for cap in caps:
-        if cap.form != "applicable" or cap.status != "proposed":
+        if cap.form != "applicable" or cap.status != "proposed" or any(
+                units[k].status == "candidate" and units[k].owner.startswith("rd:") for k in cap.based_on):
             continue
         pid, ph = cap.payload["product_id"], cap.payload["phenomenon"]
         evs = [e for e in events.query(["project_declined", "reuse_adopted"], until=at)
