@@ -308,7 +308,7 @@ export interface Capability {
   status: "proposed" | "active" | "suspended" | "revoked"; at: string;
 }
 export interface Claim {
-  id: string; title: string; text: string; evidence: string[]; status: string; owner: string;
+  id: string; title: string; text: string; evidence: string[]; status: string; owner: string; product_id: string | null;
 }
 
 // v8 Q9.5：模拟业务月。运行进度来自 runs/<运行>/progress.json；时间线是门面 timeline(day, by)，只给主管。

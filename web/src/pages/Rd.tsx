@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { ACTION, REQ_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
-import type { AgentMessage, CitedKnowledge, GrantScope, LeakHit, Question, ReqItem, RequirementView } from "../types";
+import type { AgentMessage, CitedKnowledge, Claim, GrantScope, LeakHit, Question, ReqItem, RequirementView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
 import { ChevronRight } from "../components/Icons";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
@@ -105,7 +105,8 @@ function RdDesk({ question, reqId, panel, select }: {
                 ["前情", <Backstory id={view.requirement.id} />, true],
                 ["旁白", <Narration id={view.requirement.id} />, notes],
                 ["流转", <RouteStrip objectId={view.requirement.id} />, notes],
-                [`资料里读出的结论 ${claims.length}`, <CandidateClaims key={reqId ?? ""} reqId={reqId} readOnly={readOnly} />, claims.length > 0],
+                [`资料里读出的结论 ${claims.length}`, <CandidateClaims key={reqId ?? ""} reqId={reqId} readOnly={readOnly}
+                  words={Object.values(view.requirement.known_slots)} />, claims.length > 0],
                 ["查资料", <LibrarySearch reqId={view.requirement.id} />, true],
                 ["候选方案", <PlanCard reqId={view.requirement.id} />, !!plan],
                 ["条件齐不齐", <ReadinessCard reqId={view.requirement.id} />, true],
@@ -531,7 +532,7 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
     switch (q.family) {
       case "reuse_product": return <ReuseReview q={q} view={view!} dismiss={dismiss} />;
       case "opportunity": return <MergeReview q={q} view={view!} dismiss={dismiss} />;
-      case "accept_requirement": return <AcceptReview reqId={req.id} dismiss={dismiss} evidence={null} />;   // 觉的到点说明不给人看，为什么到你这写在卡头
+      case "accept_requirement": return <AcceptReview reqId={req.id} words={Object.values(req.known_slots)} dismiss={dismiss} evidence={null} />;   // 觉的到点说明不给人看，为什么到你这写在卡头
       case "confirm_translation": return <ConfirmReview view={view!} dismiss={dismiss} />;
       case "contribution": return <ContributionReview view={view!} dismiss={dismiss} />;
       case "seal_points": return <PointsReview view={view!} dismiss={dismiss} />;
@@ -598,7 +599,7 @@ function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: Reac
   );
 }
 
-function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: React.ReactNode; evidence: React.ReactNode }) {
+function AcceptReview({ reqId, words, dismiss, evidence }: { reqId: string; words: string[]; dismiss: React.ReactNode; evidence: React.ReactNode }) {
   const { me, meta } = useApp();
   const L = useLabels();
   const { all } = useInbox();
@@ -612,6 +613,10 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
   const claims = (useData(() => api.claims(reqId, me), [reqId, me]) ?? []).filter((c) => c.owner === me);
   const [basis, setBasis] = useState<string[]>([]);
   const [review, setReview] = useState<ClaimReview | null>(null);
+  const [allBasis, setAllBasis] = useState(false);
+  // 只列所选产品的，和本单条件最像的 3 条在前，其余收起
+  const forProduct = byRelevance(claims.filter((c) => c.product_id === product), words);
+  const shownBasis = forProduct.filter((c, i) => allBasis || i < 3 || basis.includes(c.id));
   // 演示讲解：研发判「已有产品适用」要选的产品与依据，由「演示自动填入」填好（录制回放里须与录制一致）
   const scripted = useGuideArg("decline");
   const dec = scripted ? JSON.parse(scripted) as { product: string; reason: string } : null;
@@ -637,18 +642,21 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
           </>}
           {mode === "applicable" && <>
             <p className="text-[13px] leading-5 text-ink-2">现成产品其实能用，只是说明书没写这种用法。客户会收到这款产品；产品经理随后把这种用法加进说明书，以后同样的需求客户自己就能查到，不再找你。</p>
-            <select value={product} onChange={(e) => setProduct(e.target.value)} className="field !h-8 w-fit !py-0" aria-label="适用的产品">
+            <select value={product} onChange={(e) => { setProduct(e.target.value); setBasis([]); setReview(null); setAllBasis(false); }}
+                    className="field !h-8 w-fit !py-0" aria-label="适用的产品">
               {meta.products.map((p) => <option key={p.id} value={p.id}>{L.product(p.id)}</option>)}
             </select>
             <Field value={reason} onChange={setReason} placeholder="为什么能用（产品经理看得到，别写配方和机理）" />
             <Field value={limits} onChange={setLimits} placeholder="限制条件（可空；有限制的，客户自助时不会自动推荐）" />
-            {claims.length > 0 && <div className="flex flex-col gap-1.5 text-[13px]">
-              <p className="text-ink-2">拿资料里读出的结论做依据（可选；勾上后先看原文出处，和这次判断一起确认）：</p>
-              {claims.map((c) => <label key={c.id} className="flex items-start gap-2">
+            {forProduct.length > 0 && <div className="flex flex-col gap-1.5 text-[13px]">
+              <p className="text-ink-2">资料里有 {forProduct.length} 条关于这款产品的结论，可以勾几条做依据（可选，勾上后先看原文）：</p>
+              {shownBasis.map((c) => <label key={c.id} className="flex items-start gap-2">
                 <input type="checkbox" checked={basis.includes(c.id)} onChange={(e) => {
                   setReview(null);
                   setBasis(e.target.checked ? [...basis, c.id] : basis.filter((id) => id !== c.id));
                 }} /><span>{c.title}</span></label>)}
+              {shownBasis.length < forProduct.length && <div><button type="button" className="text-accent" onClick={() => setAllBasis(true)}>
+                还有 {forProduct.length - shownBasis.length} 条</button></div>}
               {basis.length > 0 && !review && <div><Act kind="plain" label="看所选几条的原文出处" run={() => api.reviewClaims(basis, me).then(setReview)} /></div>}
               {review && <EvidenceReviewPanel review={review} compactSingle />}
             </div>}
@@ -1208,7 +1216,16 @@ function QiEvidenceReview({ q, dismiss, evidence }: { q: Question; dismiss: Reac
   </div></>;
 }
 
-function CandidateClaims({ reqId, empty = null, readOnly = false }: { reqId: string | null; empty?: React.ReactNode; readOnly?: boolean }) {
+// 资料候选按和这张单的相关程度排：本单已知的条件（纤维、设备……）在结论里出现得越多越靠前
+function byRelevance(claims: Claim[], words: string[]) {
+  const score = (c: Claim) => words.filter((w) => `${c.title}${c.text}`.includes(w)).length;
+  return [...claims].sort((a, b) => score(b) - score(a));
+}
+
+// 资料里读出的结论：按产品分组、默认收起，每条只给标题，点开才看正文与出处；勾选跨组累计，底下一次看原文、一次确认
+function CandidateClaims({ reqId, words = [], empty = null, readOnly = false }: {
+  reqId: string | null; words?: string[]; empty?: React.ReactNode; readOnly?: boolean;
+}) {
   const { me } = useApp();
   const L = useLabels();
   const claims = useData(() => api.claims(reqId, me), [reqId, me]) ?? [];
@@ -1216,25 +1233,50 @@ function CandidateClaims({ reqId, empty = null, readOnly = false }: { reqId: str
   const [review, setReview] = useState<Awaited<ReturnType<typeof api.reviewClaims>> | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [toggled, setToggled] = useState<string[]>([]);       // 点过展开 / 收起的产品组
+  const [reading, setReading] = useState<string | null>(null);  // 展开正文的那一条
   if (!claims.length) return <>{empty}</>;
   const mine = !readOnly && claims.some((c) => c.owner === me);
-  return <Group title={reqId ? "这张单相关的资料里读出的结论，等确认" : "资料里读出的结论，等你确认"}
-    foot="勾上你认可的几条，先看原文出处，再确认。确认只说明你认可这条结论；要不要给业务员、客户用，之后另外问你。">
-    {claims.map((c) => <div key={c.id} className="row flex-wrap !items-start text-[13px] leading-5"><label className="flex min-w-0 flex-1 basis-64 items-start gap-2">
-      <input type="checkbox" disabled={readOnly || c.owner !== me} checked={selected.includes(c.id)} onChange={(e) => {
-        setReview(null);
-        setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id));
-      }} />
-      <span className="min-w-0"><strong>{c.title}</strong><br /><span className="text-ink-3">{c.owner === me ? "等你确认" : `等${L.name(c.owner)}确认`}</span>
-        <span className="mt-1.5 block whitespace-pre-wrap leading-6">{c.text}</span></span>
-    </label>{c.owner === me && !readOnly && <div className="flex shrink-0 gap-2">
-      <button type="button" className="btn btn-plain" onClick={() => {
-        setReview(null); setSelected([]); setEditing(c.id); setText(c.text);
-      }}>修订正文</button>
-      <Act kind="quiet" label="撤回候选" run={() => api.withdrawClaim(c.id, me).then(() => {
-        setSelected([]); setReview(null); setEditing(null);
-      })} />
-    </div>}<div className="basis-full pl-6"><EvidenceSummary refs={c.evidence} /></div></div>)}
+  const groups: [string, Claim[]][] = [];
+  for (const c of byRelevance(claims, words)) {
+    const key = c.product_id ?? "";
+    const g = groups.find(([k]) => k === key);
+    if (g) g[1].push(c); else groups.push([key, [c]]);
+  }
+  groups.sort((a, b) => b[1].length - a[1].length);
+  const open = (k: string) => (claims.length <= 5) !== toggled.includes(k);
+  const pick = (id: string, on: boolean) => { setReview(null); setSelected(on ? [...selected, id] : selected.filter((x) => x !== id)); };
+  return <Group title={`${reqId ? "这张单相关的资料结论" : "资料里读出的结论，等你确认"} · ${claims.length} 条`}
+    foot="勾上你认可的几条，看过原文出处再确认。确认只说明你认可；要不要给业务员、客户用，之后另外问你。">
+    {groups.map(([k, items]) => <div key={k}>
+      <button type="button" className="row w-full justify-between text-left text-[14px]"
+              onClick={() => setToggled(toggled.includes(k) ? toggled.filter((x) => x !== k) : [...toggled, k])}>
+        <span><strong>{k ? L.product(k) : "没对上产品的"}</strong><span className="ml-2 text-ink-3">{items.length} 条
+          {items.some((c) => selected.includes(c.id)) && ` · 已勾 ${items.filter((c) => selected.includes(c.id)).length}`}</span></span>
+        <ChevronRight open={open(k)} />
+      </button>
+      {open(k) && items.map((c) => <div key={c.id} className="row flex-wrap !items-start pl-6 text-[13px] leading-5">
+        <input type="checkbox" className="mt-1" disabled={readOnly || c.owner !== me} checked={selected.includes(c.id)}
+               onChange={(e) => pick(c.id, e.target.checked)} />
+        <div className="min-w-0 flex-1 basis-64 pl-2">
+          <button type="button" className="text-left" onClick={() => setReading(reading === c.id ? null : c.id)}>
+            {c.title}<span className="ml-2 text-ink-3">{c.owner === me ? "" : `等${L.name(c.owner)}确认 · `}{reading === c.id ? "收起" : "看正文"}</span>
+          </button>
+          {reading === c.id && <>
+            <span className="mt-1.5 block whitespace-pre-wrap leading-6">{c.text}</span>
+            <EvidenceSummary refs={c.evidence} />
+            {c.owner === me && !readOnly && <div className="mt-1.5 flex gap-2">
+              <button type="button" className="btn btn-plain" onClick={() => {
+                setReview(null); setSelected([]); setEditing(c.id); setText(c.text);
+              }}>修订正文</button>
+              <Act kind="quiet" label="撤回候选" run={() => api.withdrawClaim(c.id, me).then(() => {
+                setSelected([]); setReview(null); setEditing(null);
+              })} />
+            </div>}
+          </>}
+        </div>
+      </div>)}
+    </div>)}
     {editing && <div className="row !block">
       <Field value={text} onChange={setText} rows={5} label="修订后的候选正文" />
       <p className="my-2 text-[12px] text-ink-2">保存后原稿撤回，新稿仍待确认。原依据保持不变，请重新审阅；原稿的用途能力按原有撤回规则处理。</p>
@@ -1245,12 +1287,14 @@ function CandidateClaims({ reqId, empty = null, readOnly = false }: { reqId: str
         <button type="button" className="btn btn-plain" onClick={() => setEditing(null)}>放弃修订</button>
       </div>
     </div>}
-    {mine && <div className="row"><Act kind="plain" label="看所选几条的原文出处" disabled={!selected.length || editing !== null}
-      run={() => api.reviewClaims(selected, me).then(setReview)} /></div>}
+    {mine && selected.length > 0 && <div className="row flex-wrap gap-2">
+      <span className="text-[13px] text-ink-2">已勾 {selected.length} 条</span>
+      <Act kind="plain" label="看这几条的原文出处" disabled={editing !== null} run={() => api.reviewClaims(selected, me).then(setReview)} />
+      <Act label="确认这几条" disabled={!review || editing !== null}
+        run={() => api.confirmClaims(reqId, selected, me, review!.reviewed_evidence).then(() => {
+          setSelected([]); setReview(null);
+        })} />
+    </div>}
     {review && <EvidenceReviewPanel key={JSON.stringify(review.reviewed_evidence)} review={review} compactSingle />}
-    {mine && <div className="row"><Act label="确认这几条" disabled={!selected.length || !review || editing !== null}
-      run={() => api.confirmClaims(reqId, selected, me, review!.reviewed_evidence).then(() => {
-        setSelected([]); setReview(null);
-      })} /></div>}
   </Group>;
 }
