@@ -951,8 +951,8 @@ def play_tick(elapsed):
         if d.idle:
             break
         api.tick()
-    if d.state["oneshot"] and act != next((x.get("act") for x in d.open()), act):
-        d.state["paused"] = True      # 一镜到底每幕走完停下，讲完点「继续」进下一幕（V12.12）
+    if d.state["oneshot"] and act != next((x.get("act") for x in d.open()), None):
+        d.state["paused"] = True      # 一镜到底每幕走完停下，讲完点「继续」进下一幕；三幕走完也停住，巡游时业务时间不再往前跑（V12.12）
 
 
 def play_ticker():
