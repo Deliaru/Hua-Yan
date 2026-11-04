@@ -1013,8 +1013,10 @@ def director_of(sid):
         cfg = yaml.safe_load(Path(CONFIG).read_text(encoding="utf-8"))
         name = PLAY if sid == "default" else f"{PLAY}-{sid}"
         DIRECTORS[sid] = director.Director(lambda: session_api(sid), Path(cfg["run_root"]) / f"{name}.play.json", real=PLAY_REAL)
-        if sid != "default" and not DIRECTORS[sid].path.exists():
-            DIRECTORS[sid].state["paused"] = True      # 新来的浏览器先停着，等他在开始页选「看演示」或「自己玩」
+        d = DIRECTORS[sid]
+        if not d.path.exists():         # 新来的浏览器先停着，等他在开始页选「看演示」或「自己玩」；配了真实报告版就用它
+            d.state["paused"], d.state["real"] = True, PLAY_REAL is not None
+            d.levels = d._levels()
     return DIRECTORS[sid]
 
 
