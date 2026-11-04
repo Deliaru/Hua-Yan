@@ -65,7 +65,8 @@ def _summary(family: str, a: dict) -> str:
     if family in ("escalate_need", "route_rd"):
         return f"最近一次匹配中「都不合适」概率 {a['p_none']:.2f}，高于最好的候选产品 {a['p_top']:.2f}；已了解 {a['n_filled']} 项信息"
     if family == "distortion":
-        return f"本层有 {a['n_conflicting_refs']} 条条目依据的案例条件与客户已知条件不符，{a['n_unquoted_items']} 条条目缺少客户原话"
+        return "；".join(x for x in (a["n_conflicting_refs"] and f"有 {a['n_conflicting_refs']} 条需求参考的旧案例，条件和这位客户的对不上",
+                                     a["n_unquoted_items"] and f"有 {a['n_unquoted_items']} 条需求找不到客户原话") if x)
     if family == "seal_leak":
         return f"说明书与用法中有 {a['n_leak_hits']} 句命中封存项、L3 术语或研发方向假设"
     if family == "trial_risk":

@@ -8,7 +8,8 @@ import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "..
 import { useGlow, useGuideArg, useGuide } from "../components/Guide";
 import { Popover } from "../components/Controls";
 import { Plus } from "../components/Icons";
-import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote, SlotPicker, TemperatureCondition } from "../components/ui";
+import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, SlotPicker, TemperatureCondition } from "../components/ui";
+import { More, useAsk } from "../components/Task";
 import { RouteStrip, WorkloadCard } from "../components/Route";
 import { AuthorizedReplies } from "../components/AuthorizedReplies";
 import { Backstory } from "../components/Backstory";
@@ -49,7 +50,7 @@ function SalesSidebar({ mine, current, guided, choose, todo }: {
             </>
           )}
         </Popover>
-      }>轮到你</SideHead>
+      }>等你处理</SideHead>
       {mine.filter((s) => todo[s.id]).map(row)}
       {!mine.some((s) => todo[s.id]) && <p className="px-[18px] py-1 text-[13px] text-ink-3">没有待你处理的事</p>}
       <SideHead>全部会话</SideHead>
@@ -107,6 +108,7 @@ const need = (h: AskHint) => (h.scored_by === "rule" ? "到点" : `${Math.round(
 
 function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: SessionView; questions: Question[] }) {
   const L = useLabels();
+  const { notes } = useApp();
   const conv = useConversation(v.session_id);
   // 「发给客户」预填 Agent 的回复草稿；草稿更新时覆盖
   const [reply, setReply] = useState(v.reply_draft);
@@ -119,15 +121,11 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
         <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pt-7">
           <PageHead title={summary.customer_id ? L.name(summary.customer_id) : "样例客户"}
                     subtitle={`${summary.phenomenon ? L.phen(summary.phenomenon) : "尚未识别现象"} · ${SESSION_STATUS[v.status] ?? v.status}`} />
-          <LayerNote layer={1}>你在 L1：你和你的 Agent 只看得到说明书和用法，研发的知识只显示「谁懂」、不显示内容。现有产品解决不了时签字升级，需求带着客户原话交给 L2 产品经理 Agent。</LayerNote>
-          <RouteStrip objectId={v.session_id} />
           {summary.origin === "customer" && (
             <p className="rounded-[10px] bg-attn-bg px-3.5 py-2.5 text-[13px] leading-5 text-attn-ink">
               {summary.sales_id ? "客户在自助对话里提出了商务诉求，觉把这件事交给你。下面是客户的完整原话、已明确的条件和已推荐的产品，不需要你重新询问、重新记录。"
                 : "这位客户自助问过、当时没有解决。研发后来签出的判断覆盖了他当时说的条件，觉请你回访；下面是他当时的原话和条件。"}</p>
           )}
-          <Backstory id={v.session_id} />
-          <Narration id={v.session_id} />
           {frozen && <p className="rounded border border-attn-ink/30 px-3 py-2 text-[13px] text-attn-ink">你的上层知识检索已被主管冻结：检索不再显示上层知识的归属、读不到研发授予的结论，推荐只披露到用法，暂不能申请解密；日常跟单不受影响。</p>}
           <PendingActions />
           <AuthorizedReplies sessionId={v.session_id} />
@@ -135,13 +133,18 @@ function SessionDesk({ summary, v, questions }: { summary: SessionSummary; v: Se
             <Timeline v={v} lit={lit} />
             <NeedCard v={v} phenomenon={summary.phenomenon} lit={lit} setLit={setLit} />
           </div>
+          <More items={[
+            ["前情", <Backstory id={v.session_id} />, true],
+            ["旁白", <Narration id={v.session_id} />, notes],
+            ["流转", <RouteStrip objectId={v.session_id} />, notes],
+          ]} />
         </div>
       </div>
       <Composer v={v} reply={reply} setReply={setReply} replyNotes={notesFor(conv?.messages, `${v.session_id}/reply`)} />
-      <AgentPanel title="觉提出的决策 · 待你处理" sessionId={v.session_id} focus={v.session_id} external>
+      <AgentPanel title="要你定" sessionId={v.session_id} focus={v.session_id} external>
         {v.card || v.reuse || questions.length
           ? <Decisions v={v} questions={questions} fill={setReply} replyEmpty={!reply.trim()} escalateNotes={notesFor(conv?.messages, `${v.session_id}/escalate`)} />
-          : <p className="text-[13px] leading-5 text-ink-3">此刻没有需要你签字的决策。觉每听一句都会再看一遍：该推荐、该升级、该回问时出现在这里。</p>}
+          : <p className="text-[13px] leading-5 text-ink-3">现在没有要你定的事。客户每说一句，觉都会再看一遍：该推荐、该转研发、该回头问的时候出现在这里。</p>}
         <TimeBar />
         <RelayLoss />
         <WorkloadCard />
@@ -315,6 +318,7 @@ function Decisions({ v, questions, fill, replyEmpty, escalateNotes }: {
   v: SessionView; questions: Question[]; fill: (t: string) => void; replyEmpty: boolean; escalateNotes: AgentMessage[];
 }) {
   const L = useLabels();
+  const ask = useAsk();
   const by = (f: string) => questions.filter((q) => q.family === f);
   const handled = new Set(["escalate_need", "ask_back", "market_eval", "mechanism_followup", "capability_recall"]);
   return (
@@ -341,7 +345,7 @@ function Decisions({ v, questions, fill, replyEmpty, escalateNotes }: {
         <Group key={q.id} title={L.family(q.family)}>
           <div className="row !items-start">
             <div className="min-w-0 flex-1">
-              <p className="text-[14px]">{L.scrub(q.title)}</p>
+              <p className="text-[14px]">{ask(q)}</p>
               {q.evidence.map((e, i) => <p key={i} className="text-[12px] text-ink-2">{L.scrub(e.summary)}</p>)}
             </div>
             <Score q={q} />

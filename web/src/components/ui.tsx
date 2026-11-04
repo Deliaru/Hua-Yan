@@ -77,15 +77,6 @@ export function LayerChip({ layer }: { layer: 1 | 2 | 3 }) {
   );
 }
 
-export function LayerNote({ layer, children }: { layer: 1 | 2 | 3; children: React.ReactNode }) {
-  if (!useApp().notes) return null;   // 演示说明
-  return (
-    <p className="flex items-start gap-2 text-[12.5px] leading-5 text-ink-2">
-      <LayerChip layer={layer} /><span className="min-w-0">{children}</span>
-    </p>
-  );
-}
-
 // 回放部署的如实说明（状态菜单、架构总览、演示工作面共用）
 export const RECORDING_NOTE = "现有回放基于自部署 OneJev、gemini-3.8-flash-high 真实录制。如需真实在线试用，可点右上角运行状态里的「接入自己的模型」，用你的大模型（与可选的 OneJev）密钥真实运行；也可自行部署并接入 Jev 与大模型网关，Jue-K 模型已在仓库中提供。";
 

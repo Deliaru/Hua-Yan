@@ -10,15 +10,19 @@ import { Backstory } from "../components/Backstory";
 import { Narration, TimeBar } from "../components/Narration";
 import { RelayLoss } from "../components/RelayLoss";
 import { useGuideArg } from "../components/Guide";
-import { Act, AgentMark, EmptyState, Field, Group, PageHead, Score, SideHead, LayerNote } from "../components/ui";
+import { Act, AgentMark, EmptyState, Field, Group, SideHead } from "../components/ui";
+import { More, TaskHead, useAsk, useObject } from "../components/Task";
 
 const GROUPS: [string, string, (q: Question) => boolean][] = [
-  ["适用范围待定", "研发判过「已有产品适用」", (q) => q.family === "scope_update"],
+  ["适用范围", "研发判过「现成产品能用」", (q) => q.family === "scope_update"],
   ["产品机会", "几位客户的同类需求", (q) => q.family === "opportunity"],
   ["说明书跟上研发", "研发判断超出说明书", (q) => q.family === "sheet_mismatch"],
-  ["待纠偏", "研发退回的需求", (q) => q.family === "accept_requirement" || q.family === "contribution_pm"],
+  ["研发退回的", "研发退回的需求", (q) => q.family === "accept_requirement" || q.family === "contribution_pm"],
 ];
 const reqOf = (q: Question) => q.refs.requirement_id ?? (q.refs.requirement_ids ?? "").split(",").filter(Boolean)[0] ?? null;
+// 为什么到你这：适用范围写明是哪款产品、哪个现象；其余用决策类型的通用说法
+const whyOf = (q: Question, L: ReturnType<typeof useLabels>) => q.family === "scope_update"
+  ? `研发判过 ${L.product(q.refs.product_id)} 能解决「${L.phen(q.refs.phenomenon)}」，说明书还没写这种用法。` : undefined;
 // V9.6：适用范围问题的对象是待批准的适用能力（knowledge:cap:<id>），产品、现象、条件与限制原文在 refs 里
 const scopeOf = (q: Question) => ({ product: q.refs.product_id, phenomenon: q.refs.phenomenon,
   conditions: JSON.parse(q.refs.conditions || "{}") as Record<string, string[]>, limits: q.refs.limits ?? "",
@@ -27,8 +31,10 @@ const scopeOf = (q: Question) => ({ product: q.refs.product_id, phenomenon: q.re
 export function Pm() {
   const { me, focus, notes } = useApp();
   const L = useLabels();
+  const ask = useAsk();
   const qs = useData(() => api.questions(me), [me]) ?? [];
   const reqs = (useData(() => api.requirements(me), [me]) ?? []).slice().reverse();
+  const object = useObject(reqs);
   const [qid, setQid] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);   // 刚签完的那项：问题已结案，主区显示签字的效果
   useEffect(() => { if (focus) { const q = qs.find((x) => reqOf(x) === focus); if (q) setQid(q.id); } }, [focus, qs.length]);
@@ -45,16 +51,15 @@ export function Pm() {
               <SideHead aside={!!items.length && <span className="num text-attn-ink">{items.length}</span>}>{title}</SideHead>
               {items.map((x) => (
                 <button key={x.id} onClick={() => { setQid(x.id); setDone(null); }} className={`side-row ${x.id === q?.id ? "on" : ""}`}>
-                  <p className="flex items-center gap-1.5"><span className={`tag ${x.prepared_at ? "tag-attn" : ""}`}>{L.family(x.family)}</span>
-                    {!x.prepared_at && x.owner_id !== me && <span className="text-[12px] text-ink-3">Agent 准备中</span>}</p>
-                  <p className="mt-1 truncate text-[13px] font-semibold">{L.scrub(x.title)}</p>
+                  <p className="truncate text-[13px] font-semibold">{ask(x)}</p>
+                  <p className="truncate text-[12px] text-ink-2">{object(x)}{!x.prepared_at && x.owner_id !== me && " · Agent 在准备"}</p>
                 </button>
               ))}
               {!items.length && <p className="px-[18px] py-1 text-[12.5px] text-ink-3">无 · {sub}</p>}
             </div>
           );
         })}
-        <SideHead>Agent 后台转译中</SideHead>
+        <SideHead>Agent 在后台写需求</SideHead>
         {background.map((r) => (
           <div key={r.id} className="px-[18px] py-1.5">
             <p className="truncate text-[13px]">{L.phen(r.phenomenon)}</p>
@@ -67,7 +72,7 @@ export function Pm() {
         <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pb-24 pt-7">
           {done && <DoneBanner text={done} />}
           {q ? <Pane key={q.id} q={q} onDone={(t) => { setDone(t); setQid(null); }} />
-            : !done && <EmptyState title="产品经理不再逐单转述" text="逐单的 L2 转译由产品经理 Agent 在后台完成。你只处理三类事：扩展产品适用范围、判断产品机会、纠正研发退回的需求。它们由觉提出，出现在左侧。" />}
+            : !done && <EmptyState title="现在没有要你定的事" text="逐单转述由产品经理 Agent 在后台做。你只处理几类事：扩大产品的适用范围、判断产品机会、更新说明书、纠正研发退回的需求。有了会出现在左边。" />}
         </div>
       </div>
       <aside className="inspector fixed bottom-0 right-0 top-[52px] z-10 flex w-[372px] flex-col gap-5 overflow-y-auto border-l border-sep px-5 py-5">
@@ -89,24 +94,24 @@ function Pane({ q, onDone }: { q: Question; onDone: (text: string) => void }) {
   const L = useLabels();
   const rid = reqOf(q);
   const view = useData(() => (rid ? api.requirement(rid, me) : Promise.resolve(null)), [rid, me]);
-  const head = (
-    <PageHead title={L.scrub(q.title)} subtitle={<span className="flex items-center gap-2">{L.family(q.family)}<Score q={q} /></span>} />
-  );
+  const { notes } = useApp();
+  const head = <TaskHead q={q} why={whyOf(q, L)} />;
   if (q.prepared_at == null && q.owner_id !== me) {
-    return <>{head}<Group><div className="row text-[14px] text-ink-2">产品经理 Agent 正在准备，准备好后在这里签字。</div></Group></>;
+    return <>{head}<Group><div className="row text-[14px] text-ink-2">产品经理 Agent 正在准备，好了就能定。</div></Group></>;
   }
   return (
     <>
       {head}
-      <LayerNote layer={2}>你在 L2：看得到产品需求与归属，研发的化学要点与封存项只显示「谁懂」、不显示原文。</LayerNote>
-      {rid && <RouteStrip objectId={rid} />}
-      {rid && <Backstory id={rid} />}
-      {rid && <Narration id={rid} />}
       {q.family === "scope_update" && <Scope q={q} onDone={onDone} />}
       {q.family === "opportunity" && <Opportunity q={q} onDone={onDone} />}
       {q.family === "sheet_mismatch" && <SheetRevision q={q} onDone={onDone} />}
       {q.family === "accept_requirement" && view && <Correct q={q} view={view} onDone={onDone} />}
       {q.family === "contribution_pm" && view && <Contribute view={view} onDone={onDone} />}
+      {rid && <More items={[
+        ["前情", <Backstory id={rid} />, true],
+        ["旁白", <Narration id={rid} />, notes],
+        ["流转", <RouteStrip objectId={rid} />, notes],
+      ]} />}
     </>
   );
 }
@@ -162,27 +167,27 @@ function Scope({ q, onDone }: { q: Question; onDone: (t: string) => void }) {
           <span className="text-[15px] font-semibold">{L.product(s.product)}</span></div>
         <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">现象</span>
           <span className="text-[15px]">{L.phen(s.phenomenon)}</span><span className="ml-2 text-[12px] text-ink-3">说明书的适用范围里还没有</span></div>
-        <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">枚举条件</span>
-          <span className="text-[14px]">{Object.entries(s.conditions).map(([k, v]) => `${L.slot(k)} ${v.join("、")}`).join("；") || "未限定枚举条件"}</span></div>
+        <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">试过的条件</span>
+          <span className="text-[14px]">{Object.entries(s.conditions).map(([k, v]) => `${L.slot(k)} ${v.join("、")}`).join("；") || "没限定"}</span></div>
         {s.temperature && <div className="row"><span className="w-20 shrink-0 text-[13px] text-ink-2">适用温度</span>
-          <span className="text-[14px]">{s.temperature.join("—")}℃</span></div>}
-        {s.limits && <div className="row !items-start"><span className="w-20 shrink-0 text-[13px] text-ink-2">研发限制</span>
-          <span className="text-[14px] leading-[21px]">「{s.limits}」<span className="ml-1 text-[12px] text-ink-3">带限制的适用不在客户自助阶段自动推荐，同类需求仍交研发对照处理</span></span></div>}
+          <span className="text-[14px]">{s.temperature[0] === s.temperature[1] ? s.temperature[0] : s.temperature.join("—")}℃</span></div>}
+        {s.limits && <div className="row !items-start"><span className="w-20 shrink-0 text-[13px] text-ink-2">研发写的限制</span>
+          <span className="text-[14px] leading-[21px]">「{s.limits}」<span className="ml-1 text-[12px] text-ink-3">有限制的，客户自助时不会自动推荐，仍交研发对照</span></span></div>}
         {judged.map(([by, n], i) => (
           <div key={i} className="row !items-start"><span className="w-20 shrink-0 text-[13px] text-ink-2">{L.name(by)}</span>
             <span className="text-[14px] leading-[21px]">不立项：{n}</span></div>
         ))}
       </Group>
-      <Group title="客户原话">
+      {views.some((v) => Object.keys(v.quotes).length) && <Group title="客户原话">
         {views.flatMap((v) => Object.entries(v.quotes)).map(([id, t]) => <div key={id} className="row text-[14px]">「{t}」</div>)}
-      </Group>
-      <Group title="签字：扩展适用范围" foot="批准后按已授予的完整情境匹配；温度未知时提示待补，超范围不命中，其他限制仍须研发判断。">
+      </Group>}
+      <Group title="签字：扩大适用范围" foot="批准后，条件相同的客户自己就能查到这款产品；温度没说的会先问，超出范围的仍交研发。">
         <div className="row !items-start">
           <div className="flex flex-1 flex-col gap-2">
-            <Field value={note} onChange={setNote} rows={2} placeholder="依据（必填）：例如研发判定适用、适用条件与说明书一致" />
+            <Field value={note} onChange={setNote} rows={2} placeholder="为什么同意（必填）：例如研发试样确认适用，条件和说明书一致" />
             {scripted && note !== scripted && <div><button type="button" className="chip glow" onClick={() => setNote(scripted)}>演示自动填入</button></div>}
             <div className="flex gap-2">
-              <Act label="扩展适用范围" disabled={!note.trim()} glow={!!scripted && note === scripted} run={() => api.extendScope(q.id, note, me).then(() =>
+              <Act label="扩大适用范围" disabled={!note.trim()} glow={!!scripted && note === scripted} run={() => api.extendScope(q.id, note, me).then(() =>
                 onDone(`已批准 ${L.product(s.product)} 的「${L.phen(s.phenomenon)}」适用情境；后续需求按完整条件匹配。`))} />
             </div>
           </div>

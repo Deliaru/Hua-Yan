@@ -1,5 +1,6 @@
-// 研发工作面（L3）：左侧收件箱；中间是需求单抬头、觉在这张单上提出的决策与签字区、批注、化学要点（每条右侧并排写来历：产品需求 ← 客户原话）；
-// 右侧是这张单的来历与 Agent 协作。按钮就是签字，可签条件由门面判断，拒绝时在按钮旁显示门面给的原因。
+// 研发工作面（L3）：左侧收件箱；中间先是需求单抬头和「要你定」的一件事（签字区），然后是化学要点（每条右侧并排写来历：产品需求 ← 客户原话），
+// 其余（前情、资料候选、查资料、方案推演、觉的记录……）收在「更多」里。右侧是这张单的来历与 Agent 协作。
+// 按钮就是签字，可签条件由门面判断，拒绝时在按钮旁显示门面给的原因。
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { ACTION, REQ_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
@@ -8,13 +9,14 @@ import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "..
 import { ChevronRight } from "../components/Icons";
 import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
 import { useGlow, useGuide, useGuideArg } from "../components/Guide";
-import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, Score, SideHead, LayerChip, SlotPicker } from "../components/ui";
+import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, SideHead, SlotPicker } from "../components/ui";
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 import { SourceTrial } from "../components/SourceTrial";
 import { LibrarySearch } from "../components/LibrarySearch";
 import { PlanCard } from "../components/PlanCard";
 import { Backstory } from "../components/Backstory";
 import { Narration, TimeBar } from "../components/Narration";
+import { More, TaskCard, Waiting, LAYER_WHO, useAsk } from "../components/Task";
 
 // 决策所说的需求单：多数挂在一张单上；机会汇聚挂在主题上，refs 里是几张单（第一张为主单）
 const reqsOf = (q: Question) => q.refs.requirement_id ? [q.refs.requirement_id] : (q.refs.requirement_ids ?? "").split(",").filter(Boolean);
@@ -45,9 +47,9 @@ export function Rd() {
       <Side>
         <InboxSidebar selected={qid || (guided && question?.id === guided.id) ? question?.id ?? null : null} guided={guided && guided.id !== question?.id ? guided.id : null}
                       reqs={reqs} select={(q) => { setQid(q.id); setChosenReq(null); setShowCandidates(false); }} />
-        <SideHead>资料审阅</SideHead>
-        <button className={`side-row ${panel === "candidates" ? "on" : ""}`} onClick={() => setPanel("candidates")}>本人资料候选</button>
-        <button className={`side-row ${panel === "caps" ? "on" : ""}`} onClick={() => setPanel("caps")}>我授予的能力</button>
+        <SideHead>我的判断</SideHead>
+        <button className={`side-row ${panel === "candidates" ? "on" : ""}`} onClick={() => setPanel("candidates")}>资料里读出的结论，等我确认</button>
+        <button className={`side-row ${panel === "caps" ? "on" : ""}`} onClick={() => setPanel("caps")}>我给别人用的判断</button>
         <SideHead>需求单</SideHead>
         {reqs.map((r) => (
           <button key={r.id} onClick={() => { setChosenReq(r.id); setQid(null); setShowCandidates(false); }}
@@ -58,18 +60,31 @@ export function Rd() {
         ))}
         {!reqs.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">暂无需求单</p>}
       </Side>
-      <RdDesk key={`${me}:${reqId}:${panel}`} question={showCandidates ? null : question} reqId={reqId} panel={panel} />
+      <RdDesk key={`${me}:${reqId}:${panel}`} question={showCandidates ? null : question} reqId={reqId} panel={panel}
+              select={(q) => { setQid(q.id); setChosenReq(null); }} />
     </>
   );
 }
 
-function RdDesk({ question, reqId, panel }: { question: Question | null; reqId: string | null; panel: "req" | "candidates" | "caps" }) {
-  const { me } = useApp();
+function RdDesk({ question, reqId, panel, select }: {
+  question: Question | null; reqId: string | null; panel: "req" | "candidates" | "caps"; select: (q: Question) => void;
+}) {
+  const { me, notes } = useApp();
+  const L = useLabels();
+  const { ready } = useInbox();
+  const ask = useAsk();
   const view = useData(() => (reqId ? api.requirement(reqId, me) : Promise.resolve(null)), [reqId, me]);
   const conv = useConversation(null, reqId);
+  // 「更多」里只列这张单上真有内容的几项
+  const claims = useData(() => (reqId ? api.claims(reqId, me) : Promise.resolve([])), [reqId, me]) ?? [];
+  const plan = useData(() => (reqId ? api.plan(reqId, me) : Promise.resolve(null)), [reqId, me]);
+  const draft = useData(() => (reqId ? api.sourcePreparation(reqId, me) : Promise.resolve(null)), [reqId, me]);
   const [itemIndex, setItemIndex] = useState<number | null>(null);
   const focus = itemIndex === null ? reqId : `${reqId}/chem/${itemIndex}`;
   const onThis = !!question && (!view || reqsOf(question).includes(view.requirement.id));
+  const others = view ? ready.filter((q) => q.id !== question?.id && reqsOf(q).includes(view.requirement.id)) : [];
+  const owner = view?.requirement.assigned_rd;
+  const readOnly = !!owner && owner !== me && !onThis;
   return (
     <>
       <div className="mr-[372px]">
@@ -80,17 +95,23 @@ function RdDesk({ question, reqId, panel }: { question: Question | null; reqId: 
                 empty={<EmptyState title="没有待你确认的资料候选" text="资料编译出的候选结论归属你时，会出现在这里等你确认。" />} />
             : view ? (
             <>
-              <Backstory id={view.requirement.id} />
-              <Narration id={view.requirement.id} />
-              <RouteStrip objectId={view.requirement.id} />
               <ReqHead view={view} />
-              <CandidateClaims key={reqId ?? ""} reqId={reqId} />
-              <SourcePreparationCard reqId={view.requirement.id} />
-              <LibrarySearch reqId={view.requirement.id} />
-              <PlanCard reqId={view.requirement.id} />
-              <ReadinessCard reqId={view.requirement.id} />
-              <Trail view={view} sign={onThis && question ? <SignArea key={question.id} q={question} view={view} /> : null} />
+              {readOnly ? <Waiting>这是{L.name(owner)}的单，你只能看；要改请找{L.name(owner)}。</Waiting>
+                : onThis && question ? <SignArea key={question.id} q={question} view={view} /> : <SheetWaiting view={view} />}
+              {!!others.length && <p className="-mt-3 flex flex-wrap items-center gap-2 px-1 text-[13px] text-ink-2">这张单上还有
+                {others.map((q) => <button key={q.id} type="button" className="chip" onClick={() => select(q)}>{ask(q)}</button>)}</p>}
               <RequirementSheet view={view} notes={conv?.messages ?? []} selectItem={setItemIndex} />
+              <More items={[
+                ["前情", <Backstory id={view.requirement.id} />, true],
+                ["旁白", <Narration id={view.requirement.id} />, notes],
+                ["流转", <RouteStrip objectId={view.requirement.id} />, notes],
+                [`资料里读出的结论 ${claims.length}`, <CandidateClaims key={reqId ?? ""} reqId={reqId} readOnly={readOnly} />, claims.length > 0],
+                ["查资料", <LibrarySearch reqId={view.requirement.id} />, true],
+                ["候选方案", <PlanCard reqId={view.requirement.id} />, !!plan],
+                ["条件齐不齐", <ReadinessCard reqId={view.requirement.id} />, true],
+                ["Agent 备的资料", <SourcePreparationCard reqId={view.requirement.id} />, !!draft],
+                ["觉的记录", <Trail view={view} />, true],
+              ]} />
             </>
           ) : question ? <SignArea key={question.id} q={question} view={null} />
             : <EmptyState title="资料审阅与研发决策" text="从左侧选择待签决策、需求单，或资料审阅。" />}
@@ -163,9 +184,11 @@ const splitArrow = (text: string) => {
 };
 
 function ReqHead({ view }: { view: RequirementView }) {
+  const { me } = useApp();
   const L = useLabels();
   const req = view.requirement;
   const gaps = [...new Set(req.product_lang.filter(untranslated).map((g) => g.text.replace("未转译：", "")))];
+  const missing = (useData(() => api.readiness(req.id, me), [req.id, me])?.items ?? []).filter((c) => !c.value);
   return (
     <section className="flex flex-col gap-3">
       <PageHead title={L.phen(req.phenomenon)}
@@ -175,19 +198,22 @@ function ReqHead({ view }: { view: RequirementView }) {
         <div className="px-5 py-4">
           <p className="eyebrow">要解决什么</p>
           <p className="mt-1 text-[17px] font-semibold leading-[25px]">{req.direction || "产品经理 Agent 尚未起草"}</p>
-          {!!Object.keys(req.known_slots).length && (
+          {!!(Object.keys(req.known_slots).length + missing.length) && (
             <div className="mt-3 flex flex-wrap gap-2">
               {Object.entries(req.known_slots).map(([slot, value]) => (
                 <span key={slot} className="inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-bg px-2.5 text-[13px]">
                   <span className="text-ink-2">{L.slot(slot)}</span><span className="font-semibold">{value}</span>
                 </span>
               ))}
+              {missing.map((c) => (
+                <span key={c.slot} className="inline-flex h-7 items-center rounded-[7px] bg-attn-bg px-2.5 text-[13px] text-attn-ink">还差 {c.label}</span>
+              ))}
             </div>
           )}
           {gaps.map((g) => (
             <p key={g} className="mt-2.5 flex items-center gap-1.5 text-[12.5px] text-attn-ink">
               <i className="h-1.5 w-1.5 shrink-0 rounded-full bg-attn" />
-              客户说的「{g}」产品经理 Agent 没能转成产品需求，留意是否漏了约束
+              客户说的「{g}」产品经理 Agent 没能写进需求，留意是不是漏了条件
             </p>
           ))}
         </div>
@@ -204,18 +230,17 @@ function ReqHead({ view }: { view: RequirementView }) {
 
 // ── 觉在这张单上提出的决策：取自觉视图接口（真实的提出、准备、签字三个时刻），签字区挂在下面 ─────
 // 流程由觉提出的决策推动，不在前端写死步骤；试样不经过觉（模拟实验室系统回传），单列一行。
-function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode }) {
+const ENDED: Record<string, string> = { reused: "已复用现成产品，没有立项", merged: "已并入另一张单", rejected: "已失效" };
+
+function Trail({ view }: { view: RequirementView }) {
   const { me } = useApp();
   const L = useLabels();
   const req = view.requirement;
   const t = useData(() => api.timeline(req.id, me), [req.id, me]);
-  const glowTrial = useGlow("trial");
-  const ended = ({ reused: "已复用现成产品，没有立项", merged: "已并入另一张单", rejected: "已失效" } as Record<string, string>)[req.status];
+  const ended = ENDED[req.status];
   const nodes = (t?.nodes ?? []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
   const doneNodes = nodes.filter((n) => n.resolved_at != null);
   const [all, setAll] = useState(false);
-  // 需求单视图里没有试样状态：试样通过后觉会提出「客户评价」，以此判断试样已录入
-  const trial = req.status === "rd_confirmed" && !nodes.some((n) => n.family === "market_eval" || n.family === "seal_points");
   return (
     <section className="flex flex-col gap-4">
       <div>
@@ -255,20 +280,31 @@ function Trail({ view, sign }: { view: RequirementView; sign: React.ReactNode })
             );
           })}
           {t && !nodes.length && !ended && <div className="row text-[13px] text-ink-2">觉还没有在这张单上提出决策。</div>}
-          {trial && (
-            <div className="row">
-              <span className="h-[18px] w-[18px] shrink-0 rounded-full shadow-[inset_0_0_0_1.5px_rgba(60,60,67,.25)]" />
-              <span className="w-[92px] shrink-0 text-[14px] font-semibold">试样</span>
-              <span className="min-w-0 flex-1 text-[12.5px] text-ink-2">不经过觉：研发在实验室做试样，在这里录入结果（实验室系统尚未接入）</span>
-              <Act kind="plain" label="试样通过" glow={glowTrial} run={() => api.trial(req.id, "pass", me)} />
-            </div>
-          )}
-          {trial && <TrialFail reqId={req.id} />}
         </div>
       </div>
-      {sign}
     </section>
   );
+}
+
+// 这张单上没有要你定的事：试样待录入时就是这件事；否则写一句现在在等什么
+function SheetWaiting({ view }: { view: RequirementView }) {
+  const { me } = useApp();
+  const L = useLabels();
+  const { preparing } = useInbox();
+  const req = view.requirement;
+  const t = useData(() => api.timeline(req.id, me), [req.id, me]);
+  const glowTrial = useGlow("trial");
+  const doing = preparing.find((q) => reqsOf(q).includes(req.id));
+  // 需求单视图里没有试样状态：试样通过后觉会提出「客户评价」，以此判断试样已录入
+  const trial = !!t && req.status === "rd_confirmed" && !t.nodes.some((n) => n.family === "market_eval" || n.family === "seal_points");
+  if (trial) return (
+    <TaskCard title="试样做完了吗？" why="试样在实验室做（实验室系统还没接入），做完在这里录结果。">
+      <div className="row gap-2"><Act label="试样通过" glow={glowTrial} run={() => api.trial(req.id, "pass", me)} /></div>
+      <TrialFail reqId={req.id} />
+    </TaskCard>
+  );
+  return <Waiting>{ENDED[req.status] ? `这张单${ENDED[req.status]}。`
+    : doing ? `${ownerText(doing, me, L.name)}，好了会在这里等你定。` : `现在没有要你定的事 · ${REQ_STATUS[req.status]}`}</Waiting>;
 }
 
 // Agent 在这张单上的批注：后端目前挂在整张单上，先集中显示在需求单顶部。
@@ -310,17 +346,17 @@ function RequirementSheet({ view, notes, selectItem }: { view: RequirementView; 
             {!req.sealed.length && <div className="row text-[13px] text-ink-2">无</div>}
           </Group>
         </div>
-        <p className="px-1 text-[12px] text-ink-3">L3 向下只有两个出口：你放出的对外要点（包装成说明书交给 L1），和你本人批准的解密；封存项不会出现在任何下层。</p>
+        <p className="px-1 text-[12px] text-ink-3">研发的内容只有两条路出去：你放出的对外要点（写进说明书），和你本人批准的解密；封存的谁都看不到。</p>
         </div>
       )}
       <div>
         <div className="group-title flex items-baseline justify-between">
-          <span className="flex items-center gap-2"><LayerChip layer={3} />化学要点</span>
+          <span>化学要点</span>
           <span className="font-normal text-ink-3">
             {req.rd_confirmed_by ? `${L.name(req.rd_confirmed_by)} 已确认` : req.status === "rd_accepted" ? "可直接修改；改过的条目可沉淀为你的知识" : ""}
           </span>
         </div>
-        <p className="mb-2 px-1 text-[12px] leading-[18px] text-ink-3">只有研发可见。每条都带客户原话和依据了哪位研发的转化知识；产品经理 Agent 只见归属、看不到原文。</p>
+        <p className="mb-2 px-1 text-[12px] leading-[18px] text-ink-3">只有研发看得到。每条都带客户原话，和参考了哪位研发的经验；产品经理那边只知道是谁的，看不到内容。</p>
         <div className="group">
           <div className="grid grid-cols-[1fr_280px] border-b border-sep bg-[#fafafb] text-[11px] font-semibold tracking-[.04em] text-ink-3">
             <span className="px-5 py-2">研发要做到什么</span>
@@ -449,8 +485,8 @@ function ReqContext({ view }: { view: RequirementView }) {
         </Group>
       )}
       {!!l2.length && (
-        <Group title={<span className="flex items-center gap-2"><LayerChip layer={2} />产品需求</span>}
-               foot={`产品经理 Agent 用 L2 知识把客户原话转成产品需求，看不到 L3 原文与封存项${req.rd_accepted_by ? ` · ${L.name(req.rd_accepted_by)} 已接单` : ""}`}>
+        <Group title="产品需求（产品经理 Agent 写的）"
+               foot={`按产品经理能看到的资料，把客户原话写成产品需求；研发的原文和封存内容它看不到${req.rd_accepted_by ? ` · ${L.name(req.rd_accepted_by)} 已接单` : ""}`}>
           {l2.map((it, i) => <div key={i} className="row !min-h-0 !py-2 text-[13px] leading-5">{splitArrow(it.text).body}</div>)}
         </Group>
       )}
@@ -471,23 +507,10 @@ function ReqContext({ view }: { view: RequirementView }) {
 export function SignArea({ q, view }: { q: Question; view: RequirementView | null }) {
   const { me } = useApp();
   const L = useLabels();
-  const glow = useGlow(`sign:${q.family}`);
   // v8 收口：推进类问题不给「忽略」，不想处理就先放着；异常类问题可以写理由越过
   const dismiss = ANOMALY.has(q.family) ? <Overrule q={q} /> : null;
-  const head = (
-    <div className="row attn-edge">
-      <span className="tag tag-attn">{L.family(q.family)}</span>
-      <p className="min-w-0 flex-1 truncate text-[14px] font-semibold">{L.scrub(q.title)}</p>
-      <Score q={q} />
-    </div>
-  );
   if (q.prepared_at == null) {
-    return (
-      <Group title="待你签字">
-        <div className="row"><span className="tag">{L.family(q.family)}</span>
-          <p className="flex-1 text-[14px] text-ink-2">{ownerText(q, me, L.name)}，准备好后才能签字</p></div>
-      </Group>
-    );
+    return <TaskCard q={q}><div className="row text-[14px] text-ink-2">{ownerText(q, me, L.name)}，好了就能定。</div></TaskCard>;
   }
   const req = view?.requirement;
   const evidence = q.evidence.map((e, i) => (
@@ -498,25 +521,28 @@ export function SignArea({ q, view }: { q: Question; view: RequirementView | nul
       <Act label="退回重新转译" run={() => api.rework(q.refs.requirement_id, me)} />{dismiss}</div></>;
     if (q.family === "trial_risk") return <TrialRiskReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "stale_capability") return <StaleReview q={q} dismiss={dismiss} evidence={evidence} />;
-    if (q.family === "qi_grant" && q.refs.form === "statement") return <StatementGrant q={q} dismiss={dismiss} evidence={evidence} />;
-    if (q.family === "qi_grant" && q.refs.scope) return <ApplicableGrant key={q.id} q={q} dismiss={dismiss} evidence={evidence} />;
+    if (q.family === "qi_grant" && q.refs.form === "statement") return <StatementGrant q={q} />;
+    if (q.family === "qi_grant" && q.refs.scope) return <ApplicableGrant key={q.id} q={q} dismiss={<NotGrant q={q} />} evidence={evidence} />;
     if (q.family === "qi_grant") return <>{evidence}<div className="row gap-2">
-      <Act label="签字授予" run={() => api.grantCapability(q.id, me)} />{dismiss}</div></>;
+      <Act label="给" run={() => api.grantCapability(q.id, me)} /><NotGrant q={q} /></div></>;
     if (q.family === "qi_review") return <QiEvidenceReview key={q.id} q={q} dismiss={dismiss} evidence={evidence} />;
     if (q.family === "decrypt_request") return <DecryptReview q={q} dismiss={dismiss} evidence={evidence} />;
     if (!req) return <>{evidence}<div className="row text-[13px] text-ink-2">证据 {q.evidence.length} 条</div><div className="row gap-2">{q.family === "knowledge_conflict" && <Act label="更新适用表" run={() => api.resolve(q.id, "update_sheet", me)} />}{q.family === "leak_risk" && <Act label="冻结上层知识检索" run={() => api.resolve(q.id, "freeze_access", me)} />}{dismiss}</div></>;
     switch (q.family) {
       case "reuse_product": return <ReuseReview q={q} view={view!} dismiss={dismiss} />;
       case "opportunity": return <MergeReview q={q} view={view!} dismiss={dismiss} />;
-      case "accept_requirement": return <AcceptReview reqId={req.id} dismiss={dismiss} evidence={evidence} />;
+      case "accept_requirement": return <AcceptReview reqId={req.id} dismiss={dismiss} evidence={null} />;   // 觉的到点说明不给人看，为什么到你这写在卡头
       case "confirm_translation": return <ConfirmReview view={view!} dismiss={dismiss} />;
       case "contribution": return <ContributionReview view={view!} dismiss={dismiss} />;
       case "seal_points": return <PointsReview view={view!} dismiss={dismiss} />;
       case "release": case "seal_leak": return <SheetReview view={view!} release={q.family === "release"} dismiss={dismiss} />;
+      case "distortion": return <>{evidence}
+        <div className="row text-[13px] leading-5 text-ink-2">对照右边的客户原话和产品需求。真不对，就到「接不接这张单」里选「退回重写」或「先问客户」；没问题就写一句为什么。</div>
+        <div className="row">{dismiss}</div></>;
       default: return <>{evidence}<div className="row">{dismiss}</div></>;
     }
   })();
-  return <Group title="待你签字" className={glow ? "guide-scope" : ""}>{head}{body}</Group>;
+  return <TaskCard q={q}>{body}</TaskCard>;
 }
 
 // 越过异常提示：理由留在结案说明里，作为觉的标签
@@ -525,8 +551,8 @@ function Overrule({ q }: { q: Question }) {
   const [note, setNote] = useState("");
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2">
-      <Field value={note} onChange={setNote} rows={1} placeholder="判断无须处理的理由" />
-      <Act kind="quiet" label="越过" disabled={!note.trim()} run={() => api.resolve(q.id, "dismiss", me, note)} />
+      <Field value={note} onChange={setNote} rows={1} placeholder="为什么不用处理（写一句）" />
+      <Act kind="plain" label="不用处理" disabled={!note.trim()} run={() => api.resolve(q.id, "dismiss", me, note)} />
     </span>
   );
 }
@@ -602,46 +628,46 @@ function AcceptReview({ reqId, dismiss, evidence }: { reqId: string; dismiss: Re
       <div className="row !items-start">
         <div className="flex flex-1 flex-col gap-2.5">
           <div className="inline-flex w-fit gap-0.5 rounded-[9px] bg-fill p-0.5">
-            {tab("accept", "接单立项")}{tab("applicable", "不立项：已有产品适用")}{tab("other", "不立项：其他原因")}{tab("ask", "先回问客户")}{tab("return", "退回补充")}
+            {tab("accept", "接单")}{tab("applicable", "不接：现成产品能用")}{tab("other", "不接：别的原因")}{tab("ask", "先问客户")}{tab("return", "退回重写")}
           </div>
           {mode === "accept" && <>
-            <p className="text-[13px] text-ink-2">接单即立项：被引用的 L2 知识给归属人记分。</p>
-            {distortions.length > 0 && <p className="text-[13px] leading-5 text-ink-2">供参考，同单的失真提示：{distortions.flatMap((d) => d.evidence.map((e) => L.scrub(e.summary))).join("；")}。要不要先回问客户由您判断。</p>}
-            <div className="flex flex-wrap gap-2"><Act label="接单立项" run={() => api.accept(reqId, me)} />{dismiss}</div>
+            <p className="text-[13px] text-ink-2">接了就立项开工；需求里引用的同事经验，会记在原作者名下。</p>
+            {distortions.length > 0 && <p className="rounded-[8px] bg-attn-bg px-3 py-2 text-[13px] leading-5 text-attn-ink">觉发现有说法和客户原话对不上：{distortions.flatMap((d) => d.evidence.map((e) => L.scrub(e.summary))).join("；")}。拿不准就先问客户。</p>}
+            <div className="flex flex-wrap gap-2"><Act label="接单" run={() => api.accept(reqId, me)} />{dismiss}</div>
           </>}
           {mode === "applicable" && <>
-            <p className="text-[13px] leading-5 text-ink-2">现有产品其实能解决，只是说明书没标注这种用法：客户会收到该产品的推荐；觉随后请产品经理把它加进产品适用范围，同类需求以后在客户自助阶段就解决，不再进研发。</p>
+            <p className="text-[13px] leading-5 text-ink-2">现成产品其实能用，只是说明书没写这种用法。客户会收到这款产品；产品经理随后把这种用法加进说明书，以后同样的需求客户自己就能查到，不再找你。</p>
             <select value={product} onChange={(e) => setProduct(e.target.value)} className="field !h-8 w-fit !py-0" aria-label="适用的产品">
               {meta.products.map((p) => <option key={p.id} value={p.id}>{L.product(p.id)}</option>)}
             </select>
-            <Field value={reason} onChange={setReason} placeholder="判断依据（产品经理可见，提交前做研发术语自查）" />
-            <Field value={limits} onChange={setLimits} placeholder="限制条件（可空；原文保留，带限制的适用不在客户自助阶段自动推荐）" />
+            <Field value={reason} onChange={setReason} placeholder="为什么能用（产品经理看得到，别写配方和机理）" />
+            <Field value={limits} onChange={setLimits} placeholder="限制条件（可空；有限制的，客户自助时不会自动推荐）" />
             {claims.length > 0 && <div className="flex flex-col gap-1.5 text-[13px]">
-              <p className="text-ink-2">以本单资料候选为依据（可选；勾选后先读审阅原文，随不立项一起签字确认）：</p>
+              <p className="text-ink-2">拿资料里读出的结论做依据（可选；勾上后先看原文出处，和这次判断一起确认）：</p>
               {claims.map((c) => <label key={c.id} className="flex items-start gap-2">
                 <input type="checkbox" checked={basis.includes(c.id)} onChange={(e) => {
                   setReview(null);
                   setBasis(e.target.checked ? [...basis, c.id] : basis.filter((id) => id !== c.id));
                 }} /><span>{c.title}</span></label>)}
-              {basis.length > 0 && !review && <div><Act kind="plain" label="读取所选结论的审阅依据" run={() => api.reviewClaims(basis, me).then(setReview)} /></div>}
+              {basis.length > 0 && !review && <div><Act kind="plain" label="看所选几条的原文出处" run={() => api.reviewClaims(basis, me).then(setReview)} /></div>}
               {review && <EvidenceReviewPanel review={review} compactSingle />}
             </div>}
             {dec && !filled && <div><button type="button" className="chip glow" onClick={() => { setProduct(dec.product); setReason(dec.reason); }}>演示自动填入</button></div>}
-            <div><Act label="不立项：已有产品适用" disabled={!reason.trim() || (basis.length > 0 && !review)} glow={filled}
+            <div><Act label="不接，推荐这款产品" disabled={!reason.trim() || (basis.length > 0 && !review)} glow={filled}
                       run={() => api.decline(reqId, reason, me, product, limits, basis, review?.reviewed_evidence)} /></div>
           </>}
           {mode === "other" && <>
-            <Field value={reason} onChange={setReason} placeholder="不立项原因（客户会收到「已记录，暂无方案」）" />
-            <div><Act kind="plain" label="不立项" disabled={!reason.trim()} run={() => api.decline(reqId, reason, me, null)} /></div>
+            <Field value={reason} onChange={setReason} placeholder="不接的原因（客户会收到「已记录，暂无方案」）" />
+            <div><Act kind="plain" label="不接" disabled={!reason.trim()} run={() => api.decline(reqId, reason, me, null)} /></div>
           </>}
           {mode === "ask" && <>
-            <p className="text-[13px] text-ink-2">缺的是客户才知道的条件：勾选后由业务员向客户回问，答完觉再提接单；不经过产品经理。</p>
+            <p className="text-[13px] text-ink-2">缺的是只有客户知道的条件：勾上要问的，业务员去问，客户答完这张单再回到你这。</p>
             <SlotPicker value={slots} onChange={setSlots} />
             <div><Act kind="plain" label="先回问客户" disabled={!slots.length} run={() => api.askBeforeAccept(reqId, slots, me)} /></div>
           </>}
           {mode === "return" && <>
-            <p className="text-[13px] text-ink-2">需求写得不清楚：退回给产品经理 Agent 按理由重写。</p>
-            <Field value={reason} onChange={setReason} placeholder="退回理由（提交前做研发术语自查，产品经理可见）" />
+            <p className="text-[13px] text-ink-2">需求写得不清楚：退给产品经理 Agent 按你的理由重写。</p>
+            <Field value={reason} onChange={setReason} placeholder="哪里不清楚（产品经理看得到，别写配方和机理）" />
             <div><Act kind="plain" label="退回" disabled={!reason.trim()} run={() => api.returnReq(reqId, reason, me)} /></div>
           </>}
         </div>
@@ -957,7 +983,7 @@ function ApplicableGrant({ q, dismiss, evidence }: { q: Question; dismiss: React
     <>
       {evidence}
       <div className="row !items-start">
-        <span className="w-[110px] shrink-0 text-[13px] text-ink-2">授予范围（默认只到试过的条件）</span>
+        <span className="w-[110px] shrink-0 text-[13px] text-ink-2">在什么条件下能用（默认只到试过的）</span>
         <div className="flex flex-1 flex-col gap-2 text-[13px]">
           {rows.map((s) => (
             <div key={s.id} className="flex flex-wrap items-center gap-2">
@@ -976,7 +1002,7 @@ function ApplicableGrant({ q, dismiss, evidence }: { q: Question; dismiss: React
           <span className="text-ink-2">限制原文（删掉一行，这一条就不再限制）</span>
           <Field value={limits} onChange={setLimits} rows={3} label="限制原文" />
           <div className="flex flex-wrap gap-2">
-            <Act label={changed ? "按改过的范围签字授予" : "签字授予"} run={() => api.grantCapability(q.id, me, "", changed ? scope : undefined)} />{dismiss}
+            <Act label={changed ? "按改过的范围给" : "就按这个范围给"} run={() => api.grantCapability(q.id, me, "", changed ? scope : undefined)} />{dismiss}
           </div>
         </div>
       </div>
@@ -984,20 +1010,45 @@ function ApplicableGrant({ q, dismiss, evidence }: { q: Question; dismiss: React
   );
 }
 
-function StatementGrant({ q, dismiss, evidence }: { q: Question; dismiss: React.ReactNode; evidence: React.ReactNode }) {
+// 这一层答不上来，给他们一句能说的话：Agent 起草的那句（对话里引用块）先填好，研发改或直接给；原判断只有研发看得到
+function StatementGrant({ q }: { q: Question }) {
   const { me } = useApp();
-  const [text, setText] = useState("");
+  const conv = useConversation(null, null);
+  const quoted = (m: { text: string }) => m.text.split("\n").filter((l) => l.startsWith(">")).map((l) => l.replace(/^>\s*/, ""));
+  const drafted = quoted((conv?.messages ?? []).filter((m) => m.role === "assistant" && m.target === q.object_id)
+    .reverse().find((m) => quoted(m).length) ?? { text: "" }).join("");
+  const [text, setText] = useState<string | null>(null);
+  const value = text ?? drafted;
+  const unit = q.evidence[q.evidence.length - 1];
   return (
     <>
-      {evidence}
+      {q.evidence.slice(1, -1).map((e, i) => (
+        <div key={i} className="row text-[13px] leading-5">{e.summary}，只看到这是你的判断，没有能说的话。</div>
+      ))}
       <div className="row !items-start">
-        <div className="flex flex-1 flex-col gap-2">
-          <Field value={text} onChange={setText} rows={2} placeholder={`写给 L${q.refs.audience} 可以说的一句话（不含结论原文与机理）`} />
-          <div className="flex flex-wrap gap-2"><Act label="签字授予这句话" run={() => api.grantCapability(q.id, me, text)} />{dismiss}</div>
+        <span className="w-24 shrink-0 text-[13px] text-ink-2">你的原判断</span>
+        <div className="min-w-0 flex-1 text-[13px] leading-5">{unit.quote}
+          <p className="mt-1 text-[12px] text-ink-3">只有你看得到，不会给出去</p></div>
+      </div>
+      <div className="row !items-start">
+        <span className="w-24 shrink-0 pt-1 text-[13px] text-ink-2">给{LAYER_WHO[q.refs.audience]}的一句话</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          {text === null && drafted && <span><AgentMark /></span>}
+          <Field value={value} onChange={setText} rows={3} placeholder="写一句他们可以对外说的话，别写机理和配方" />
+          <p className="text-[12px] text-ink-3">给出去以后，随时能在左边「我给别人用的判断」里收回。</p>
+          <div className="flex flex-wrap gap-2">
+            <Act label="就这么说" disabled={!value.trim()} run={() => api.grantCapability(q.id, me, value)} /><NotGrant q={q} />
+          </div>
         </div>
       </div>
     </>
   );
+}
+
+// 不给：记成「现在不需要」，觉一段时间内不再为同一件事来问
+function NotGrant({ q }: { q: Question }) {
+  const { me } = useApp();
+  return <Act kind="quiet" label="不给，让他们来问我" run={() => api.resolve(q.id, "dismiss", me, "研发不给，让他们来问")} />;
 }
 
 function DecryptReview({ q, dismiss, evidence }: { q: Question; dismiss: React.ReactNode; evidence: React.ReactNode }) {
@@ -1157,7 +1208,7 @@ function QiEvidenceReview({ q, dismiss, evidence }: { q: Question; dismiss: Reac
   </div></>;
 }
 
-function CandidateClaims({ reqId, empty = null }: { reqId: string | null; empty?: React.ReactNode }) {
+function CandidateClaims({ reqId, empty = null, readOnly = false }: { reqId: string | null; empty?: React.ReactNode; readOnly?: boolean }) {
   const { me } = useApp();
   const L = useLabels();
   const claims = useData(() => api.claims(reqId, me), [reqId, me]) ?? [];
@@ -1166,16 +1217,17 @@ function CandidateClaims({ reqId, empty = null }: { reqId: string | null; empty?
   const [editing, setEditing] = useState<string | null>(null);
   const [text, setText] = useState("");
   if (!claims.length) return <>{empty}</>;
-  return <Group title={reqId ? "本单候选结论 · 待研发确认" : "本人资料候选 · 待研发确认"}
-    foot="归属人是待确认负责人；点击签字才记录专业确认。用途授予与适用范围批准另行办理。">
+  const mine = !readOnly && claims.some((c) => c.owner === me);
+  return <Group title={reqId ? "这张单相关的资料里读出的结论，等确认" : "资料里读出的结论，等你确认"}
+    foot="勾上你认可的几条，先看原文出处，再确认。确认只说明你认可这条结论；要不要给业务员、客户用，之后另外问你。">
     {claims.map((c) => <div key={c.id} className="row flex-wrap !items-start text-[13px] leading-5"><label className="flex min-w-0 flex-1 basis-64 items-start gap-2">
-      <input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => {
+      <input type="checkbox" disabled={readOnly || c.owner !== me} checked={selected.includes(c.id)} onChange={(e) => {
         setReview(null);
         setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id));
       }} />
-      <span className="min-w-0"><strong>{c.title}</strong><br /><span className="text-ink-3">待确认 · 归属 {L.name(c.owner)}</span>
+      <span className="min-w-0"><strong>{c.title}</strong><br /><span className="text-ink-3">{c.owner === me ? "等你确认" : `等${L.name(c.owner)}确认`}</span>
         <span className="mt-1.5 block whitespace-pre-wrap leading-6">{c.text}</span></span>
-    </label>{c.owner === me && <div className="flex shrink-0 gap-2">
+    </label>{c.owner === me && !readOnly && <div className="flex shrink-0 gap-2">
       <button type="button" className="btn btn-plain" onClick={() => {
         setReview(null); setSelected([]); setEditing(c.id); setText(c.text);
       }}>修订正文</button>
@@ -1193,12 +1245,12 @@ function CandidateClaims({ reqId, empty = null }: { reqId: string | null; empty?
         <button type="button" className="btn btn-plain" onClick={() => setEditing(null)}>放弃修订</button>
       </div>
     </div>}
-    <div className="row"><Act label="读取所选结论的审阅依据" disabled={!selected.length || editing !== null}
-      run={() => api.reviewClaims(selected, me).then(setReview)} /></div>
+    {mine && <div className="row"><Act kind="plain" label="看所选几条的原文出处" disabled={!selected.length || editing !== null}
+      run={() => api.reviewClaims(selected, me).then(setReview)} /></div>}
     {review && <EvidenceReviewPanel key={JSON.stringify(review.reviewed_evidence)} review={review} compactSingle />}
-    <div className="row"><Act label="签字确认已审阅结论" disabled={!selected.length || !review || editing !== null}
+    {mine && <div className="row"><Act label="确认这几条" disabled={!selected.length || !review || editing !== null}
       run={() => api.confirmClaims(reqId, selected, me, review!.reviewed_evidence).then(() => {
         setSelected([]); setReview(null);
-      })} /></div>
+      })} /></div>}
   </Group>;
 }

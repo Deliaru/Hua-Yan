@@ -2157,13 +2157,16 @@ class HuayanApp:
             elif q.family == "qi_grant" and q.refs["form"] == "statement":
                 unit = self.kb._units[q.refs["ku_id"]]
                 ids = set(q.refs["retrieve_ids"].split(","))
-                q.evidence += [Evidence(summary=f"L{q.refs['audience']} 被问到：{e.payload['query']}")
+                q.evidence += [Evidence(summary=f"{self.actors[e.payload['principal']].name}"
+                                                f"{' ' if e.actor == e.payload['principal'] else '的 Agent '}查「{e.payload['query']}」时碰到了这条")
                                for e in self.events.query(["retrieve"]) if e.id in ids]
                 q.evidence.append(Evidence(summary=f"{unit.title}；依据位置：{'；'.join(unit.evidence) or '研发直接判断'}",
                                            quote=unit.text))
             elif q.family == "qi_grant":
                 cap = self.kb._caps[q.refs["capability_id"]]
-                q.evidence.append(Evidence(summary=f"形式：{cap.form}；目标层：L{q.refs['audience']}"))
+                form = {"applicable": "在什么条件下可以推荐", "ask": "该追问客户什么", "statement": "一句能说的话", "phrase": "客户说法怎么理解",
+                        "translation": "场景说法对应的化学表述", "decrypt": "解密后的原文", "share": "原文"}[cap.form]
+                q.evidence.append(Evidence(summary=f"给{['客户', '业务员', '产品经理'][int(q.refs['audience'])]}用的是：{form}"))
                 if cap.form == "applicable":
                     conditions = "；".join(f"{labels[s]}：{'、'.join(v)}" for s, v in cap.payload["conditions"].items())
                     q.evidence.append(Evidence(summary=f"枚举条件：{conditions or '未限定枚举条件'}"))

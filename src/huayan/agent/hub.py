@@ -38,7 +38,9 @@ class MemoryOps(BaseModel):
 class AgentHub:
     def __init__(self, app):
         self.app = app
-        self._conversations: dict[str, Conversation] = {}
+        convs = app.run_dir / "conversations"       # V12.13 续跑（重启服务）时读回对话，Agent 起草的稿子和聊过的话还在
+        self._conversations: dict[str, Conversation] = {
+            c.id: c for c in (Conversation.model_validate_json(f.read_text(encoding="utf-8")) for f in sorted(convs.glob("*.json")))}
         self._pending: dict[str, PendingAction] = {}
         trace = app.run_dir / "agent_trace.jsonl"     # V12.3 续跑时读回执行轨迹，需求单上的检索记录重启后还在
         self._steps: list[AgentStep] = ([AgentStep.model_validate_json(line) for line in trace.read_text(encoding="utf-8").splitlines()]
