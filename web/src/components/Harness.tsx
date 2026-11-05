@@ -41,7 +41,7 @@ export function Harness({ viewer }: { viewer: string }) {
            nums={[[c.human.signs, "次签字"], [c.human.confirms, "条结论确认"], [c.human.grants, "项能力授予"], [c.human.decisions, "次主动决定"]]} />
       <div className="grid grid-cols-[1fr_200px] gap-2.5">
         <div className="rounded-[12px] border border-dashed border-line p-2.5">
-          <p className="pb-2 text-[12px] font-semibold text-ink-2">组织级 Agent Harness（一组运行职责，由现有组件承担，不另设总调度 Agent）</p>
+          <p className="pb-2 text-[12px] font-semibold text-ink-2">协同中枢（组织级 Agent Harness：一组运行职责，由现有组件承担，不另设总调度 Agent）</p>
           <div className="grid grid-cols-[1fr_24px_1fr_24px_1fr_24px_1fr] gap-y-2">
             <Box title="业务信息" sub="客户对话 · 试样与评价 · 资料变更" nums={[[c.info.turns, "句对话"], [c.info.trials, "次试样"], [c.info.source_changes, "次资料变更"]]} />
             <Arrow />

@@ -76,6 +76,11 @@ const SPEEDS = [[1800, "慢放"], [600, "快放"]] as const;
 const SUBJECT: Record<StoryLine["subject"], string> = { jue: "觉", jev: "Jev", qi: "契", agent: "Agent", system: "系统", human: "人" };
 let shownSoFar = 0;     // 切到别的标签再回来，接着上次放到的地方
 
+// 导演替缺席岗位做的那一步（同一人、同一分钟）标出来；客户的话都是模拟客户说的
+const acted = (play: ReturnType<typeof usePlay>, l: StoryLine) => l.subject === "human" && !!l.who &&
+  !!play?.acted.some((a) => a.actor === l.who && a.ts.slice(0, 16) === l.ts.slice(0, 16));
+const actedTag = (l: StoryLine) => l.who.startsWith("customer:") ? "模拟客户" : "导演代办（模拟）";
+
 function Flow() {
   const { go } = useApp();
   const L = useLabels();
@@ -116,7 +121,8 @@ function Flow() {
       <span className="num shrink-0 text-[12px] text-ink-3">第 {n} / {total} 步</span>
       <p className="min-w-0 flex-1 text-[16px] leading-6">
         {now ? <><span className="text-ink-3">{hhmm(now.l.ts)} · {name(now.c, now.i)} · </span>
-          <b className={`rounded px-1.5 ${LANE_TONE[LANE_OF[now.l.subject]]}`}>{actor(now.l)}</b> {now.l.text}
+          <b className={`rounded px-1.5 ${LANE_TONE[LANE_OF[now.l.subject]]}`}>{actor(now.l)}</b>
+          {acted(play, now.l) && <span className="tag tag-warn ml-1 !font-normal">{actedTag(now.l)}</span>} {now.l.text}
           {jevText(now.l) && <span className="ml-1 font-semibold">（{jevText(now.l)}）</span>}</> : "准备开始"}
       </p>
       <div className="flex shrink-0 gap-1">
@@ -176,6 +182,7 @@ function Lanes() {
   const L = useLabels();
   const tick = useTick();
   const data = useData(() => api.live(VIEWER), [tick]);
+  const play = usePlay();
   if (!data) return null;
   if (!data.cases.length) return <EmptyState title="这一局还没有事" text="导演送来第一件事后，这里按时间画出它经过的每一步。" />;
   const topics = new Map<string, LiveCase[]>();
@@ -212,7 +219,7 @@ function Lanes() {
                       className={`mx-0.5 rounded-md px-2 py-1 text-left text-[11.5px] leading-4 ${LANE_TONE[lane]} ${l.role ? "hover:ring-1 hover:ring-accent" : "cursor-default"}
                         ${l.ts === newest ? "animate-pulse ring-2 ring-[#c93400]" : ""}`}>
                 <span className="block text-[10.5px] opacity-70">{hhmm(l.ts)} · {c.customer_id ? L.name(c.customer_id) : `第 ${i + 1} 件`}</span>
-                <span className="line-clamp-2">{who(l) && `${who(l)} `}{l.text}</span>
+                <span className="line-clamp-2">{acted(play, l) && <span className="font-semibold text-[#c93400]">[{actedTag(l)}] </span>}{who(l) && `${who(l)} `}{l.text}</span>
                 {jevText(l) && <span className="mt-0.5 block font-semibold">{jevText(l)}{l.jev?.version ? ` · ${L.version(l.jev.version)}` : ""}</span>}
               </button>
             ))}

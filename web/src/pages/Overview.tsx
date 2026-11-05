@@ -75,7 +75,7 @@ const STEPS: { node: string; text: string; how: string }[] = [
   { node: "reuse", text: "觉自动升级；已查 3 个历史案例：无现成产品", how: "「直达研发」是低风险推进，由觉按模板自动执行，不再要业务员签字；产品经理 Agent 先查 L2 知识，适用范围内的复用自动采用。" },
   { node: "l2", text: "「需要在低浴比下仍能保持匀染效果的助剂」", how: "产品经理 Agent 在后台把场景语言转成产品需求，每句标明依据了谁的历史案例；真人产品经理不再逐单转述。" },
   { node: "accept", text: "开工门槛已齐，研发接单 = 立项", how: "研发只收到带客户原话、必问条件已齐的需求单；接单是 L2 的生效点，被引用的历史案例给归属人记分。" },
-  { node: "l3", text: "「对酸性染料有缓染作用、与染料竞争染座的组分；氨纶段亲和力低，需控制沾色」", how: "研发 Agent 起草、研发修改确认；觉发现缺染浴 pH，提出回问，客户的答复带原话回填需求单。" },
+  { node: "l3", text: "「对酸性染料有缓染作用、与染料竞争染座的组分；氨纶段亲和力低，需控制沾色」", how: "研发 Agent 起草、研发修改确认；觉发现缺染料类别，提出回问，客户的答复带原话回填需求单。" },
   { node: "seal", text: "研发改过的转译沉淀为自己的知识；窗户纸封存，对外要点放出", how: "试样通过、业务员带回客户评价后，研发审定哪些封存、哪些放出。" },
   { node: "pack", text: "说明书只用产品需求与对外要点写成", how: "觉检查说明书是否命中封存项或 L3 术语；命中则研发 Agent 改写，产品经理 Agent 拿不到封存内容。" },
   { node: "kb", text: "研发审定发布，新品说明书回到 L0", how: "下一位客户同样描述，在自助阶段直接命中新品，不再进研发——这一轮系统又多会了一件事。" },
@@ -101,7 +101,7 @@ export function Overview() {
       <div id="arch" className="scroll-mt-16"><Pillars /></div>
       <section className="flex flex-col gap-4">
         <h2 className="text-center text-[26px] font-semibold leading-[38px] tracking-[-0.01em]">活的架构图</h2>
-        <p className="mx-auto max-w-[860px] text-center text-[14px] leading-[23px] text-ink-2">组织级 Agent Harness 的每个组件，写的是当前运行里的实数：觉提出了几件、Jev 判了几次、契里有几条结论与能力、Agent 调了几次工具又被门面拒了几次、人签了几次字。</p>
+        <p className="mx-auto max-w-[860px] text-center text-[14px] leading-[23px] text-ink-2">协同中枢（组织级 Agent Harness）的每个组件，写的是当前运行里的实数：觉提出了几件、Jev 判了几次、契里有几条结论与能力、Agent 调了几次工具又被门面拒了几次、人签了几次字。</p>
         <Harness viewer={me} />
       </section>
       <section className="flex flex-col gap-5">

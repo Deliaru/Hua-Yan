@@ -33,6 +33,8 @@ def recommend(session, deps):
     limited = deps.kb.limits()
     found = match_candidates(session.need.phenomenon, session.need.known(), list(products.values()), limited,
                              temperature_c=session.need.known_temperature())
+    if session.sales_id is None and ask_temperature(session, found, deps):
+        return session
     # V9.5：带研发限制的适用不交 Jev 自动推荐，按常规转研发，由研发对照限制原文处理
     candidates = [c for c in found if c.capability_id not in limited]
     decision = deps.jev.match(session.need, candidates, products)
@@ -88,6 +90,22 @@ def recommendation_note(session, deps):
         if "temperature_c" in candidate.unknown_slots:
             unknown.append(f"温度需在{value}内，请补充确认")
     return "；".join(filter(None, ["可能适用：" + "；".join(unknown) if unknown else "", scope]))
+
+
+TEMPERATURE_ASK = "请问保温温度是多少？"
+
+
+def ask_temperature(session, found, deps):
+    """V12.16 温度不是觉的槽位：候选能力写明了适用温度、客户还没说时，化言按能力条件问一次（不算觉追问）。"""
+    if session.need.temperature is not None or not any("temperature_c" in c.unknown_slots for c in found) \
+            or any(t.text == TEMPERATURE_ASK for t in session.turns):
+        return False
+    n = len(session.turns) + 1
+    session.turns.append(Turn(id=f"turn:{session.id}:{n}", session_id=session.id, n=n, speaker="assistant",
+                              text=TEMPERATURE_ASK, ts=get_clock().now()))
+    deps.events.append("turn", "system", {"turn_id": session.turns[-1].id, "speaker": "assistant", "text": TEMPERATURE_ASK,
+                                          "basis": "按能力条件追问"}, session_id=session.id)
+    return True
 
 
 def ask_customer(session, hint, deps):

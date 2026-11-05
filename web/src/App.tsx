@@ -194,6 +194,7 @@ export default function App() {
                 {ROLE_NAME[actor.role][0]}
               </span>
               <span className="text-[13px]"><Name id={actor.id} /></span>
+              {meta.play && trialActor && <span className="tag tag-warn !text-[11px]">团队成员扮演</span>}
               <span className="text-ink-2"><ChevronDown /></span>
             </button>
           )}>
@@ -354,7 +355,7 @@ function StatusMenu({ s, m, trial, play, onMode }: { s: RunStatus; m: RunMode; t
   ];
   const degraded = items.filter(([, , k]) => k === "warn").length;
   const mode = s.replay ? "录制回放" : byok ? "自带密钥" : s.gateway_mock ? (trial ? "离线运行" : "离线演示") : "现场运行";
-  const sub = s.replay ? "非在线运行" : rec ? "主线回放彩排录制" : degraded ? `${degraded} 项降级` : byok ? "真实运行" : "全部正常";
+  const sub = s.replay ? "非在线运行" : rec ? "录制优先：主线录制回放 · 现场新问题真实调用" : degraded ? `${degraded} 项降级` : byok ? "真实运行" : "全部正常";
   const TAG: Record<Kind, string> = { ok: "text-ink", warn: "tag tag-warn", replay: "tag" };
   return (
     <>

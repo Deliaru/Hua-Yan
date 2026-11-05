@@ -42,7 +42,7 @@ export function Backstory({ id, title = "前情" }: { id: string; title?: string
           <div className={`row !min-h-0 !items-baseline !py-2 text-[13px] leading-5 ${PROCESS.has(x.kind) ? "text-ink-3" : ""}`}>
             <span className="num w-[78px] shrink-0 text-[11.5px] text-ink-3">{when(x.ts, first.ts)}</span>
             <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              {label(x)}{simulated(x) && <span className="tag tag-warn shrink-0 !font-normal">模拟</span>}<span className="min-w-0">{L.scrub(x.text)}</span>
+              {label(x)}{simulated(x) && <span className="tag tag-warn shrink-0 !font-normal">{x.who.startsWith("customer:") ? "模拟" : "导演代办（模拟）"}</span>}<span className="min-w-0">{L.scrub(x.text)}</span>
             </span>
           </div>
         </div>

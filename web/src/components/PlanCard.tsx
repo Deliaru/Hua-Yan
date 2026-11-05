@@ -20,7 +20,8 @@ export function PlanCard({ reqId }: { reqId: string }) {
   const [page, setPage] = useState<{ doc: string; page: number } | null>(null);
   if (!plan) return null;
   return <section className="rounded-xl border border-line bg-white p-5 text-[13px]">
-    <h3 className="font-semibold">候选方案（从历史试样推出）</h3>
+    <h3 className="font-semibold">候选方案（从历史试样推出）{plan.preloaded && <span className="tag tag-attn ml-2">预先准备</span>}</h3>
+    {plan.preloaded && <p className="mt-1 text-ink-2">这份方案是之前一次真实运行里研发 Agent 推出、保存下来的，演示时直接放进来。</p>}
     <p className="mt-1 text-ink-2">{plan.by.startsWith("agent:") ? `${L.name(plan.by.slice(6))}的研发 Agent` : L.name(plan.by)}起草 · {plan.at.slice(5, 16).replace("T", " ")}。
       方案是草稿，不是能力，不进客户侧；要改就在右栏让 Agent 改写。</p>
     <Section title="历史试样对照" items={plan.comparison} />

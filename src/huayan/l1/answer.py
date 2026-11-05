@@ -33,7 +33,7 @@ def answer(session, deps, targets, *, check_grounding=False):
         # 没有明确指代或有效推荐时，不把其他型号的剂量当成当前建议。
         hits = []
     denial = ("这部分属于研发保密内容；你的访问已被冻结，暂不能申请解密。" if deps.kb.is_frozen(actor.id)
-              else "这部分属于研发保密内容，可以为客户申请解密。") + "配方不对外开放。" if targets \
+              else "这部分属于研发保密内容，可以为客户申请解密。") + "配方不对外开放。" if targets and actor.role != "customer" \
         else "这部分需要专业人员解答。"
     if blocked:
         deps.audit.append(AuditRecord(ts=get_clock().now(), actor=actor.id, action="deny",

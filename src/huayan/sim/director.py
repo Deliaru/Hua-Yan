@@ -319,7 +319,7 @@ class Director:
         说出台词的意思，心里的真值照关卡，剧情与通关条件不变。heard 是化言或业务员刚说的话。"""
         line = lv["lines"][said]
         app = self.api().app
-        if app.config["gateway_mock"]:
+        if app.config["gateway_mock"] or said == 0:      # 开场那句照台词原样说（V12.16 与路演细纲一致）
             return line
         sim = self._sim_customer(lv, sid, customer)
         cue = f"（这一句请用你自己的话、一两句说出这个意思：「{line}」。不要补充别的条件。）"
@@ -411,6 +411,18 @@ class Director:
             self._act(actor, "/api/turn", session_id=sid, speaker="sales", text=a["say"])
             return True
         req = self._req(sid)                # 其余是需求单上指派研发的动作
+        if "plan" in a:                   # 有人玩研发也照放（这是外部世界给的材料）
+            # V12.16 预先准备：放入之前一次真实运行保存的方案（研发 Agent 当时推出的），界面标「预先准备」
+            if req is None or req.status != "draft":
+                return False
+            rd, rid = req.assigned_rd, req.id
+            if self._get("/api/plan", req_id=rid, viewer=rd) is None:
+                saved = json.loads((self.real / a["plan"]).read_text(encoding="utf-8"))
+                app = self.api().app
+                record = app.save_plan_draft(rid, saved["evidence"], saved["comparison"], saved["transferable"], saved["open_items"], rd)
+                app._write_plan(req, record | {"preloaded": True})
+                self.state["acted"].append({"ts": get_clock().now().isoformat(), "actor": rd, "path": "/api/plan"})
+            return True
         if req is None or req.assigned_rd in present:
             return False
         rd, rid = req.assigned_rd, req.id

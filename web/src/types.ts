@@ -410,7 +410,7 @@ export interface SourceSearch { hits: SourceHit[]; note: string | null; queries?
 // V12.5 方案推演：研发 Agent 从历史试样推出的候选方案（本单准备材料，不是能力）
 export interface PlanDraft {
   req_id: string; evidence: string[]; comparison: string[]; transferable: string[]; open_items: string[];
-  by: string; at: string; adopted_by: string | null; adopted_at: string | null;
+  by: string; at: string; adopted_by: string | null; adopted_at: string | null; preloaded?: boolean;
 }
 export interface SourceImageAnswer { doc_id: string; page: number; question: string; answer: string; read_by: string; image_fingerprint: string }
 export interface AgentStep {

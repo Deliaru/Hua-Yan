@@ -646,6 +646,9 @@ function AcceptReview({ reqId, words, dismiss, evidence }: { reqId: string; word
                     className="field !h-8 w-fit !py-0" aria-label="适用的产品">
               {meta.products.map((p) => <option key={p.id} value={p.id}>{L.product(p.id)}</option>)}
             </select>
+            {product === "TF-213HE" && <p className="rounded-[8px] bg-fill px-3 py-2 text-[13px] leading-5">
+              <span className="tag tag-attn mr-1.5">示例说法 · 待研发审定</span>
+              窗户纸：机理「控制染浴 pH」只在研发层；给客户层准备的说法是「让上色更稳，布面更匀」，你审定前前台 AI 不会用它，客户问原理只答「这部分需要专业人员解答」。</p>}
             <Field value={reason} onChange={setReason} placeholder="为什么能用（产品经理看得到，别写配方和机理）" />
             <Field value={limits} onChange={setLimits} placeholder="限制条件（可空；有限制的，客户自助时不会自动推荐）" />
             {forProduct.length > 0 && <div className="flex flex-col gap-1.5 text-[13px]">

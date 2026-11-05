@@ -97,7 +97,7 @@ function Exceptions() {
       {b.overdue.filter((r) => !b.risk.some((x) => x.id === r.id)).map((r) => line(r, "超期"))}
       {b.failures.map((r) => line(r, `Agent 没准备成：${r.error}`))}
       {b.suspended.map((c) => <div key={c.id} className="row text-[12.5px]"><span className="w-[86px] shrink-0"><span className="tag tag-danger">挂起复核</span></span>
-        <span className="min-w-0 flex-1">{FORM[c.form] ?? c.form}{c.product && ` · ${c.product}`} · {L.name(c.granted_by)}签出</span></div>)}
+        <span className="min-w-0 flex-1">{FORM[c.form] ?? c.form}{c.product && ` · ${c.product}`} · {L.name(c.granted_by)}签出；挂起期间不再用于推荐，复核由{L.name(c.granted_by)}看本次原文后签字</span></div>)}
       {b.frozen.length > 0 && <div className="row text-[12.5px] text-ink-2">已冻结上层知识检索：{b.frozen.map(L.name).join("、")}</div>}
       {empty && <div className="row text-ink-2">现在没有风险与例外</div>}
     </Group>
