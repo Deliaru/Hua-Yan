@@ -26,7 +26,8 @@ class SimCustomer:
         self.asked_mechanism = False
         # 懂化学的客户自己的判断（种子中该现象原因说明的第一句）与据此想要的助剂品类（该现象下第一个产品的品类）
         self.diagnosis = re.split("[，；。]", self.phen.causes.removeprefix("（模拟）"))[0]
-        self.category = min((p for p in seeds.products if card.phenomenon in p.solves), key=lambda p: p.id).category
+        # 现有产品都不解决的现象（产品机会）：只泛说要一款助剂
+        self.category = min(((p.id, p.category) for p in seeds.products if card.phenomenon in p.solves), default=(None, "助剂"))[1]
 
     def _phrase(self, slot: str) -> str:
         return self.rng.choice(self.slots[slot].customer_phrases[self.card.slots[slot]])
