@@ -3,7 +3,7 @@
 // 下面是暂停 / 继续，换一局（看演示 / 自己玩）与重开这一局。进度由服务端的导演保存，几个浏览器共用一局。
 import { useEffect, useState } from "react";
 import { NO_GUIDE, publish } from "./Guide";
-import { api } from "../api";
+import { api, GAME, gameLink } from "../api";
 import { useApp, useLabels } from "../ctx";
 import type { PlayLevel, PlayState } from "../types";
 import { Popover } from "./Controls";
@@ -191,7 +191,14 @@ export function PlayBar() {
               {([[true, "看演示"], [false, "自己玩"]] as const).map(([watch, label]) => (
                 <button key={label} className={`btn btn-plain ${s.oneshot === watch ? "!text-accent" : ""}`} disabled={!!busy}
                         onClick={() => restart({ oneshot: watch, roadshow: !watch })}>{label}</button>))}
+              <button className="btn btn-plain" disabled={!!busy} title="每个岗位由一个真人扮演；没人扮的岗位和客户由导演做"
+                      onClick={() => restart({ roadshow: false, oneshot: false })}>多人一局</button>
               <button className="btn btn-plain ml-auto" disabled={!!busy} onClick={() => restart({})}>重开这一局</button>
+            </div>
+            <div className="flex items-center gap-2 text-[12px]">
+              <span className="text-ink-2">{GAME ? "你在别人开的这一局里。" : "让别人加入这一局（每人选一个岗位）："}</span>
+              {!GAME && <><code className="min-w-0 flex-1 truncate rounded bg-fill px-1.5 py-0.5">{gameLink()}</code>
+                <button className="btn btn-plain" onClick={() => navigator.clipboard.writeText(gameLink())}>复制链接</button></>}
             </div>
           </div>
         )}

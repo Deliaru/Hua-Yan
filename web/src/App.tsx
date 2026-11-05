@@ -7,7 +7,7 @@
 import { WatchStep } from "./components/Tour";
 import { useEffect, useState } from "react";
 import { NextStep, PlayBar } from "./components/Play";
-import { api } from "./api";
+import { api, GAME } from "./api";
 import { AppCtx, useLabels } from "./ctx";
 import type { Meta, Role, RunMode, RunStatus } from "./types";
 import { Popover } from "./components/Controls";
@@ -129,7 +129,7 @@ export default function App() {
     .then(() => (watch ? null : api.playControl({ paused: false })))
     .then(() => api.meta())
     .then((m) => enter(watch ? "supervisor:CEO" : m.actors.find((a) => a.role === "customer")!.id, watch ? "live" : undefined), fail);
-  if (trial && !trialActor) return <RolePicker meta={meta} onPick={enter} onStart={meta.play ? start : undefined} error={error} />;
+  if (trial && !trialActor) return <RolePicker meta={meta} onPick={enter} onStart={meta.play && !GAME ? start : undefined} error={error} />;
   // 试用实例里只出现自己的工作面、觉视图与知识账本；地址栏指到别处时回到自己的工作面
   // V11.9 结算页只在游戏模式出现，谁都能看
   // V12.8 实况是路演画面：游戏模式里主管身份可见（四屏并排时主屏用主管身份开一个窗口），真实试用里不出现

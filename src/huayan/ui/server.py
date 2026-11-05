@@ -942,12 +942,12 @@ def load_trial_roles():
     trial_roles.update(json.loads(path.read_text(encoding="utf-8")) if path.exists() else {})
 
 
-def set_trial_role(sid, p):
+def set_trial_role(sid, p, game=None):
     """进入试用时选身份（人，不含 Agent）；actor 为空表示退出、重选。"""
     if not SESSION_ID.fullmatch(sid):
         raise ValueError("会话号格式不对")
     actor = p.get("actor")
-    app = session_api(sid).app
+    app = session_api(game or sid).app
     if actor is not None and (actor not in app.actors or actor == "pm:agent"):
         raise ValueError("没有这个身份")
     with trial_lock:
@@ -1004,6 +1004,9 @@ WAKES: dict[str, Event] = {}     # 写操作或重跑之后叫醒后台，不用
 SEEN: dict[str, float] = {}      # 游戏模式各局最近一次有浏览器来访的时刻；没人看的局不再推进
 
 
+GAME_OF: dict[str, str] = {}      # 浏览器会话 → 它加入的那一局（多人同一局）
+
+
 def wake(sid="default"):
     WAKES.setdefault(sid, Event()).set()
 
@@ -1036,7 +1039,7 @@ def play_tick(sid, elapsed):
     api.tick()
     act = next((x.get("act") for x in d.open()), None)
     for _ in range(1 if d.state["oneshot"] else 10):     # 一镜到底一拍只走一步，台下看得清每次交接
-        d.idle = not d.step({trial_roles[sid]} if sid in trial_roles else set())
+        d.idle = not d.step({trial_roles[x] for x in trial_roles if x == sid or GAME_OF.get(x) == sid})   # 这一局里每个人扮的身份
         if d.idle:
             break
         api.tick()
@@ -1147,9 +1150,12 @@ class Handler(SimpleHTTPRequestHandler):
         url = urlparse(self.path)
         params |= {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
-            sid = self.headers.get("X-Huayan-Session", "default")
+            person = sid = self.headers.get("X-Huayan-Session", "default")
+            game = self.headers.get("X-Huayan-Game", "")      # V12.17 多人同一局：链接带 ?game=，各人身份仍按自己的浏览器记
+            if PLAY and SESSION_ID.fullmatch(game):
+                sid = GAME_OF[person] = game
             if TRIAL and url.path not in MONTH and not url.path.startswith(("/api/trial/", "/api/play/")):
-                params = trial_params(sid, method, url.path, params)
+                params = trial_params(person, method, url.path, params)
             if PLAY and SESSION_ID.fullmatch(sid):         # 游戏模式每个浏览器一局：有人在看，这一局的后台就跑着
                 play_seen(sid)
             if PLAY and url.path in PLAY_NOWAIT:           # V12.3 读进度、暂停与倍速不等导演这一拍：真实模型下一拍要几分钟
@@ -1160,7 +1166,7 @@ class Handler(SimpleHTTPRequestHandler):
             elif TRIAL and url.path == "/api/trial/stamp":         # 界面轮询有没有别人的变化，不排会话锁
                 result = GET[url.path](session_api(sid).app, params)
             elif TRIAL and url.path == "/api/trial/role":
-                result = set_trial_role(sid, params)
+                result = set_trial_role(person, params, sid)
             elif TRIAL and url.path == "/api/trial/models":
                 result = session_api(sid).switch_models(params)
             # 过程面板的两个读接口不排会话锁：会话锁正被那次耗时的写操作占着
@@ -1177,7 +1183,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if TRIAL and url.path == "/api/agents/retry":
                     wake(sid if PLAY else "default")
             if TRIAL and url.path == "/api/meta":
-                result = dump(result) | {"trial": {"actor": trial_roles.get(sid)}, "play": bool(PLAY)}
+                result = dump(result) | {"trial": {"actor": trial_roles.get(person)}, "play": bool(PLAY)}
             status, body = 200, dump(result)
         except PermissionDenied as e:
             status, body = 403, {"error": str(e)}
