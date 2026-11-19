@@ -396,13 +396,20 @@ def _stale(events, at, caps, seeds):
                  [*scope, *(k.split("=")[0] for k in spots)])}, ensure_ascii=False)}
 
 
+def scope_key(cap):
+    """同一产品 × 现象、同一批依据结论的适用能力，产品经理批一次就够。"""
+    return cap.payload["product_id"], cap.payload["phenomenon"], frozenset(cap.based_on)
+
+
 def _scope(events, at, caps, units):
     """待批准的适用能力交产品经理。依据是研发名下还没确认的候选时先不提：研发确认后再批准（QI.md 的 K5），
     整批编译出的候选不会一下子把几十件批准推给产品经理；公开产品页的候选由产品经理核对，照常提。"""
-    for cap in caps:
-        if cap.form != "applicable" or cap.status != "proposed" or any(
-                units[k].status == "candidate" and units[k].owner.startswith("rd:") for k in cap.based_on):
+    proposed = [c for c in caps if c.form == "applicable" and c.status == "proposed"]
+    for cap in proposed:
+        if any(units[k].status == "candidate" and units[k].owner.startswith("rd:") for k in cap.based_on):
             continue
+        if any(o.audience < cap.audience and scope_key(o) == scope_key(cap) for o in proposed):
+            continue    # 同一份结论同时有对客和研发层两条待批：只提对客那条，产品经理签一次两条一起生效
         pid, ph = cap.payload["product_id"], cap.payload["phenomenon"]
         evs = [e for e in events.query(["project_declined", "reuse_adopted"], until=at)
                if e.payload.get("product_id") == pid and e.payload.get("phenomenon") == ph]

@@ -4,6 +4,7 @@
 import hashlib
 import json
 import os
+import re
 import time
 from contextlib import nullcontext
 from pathlib import Path
@@ -13,6 +14,9 @@ import openai
 from pydantic import ValidationError
 
 from huayan.contracts import LLMResponse, LLMToolCall, Message, Tier, Usage
+
+
+_TIME = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?([+-]\d{2}:?\d{2}|Z)?")
 
 
 class StructuredOutputError(ValueError):
@@ -75,10 +79,15 @@ class OpenAICompatGateway:
     def _request(self, req, schema=None):
         if not req.caller:
             raise ValueError("Every model call needs caller")
-        cache_key = hashlib.sha256(json.dumps({"request": req.model_dump(mode="json"),
+        text = json.dumps({"request": req.model_dump(mode="json"),
             "schema": schema.model_json_schema() if schema else None, "tiers": self.tiers},
-            sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+            sort_keys=True, ensure_ascii=False)
+        cache_key = hashlib.sha256(text.encode("utf-8")).hexdigest()
         path = Path(self.cache_dir) / f"{cache_key}.json" if self.cache_dir else None
+        # V12.18 第二把钥匙不看业务时间：人点得快慢不同，上下文里的时间戳跟着变，其余一字不差仍命中录制
+        timeless = Path(self.cache_dir) / f"t-{hashlib.sha256(_TIME.sub('T', text).encode('utf-8')).hexdigest()}.json" if self.cache_dir else None
+        if path and not path.exists() and timeless.exists():
+            path = timeless
         if self.trace is not None:
             self.trace("llm_start", caller=req.caller, model=self.tiers[req.tier.value]["model"])
         if path and path.exists():
@@ -136,6 +145,7 @@ class OpenAICompatGateway:
                     if path:
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_text(response.model_dump_json(), encoding="utf-8")
+                        timeless.write_text(response.model_dump_json(), encoding="utf-8")
                     return response
                 # v8 Q9.3：服务偶尔返回非 JSON 正文（SDK 给出字符串）或截断的工具参数，与连接错误一样重试
                 except (openai.APIConnectionError, openai.APIStatusError, AttributeError, json.JSONDecodeError) as exc:

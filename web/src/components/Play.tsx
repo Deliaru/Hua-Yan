@@ -21,7 +21,7 @@ export function usePlay(): PlayState | null {
     if (!meta.play) return;
     const load = () => api.playState().then(setS, () => {});
     load();
-    const timer = setInterval(load, 2000);
+    const timer = setInterval(load, 1000);
     return () => clearInterval(timer);
   }, [meta.play, version]);
   return s;
@@ -31,12 +31,22 @@ export function usePlay(): PlayState | null {
 function whoFor(x: PlayLevel, me: string, actors: { id: string; role: string }[]) {
   return x.who ?? (me.startsWith(`${x.to}:`) ? me : actors.find((a) => a.role === x.to && a.id !== "supervisor:CEO" && a.id !== "pm:agent")?.id);
 }
+const IM = new Set(["sales", "pm", "rd", "supervisor"]);
+
+// 现在轮到我的那一步：业务流程演示（一个人走所有岗位）严格按顺序一件一件走，前一件还在路上就等它；多人一局各做各的
+export function myTurn(s: PlayState | null, me: string) {
+  const open = s && !s.oneshot ? s.levels.filter((x) => x.status === "open") : [];
+  const landed = s?.roadshow ? open.slice(0, 1).filter((x) => x.who) : open.filter((x) => x.who);
+  return { open, landed, mine: landed.find((x) => x.who === me) };
+}
+
 function useEnter() {
   const { me, meta, go, become } = useApp();
   return (x: PlayLevel) => {
     const who = whoFor(x, me, meta.actors);
     const page = who?.split(":")[0] ?? x.to;     // 产品经理那件事可能先等研发：进等它的那个人的工作面
-    return who && who !== me ? become(who, page, x.focus) : go(page, x.focus);
+    const focus = IM.has(page) ? null : x.focus;   // 岗位工作面不直接打开那件事：化言把它推到消息里，点「去处理」才打开
+    return who && who !== me ? become(who, page, focus) : go(page, focus);
   };
 }
 
@@ -44,21 +54,32 @@ function useEnter() {
 // 批范围 / 合并课题是产品经理的签字区，录试样是试样按钮，客户是输入框，其余是「要你定」卡片的主按钮（示范文字写在下一步条上）
 function TARGET(x: PlayLevel): [string, string | null] {
   const h = (x.hint ?? {}) as Record<string, string>;
-  if (x.to === "customer") return ["say", null];
+  if (x.to === "customer" || x.who?.startsWith("customer:")) return ["say", null];
   if (h.say) return ["send", h.say];
   if (h.reuse) return ["reuse-no", h.reuse];
   if (h.decline) return ["decline", JSON.stringify(h.decline)];
   if (h.scope) return ["scope", h.scope];
   if (h.merge) return ["merge", h.merge];
-  if (h.trial) return ["trial", null];
+  if (h.trial) {   // 试样结果由导演按世界规律给：没过就指「录入不通过」，并带上原因和缺的条件
+    const t = h.trial as unknown as { result: string; missing: string[] } | true;
+    return t !== true && t.result === "fail" ? ["trial-fail", t.missing.join(",")] : ["trial", null];
+  }
   return ["task", null];
 }
 const NOTE_KEYS = ["review", "recall", "sheet", "note"];
 // 一件事要几个岗位接力时，按正在等的那个人这一步写要做什么
 const STEP: Record<string, string> = { say: "回客户一句话", decline: "判断现成产品就能用，不接单", scope: "批准扩大产品的适用范围",
   merge: "把几位客户的需求合成一个课题", reuse: "这次不采用现成产品：点「演示自动填入」写理由，再点「不采用」", accept: "接单", trial: "录试样结果",
+  confirm: "确认化学要点：研发 Agent 已按客户原话写好，看一遍点确认",
+  rework: "试样没过、缺条件：点「退回重新转译」，化言会回头问客户缺的那一条，答复填回这张单",
   review: "复核资料改版后的结论", recall: "回访过去没解决的客户", sheet: "按研发的判断更新说明书" };
-const todo = (x: PlayLevel) => STEP[Object.keys(x.hint ?? {})[0]] ?? x.decide;
+export const todo = (x: PlayLevel) => {
+  const t = (x.hint?.trial ?? null) as { result: string; labels: string } | null;
+  if (t && typeof t === "object") return t.result === "fail"
+    ? `录试样结果：这次没过，原因是「${t.labels}」当初没问到。点「需求条件缺失」，勾上「${t.labels}」，再点「录入不通过」`
+    : "录试样结果：这次过了，点「试样通过」";
+  return STEP[Object.keys(x.hint ?? {})[0]] ?? x.decide;
+};
 
 // 自己玩：工作面顶上一条「下一步」。轮到你时写要做什么，并让工作面上「要你定」的主按钮（客户是输入框）呼吸高亮；
 // 轮到别人时写轮到谁、做什么，点一下就换成他进他的工作面。
@@ -67,17 +88,15 @@ export function NextStep() {
   const L = useLabels();
   const s = usePlay();
   const enter = useEnter();
-  const open = s && !s.oneshot ? s.levels.filter((x) => x.status === "open") : [];
   // 还没落到具体的人手上（who 为空）的事在路上：客户还在说、Agent 还在准备，不算轮到谁
-  const landed = open.filter((x) => x.who);
-  const mine = landed.find((x) => x.who === me);
+  const { open, landed, mine } = myTurn(s, me);
   const next = mine ?? landed[0];
   const line = s?.lines.find((x) => x.customer === me);
   const [target, arg] = mine ? TARGET(mine) : [null, null];
   const note = mine?.hint && NOTE_KEYS.map((k) => (mine.hint as Record<string, unknown>)[k]).find((v) => typeof v === "string") as string | undefined;
   useEffect(() => { publish(target ? { who: me, target, arg, customer: null } : NO_GUIDE); }, [me, target, arg]);
   // 轮到你的下一件换了：直接打开那件事（同一件不重复跳，看别处时不被拉回）
-  useEffect(() => { if (mine?.focus) go(me.split(":")[0], mine.focus); }, [mine?.id, mine?.focus]);
+  useEffect(() => { const page = me.split(":")[0]; if (mine?.focus) go(page, IM.has(page) ? null : mine.focus); }, [mine?.id, mine?.focus]);
   if (!s || s.oneshot) return null;
   const all = s.done.length === s.levels.length;
   const who = next?.who ?? undefined;
@@ -88,7 +107,7 @@ export function NextStep() {
         : !next ? <span className="flex-1 text-ink-2">{s.paused ? "这一局停着，点右边「继续」。"
             : `事情在路上（客户在说、Agent 在准备）：${open.map((x) => x.title).join("、") || "导演正在送下一件事"}。到了谁手上，这里马上告诉你。`}</span>
         : mine ? <>
-            <span className="min-w-0 flex-1"><b>轮到你：{todo(mine)}</b><span className="text-ink-2"> · {mine.brief}。页面上呼吸发亮的就是要点的。</span></span>
+            <span className="min-w-0 flex-1"><b>轮到你：{todo(mine)}</b><span className="text-ink-2"> · {mine.brief}。{IM.has(me.split(":")[0]) ? "化言推到左边消息里了，点「去处理」打开，再点发亮的地方。" : "页面上呼吸发亮的就是要点的。"}</span></span>
             {note && <button className="chip shrink-0" title={`${note}（点一下复制）`} onClick={() => navigator.clipboard.writeText(note)}>
               示范：「{note.slice(0, 14)}…」复制</button>}
             {line && <button className="btn btn-primary glow shrink-0" onClick={() => api.addTurn(line.session_id, "customer", line.text).then(refresh, fail)}>
@@ -135,7 +154,7 @@ export function PlayBar() {
       <Popover trigger={(toggle) => (
         <button onClick={toggle} className={`flex h-8 min-w-0 max-w-[min(640px,100%)] items-center gap-2 rounded-[8px] px-2.5 text-[13px] hover:bg-fill ${
           all ? "bg-[rgba(48,194,91,.11)]" : turn.length ? "bg-attn-bg" : ""}`}>
-          <span className="tag tag-accent">{s.oneshot ? `看演示${s.act ? ` · 第 ${s.act} 幕` : ""}` : "自己玩"}</span>
+          <span className="tag tag-accent">{s.oneshot ? `CEO 视角总结${s.act ? ` · 第 ${s.act} 幕` : ""}` : "业务流程演示"}</span>
           {turn[0] ? <><span className="truncate font-semibold">{turn[0].id} · {turn[0].title}</span>
                        <span className="truncate text-ink-2">· {turn[0].brief}</span></>
                    : <span className="truncate text-ink-2">{all ? "业务和关卡都过了" : `进行中 ${open} 件`}</span>}
@@ -182,13 +201,13 @@ export function PlayBar() {
               </div>
             </div>
             <p className="text-[12px] text-ink-3">
-              {s.oneshot ? "看演示：导演按三幕把所有岗位的事做完，你在组织运行实况里看每一次交接。" : "自己玩：各岗位的事都留给你，导演只扮演客户和外部世界（试样结果、资料改版）。"}
+              {s.oneshot ? "CEO 视角总结：导演按三幕把所有岗位的事做完，你在组织运行实况里看每一次交接。" : "业务流程演示：各岗位的事都留给你，导演只扮演客户和外部世界（试样结果、资料改版）。"}
               点一件就以等它的那个人进他的工作面。业务时间 {s.now.slice(5, 16).replace("T", " ")} · 第 {s.round} 局</p>
             {s.error && <p role="alert" className="text-[12px] text-danger">导演这一拍没做成：{s.error}</p>}
             <div className="flex flex-wrap items-center gap-1.5">
               <button className="btn btn-plain" onClick={() => run("…", api.playControl({ paused: !s.paused }))}>{s.paused ? "继续" : "暂停"}</button>
               <span className="ml-3 text-ink-2">换一局</span>
-              {([[true, "看演示"], [false, "自己玩"]] as const).map(([watch, label]) => (
+              {([[true, "CEO 视角总结"], [false, "业务流程演示"]] as const).map(([watch, label]) => (
                 <button key={label} className={`btn btn-plain ${s.oneshot === watch ? "!text-accent" : ""}`} disabled={!!busy}
                         onClick={() => restart({ oneshot: watch, roadshow: !watch })}>{label}</button>))}
               <button className="btn btn-plain" disabled={!!busy} title="每个岗位由一个真人扮演；没人扮的岗位和客户由导演做"

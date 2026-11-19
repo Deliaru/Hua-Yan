@@ -8,7 +8,7 @@ import { Score } from "./ui";
 
 export const LAYER_WHO: Record<string, string> = { "0": "客户", "1": "业务员", "2": "产品经理", "3": "研发" };
 
-const ASK: Record<string, string> = {
+export const ASK: Record<string, string> = {
   accept_requirement: "接不接这张单？", distortion: "转述可能走样了，核对一下", confirm_translation: "Agent 写的化学要点对不对？",
   reuse_product: "现成产品能直接用吗？", opportunity: "这几位客户说的是同一件事吗？", contribution: "这次的改动要不要记成你的经验？",
   market_eval: "客户怎么评价样品？", seal_points: "哪些能对外说，哪些只留在研发？", seal_leak: "说明书可能说多了，改一下",
@@ -20,7 +20,7 @@ const ASK: Record<string, string> = {
   capability_recall: "要不要回访过去没解决的客户？", contribution_pm: "这次的产品需求要不要记成你的经验？",
 };
 
-const WHY: Record<string, string> = {
+export const WHY: Record<string, string> = {
   accept_requirement: "产品经理 Agent 把客户的话整理成了需求，要你判断立不立项。",
   distortion: "觉发现需求里的说法和客户原话对不上。",
   confirm_translation: "接单后你的 Agent 把需求写成了化学要点，你确认了才算数。",

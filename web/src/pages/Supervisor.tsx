@@ -5,7 +5,8 @@
 import { useState } from "react";
 import type { ExceptionRow } from "../types";
 import { REQ_STATUS, Side, useApp, useData, useLabels } from "../ctx";
-import { InboxSidebar, useInbox } from "../components/Inbox";
+import { useInbox } from "../components/Inbox";
+import { HuayanFeed, ImSide } from "../components/Im";
 import { Act, EmptyState, Group, PageHead, SideHead } from "../components/ui";
 import { Backstory } from "../components/Backstory";
 import { RouteStrip } from "../components/Route";
@@ -45,7 +46,7 @@ export function Supervisor() {
   return (
     <>
       <Side>
-        <InboxSidebar selected={q?.id ?? null} reqs={[]} select={(x) => { setQid(x.id); setRid(null); }} />
+        <ImSide badge={ready.length} feed={<HuayanFeed selected={q?.id ?? null} reqs={reqs} select={(x) => { setQid(x.id); setRid(null); }} />} desk={<>
         <SideHead aside={<span className="num">{reqs.length}</span>}>进展</SideHead>
         {reqs.map((r) => (
           <button key={r.id} onClick={() => setRid(r.id)} className={`side-row ${r.id === rid ? "on" : ""}`}>
@@ -54,6 +55,7 @@ export function Supervisor() {
           </button>
         ))}
         {!reqs.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">还没有需求单</p>}
+        </>} />
       </Side>
       <div className="mx-auto flex max-w-[760px] flex-col gap-6 px-8 pb-24 pt-7">
         {req ? <>

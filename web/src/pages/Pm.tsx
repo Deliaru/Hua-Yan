@@ -2,6 +2,7 @@
 // 维护产品适用范围（scope_update）、判断产品机会（opportunity，签字附商业判断）、纠正研发退回的需求（例外纠偏 + 沉淀）。
 // 逐单 L2 转译由产品经理 Agent 在后台完成，这里只读显示「无需你转述」。
 import { useEffect, useState } from "react";
+import { HuayanFeed, ImSide } from "../components/Im";
 import { api } from "../api";
 import { REQ_STATUS, Side, useApp, useData, useLabels } from "../ctx";
 import type { Question, RequirementView } from "../types";
@@ -11,6 +12,7 @@ import { Narration, TimeBar } from "../components/Narration";
 import { RelayLoss } from "../components/RelayLoss";
 import { useGuideArg } from "../components/Guide";
 import { Act, AgentMark, EmptyState, Field, Group, SideHead } from "../components/ui";
+import { Md } from "../components/Md";
 import { More, TaskHead, useAsk, useObject } from "../components/Task";
 
 const GROUPS: [string, string, (q: Question) => boolean][] = [
@@ -38,12 +40,14 @@ export function Pm() {
   const [qid, setQid] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);   // 刚签完的那项：问题已结案，主区显示签字的效果
   useEffect(() => { if (focus) { const q = qs.find((x) => x.id === focus || reqOf(x) === focus); if (q) { setQid(q.id); setDone(null); } } }, [focus, qs.length]);
-  const q = qs.find((x) => x.id === qid) ?? (done ? null : qs.find((x) => x.prepared_at != null || x.owner_id === me) ?? null);
+  const q = qs.find((x) => x.id === qid) ?? null;   // 不自己打开：化言推到左边消息里，点了才开
   const mineReqs = new Set(qs.map(reqOf));
   const background = reqs.filter((r) => r.status === "draft" && !mineReqs.has(r.id));
   return (
     <>
       <Side>
+        <ImSide badge={qs.filter((x) => x.prepared_at != null).length} feed={<HuayanFeed selected={q?.id ?? null} reqs={reqs}
+          select={(x) => { setQid(x.id); setDone(null); }} />} desk={<>
         {GROUPS.map(([title, sub, pick]) => {
           const items = qs.filter(pick);
           return (
@@ -67,12 +71,13 @@ export function Pm() {
           </div>
         ))}
         {!background.length && <p className="px-[18px] py-1 text-[12.5px] text-ink-3">无</p>}
+        </>} />
       </Side>
       <div className="mr-[372px]">
         <div className="mx-auto flex max-w-[1000px] flex-col gap-5 px-8 pb-24 pt-7">
           {done && <DoneBanner text={done} />}
           {q ? <Pane key={q.id} q={q} onDone={(t) => { setDone(t); setQid(null); }} />
-            : !done && <EmptyState title="现在没有要你定的事" text="逐单转述由产品经理 Agent 在后台做。你只处理几类事：扩大产品的适用范围、判断产品机会、更新说明书、纠正研发退回的需求。有了会出现在左边。" />}
+            : !done && <EmptyState title={qs.length ? "在左边化言的消息里点「去处理」" : "现在没有要你定的事"} text="逐单转述由产品经理 Agent 在后台做。你只处理几类事：扩大产品的适用范围、判断产品机会、更新说明书、纠正研发退回的需求。有了会出现在左边。" />}
         </div>
       </div>
       <aside className="inspector fixed bottom-0 right-0 top-[52px] z-10 flex w-[372px] flex-col gap-5 overflow-y-auto border-l border-sep px-5 py-5">
@@ -219,7 +224,7 @@ function Opportunity({ q, onDone }: { q: Question; onDone: (t: string) => void }
         </div>
         {main?.requirement.merge_note && (
           <div className="row !items-start"><span className="w-24 shrink-0 text-[13px] text-ink-2">是不是同一件事</span>
-            <p className="flex-1 text-[13px] leading-5">{L.scrub(main.requirement.merge_note)} <AgentMark who="产品经理 Agent 起草" /></p></div>
+            <div className="flex-1 text-[13px] leading-5"><Md text={main.requirement.merge_note} /><AgentMark who="产品经理 Agent 起草" /></div></div>
         )}
         {q.evidence.map((e, i) => <div key={i} className="row text-[12.5px] text-ink-2">{L.scrub(e.summary)}</div>)}
       </Group>

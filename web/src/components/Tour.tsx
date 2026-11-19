@@ -34,7 +34,7 @@ export function WatchStep() {
   return (
     <div className="sticky top-[52px] z-20 flex flex-col gap-1.5 border-b border-sep bg-attn-bg px-6 py-2.5 text-[14px]">
       <div className="flex items-center gap-3">
-        <span className="tag tag-accent shrink-0">看演示</span>
+        <span className="tag tag-accent shrink-0">CEO 视角总结</span>
         {all ? <><span className="flex-1"><b>三幕都讲完了。</b>回到最早那位没解决的老客户：报告改版复核后，他会话里的推荐依然有效；再去结算页看省了多少。</span>
             {old && <button className="btn btn-primary glow" onClick={() => go("sales", old)}>回到那位老客户的会话</button>}
             <button className="btn btn-plain" onClick={() => go("settle")}>看这一局省了什么</button></>

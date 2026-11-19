@@ -102,6 +102,7 @@ class Director:
         self.levels = levels or self._levels()
         self.idle = False          # 上一拍导演没事可做（一镜到底据此跳到觉的下一次扫描，V12.12）
         self.paused_at = 0         # 暂停时这一局的写操作数；暂停后多出来的是人自己做的事
+        self.present: set[str] = set()   # 上一拍这一局有人在玩的身份（「下一步」据此只提示真人要做的事）
         self.customers: dict[str, SimCustomer] = {}
         self.error: str | None = None
 
@@ -120,13 +121,15 @@ class Director:
 
     def open(self) -> list[dict]:
         """该送来、还没通过的事：业务全部，关卡只到第一个没通过的那一步。一镜到底只送当前这一幕：关卡里标了 act 的按幕排，
-        同一幕的业务一起送、关卡一步一步送；没标的不送，都没标就全送（V12.12）。"""
+        同一幕的业务一起送、关卡一步一步送；没标的不送，都没标就全送（V12.12）。业务流程演示一件一件送。"""
         levels = [x for x in self.levels if x["id"] not in self.state["passed"]]
         if self.state["oneshot"] and any("act" in x for x in self.levels):
             levels = [x for x in levels if "act" in x]
             levels = [x for x in levels if x["act"] == min((y["act"] for y in levels), default=None)]
         stage = [x for x in levels if x["kind"] == "stage"][:1]
-        return [x for x in levels if x["kind"] == "business"] + stage
+        now = [x for x in levels if x["kind"] == "business"] + stage
+        # 业务流程演示（一个人挨个岗位讲）：一次只送一件，这件过了才送下一件；Agent 也只忙这一件，人点得快慢不改变它看到的内容
+        return now[:1] if self.state["roadshow"] and not self.state["oneshot"] else now
 
     def view(self) -> dict:
         s, now = self.state, self.open()
@@ -145,6 +148,8 @@ class Director:
     def _focus(self, lv: dict) -> str | None:
         """自己玩：进工作面时直接打开的对象。业务员、客户按会话，产品经理、研发按需求单。"""
         sids = self.state["cases"].get(lv["id"], [])
+        if "revise" in lv:
+            return next(iter(self.state["seen"].get(lv["id"], [])), None)
         if not sids and lv["id"] in self.state["cases"]:      # 没有客户的关卡：直接打开觉提出的那件决策
             family = next(({"recall": "capability_recall", "sheet": "sheet_mismatch"}[k] for a in lv.get("do", []) for k in a if k in ("recall", "sheet")), None)
             return next(iter(self._open(family)), None) if family else None
@@ -156,12 +161,32 @@ class Director:
     def _hint(self, lv: dict) -> dict | None:
         """自己玩：关卡里替正在等的那个岗位写好的这一步（界面据此指按钮、给「演示自动填入」的内容）。"""
         role = (self._who(lv) or lv["to"]).split(":")[0]
-        return next(({k: v for k, v in a.items() if k != "as"} for i, a in enumerate(lv.get("do", []))
-                     if a.get("as") == role and f"{lv['id']}:{i}" not in self.state["done"]), None)   # 这个岗位还没做的第一步
+        hint = next(({k: v for k, v in a.items() if k != "as"} for i, a in enumerate(lv.get("do", []))
+                     if a.get("as") == role and "plan" not in a and f"{lv['id']}:{i}" not in self.state["done"]
+                     and not self._achieved(lv, i, a)), None)   # 这个岗位还没做的第一步（人刚做完的不等导演下一拍就跳过）
+        if hint and "trial" in hint and "trial" in lv:   # 录试样：按世界规律写明这次过没过、缺了什么，界面照此指按钮
+            req = next((r for sid in self.state["cases"].get(lv["id"], []) if (r := self._req(sid)) and r.status == "rd_confirmed"), None)
+            if req:
+                result, cause, missing = self._trial(lv, req)
+                labels = "、".join(s.label for s in self.api().app.seeds.slots if s.id in missing)
+                hint = {"trial": {"result": result, "cause": cause, "missing": missing, "labels": labels}}
+        return hint
 
     def _who(self, lv: dict) -> str | None:
         """这件事在等谁：送达工作面上的那个人（路演时点一件就以他进入）；还没落到具体的人手上就是 None。"""
         sids = self.state["cases"].get(lv["id"], [])
+        if self.state["roadshow"] and self._preparing():
+            return None                    # 业务流程演示：Agent 手上还有没准备完的，先等它做完再轮到人，人点得快慢不改变 Agent 看到的内容
+        if "revise" in lv:                 # 报告改版：觉提出复核、准备好之后轮到签过那条结论的研发
+            return next((q.signer_id for q in self._open("qi_review").values()
+                         if q.id in self.state["seen"].get(lv["id"], []) and q.prepared_at), None)
+        for sid in sids if lv["to"] != "customer" else []:   # 有人扮的客户还有话没说（化言刚问了他）：先轮到这位客户；导演扮的客户自己会说
+            if self._customer_of(sid) not in self._present(lv, self.present):
+                continue
+            view = self._get("/api/session", id=sid, viewer=self._customer_of(sid))["view"]
+            said = sum(t.speaker == "customer" for t in view.turns)
+            if said < len(lv["lines"]) and view.turns and view.turns[-1].speaker != "customer":
+                return self._customer_of(sid)
         if lv["id"] in self.state["cases"] and not sids:   # 没有客户的关卡（回访、改说明书）：觉提出那件决策后轮到签字人
             family = next(({"recall": "capability_recall", "sheet": "sheet_mismatch"}[k] for a in lv.get("do", []) for k in a if k in ("recall", "sheet")), None)
             return next((q.signer_id for q in self._open(family).values() if q.prepared_at), None) if family else None
@@ -187,7 +212,11 @@ class Director:
             return None                    # 产品经理 Agent 还在找现成产品，找完才轮到研发看
         # 研发判完、轮到产品经理批准范围的关卡（研发判断真实报告并授予）：研发动过这张单，就在等产品经理
         if req and req.status != "draft" and pm_family:
-            return PM if pm_ready else None
+            return PM if pm_ready and PM in self._present(lv, self.present) else None   # 产品经理不在场（业务里的支线）由导演代办
+        # 研发要签的那件决策 Agent 还没准备好（如不采用现成产品后觉再提「接不接单」）：还在路上，不让人点了报「尚在准备中」
+        if req and any(q.status == "open" and q.prepared_at is None and q.refs.get("requirement_id") == req.id
+                       for q in self._get("/api/questions", viewer=req.assigned_rd)):
+            return None
         return req.assigned_rd if req else None
 
     def _lines(self, lv: dict) -> list[dict]:
@@ -222,6 +251,11 @@ class Director:
         rid = self._get("/api/route", id=sid, viewer=VIEWER)["requirement_id"]
         return self._get("/api/requirement", id=rid, viewer=VIEWER).requirement if rid else None
 
+    def _preparing(self) -> bool:
+        """各岗位收件箱里有没有还在准备的决策（Agent 没准备完）。"""
+        return any(q.prepared_at is None for a in self.api().app.seeds.actors if a.role in ("sales", "pm", "rd", "supervisor")
+                   for q in self._get("/api/questions", viewer=a.id))
+
     def _open(self, family: str) -> dict:
         """各岗位收件箱里还开着的这一类决策 {问题编号: 问题}。"""
         return {q.id: q for a in self.api().app.seeds.actors if a.role in ("sales", "pm", "rd", "supervisor")
@@ -245,7 +279,7 @@ class Director:
     # 一件事 --------------------------------------------------------------------------------------
     def step(self, present: set[str]) -> bool:
         """导演看一眼所有还没通过的事，返回这一眼做没做事。present = 这一局有人在玩的身份；他们的事留给人做。"""
-        acted = False
+        acted, self.present = False, present
         for lv in self.open():
             acted |= self._step(lv, self._present(lv, present))
         self.save()
@@ -285,7 +319,7 @@ class Director:
             if customer not in present:
                 acted |= self._customer(lv, sid, customer)
         for i, a in enumerate(lv.get("do", [])):
-            if f"{key}:{i}" not in s["done"] and self._do(lv, a, present):
+            if f"{key}:{i}" not in s["done"] and (self._do(lv, a, present) or self._achieved(lv, i, a)):
                 s["done"].append(f"{key}:{i}")
                 acted = True
         if self._passed(lv):
@@ -332,7 +366,7 @@ class Director:
             seeds = self.api().app.seeds
             phen = next(p for p in seeds.phenomena if p.id == lv["card"]["phenomenon"])
             # 一镜到底每局用同一个随机数：彩排那一局写进录制缓存，现场重开的一局同输入命中（V12.12）
-            rng = random.Random(f"{'oneshot' if self.state['oneshot'] else self.state['round']}:{sid}")
+            rng = random.Random(f"oneshot:{sid}")      # 每局同一个随机数：录下的请求下一局还对得上（V12.18 业务流程演示也录）
             slots = sample_slots(phen, seeds, rng, lv["card"]["slots"])
             card = NeedCard(id=f"level:{lv['id']}", phenomenon=phen.id, slots=slots, unknown_slots=[], opening_slots=[],
                             customer_id=customer, chem_savvy=False, wants_mechanism=False,
@@ -369,7 +403,8 @@ class Director:
             return True
         if "recall" in a or "sheet" in a:  # V12.7 业务员回访过去没解决的客户；产品经理按研发判断更新说明书
             family = "capability_recall" if "recall" in a else "sheet_mismatch"
-            q = next((q for q in self._open(family).values() if q.signer_id not in present), None)
+            q = next((q for q in self._open(family).values() if q.signer_id not in present
+                      and q.refs.get("product_id") in (None, a.get("product", q.refs.get("product_id")))), None)
             if q is None:
                 return False
             self._act(q.signer_id, "/api/resolve", question_id=q.id, action="sign" if "recall" in a else "update_sheet",
@@ -455,12 +490,37 @@ class Director:
             return True
         return False
 
+    def _achieved(self, lv: dict, i: int, a: dict) -> bool:
+        """有人扮的岗位自己做完了这一步（导演没代做，done 里没有）：按这件事的实际经过认出来，「下一步」才往下指。
+        同一种动作写了两遍（再确认、再试样），看经过里这种事出现够不够次数。"""
+        sids = self.state["cases"].get(lv["id"], [])        # 还没送来的事什么都没做
+        kinds = [x["kind"] for sid in sids for x in self._story(sid)]
+        what = next(k for k in a if k != "as")
+        nth = sum(what in b for b in lv["do"][:i + 1])
+        if what == "say":
+            return bool(sids) and any(t.speaker == "sales" for t in self._get("/api/session", id=sids[0], viewer=VIEWER)["view"].turns)
+        if what == "reuse":
+            req = self._req(sids[0]) if sids else None
+            return bool(req and req.reuse and (not req.reuse.product_id or req.reuse.declined_reason or req.status != "draft"))
+        if what == "scope" and self._scope_left(lv):
+            return False
+        if what == "trial" and nth == sum("trial" in b for b in lv["do"]):
+            return False                   # 最后一次试样要等通关（试样通过）才算，多录几次没过的不算
+        event = {"decline": "project_declined", "accept": "requirement_accepted", "confirm": "requirement_translated",
+                 "trial": "trial", "rework": "requirement_returned", "merge": "requirements_merged", "scope": "scope_extended"}.get(what)
+        return event is not None and kinds.count(event) >= nth
+
     def _revise(self, r: dict) -> None:
         """外部世界：资料来源改版。改这一局的资料副本，再请系统重取依据比指纹（与浏览器同一个入口）。"""
         source = next(s for s in self.api().app.kb.sources if r["doc"] in s.list_docs())
         path = source.root / f"{r['doc']}.md"
         path.write_text(path.read_text(encoding="utf-8").replace(r["old"], r["new"]), encoding="utf-8")
         self._act("system:source", "/api/sources/recheck")
+
+    def _scope_left(self, lv: dict) -> bool:
+        """一次判断常扩好几条范围（Agent 陆续准备好）：这件事的单上还有没批的范围，就还没完。"""
+        rids = {r.id for sid in self.state["cases"].get(lv["id"], []) if (r := self._req(sid))}
+        return any(rids & set(q.refs.get("requirement_ids", "").split(",")) for q in self._open("scope_update").values())
 
     def _passed(self, lv: dict) -> bool:
         """通关条件，任一条成立：前情里出现 kind（或 kind:role；kind~文字 还要求这一行含这段文字）；
@@ -471,6 +531,12 @@ class Director:
         key = lv["id"]
         if "revise" in lv and key in self.state["cases"] and not self.state["seen"][key]:
             return True                # 改版的那份报告这一局没有结论生效（研发判断时用了别的依据），没有要复核的，直接过
+        if any("scope" in a for a in lv.get("do", [])) and self._scope_left(lv):
+            return False
+        # 业务里导演代办的说明书支线（指明了产品）：等觉提出、导演改完才算这件事完
+        if lv["kind"] == "business" and any("sheet" in a and "product" in a and f"{key}:{i}" not in self.state["done"]
+                                            for i, a in enumerate(lv.get("do", []))):
+            return False
         for want in lv["pass"]:
             if want.startswith("settled:") and set(self.state["seen"][key]) - set(self._open(want.removeprefix("settled:"))):
                 return True

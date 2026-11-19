@@ -21,7 +21,7 @@
 
 ### 1. Loop `agent/loop.py`（≤ 120 行）
 从 JUE `Agent.handle` 改写，去掉派生子问题、钩子注册表和最终结构化决策：
-- `run_turn(conv, ctx, tools, gateway, trace) -> list[AgentMessage]`：系统提示词（角色提示词 + 委托人身份 + 当前待确认动作）+ 跨轮文字历史 + 本条消息 → `gateway.complete(tools=..., caller=f"agent:{role}", tier=FAST, temperature=0)` → 逐个执行工具调用，结果作为 `tool` 消息追加 → 直到没有工具调用或满 8 步 → 最后的 `content` 作为助手回复。满 8 步仍在调用工具时，回复「步数用完，已完成的部分见上」，不再追加调用。
+- `run_turn(conv, ctx, tools, gateway, trace) -> list[AgentMessage]`：系统提示词（角色提示词 + 委托人身份 + 当前待确认动作）+ 跨轮文字历史 + 本条消息 → `gateway.complete(tools=..., caller=f"agent:{role}", tier=FAST, temperature=0)` → 逐个执行工具调用，结果作为 `tool` 消息追加 → 直到没有工具调用或满 32 步 → 最后的 `content` 作为助手回复。满 32 步仍在调用工具时，回复「步数用完，已完成的部分见上」，不再追加调用。
 - 执行工具：`read` / `draft` 直接调用；`effect` 不调用，交给 `hub` 创建 `PendingAction` 并把 `pending_action_id` 作为结果返回。
 - 每一步写一条 `AgentStep`；`search_knowledge` 的 `BlockedHint` 写进 `blocked`（「研发 R01 · L3」）。
 - 网关异常直接抛出（网关自身已有重试与降级），Loop 不再包一层重试。

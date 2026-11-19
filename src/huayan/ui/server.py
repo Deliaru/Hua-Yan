@@ -167,7 +167,10 @@ def meta(app, _):
 
 def sessions(app, _):
     return [{"id": s.id, "customer_id": s.customer_id, "sales_id": s.sales_id, "status": s.status,
-             "phenomenon": s.need.phenomenon, "origin": s.origin} for s in app.sessions()]
+             "phenomenon": s.need.phenomenon, "origin": s.origin,
+             # 化言消息流：最后一句是客户说的，就是在等业务员回
+             "last": s.turns[-1].model_dump(mode="json", include={"speaker", "text", "ts"}) if s.turns else None}
+            for s in app.sessions()]
 
 
 def session(app, p):
@@ -373,7 +376,7 @@ GET = {
     "/api/status": lambda app, p: app.status(),
     "/api/sessions": sessions,
     "/api/session": session,
-    "/api/questions": lambda app, p: app.questions(p["viewer"]),
+    "/api/questions": lambda app, p: app.questions(p["viewer"], p.get("done") == "1"),
     "/api/requirements": lambda app, p: [{"id": r.id, "status": r.status, "phenomenon": r.phenomenon,
                                           "customer_ids": [s.customer_id for s in app.sessions() if s.id in r.session_ids]}
                                     for r in app.requirements(p["viewer"])],
@@ -646,7 +649,7 @@ class Api:
         """resume：续跑已有运行（--run <id> --resume），业务时间接着最后一条事件。试用实例用真实时间，运行目录已有就续跑。"""
         if TRIAL:
             d = director_of(self.sid) if PLAY else None
-            run = f"{PLAY}{'' if self.sid == 'default' else '-' + self.sid}-r{d.state['round']}" if PLAY else TRIAL
+            run = play_run(self.sid, d.state["round"]) if PLAY else TRIAL
             self.clock = SimClock(T0) if PLAY else WallClock()
             use_clock(self.clock)
             run_root = Path(yaml.safe_load(Path(self.config_path).read_text(encoding="utf-8"))["run_root"])
@@ -1035,7 +1038,10 @@ def play_tick(sid, elapsed):
         return
     # 一镜到底每拍推进固定的业务时间，不按墙上时间，同一局重开走出同样的请求，录下的断网退路才放得出来；
     # 上一拍没事可做就直接跳到觉的下一次扫描（30 分钟），不空等（V12.12）
-    api.advance(1800 if d.state["oneshot"] and d.idle else d.state["speed"] * (PLAY_TICK if d.state["oneshot"] else elapsed))
+    # 业务流程演示也一样：导演没事可做、这件事也没轮到谁（在等觉的定时扫描，如产品机会），直接跳到下一次扫描，现场不空等
+    skip = d.idle and (d.state["oneshot"] or d.state["roadshow"] and not any(d._who(x) for x in d.open()))
+    # 业务流程演示：轮到人时业务时钟停住，只随人的每一步（一分钟）和上面的跳扫描往前走，人停多久都走出同一条时间线，录制对得上
+    api.advance(1800 if skip else 0 if d.state["roadshow"] else d.state["speed"] * (PLAY_TICK if d.state["oneshot"] else elapsed))
     api.tick()
     act = next((x.get("act") for x in d.open()), None)
     for _ in range(1 if d.state["oneshot"] else 10):     # 一镜到底一拍只走一步，台下看得清每次交接
@@ -1051,7 +1057,7 @@ def play_ticker(sid):
     """一局一个后台线程；这一局 10 分钟没人看就停下，再有人来时重新起。"""
     last, ev, d = time.monotonic(), WAKES.setdefault(sid, Event()), director_of(sid)
     while time.monotonic() - SEEN.get(sid, 0) < 600:
-        ev.wait(PLAY_TICK)
+        ev.wait(1 if d.state["roadshow"] else PLAY_TICK)   # 业务流程演示一秒一拍，下一步跟得上讲解
         ev.clear()
         now = time.monotonic()
         try:
@@ -1079,13 +1085,23 @@ def play_seen(sid):
     Thread(target=play_ticker, args=(sid,), daemon=True).start()
 
 
+def play_run(sid, round_):
+    return f"{PLAY}{'' if sid == 'default' else '-' + sid}-r{round_}"
+
+
 def play_restart(sid, p):
     """重开这一局：开新的一局（新的运行目录），业务与关卡第 1 步重新送来。
-    real：换报告（真实报告版 / 模拟报告）；roadshow：路演局（各岗位的事都留给人）；oneshot：一镜到底（导演按幕一件一件做完）；
+    real：换报告（真实报告版 / 模拟报告，不给就用真实报告）；roadshow：路演局（各岗位的事都留给人）；oneshot：一镜到底（导演按幕一件一件做完）；
     不给就照这一局的。"""
     d = director_of(sid)
-    d.new_round(bool(p.get("real", d.state["real"])), bool(p.get("roadshow", d.state["roadshow"])),
+    # 没说换报告就用真实报告（配了的话），不跟着旧局的模拟报告走
+    d.new_round(bool(p.get("real", PLAY_REAL is not None)), bool(p.get("roadshow", d.state["roadshow"])),
                 bool(p.get("oneshot", d.state["oneshot"])))
+    # 新的一局一定是新的运行目录：局号对不上已有目录（如进度文件回退过）时往后跳，不接着旧局的数据送事
+    run_root = Path(yaml.safe_load(Path(CONFIG).read_text(encoding="utf-8"))["run_root"])
+    while (run_root / play_run(sid, d.state["round"])).exists():
+        d.state["round"] += 1
+    d.save()
     session_api(sid, rebuild=True)
     _roles_path().write_text(json.dumps(trial_roles, ensure_ascii=False, indent=1), encoding="utf-8")
     wake(sid)

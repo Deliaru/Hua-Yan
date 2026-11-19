@@ -74,6 +74,7 @@ export const api = {
   sessions: () => call<SessionSummary[]>("sessions"),
   session: (id: string, viewer: string) => call<SessionView | { view: SessionView }>(`session?${q({ id, viewer })}`).then((d) => ("view" in d ? d.view : d)),
   questions: (viewer: string) => call<Question[]>(`questions?${q({ viewer })}`),
+  doneQuestions: (viewer: string) => call<Question[]>(`questions?${q({ viewer, done: "1" })}`),
   requirements: (viewer: string) => call<RequirementSummary[]>(`requirements?${q({ viewer })}`),
   frozen: (actor: string) => call<{ frozen: boolean }>(`frozen?${q({ actor })}`),
   frozenActors: (viewer: string) => call<FrozenActor[]>(`frozen_actors?${q({ viewer })}`),

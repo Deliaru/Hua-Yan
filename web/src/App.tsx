@@ -166,7 +166,9 @@ export default function App() {
     },
   };
   const key = `${meta.status.run_id}:${actor.id}`;
-  const sideW = inDemo ? 400 : 232;
+  // V12.18 岗位工作面像钉钉：最左一条图标导航，旁边一栏是和化言的会话
+  const im = !inDemo && ["sales", "pm", "rd", "supervisor"].includes(page);
+  const sideW = inDemo ? 400 : im ? 72 + 330 : 232;
   // 讲解每执行一步：从头重建过的要重读 meta（run_id 变了），再切到该看的工作面与对象
   const onView = async (v: { page: string; focus: string | null; who: string | null } | null, rebuilt: boolean) => {
     if (rebuilt) setMeta(await api.meta());
@@ -220,12 +222,18 @@ export default function App() {
         </div>
       </header>
 
-      <aside style={{ width: sideW }} className="sidebar fixed bottom-0 left-0 top-[52px] z-20 flex flex-col overflow-y-auto border-r border-sep pb-4 pt-2">
+      {im && <aside className="fixed bottom-0 left-[72px] top-[52px] z-20 w-[330px] overflow-y-auto border-r border-sep bg-[#f5f6f8]"><div ref={setSide} /></aside>}
+      <aside style={{ width: im ? 72 : sideW }} className={`sidebar fixed bottom-0 left-0 top-[52px] z-20 flex flex-col overflow-y-auto border-r border-sep pb-4 pt-2 ${im ? "items-center" : ""}`}>
         {inDemo ? <DemoPanel onExit={() => setDemo(false)} onView={onView} side={setSide} /> : <>
-        {!trial && <button onClick={() => setDemo(true)} className="side-row nav-row">
+        {!trial && !im && <button onClick={() => setDemo(true)} className="side-row nav-row">
           <NavStory /><span className="text-[13px] font-semibold">演示讲解</span><span className="tag tag-accent ml-auto !h-[18px] !text-[11px]">推荐</span>
         </button>}
-        {PAGES.filter(([k]) => !HIDDEN.includes(k) && visible(k)).map(([k, label, Icon, group], i, shown) => (
+        {PAGES.filter(([k]) => !HIDDEN.includes(k) && visible(k)).map(([k, label, Icon, group], i, shown) => im ? (
+          <button key={k} title={label} onClick={() => { setFocus(null); setPage(k); }}
+                  className={`mb-1 flex w-[60px] flex-col items-center gap-0.5 rounded-[9px] py-1.5 text-[10.5px] leading-[13px] ${page === k ? "bg-[rgba(10,108,223,.1)] font-semibold text-accent" : "text-ink-2 hover:bg-fill"}`}>
+            <Icon /><span className="line-clamp-2 text-center">{label}</span>
+          </button>
+        ) : (
           <div key={k}>
             {group && shown[i - 1]?.[3] !== group && <p className="side-head !pb-1 !pt-3">{group}</p>}
             <button onClick={() => { setFocus(null); setPage(k); }} className={`side-row nav-row ${page === k ? "on" : ""} ${group ? "!pl-[30px]" : ""}`}>
@@ -233,9 +241,9 @@ export default function App() {
             </button>
           </div>
         ))}
-        <div ref={setSide} className="flex-1" />
+        {!im && <div ref={setSide} className="flex-1" />}
         </>}
-        {!trial && <p className="mx-[18px] mt-4 flex items-center gap-1.5 text-[11px] leading-4 text-ink-3"
+        {!trial && !im && <p className="mx-[18px] mt-4 flex items-center gap-1.5 text-[11px] leading-4 text-ink-3"
            title="占位种子与程序生成的对话，不含任何真实客户、企业与配方">
           <i className="h-1.5 w-1.5 rounded-full bg-ink-3" />全部为模拟数据
         </p>}
@@ -292,8 +300,8 @@ function RolePicker({ meta, onPick, onStart, error }: { meta: Meta; onPick: (id:
       {onStart && <>
         <h1 className="mt-6 text-[22px] font-semibold">你想怎么用化言？</h1>
         <div className="mt-4 grid grid-cols-2 gap-3">
-          {([[true, "看演示", "导演把三幕从头演到尾，你只点「继续」，看一件件事怎样在觉、Agent 和各岗位之间流转。适合给别人讲。"],
-             [false, "自己玩", "你轮流当客户、业务员、产品经理、研发。顶部一直告诉你下一步轮到谁、点哪里，跟着点就能走完一条完整业务。"]] as const).map(([watch, title, text]) => (
+          {([[true, "CEO 视角总结", "导演把整条业务从头跑到尾，你站在 CEO 的位置看：事情怎么在各岗位之间流转，比原来省了多少人工和等待。"],
+             [false, "业务流程演示", "你（或几个人分头）当客户、业务员、产品经理、研发。化言像钉钉里的同事，把轮到你的事推给你，跟着点就能走完一条完整业务。"]] as const).map(([watch, title, text]) => (
             <button key={title} disabled={busy} onClick={() => go(watch)}
                     className="rounded-[14px] bg-white p-5 text-left shadow-[0_1px_3px_rgba(0,0,0,.08)] hover:ring-2 hover:ring-accent disabled:opacity-50">
               <p className="text-[18px] font-semibold">{title}</p>

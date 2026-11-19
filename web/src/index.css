@@ -175,3 +175,20 @@ body {
 /* 处理过程：进行中的小圆环 */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner { display: inline-block; width: 11px; height: 11px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid rgba(10, 108, 223, .25); border-top-color: var(--color-accent); animation: spin .8s linear infinite; }
+/* V12.18 化言消息：准备中的三个点 */
+.typing { display: inline-block; width: 18px; height: 6px; margin-right: 6px; vertical-align: middle;
+  background: radial-gradient(circle, #8e8e93 2px, transparent 2.5px) 0 0 / 6px 6px repeat-x; animation: typing 1.2s steps(3) infinite; }
+@keyframes typing { from { width: 6px; } to { width: 24px; } }
+
+/* Agent 的 markdown 输出 */
+.md > * + * { margin-top: 6px; }
+.md strong { font-weight: 600; color: var(--color-ink, inherit); }
+.md ul { list-style: disc; padding-left: 18px; }
+.md ol { list-style: decimal; padding-left: 18px; }
+.md li + li { margin-top: 2px; }
+.md h1, .md h2, .md h3, .md h4 { font-weight: 600; }
+.md code { font-size: 12px; background: rgba(118,118,128,.1); border-radius: 4px; padding: 0 3px; }
+.md table { border-collapse: collapse; font-size: 12px; width: 100%; }
+.md th, .md td { border: .5px solid rgba(0,0,0,.14); padding: 3px 6px; text-align: left; vertical-align: top; }
+.md th { background: rgba(118,118,128,.08); font-weight: 600; }
+.md .md-wrap { overflow-x: auto; }

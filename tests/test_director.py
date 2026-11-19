@@ -80,15 +80,10 @@ def test_roadshow_leaves_every_role_its_business(tmp_path):
             _tick(api)()
     s, view = director.state, director.view()
     status = {x["id"]: x["status"] for x in view["levels"]}
-    # 送到客户面的事留给人在客户面说；其余客户由导演说，事到各岗位手上就停下等人
+    # 业务流程演示一次只送一件：第一件送到客户面，留给人在客户面说，后面的都还没送
     assert not api.app.view_session(s["cases"]["客户业务 1"][0], "customer:C01").turns
-    quote = api.app.view_session(s["cases"]["业务员业务 1"][0], "sales:S01")
-    assert quote.turns[-1].speaker == "customer" and not any(t.speaker == "sales" for t in quote.turns)
-    assert _route(api, s["cases"]["研发业务 1"][0])["roles"]["rd"]["state"] == "pending"
-    # 业务员业务 2 是第三幕的前情（过去没解决的客户）：研发不立项由导演做完，不等人
-    assert all(v == "open" for k, v in status.items() if (not k.startswith("关卡") or k == "关卡第 1 步") and k != "业务员业务 2")
-    assert status["关卡第 2 步"] == "waiting" and s["passed"] == ["业务员业务 2"]
-    assert {a["actor"].split(":")[0] for a in s["acted"] if a["path"] != "/api/decline"} <= {"customer", "system"}
+    assert list(s["cases"]) == ["客户业务 1"] and status["客户业务 1"] == "open"
+    assert all(v == "waiting" for k, v in status.items() if k != "客户业务 1")
 
 
 def test_stage_follows_report_to_next_order_and_revision(tmp_path):

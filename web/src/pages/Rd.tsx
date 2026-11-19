@@ -7,9 +7,11 @@ import { ACTION, REQ_STATUS, Side, hhmm, useApp, useData, useLabels } from "../c
 import type { AgentMessage, CitedKnowledge, Claim, GrantScope, LeakHit, Question, ReqItem, RequirementView } from "../types";
 import { AgentPanel, Notes, PendingActions, notesFor, useConversation } from "../components/Agent";
 import { ChevronRight } from "../components/Icons";
-import { InboxSidebar, ownerText, useInbox } from "../components/Inbox";
+import { ownerText, useInbox } from "../components/Inbox";
+import { HuayanFeed, ImSide } from "../components/Im";
 import { useGlow, useGuide, useGuideArg } from "../components/Guide";
 import { ANOMALY, Act, AgentMark, Disclosure, EmptyState, Field, Group, Marked, PageHead, SideHead, SlotPicker } from "../components/ui";
+import { Md } from "../components/Md";
 import { ReadinessCard, RouteStrip, WorkloadCard } from "../components/Route";
 import { SourceTrial } from "../components/SourceTrial";
 import { LibrarySearch } from "../components/LibrarySearch";
@@ -33,20 +35,26 @@ export function Rd() {
   const [panel, setPanel] = useState<"req" | "candidates" | "caps">("req");
   const showCandidates = panel !== "req";
   const setShowCandidates = (on: boolean) => { if (!on) setPanel("req"); };
-  useEffect(() => { if (focus) { setChosenReq(focus); setQid(null); setShowCandidates(false); } }, [focus]);
+  useEffect(() => {      // 关卡指来的可能是一张单，也可能是不挂在单上的一件决策（资料改版复核）
+    if (!focus) return;
+    const q = all.find((x) => x.id === focus);
+    if (q) { setQid(q.id); setChosenReq(null); } else { setChosenReq(focus); setQid(null); }
+    setShowCandidates(false);
+  }, [focus, all.length]);
   // 导览要你签的那项决策：没手动选过就直接打开它；导览换到新的一项时，回到它
   const g = useGuide();
   const guided = g.who === me ? ready.find((q) => `sign:${q.family}` === g.target) ?? null : null;
   useEffect(() => { if (guided) { setQid(null); setChosenReq(null); setShowCandidates(false); } }, [guided?.id]);
   const question = all.find((q) => q.id === qid)
-    ?? (chosenReq ? ready.find((q) => reqsOf(q).includes(chosenReq)) ?? null : guided ?? ready[0] ?? null);
+    ?? (chosenReq ? ready.find((q) => reqsOf(q).includes(chosenReq)) ?? null : guided);   // 不自己打开：化言推到左边消息里，点了才开
   // 不挂在需求单上的决策（解密申请、知识冲突、泄露风险）只显示签字区
-  const reqId = showCandidates ? null : question ? reqsOf(question)[0] ?? null : chosenReq ?? (reqs.find((r) => r.status !== "merged") ?? reqs[0])?.id ?? null;
+  const reqId = showCandidates ? null : question ? reqsOf(question)[0] ?? null : chosenReq;
   return (
     <>
       <Side>
-        <InboxSidebar selected={qid || (guided && question?.id === guided.id) ? question?.id ?? null : null} guided={guided && guided.id !== question?.id ? guided.id : null}
-                      reqs={reqs} select={(q) => { setQid(q.id); setChosenReq(null); setShowCandidates(false); }} />
+        <ImSide badge={ready.length} feed={
+          <HuayanFeed selected={qid || (guided && question?.id === guided.id) ? question?.id ?? null : null} guided={guided && guided.id !== question?.id ? guided.id : null}
+                      reqs={reqs} select={(q) => { setQid(q.id); setChosenReq(reqsOf(q)[0] ?? null); setShowCandidates(false); }} />} desk={<>
         <SideHead>我的判断</SideHead>
         <button className={`side-row ${panel === "candidates" ? "on" : ""}`} onClick={() => setPanel("candidates")}>资料里读出的结论，等我确认</button>
         <button className={`side-row ${panel === "caps" ? "on" : ""}`} onClick={() => setPanel("caps")}>我给别人用的判断</button>
@@ -59,6 +67,7 @@ export function Rd() {
           </button>
         ))}
         {!reqs.length && <p className="px-[18px] py-1 text-[13px] text-ink-3">暂无需求单</p>}
+        </>} />
       </Side>
       <RdDesk key={`${me}:${reqId}:${panel}`} question={showCandidates ? null : question} reqId={reqId} panel={panel}
               select={(q) => { setQid(q.id); setChosenReq(null); }} />
@@ -115,7 +124,7 @@ function RdDesk({ question, reqId, panel, select }: {
               ]} />
             </>
           ) : question ? <SignArea key={question.id} q={question} view={null} />
-            : <EmptyState title="资料审阅与研发决策" text="从左侧选择待签决策、需求单，或资料审阅。" />}
+            : <EmptyState title="在左边化言的消息里点「去处理」" text="轮到你的事化言会推给你；需求单和资料审阅在「工作台」里。" />}
         </div>
       </div>
       <AgentPanel title={view ? "这张单的来历" : "Agent 协作"} sessionId={null} focus={focus}>
@@ -294,7 +303,8 @@ function SheetWaiting({ view }: { view: RequirementView }) {
   const { preparing } = useInbox();
   const req = view.requirement;
   const t = useData(() => api.timeline(req.id, me), [req.id, me]);
-  const glowTrial = useGlow("trial") || useGlow("task");   // 自己玩：这张单轮到研发时，试样按钮也算「要点的」
+  const [glowPass, glowTask] = [useGlow("trial"), useGlow("task")];   // 两个都要调：钩子不能短路
+  const glowTrial = glowPass || glowTask;   // 自己玩：这张单轮到研发时，试样按钮也算「要点的」
   const doing = preparing.find((q) => reqsOf(q).includes(req.id));
   // 需求单视图里没有试样状态：试样通过后觉会提出「客户评价」，以此判断试样已录入
   const trial = !!t && req.status === "rd_confirmed" && !t.nodes.some((n) => n.family === "market_eval" || n.family === "seal_points");
@@ -320,7 +330,7 @@ function SheetNotes({ reqId, notes }: { reqId: string; notes: AgentMessage[] }) 
       {mine.map((m, i) => (
         <div key={i} className="row !min-h-0 !items-start !py-2 text-[13px] leading-5">
           <span className="num w-11 shrink-0 text-ink-3">{hhmm(m.at)}</span>
-          <span className="min-w-0 flex-1 text-ink-2">{L.scrub(m.text)}</span>
+          <Md className="min-w-0 flex-1 text-ink-2" text={m.text} />
         </div>
       ))}
     </Group>
@@ -481,7 +491,7 @@ function ReqContext({ view }: { view: RequirementView }) {
       {req.escalate_note && <Group title="业务员的升级说明"><div className="row text-[13px] leading-5">{req.escalate_note}</div></Group>}
       {req.reuse && (
         <Group title="现成产品">
-          <div className="row text-[13px] leading-5">{req.reuse.product_id ? L.product(req.reuse.product_id) : L.scrub(req.reuse.note)}</div>
+          <div className="row text-[13px] leading-5">{req.reuse.product_id ? L.product(req.reuse.product_id) : <Md text={req.reuse.note} />}</div>
           {req.reuse.declined_reason && <div className="row text-[13px] text-ink-2">不采用：{req.reuse.declined_reason}</div>}
         </Group>
       )}
@@ -600,7 +610,7 @@ function ConfirmReview({ view, dismiss }: { view: RequirementView; dismiss: Reac
 }
 
 function AcceptReview({ reqId, words, dismiss, evidence }: { reqId: string; words: string[]; dismiss: React.ReactNode; evidence: React.ReactNode }) {
-  const { me, meta } = useApp();
+  const { me, meta, fail } = useApp();
   const L = useLabels();
   const { all } = useInbox();
   const distortions = all.filter((d) => d.family === "distortion" && d.refs.requirement_id === reqId);
@@ -619,8 +629,14 @@ function AcceptReview({ reqId, words, dismiss, evidence }: { reqId: string; word
   const shownBasis = forProduct.filter((c, i) => allBasis || i < 3 || basis.includes(c.id));
   // 演示讲解：研发判「已有产品适用」要选的产品与依据，由「演示自动填入」填好（录制回放里须与录制一致）
   const scripted = useGuideArg("decline");
-  const dec = scripted ? JSON.parse(scripted) as { product: string; reason: string } : null;
-  const filled = !!dec && product === dec.product && reason === dec.reason;
+  const dec = scripted ? JSON.parse(scripted) as { product: string; reason: string; claims?: string } : null;
+  // 依据：台词点名的那份报告里读出的结论（归本人的），自动勾上并调出原文，和研发自己勾选、看原文后签字是同一条路
+  const scriptedBasis = dec?.claims ? claims.filter((c) => c.evidence.some((e) => e.startsWith(`${dec.claims}#`))).map((c) => c.id) : [];
+  const filled = !!dec && product === dec.product && reason === dec.reason && (!dec.claims || (!!review && basis.join() === scriptedBasis.join()));
+  const autofill = () => {
+    setProduct(dec!.product); setReason(dec!.reason); setBasis(scriptedBasis); setReview(null);
+    if (scriptedBasis.length) api.reviewClaims(scriptedBasis, me).then(setReview, fail);
+  };
   const tab = (k: typeof mode, label: string) => (
     <button type="button" onClick={() => { setMode(k); setReason(""); }}
             className={`h-7 rounded-[7px] px-3 text-[13px] ${mode === k ? "bg-white font-semibold shadow-[0_0_0_.5px_rgba(0,0,0,.14),0_1px_1.5px_rgba(0,0,0,.07)]" : "text-ink-2"} ${
@@ -663,7 +679,7 @@ function AcceptReview({ reqId, words, dismiss, evidence }: { reqId: string; word
               {basis.length > 0 && !review && <div><Act kind="plain" label="看所选几条的原文出处" run={() => api.reviewClaims(basis, me).then(setReview)} /></div>}
               {review && <EvidenceReviewPanel review={review} compactSingle />}
             </div>}
-            {dec && !filled && <div><button type="button" className="chip glow" onClick={() => { setProduct(dec.product); setReason(dec.reason); }}>演示自动填入</button></div>}
+            {dec && !filled && <div><button type="button" className="chip glow" onClick={autofill}>演示自动填入</button></div>}
             <div><Act label="不接，推荐这款产品" disabled={!reason.trim() || (basis.length > 0 && !review)} glow={filled}
                       run={() => api.decline(reqId, reason, me, product, limits, basis, review?.reviewed_evidence)} /></div>
           </>}
@@ -897,8 +913,11 @@ const CAUSES = { product: "产品", equipment: "设备", operation: "操作", re
 
 function TrialFail({ reqId }: { reqId: string }) {
   const { me } = useApp();
+  const glow = useGlow("trial-fail");
+  const scripted = useGuideArg("trial-fail");   // 业务流程演示：这次试样缺的条件
   const [cause, setCause] = useState<keyof typeof CAUSES>("product");
   const [missing, setMissing] = useState<string[]>([]);
+  useEffect(() => { if (scripted) { setCause("requirement"); setMissing(scripted.split(",")); } }, [scripted]);
   return (
     <div className="row !items-start">
       <span className="w-[110px] shrink-0 text-[13px] text-ink-2">不通过的原因</span>
@@ -910,7 +929,7 @@ function TrialFail({ reqId }: { reqId: string }) {
           ))}
         </div>
         {cause === "requirement" && <SlotPicker value={missing} onChange={setMissing} />}
-        <div><Act kind="quiet" label="录入不通过" run={() => api.trial(reqId, "fail", me, cause, cause === "requirement" ? missing : [])} /></div>
+        <div><Act kind={glow ? undefined : "quiet"} glow={glow} label="录入不通过" run={() => api.trial(reqId, "fail", me, cause, cause === "requirement" ? missing : [])} /></div>
       </div>
     </div>
   );

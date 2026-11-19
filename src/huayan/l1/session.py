@@ -159,6 +159,9 @@ def handle_turn(session, speaker, text, deps, answering=False, asking=()):
             session.recommendation, session.status = None, "open"
         if session.hints and session.sales_id is None:
             ask_customer(session, session.hints[0], deps)
-    if result.intent in ("product_question", "cause_question", "mechanism_request"):
+    # 客户自助时没指型号、也还没推荐，化言正在追问条件（如开场「这个助剂能不能用」）：只追问，不回「请明确型号」
+    asking = result.intent == "product_question" and session.sales_id is None and session.hints \
+        and not result.product_refs and session.recommendation is None
+    if result.intent in ("product_question", "cause_question", "mechanism_request") and not asking:
         session.replies.append(answer(session, deps, result.product_refs))
     return session

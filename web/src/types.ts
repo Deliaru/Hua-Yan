@@ -119,7 +119,8 @@ export interface SessionView {
   asks: { question_id: string; slot: string; label: string; ask_text: string }[];
 }
 
-export interface SessionSummary { id: string; customer_id: string; sales_id: string | null; status: string; phenomenon: string | null; origin: "sales" | "customer" }
+export interface SessionSummary { id: string; customer_id: string; sales_id: string | null; status: string; phenomenon: string | null; origin: "sales" | "customer";
+  last: { speaker: "customer" | "sales" | "assistant"; text: string; ts: string } | null }
 
 // v6 需求轨迹（门面 route_of）：四格状态 human 人真实处理过 / auto 由 Agent 或觉代办 / pending 已到、待处理 / none 未经过
 export type RouteState = "human" | "auto" | "pending" | "none";

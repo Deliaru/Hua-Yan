@@ -28,7 +28,7 @@ from huayan.jue.jue_k import JueK
 from huayan.jue.proto import JueProto, judge_level, load_templates, rule_score
 from huayan.jue.publish import describe, publish, select_asks
 from huayan.jue.records import _human_level, load_records
-from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, session_state, theme_id
+from huayan.jue.state import collect_scheduled, realtime_state, requirement_state, scope_key, session_state, theme_id
 from huayan.ingest.compile import admit, propose, recheck
 from huayan.ingest.folder import FolderSource
 from huayan.ingest.trial_ir import EvidenceReportSource, OperationIR
@@ -856,6 +856,9 @@ class HuayanApp:
         if not note.strip():
             raise ValueError("请写明扩展依据")
         capability = self.kb.approve(q.refs["capability_id"], by, reviewed_evidence=reviewed_evidence)
+        for twin in self.kb.capabilities():     # 同一结论的研发层那条一起生效（觉只提了对客那条）
+            if twin.form == "applicable" and twin.status == "proposed" and scope_key(twin) == scope_key(capability):
+                self.kb.approve(twin.id, by)
         self.events.append("scope_extended", by, {"question_id": q.id,
             "product_id": capability.payload["product_id"], "phenomenon": capability.payload["phenomenon"],
             "capability_id": capability.id, "note": note,
@@ -2138,11 +2141,12 @@ class HuayanApp:
                          "n_denied": len(denied), "customers": sorted(customers)})
         return rows
 
-    def questions(self, viewer_id):
+    def questions(self, viewer_id, done=False):
+        """done：已处理的（V12.18 化言消息流里的历史）。"""
         viewer = self._actor(viewer_id, {"sales", "pm", "rd", "supervisor"})
         labels = {s.id: s.label for s in self.seeds.slots}
-        questions = [q.model_copy(deep=True) for q in self.bus.list()
-                     if viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
+        questions = [q.model_copy(deep=True) for q in self.bus.list(status=None if done else "open")
+                     if (not done or q.status != "open") and viewer_id in (q.owner_id, q.signer_id) or (q.family == "decrypt_request"
                          and self._sessions[q.refs["session_id"]].sales_id == viewer_id)]
         unfinished = {r["question_id"] for r in self.agents.errors() if r["kind"] == "unfinished"}
         for q in questions:

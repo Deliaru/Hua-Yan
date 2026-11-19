@@ -7,6 +7,7 @@ import { useApp, useData } from "../ctx";
 import type { AgentMessage, AgentRun, MemoryEntry } from "../types";
 import { ArrowUp, ChevronRight } from "./Icons";
 import { Group } from "./ui";
+import { Md } from "./Md";
 import { LiveLine, RunLine } from "./Process";
 
 // 当前身份与这条会话（业务员）或收件箱（研发）的对话；批注按 target 挂到工作面对应位置。
@@ -27,9 +28,9 @@ export function Notes({ notes }: { notes: AgentMessage[] }) {
   return (
     <div className="mt-1.5 flex flex-col gap-1">
       {notes.map((m, i) => (
-        <p key={i} className="rounded-[6px] bg-[rgba(118,118,128,.08)] px-2 py-1 text-[12px] leading-[18px] text-ink-2">
-          <span className="font-semibold text-ink">Agent</span>　{m.text}
-        </p>
+        <div key={i} className="rounded-[6px] bg-[rgba(118,118,128,.08)] px-2 py-1 text-[12px] leading-[18px] text-ink-2">
+          <span className="font-semibold text-ink">Agent</span><Md text={m.text} />
+        </div>
       ))}
     </div>
   );
@@ -82,8 +83,8 @@ export function AgentPanel({ sessionId, focus, external, title, children }: {
             <div className="anim-fade flex max-h-[240px] flex-col gap-1.5 overflow-y-auto border-b border-sep px-3.5 pb-2.5 pt-1">
               {history.map((m) => (
                 <div key={m.i} className="contents">
-                  <p className={`max-w-[88%] rounded-[12px] px-2.5 py-1.5 text-[13px] leading-5 ${
-                    m.role === "principal" ? "self-end bg-[#ececf0]" : "self-start bg-[#f6f6f8]"}`}>{m.text}</p>
+                  <div className={`max-w-[88%] rounded-[12px] px-2.5 py-1.5 text-[13px] leading-5 ${
+                    m.role === "principal" ? "self-end bg-[#ececf0]" : "self-start bg-[#f6f6f8]"}`}>{m.role === "assistant" ? <Md text={m.text} /> : m.text}</div>
                   {m.role === "assistant" && runs?.[m.i] && <RunLine {...runs[m.i]} />}
                 </div>
               ))}

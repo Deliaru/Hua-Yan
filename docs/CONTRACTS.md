@@ -1558,7 +1558,7 @@ class AgentHub:                               # HuayanApp.agents
 ```
 
 **Loop**（`huayan/agent/loop.py`，复用 JUE `src/jue/agent/__init__.py` 并简化，去掉派生与钩子）：
-- 每轮：系统提示词（`prompts/assistant_<role>.md` + 委托人身份 + 当前待确认动作）+ 对话历史 → `gateway.complete(tools=该角色的工具, caller="agent:<role>", tier=fast, temperature=0)` → 执行工具调用，结果追加为 tool 消息 → 直到没有工具调用或满 8 步 → 最后的文字作为助手回复；
+- 每轮：系统提示词（`prompts/assistant_<role>.md` + 委托人身份 + 当前待确认动作）+ 对话历史 → `gateway.complete(tools=该角色的工具, caller="agent:<role>", tier=fast, temperature=0)` → 执行工具调用，结果追加为 tool 消息 → 直到没有工具调用或满 32 步 → 最后的文字作为助手回复；
 - 本轮的工具消息只在本轮保留，跨轮只保留文字消息（含确认结果的 system 消息）；
 - 每一步写一条 `AgentStep`；
 - `gateway_mock` 为 true 时不跑 Loop：`chat` 只追加一条「助手需要大模型（当前离线）」的 system 消息；v5：`dispatch` 对主人调用对应的规则骨架（`draft_requirement` / `translate_requirement` / `package_sheet`）后 `mark_prepared`，没有骨架的（升级说明、封存两栏、提炼）用录制缓存或标注「离线，无草稿」。

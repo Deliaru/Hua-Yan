@@ -9,7 +9,7 @@ from huayan.knowledge import level_of
 
 from .tools import ToolContext, openai_schemas
 
-MAX_STEPS = 8
+MAX_STEPS = 32
 MEMORY_INDEX = 30          # v8：每段对话开头注入的记忆索引条数（最近的在后）
 PROMPTS = Path(__file__).resolve().parents[3] / "prompts"
 OUT_OF_STEPS = "步数用完，已完成的部分见上。"
@@ -41,7 +41,7 @@ def history(conv: Conversation) -> list[Message]:
 
 
 def run_turn(conv: Conversation, ctx: ToolContext, hub, gateway) -> list[AgentMessage]:
-    """跑一轮：模型 → 工具 → 模型 … 直到没有工具调用或满 8 步；返回本轮的助手消息。"""
+    """跑一轮：模型 → 工具 → 模型 … 直到没有工具调用或满 32 步；返回本轮的助手消息。"""
     role = ctx.principal.role
     # V9.4：只列本段对话（按对象分段时即当前对象）提出的确认卡，别的单的卡不进上下文
     pending = [a for a in hub.pending(ctx.principal.id) if a.conversation_id == conv.id]

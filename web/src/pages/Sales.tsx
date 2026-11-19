@@ -1,6 +1,7 @@
 // 业务员工作面（L1）：中间是沟通记录（紧凑时间轴，末尾录入客户的话）与场景需求卡，底部「发给客户」操作坞，都不经过 Agent；
 // 右侧是觉的决策（推荐还是升级、现成产品、回问、客户评价）与「与 Agent 协作」。
 import { useEffect, useState } from "react";
+import { HuayanFeed, ImSide } from "../components/Im";
 import { api } from "../api";
 import { SESSION_STATUS, Side, hhmm, useApp, useData, useLabels } from "../ctx";
 import type { AgentMessage, AskHint, Question, RecommendationCard, SessionSummary, SessionView } from "../types";
@@ -88,18 +89,24 @@ export function Sales() {
   const signAt = (questions ?? []).find((q) => `sign:${q.family}` === g.target && q.refs.session_id)?.refs.session_id;
   const guided = g.who !== me ? null : (g.customer ? mine.find((s) => s.customer_id === g.customer)?.id : undefined)
     ?? mine.find((s) => s.id === signAt)?.id ?? null;
-  useEffect(() => { if (guided) choose(null); }, [guided]);   // 导览换到另一段会话时，回到导览指的那段
-  const current = mine.find((s) => s.id === chosen) ?? mine.find((s) => s.id === guided) ?? mine[0] ?? null;
+  // 演示讲解按台词打开那段会话；其余不自己打开：化言把轮到你的会话推到左边消息里，点「去处理」才打开
+  useEffect(() => { if (guided && g.customer) choose(null); }, [guided]);
+  const current = mine.find((s) => s.id === chosen) ?? (g.customer ? mine.find((s) => s.id === guided) : null) ?? null;
   const sid = current?.id ?? null;
   const view = useData(() => (sid ? api.session(sid, me) : Promise.resolve(null)), [sid, me]);
   const mineQs = (questions ?? []).filter((q) => !q.refs.session_id || q.refs.session_id === sid);
+  const handoffs = own.filter((s) => s.origin === "customer" && s.last?.speaker === "customer").reverse();
   const todo: Record<string, number> = {};
   for (const q of questions ?? []) if (q.refs.session_id) todo[q.refs.session_id] = (todo[q.refs.session_id] ?? 0) + 1;
   return (
     <>
-      <Side><SalesSidebar mine={mine} current={sid} guided={guided} choose={choose} todo={todo} /></Side>
+      <Side><ImSide badge={(questions ?? []).filter((q) => q.prepared_at != null).length + handoffs.length}
+        feed={<HuayanFeed selected={(questions ?? []).find((q) => q.refs.session_id === sid)?.id ?? null} reqs={[]}
+                          select={(q) => q.refs.session_id && choose(q.refs.session_id)} handoffs={handoffs} chosen={sid} openHandoff={choose} />}
+        desk={<SalesSidebar mine={mine} current={sid} guided={guided} choose={choose} todo={todo} />} /></Side>
       {current && view ? <SessionDesk key={sid} summary={current} v={view} questions={mineQs} />
-        : <EmptyState title="还没有客户会话" text="点侧栏「客户会话」右侧的 ＋，选一个客户开始，把客户的原话录进来。" />}
+        : <EmptyState title={mine.length ? "在左边化言的消息里点「去处理」" : "还没有客户会话"}
+                      text={mine.length ? "轮到你的会话化言会推给你；所有会话在「工作台」里。" : "点侧栏「工作台」里「全部会话」右侧的 ＋，选一个客户开始，把客户的原话录进来。"} />}
     </>
   );
 }
